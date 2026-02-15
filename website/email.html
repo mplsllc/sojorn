@@ -1,0 +1,107 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Sojorn - The Path Forward</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link
+        href="https://fonts.googleapis.com/css2?family=Literata:opsz,wght@7..72,400;600;700&family=Outfit:wght@300;400;600;700&display=swap"
+        rel="stylesheet">
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    colors: {
+                        egyptianBlue: '#1034A6',
+                        queenPink: '#E8CCD7',
+                        navyText: '#0A2351',
+                    },
+                    fontFamily: {
+                        sans: ['Outfit', 'sans-serif'],
+                        serif: ['Literata', 'serif'],
+                    }
+                }
+            }
+        }
+    </script>
+    <style>
+        body {
+            font-family: 'Outfit', sans-serif;
+        }
+
+        .glass-card {
+            background: rgba(255, 255, 255, 0.7);
+            backdrop-filter: blur(12px);
+            border: 1px solid rgba(255, 255, 255, 0.5);
+        }
+    </style>
+</head>
+
+<body class="bg-gradient-to-br from-gray-50 to-queenPink min-h-screen text-navyText flex flex-col">
+
+    <nav class="w-full py-6 px-8 flex justify-between items-center glass-card border-b border-white/20">
+        <a href="/" class="flex items-center gap-3 hover:opacity-80 transition">
+            <img src="/leaf.png" alt="Sojorn Leaf" class="h-12 w-auto">
+            <span class="text-5xl font-serif font-bold tracking-tight text-egyptianBlue">sojorn</span>
+        </a>
+        <a href="/" class="text-sm font-semibold hover:text-egyptianBlue transition">Home</a>
+    </nav>
+
+    <main class="flex-grow flex items-center justify-center px-6 py-20 relative overflow-hidden">
+        <div
+            class="absolute top-0 right-0 w-96 h-96 bg-egyptianBlue/10 rounded-full blur-3xl -translate-y-1/2 translate-x-1/2">
+        </div>
+        <div
+            class="absolute bottom-0 left-0 w-80 h-80 bg-queenPink/60 rounded-full blur-3xl translate-y-1/2 -translate-x-1/3">
+        </div>
+
+        <div class="glass-card max-w-2xl w-full p-12 rounded-3xl shadow-2xl z-10 text-center">
+
+            <div class="mb-6">
+                <h1
+                    class="text-4xl md:text-5xl font-bold mb-4 bg-clip-text text-transparent bg-gradient-to-r from-egyptianBlue to-purple-600">
+                    Join the Movement.
+                </h1>
+                <p class="text-lg text-gray-700 mb-8 max-w-lg mx-auto leading-relaxed">
+                    Sojorn is a digital sanctuary built for collective action.
+                    Receive updates on our progress, opportunities to get involved, and reflections on building ethical
+                    technology.
+                </p>
+            </div>
+
+            <!-- SendPulse Subscription Form Placeholder -->
+            <div class="bg-white/40 p-8 rounded-2xl border border-white/60 text-left">
+                <!-- PASTE SENDPULSE FORM CODE HERE -->
+                <p class="text-sm font-bold text-egyptianBlue mb-2">Subscribe to Updates</p>
+                <p class="text-xs text-gray-500 mb-4">We do not sell data. We do not spam.</p>
+
+                <form action="https://api.sendpulse.com/..." method="post" class="flex flex-col gap-4">
+                    <input type="email" placeholder="email@address.com"
+                        class="w-full px-5 py-3 rounded-xl border border-gray-200 focus:border-egyptianBlue focus:ring-2 focus:ring-egyptianBlue/20 outline-none transition bg-white/80"
+                        required>
+                    <button type="submit"
+                        class="w-full px-8 py-3 bg-egyptianBlue text-white font-bold rounded-xl shadow-lg hover:bg-blue-800 transition transform hover:-translate-y-0.5">
+                        Subscribe
+                    </button>
+                    <p class="text-xs text-gray-400 mt-2">No spam, unsubscribe anytime.</p>
+                </form>
+                <!-- END PLACEHOLDER -->
+            </div>
+
+        </div>
+    </main>
+
+    <footer class="py-6 text-center text-gray-500 text-sm">
+        <div class="flex justify-center gap-6 mb-2">
+            <a href="/privacy" class="hover:text-egyptianBlue">Privacy</a>
+            <a href="/terms" class="hover:text-egyptianBlue">Terms</a>
+        </div>
+        &copy; 2026 <a href="https://mp.ls" target="_blank" class="hover:text-egyptianBlue transition">MP.LS LLC</a>.
+        All rights reserved.
+    </footer>
+
+</body>
+
+</html>

@@ -1,0 +1,487 @@
+import 'package:flutter/material.dart';
+import 'dart:async';
+import 'package:firebase_messaging/firebase_messaging.dart';
+import 'package:google_fonts/google_fonts.dart';
+import 'package:go_router/go_router.dart';
+import '../../services/notification_service.dart';
+import '../../services/secure_chat_service.dart';
+import '../../theme/app_theme.dart';
+import '../../theme/tokens.dart';
+import '../notifications/notifications_screen.dart';
+import '../compose/compose_screen.dart';
+import '../discover/discover_screen.dart';
+import '../beacon/beacon_screen.dart';
+import '../quips/create/quip_creation_flow.dart';
+import '../secure_chat/secure_chat_full_screen.dart';
+import '../../widgets/radial_menu_overlay.dart';
+import '../../providers/quip_upload_provider.dart';
+import '../../providers/notification_provider.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+
+/// Root shell for the main tabs. The active tab is controlled by GoRouter's
+/// [StatefulNavigationShell] so navigation state and tab selection stay in sync.
+class HomeShell extends ConsumerStatefulWidget {
+  final StatefulNavigationShell navigationShell;
+
+  const HomeShell({super.key, required this.navigationShell});
+
+  @override
+  ConsumerState<HomeShell> createState() => _HomeShellState();
+}
+
+class _HomeShellState extends ConsumerState<HomeShell> with WidgetsBindingObserver {
+  bool _isRadialMenuVisible = false;
+  final SecureChatService _chatService = SecureChatService();
+  StreamSubscription<RemoteMessage>? _notifSub;
+
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addObserver(this);
+    _chatService.startBackgroundSync();
+    _initNotificationListener();
+  }
+
+  void _initNotificationListener() {
+    _notifSub = NotificationService.instance.foregroundMessages.listen((message) {
+      if (mounted) {
+        NotificationService.instance.showNotificationBanner(context, message);
+      }
+    });
+  }
+
+  @override
+  void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
+    _chatService.stopBackgroundSync();
+    _notifSub?.cancel();
+    super.dispose();
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.resumed) {
+      _chatService.startBackgroundSync();
+    } else if (state == AppLifecycleState.paused) {
+      _chatService.stopBackgroundSync();
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final currentIndex = widget.navigationShell.currentIndex;
+
+    return Scaffold(
+      appBar: _buildAppBar(),
+      body: Stack(
+        children: [
+          NavigationShellScope(
+            currentIndex: currentIndex,
+            child: widget.navigationShell,
+          ),
+          RadialMenuOverlay(
+            isVisible: _isRadialMenuVisible,
+            onDismiss: () => setState(() => _isRadialMenuVisible = false),
+            onPostTap: () {
+              Navigator.of(context).push(
+                MaterialPageRoute(
+                  builder: (_) => const ComposeScreen(),
+                ),
+              );
+            },
+            onQuipTap: () {
+              Navigator.of(context).push(
+                MaterialPageRoute(
+                  builder: (_) => const QuipCreationFlow(),
+                ),
+              );
+            },
+            onBeaconTap: () {
+              Navigator.of(context).push(
+                MaterialPageRoute(
+                  builder: (_) => BeaconScreen(),
+                ),
+              );
+            },
+          ),
+        ],
+      ),
+      floatingActionButton: Transform.translate(
+        offset: const Offset(0, 12),
+        child: GestureDetector(
+          onTap: () => setState(() => _isRadialMenuVisible = !_isRadialMenuVisible),
+          child: Stack(
+            alignment: Alignment.center,
+            children: [
+              Consumer(
+                builder: (context, ref, child) {
+                  final upload = ref.watch(quipUploadProvider);
+                  final isDone = !upload.isUploading && upload.progress >= 1.0;
+                  final isUploading = upload.isUploading;
+                  final hasState = isUploading || isDone;
+
+                  return Container(
+                    width: 56,
+                    height: 56,
+                    decoration: BoxDecoration(
+                      color: hasState ? AppTheme.brightNavy : AppTheme.navyBlue,
+                      borderRadius: BorderRadius.circular(16),
+                      boxShadow: [
+                        BoxShadow(
+                          color: (hasState ? AppTheme.brightNavy : AppTheme.navyBlue).withValues(alpha: 0.4),
+                          blurRadius: 12,
+                          offset: const Offset(0, 4),
+                        ),
+                      ],
+                    ),
+                    child: Stack(
+                      alignment: Alignment.center,
+                      children: [
+                        // Inside Border Progress
+                        if (hasState)
+                          SizedBox(
+                            width: 50,
+                            height: 50,
+                            child: CustomPaint(
+                              painter: _VerticalBorderProgressPainter(
+                                progress: upload.progress,
+                                color: SojornColors.basicWhite,
+                                backgroundColor: SojornColors.basicWhite.withValues(alpha: 0.2),
+                                strokeWidth: 3.5,
+                                borderRadius: 12,
+                              ),
+                            ),
+                          ),
+                        
+                        // Content: Icon(+) or Percent or Check
+                        if (isDone)
+                          const Icon(Icons.check, color: SojornColors.basicWhite, size: 28)
+                        else if (isUploading)
+                          Text(
+                            '${(upload.progress * 100).toInt()}%',
+                            style: GoogleFonts.outfit(
+                              color: SojornColors.basicWhite,
+                              fontSize: 13,
+                              fontWeight: FontWeight.bold,
+                            ),
+                          )
+                        else
+                          const Icon(
+                            Icons.add,
+                            color: SojornColors.basicWhite,
+                            size: 32,
+                          ),
+                      ],
+                    ),
+                  );
+                },
+              ),
+            ],
+          ),
+        ),
+      ),
+      floatingActionButtonLocation: FloatingActionButtonLocation.centerDocked,
+      bottomNavigationBar: Padding(
+        padding: const EdgeInsets.only(bottom: 2),
+        child: BottomAppBar(
+          notchMargin: 8.0,
+          padding: EdgeInsets.zero,
+          height: SojornNav.bottomBarHeight,
+          clipBehavior: Clip.antiAlias,
+          shape: const CircularNotchedRectangle(),
+          child: ClipRRect(
+            borderRadius: const BorderRadius.only(
+              topLeft: Radius.circular(16),
+              topRight: Radius.circular(16),
+            ),
+            child: Padding(
+              padding: const EdgeInsets.symmetric(vertical: SojornNav.bottomBarVerticalPadding),
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.spaceAround,
+                children: [
+                  _buildNavBarItem(
+                    icon: Icons.home_outlined,
+                    activeIcon: Icons.home,
+                    index: 0,
+                    label: 'Home',
+                  ),
+                  _buildNavBarItem(
+                    icon: Icons.play_circle_outline,
+                    activeIcon: Icons.play_circle,
+                    index: 1,
+                    label: 'Quips',
+                    assetPath: 'assets/icon/quips.png',
+                  ),
+                  const SizedBox(width: SojornNav.bottomFabGap),
+                  _buildNavBarItem(
+                    icon: Icons.sensors_outlined,
+                    activeIcon: Icons.sensors,
+                    index: 2,
+                    label: 'Beacons',
+                    assetPath: 'assets/icon/beacon.png',
+                  ),
+                  _buildNavBarItem(
+                    icon: Icons.person_outline,
+                    activeIcon: Icons.person,
+                    index: 3,
+                    label: 'Profile',
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  PreferredSizeWidget _buildAppBar() {
+    final isBeacon = widget.navigationShell.currentIndex == 2;
+
+    return AppBar(
+      title: InkWell(
+        onTap: () => widget.navigationShell.goBranch(0),
+        child: Image.asset(
+          isBeacon ? 'assets/images/beacons.png' : 'assets/images/toplogo.png',
+          height: isBeacon ? 34 : 38,
+          fit: BoxFit.contain,
+        ),
+      ),
+      centerTitle: false,
+      elevation: 0,
+      backgroundColor: AppTheme.scaffoldBg,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.only(
+          bottomLeft: Radius.circular(16),
+          bottomRight: Radius.circular(16),
+        ),
+      ),
+      actions: [
+        if (isBeacon)
+          _buildBeaconCreateButton()
+        else
+          IconButton(
+            icon: Icon(Icons.search, color: AppTheme.navyBlue),
+            tooltip: 'Discover',
+            onPressed: () {
+              Navigator.of(context, rootNavigator: true).push(
+                MaterialPageRoute(
+                  builder: (_) => const DiscoverScreen(),
+                ),
+              );
+            },
+          ),
+        IconButton(
+          icon: Consumer(
+            builder: (context, ref, child) {
+              final badge = ref.watch(currentBadgeProvider);
+              return Badge(
+                label: Text(badge.messageCount.toString()),
+                isLabelVisible: badge.messageCount > 0,
+                backgroundColor: AppTheme.brightNavy,
+                child: Icon(Icons.chat_bubble_outline, color: AppTheme.navyBlue),
+              );
+            },
+          ),
+          tooltip: 'Messages',
+          onPressed: () {
+              Navigator.of(context, rootNavigator: true).push(
+                MaterialPageRoute(
+                  builder: (_) => const SecureChatFullScreen(),
+                  fullscreenDialog: true,
+                ),
+              );
+          },
+        ),
+        IconButton(
+          icon: Consumer(
+            builder: (context, ref, child) {
+              final badge = ref.watch(currentBadgeProvider);
+              return Badge(
+                label: Text(badge.notificationCount.toString()),
+                isLabelVisible: badge.notificationCount > 0,
+                backgroundColor: SojornColors.destructive,
+                child: Icon(Icons.notifications_none, color: AppTheme.navyBlue),
+              );
+            },
+          ),
+          tooltip: 'Notifications',
+          onPressed: () {
+            Navigator.of(context, rootNavigator: true).push(
+              MaterialPageRoute(
+                builder: (_) => const NotificationsScreen(),
+              ),
+            );
+          },
+        ),
+        const SizedBox(width: 4),
+      ],
+    );
+  }
+
+  Widget _buildBeaconCreateButton() {
+    final beaconState = BeaconScreen.globalKey.currentState;
+    final label = beaconState?.createLabel ?? 'Create';
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 8),
+      child: FilledButton.icon(
+        onPressed: () {
+          final state = BeaconScreen.globalKey.currentState;
+          if (state != null) {
+            state.onCreateAction();
+          } else {
+            WidgetsBinding.instance.addPostFrameCallback((_) {
+              BeaconScreen.globalKey.currentState?.onCreateAction();
+            });
+          }
+        },
+        icon: const Icon(Icons.add, size: 16),
+        label: Text(label, style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w700)),
+        style: FilledButton.styleFrom(
+          backgroundColor: AppTheme.navyBlue,
+          foregroundColor: SojornColors.basicWhite,
+          padding: const EdgeInsets.symmetric(horizontal: 12),
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+          minimumSize: const Size(0, 34),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildNavBarItem({
+    required IconData icon,
+    required IconData activeIcon,
+    required int index,
+    required String label,
+    String? assetPath,
+  }) {
+    final isActive = widget.navigationShell.currentIndex == index;
+    return Expanded(
+      child: InkWell(
+        onTap: () {
+          widget.navigationShell.goBranch(
+            index,
+            initialLocation: index == widget.navigationShell.currentIndex,
+          );
+        },
+        child: Container(
+          height: double.infinity,
+          alignment: Alignment.center,
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              assetPath != null
+                  ? Image.asset(
+                      assetPath,
+                      width: SojornNav.bottomBarIconSize,
+                      height: SojornNav.bottomBarIconSize,
+                      color: isActive ? AppTheme.navyBlue : SojornColors.bottomNavUnselected,
+                    )
+                  : Icon(
+                      isActive ? activeIcon : icon,
+                      color: isActive ? AppTheme.navyBlue : SojornColors.bottomNavUnselected,
+                      size: SojornNav.bottomBarIconSize,
+                    ),
+              SizedBox(height: SojornNav.bottomBarLabelTopGap),
+              Text(
+                label,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: TextStyle(
+                  fontSize: SojornNav.bottomBarLabelSize,
+                  fontWeight: isActive ? FontWeight.w700 : FontWeight.w600,
+                  color: isActive ? AppTheme.navyBlue : SojornColors.bottomNavUnselected,
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _VerticalBorderProgressPainter extends CustomPainter {
+  final double progress;
+  final Color color;
+  final Color backgroundColor;
+  final double strokeWidth;
+  final double borderRadius;
+
+  _VerticalBorderProgressPainter({
+    required this.progress,
+    required this.color,
+    required this.backgroundColor,
+    this.strokeWidth = 3.0,
+    this.borderRadius = 16.0,
+  });
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final bgPaint = Paint()
+      ..color = backgroundColor
+      ..strokeWidth = strokeWidth
+      ..style = PaintingStyle.stroke;
+
+    final rect = Rect.fromLTWH(
+      strokeWidth / 2,
+      strokeWidth / 2,
+      size.width - strokeWidth,
+      size.height - strokeWidth,
+    );
+    final rrect = RRect.fromRectAndRadius(rect, Radius.circular(borderRadius));
+
+    // Draw background border
+    canvas.drawRRect(rrect, bgPaint);
+
+    // Draw progress border
+    if (progress > 0) {
+      final progressPaint = Paint()
+        ..color = color
+        ..strokeWidth = strokeWidth
+        ..style = PaintingStyle.stroke
+        ..strokeCap = StrokeCap.round;
+
+      // Clip to vertical progress
+      canvas.save();
+      final clipRect = Rect.fromLTWH(
+        0,
+        size.height * (1.0 - progress),
+        size.width,
+        size.height * progress,
+      );
+      canvas.clipRect(clipRect);
+      canvas.drawRRect(rrect, progressPaint);
+      canvas.restore();
+    }
+  }
+
+  @override
+  bool shouldRepaint(covariant _VerticalBorderProgressPainter oldDelegate) {
+    return oldDelegate.progress != progress ||
+        oldDelegate.color != color ||
+        oldDelegate.backgroundColor != backgroundColor;
+  }
+}
+
+/// Provides the current navigation shell index to descendants that need to
+/// react (e.g. pausing quip playback when the tab is not active).
+class NavigationShellScope extends InheritedWidget {
+  final int currentIndex;
+
+  const NavigationShellScope({
+    super.key,
+    required this.currentIndex,
+    required super.child,
+  });
+
+  static NavigationShellScope? of(BuildContext context) {
+    return context.dependOnInheritedWidgetOfExactType<NavigationShellScope>();
+  }
+
+  @override
+  bool updateShouldNotify(covariant NavigationShellScope oldWidget) {
+    return currentIndex != oldWidget.currentIndex;
+  }
+}

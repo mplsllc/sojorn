@@ -1,0 +1,425 @@
+import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+import '../../models/post.dart';
+import '../../models/beacon.dart';
+import '../../providers/api_provider.dart';
+import '../../theme/tokens.dart';
+import '../../theme/app_theme.dart';
+
+class BeaconDetailScreen extends ConsumerStatefulWidget {
+  final Post beaconPost;
+
+  const BeaconDetailScreen({super.key, required this.beaconPost});
+
+  @override
+  ConsumerState<BeaconDetailScreen> createState() => _BeaconDetailScreenState();
+}
+
+class _BeaconDetailScreenState extends ConsumerState<BeaconDetailScreen>
+    with SingleTickerProviderStateMixin {
+  late AnimationController _pulseController;
+  late Animation<double> _pulseAnimation;
+  bool _isVouching = false;
+  bool _isReporting = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _pulseController = AnimationController(
+      duration: const Duration(milliseconds: 1200),
+      vsync: this,
+    );
+
+    final beacon = widget.beaconPost.toBeacon();
+    if (beacon.isRecent) {
+      _pulseAnimation = Tween<double>(begin: 0.9, end: 1.05).animate(
+        CurvedAnimation(parent: _pulseController, curve: Curves.easeInOut),
+      );
+      _pulseController.repeat(reverse: true);
+    } else {
+      _pulseAnimation = const AlwaysStoppedAnimation(1.0);
+    }
+  }
+
+  @override
+  void dispose() {
+    _pulseController.dispose();
+    super.dispose();
+  }
+
+  Beacon get _beacon => widget.beaconPost.toBeacon();
+  Post get _post => widget.beaconPost;
+
+  @override
+  Widget build(BuildContext context) {
+    final severityColor = _beacon.pinColor;
+
+    return Scaffold(
+      backgroundColor: AppTheme.scaffoldBg,
+      body: CustomScrollView(
+        slivers: [
+          _buildHeader(severityColor),
+          SliverToBoxAdapter(
+            child: Container(
+              decoration: BoxDecoration(
+                color: AppTheme.cardSurface,
+                borderRadius: const BorderRadius.vertical(top: Radius.circular(24)),
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  _buildIncidentInfo(severityColor),
+                  _buildMetaRow(),
+                  _buildVerificationSection(severityColor),
+                  const SizedBox(height: 24),
+                  _buildActionButtons(severityColor),
+                  const SizedBox(height: 40),
+                ],
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildHeader(Color severityColor) {
+    final hasImage = _post.imageUrl != null && _post.imageUrl!.isNotEmpty;
+
+    return SliverAppBar(
+      expandedHeight: hasImage ? 280 : 140,
+      pinned: true,
+      backgroundColor: AppTheme.scaffoldBg,
+      leading: Container(
+        margin: const EdgeInsets.all(8),
+        decoration: BoxDecoration(color: const Color(0x61000000), borderRadius: BorderRadius.circular(12)),
+        child: IconButton(
+          onPressed: () => Navigator.of(context).pop(),
+          icon: const Icon(Icons.arrow_back, color: SojornColors.basicWhite),
+        ),
+      ),
+      flexibleSpace: FlexibleSpaceBar(
+        background: Stack(
+          fit: StackFit.expand,
+          children: [
+            if (hasImage)
+              Image.network(_post.imageUrl!, fit: BoxFit.cover,
+                errorBuilder: (_, __, ___) => _buildFallbackHeader(severityColor))
+            else
+              _buildFallbackHeader(severityColor),
+
+            // Dark gradient overlay
+            Container(
+              decoration: BoxDecoration(
+                gradient: LinearGradient(
+                  begin: Alignment.topCenter, end: Alignment.bottomCenter,
+                  colors: [const Color(0x99000000), SojornColors.transparent, const Color(0x80000000)],
+                ),
+              ),
+            ),
+
+            // Severity + incident status badges
+            Positioned(
+              top: 60, right: 16,
+              child: AnimatedBuilder(
+                animation: _pulseAnimation,
+                builder: (context, child) {
+                  return Transform.scale(
+                    scale: _pulseAnimation.value,
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+                      decoration: BoxDecoration(
+                        color: severityColor.withValues(alpha: 0.9),
+                        borderRadius: BorderRadius.circular(16),
+                        boxShadow: [BoxShadow(color: severityColor.withValues(alpha: 0.4), blurRadius: 8, spreadRadius: 2)],
+                      ),
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Icon(_beacon.severity.icon, color: SojornColors.basicWhite, size: 14),
+                          const SizedBox(width: 4),
+                          Text(_beacon.severity.label,
+                            style: const TextStyle(color: SojornColors.basicWhite, fontWeight: FontWeight.bold, fontSize: 11)),
+                        ],
+                      ),
+                    ),
+                  );
+                },
+              ),
+            ),
+
+            // LIVE badge
+            if (_beacon.isRecent)
+              Positioned(
+                top: 60, left: 60,
+                child: Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                  decoration: BoxDecoration(
+                    color: SojornColors.destructive, borderRadius: BorderRadius.circular(4),
+                  ),
+                  child: const Text('LIVE', style: TextStyle(color: SojornColors.basicWhite, fontSize: 10, fontWeight: FontWeight.bold)),
+                ),
+              ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildFallbackHeader(Color severityColor) {
+    return Container(
+      color: AppTheme.scaffoldBg,
+      child: Center(
+        child: Container(
+          width: 80, height: 80,
+          decoration: BoxDecoration(
+            color: severityColor.withValues(alpha: 0.2),
+            shape: BoxShape.circle,
+          ),
+          child: Icon(_beacon.beaconType.icon, color: severityColor, size: 40),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildIncidentInfo(Color severityColor) {
+    return Padding(
+      padding: const EdgeInsets.all(20),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Container(
+                padding: const EdgeInsets.all(10),
+                decoration: BoxDecoration(
+                  color: severityColor.withValues(alpha: 0.15),
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                child: Icon(_beacon.beaconType.icon, color: severityColor, size: 22),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(_beacon.beaconType.displayName,
+                      style: TextStyle(color: AppTheme.navyBlue, fontSize: 18, fontWeight: FontWeight.bold)),
+                    const SizedBox(height: 2),
+                    Text('${_beacon.getFormattedDistance()} away',
+                      style: TextStyle(color: SojornColors.textDisabled, fontSize: 13)),
+                  ],
+                ),
+              ),
+              // Incident status chip
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                decoration: BoxDecoration(
+                  color: _beacon.incidentStatus == BeaconIncidentStatus.active
+                      ? const Color(0xFF4CAF50).withValues(alpha: 0.2)
+                      : SojornColors.textDisabled.withValues(alpha: 0.2),
+                  borderRadius: BorderRadius.circular(8),
+                  border: Border.all(
+                    color: _beacon.incidentStatus == BeaconIncidentStatus.active
+                        ? const Color(0xFF4CAF50).withValues(alpha: 0.5)
+                        : SojornColors.textDisabled.withValues(alpha: 0.3),
+                  ),
+                ),
+                child: Text(_beacon.incidentStatus.label,
+                  style: TextStyle(
+                    color: _beacon.incidentStatus == BeaconIncidentStatus.active ? const Color(0xFF4CAF50) : SojornColors.textDisabled,
+                    fontSize: 11, fontWeight: FontWeight.w600)),
+              ),
+            ],
+          ),
+          const SizedBox(height: 16),
+          Text(_post.body,
+            style: TextStyle(color: SojornColors.postContent, fontSize: 15, height: 1.5)),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildMetaRow() {
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 20),
+      child: Container(
+        padding: const EdgeInsets.all(12),
+        decoration: BoxDecoration(
+          color: AppTheme.scaffoldBg,
+          borderRadius: BorderRadius.circular(10),
+          border: Border.all(color: AppTheme.navyBlue.withValues(alpha: 0.08)),
+        ),
+        child: Row(
+          mainAxisAlignment: MainAxisAlignment.spaceAround,
+          children: [
+            _metaItem(Icons.schedule, _beacon.getTimeAgo()),
+            _metaItem(Icons.location_on, _beacon.getFormattedDistance()),
+            _metaItem(Icons.visibility, '${_beacon.verificationCount} verified'),
+            _metaItem(Icons.radar, '${_beacon.radius}m radius'),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _metaItem(IconData icon, String label) {
+    return Column(
+      children: [
+        Icon(icon, size: 16, color: SojornColors.textDisabled),
+        const SizedBox(height: 4),
+        Text(label, style: TextStyle(color: SojornColors.textDisabled, fontSize: 10)),
+      ],
+    );
+  }
+
+  Widget _buildVerificationSection(Color severityColor) {
+    final verCount = _beacon.verificationCount;
+    final isVerified = verCount >= 3;
+
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(20, 20, 20, 0),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text('Community Verification',
+            style: TextStyle(color: AppTheme.navyBlue.withValues(alpha: 0.6), fontSize: 13, fontWeight: FontWeight.w600)),
+          const SizedBox(height: 10),
+          Container(
+            padding: const EdgeInsets.all(14),
+            decoration: BoxDecoration(
+              color: AppTheme.scaffoldBg,
+              borderRadius: BorderRadius.circular(12),
+              border: Border.all(color: isVerified ? const Color(0xFF4CAF50).withValues(alpha: 0.3) : AppTheme.navyBlue.withValues(alpha: 0.08)),
+            ),
+            child: Row(
+              children: [
+                Icon(isVerified ? Icons.verified : Icons.pending,
+                  color: isVerified ? const Color(0xFF4CAF50) : SojornColors.nsfwWarningIcon, size: 28),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(isVerified ? 'Verified by community' : 'Awaiting verification',
+                        style: TextStyle(
+                          color: isVerified ? const Color(0xFF4CAF50) : SojornColors.nsfwWarningIcon,
+                          fontSize: 14, fontWeight: FontWeight.w600)),
+                      const SizedBox(height: 2),
+                      Text('$verCount / 3 neighbors confirmed this report',
+                        style: TextStyle(color: SojornColors.textDisabled, fontSize: 12)),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(height: 10),
+          // Verification progress bar
+          ClipRRect(
+            borderRadius: BorderRadius.circular(4),
+            child: LinearProgressIndicator(
+              value: (verCount / 3).clamp(0.0, 1.0),
+              minHeight: 4,
+              backgroundColor: AppTheme.navyBlue.withValues(alpha: 0.08),
+              valueColor: AlwaysStoppedAnimation<Color>(isVerified ? const Color(0xFF4CAF50) : SojornColors.nsfwWarningIcon),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildActionButtons(Color severityColor) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 20),
+      child: Column(
+        children: [
+          // "I see this too" button — primary action
+          SizedBox(
+            width: double.infinity,
+            height: 50,
+            child: ElevatedButton.icon(
+              onPressed: _isVouching ? null : _vouchBeacon,
+              icon: _isVouching
+                  ? const SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2, color: SojornColors.basicWhite))
+                  : const Icon(Icons.visibility, size: 20),
+              label: Text(_isVouching ? 'Confirming...' : 'I see this too',
+                style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 15)),
+              style: ElevatedButton.styleFrom(
+                backgroundColor: const Color(0xFF388E3C),
+                foregroundColor: SojornColors.basicWhite,
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                disabledBackgroundColor: const Color(0xFF4CAF50).withValues(alpha: 0.3),
+              ),
+            ),
+          ),
+          const SizedBox(height: 10),
+          // False alarm / report button — secondary action
+          SizedBox(
+            width: double.infinity,
+            height: 44,
+            child: OutlinedButton.icon(
+              onPressed: _isReporting ? null : _reportBeacon,
+              icon: _isReporting
+                  ? SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2, color: SojornColors.destructive))
+                  : Icon(Icons.flag, size: 18, color: SojornColors.destructive.withValues(alpha: 0.7)),
+              label: Text(_isReporting ? 'Reporting...' : 'False alarm / Report',
+                style: TextStyle(color: SojornColors.destructive.withValues(alpha: 0.7), fontSize: 13)),
+              style: OutlinedButton.styleFrom(
+                side: BorderSide(color: SojornColors.destructive.withValues(alpha: 0.3)),
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Future<void> _vouchBeacon() async {
+    final apiService = ref.read(apiServiceProvider);
+    setState(() => _isVouching = true);
+
+    try {
+      await apiService.vouchBeacon(_post.id);
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Thanks for confirming this report!'), backgroundColor: Color(0xFF4CAF50)),
+        );
+        Navigator.of(context).pop();
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Something went wrong: $e'), backgroundColor: SojornColors.destructive),
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _isVouching = false);
+    }
+  }
+
+  Future<void> _reportBeacon() async {
+    final apiService = ref.read(apiServiceProvider);
+    setState(() => _isReporting = true);
+
+    try {
+      await apiService.reportBeacon(_post.id);
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Report received. Thanks for keeping the community safe.'), backgroundColor: SojornColors.nsfwWarningIcon),
+        );
+        Navigator.of(context).pop();
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Something went wrong: $e'), backgroundColor: SojornColors.destructive),
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _isReporting = false);
+    }
+  }
+}

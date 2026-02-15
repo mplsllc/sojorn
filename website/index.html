@@ -1,0 +1,169 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Sojorn - The Vibrant Social Network</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link
+        href="https://fonts.googleapis.com/css2?family=Literata:opsz,wght@7..72,400;600;700&family=Outfit:wght@300;400;600;700&display=swap"
+        rel="stylesheet">
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    colors: {
+                        egyptianBlue: '#1034A6',
+                        queenPink: '#E8CCD7',
+                        navyText: '#0A2351',
+                    },
+                    fontFamily: {
+                        sans: ['Outfit', 'sans-serif'],
+                        serif: ['Literata', 'serif'],
+                    }
+                }
+            }
+        }
+    </script>
+    <style>
+        body {
+            font-family: 'Outfit', sans-serif;
+        }
+
+        .glass-card {
+            background: rgba(255, 255, 255, 0.7);
+            backdrop-filter: blur(12px);
+            border: 1px solid rgba(255, 255, 255, 0.5);
+        }
+    </style>
+</head>
+
+<body class="bg-gradient-to-br from-gray-50 to-queenPink min-h-screen text-navyText flex flex-col">
+
+    <!-- Navigation -->
+    <nav class="w-full py-6 px-8 flex justify-between items-center glass-card border-b border-white/20">
+        <div class="flex items-center gap-3">
+            <img src="/leaf.png" alt="Sojorn Leaf" class="h-12 w-auto">
+            <span class="text-5xl font-serif font-bold tracking-tight text-egyptianBlue">sojorn</span>
+        </div>
+        <div class="flex items-center gap-6">
+            <a href="/email" class="text-sm font-semibold hover:text-egyptianBlue transition">Newsletter</a>
+            <a href="mailto:contact@sojorn.net"
+                class="text-sm font-semibold hover:text-egyptianBlue transition">Contact</a>
+        </div>
+    </nav>
+
+    <!-- Hero Section -->
+    <main class="flex-grow flex items-center justify-center px-6 py-20 relative overflow-hidden">
+        <!-- Decorative blobs -->
+        <div
+            class="absolute top-0 right-0 w-96 h-96 bg-egyptianBlue/10 rounded-full blur-3xl -translate-y-1/2 translate-x-1/2">
+        </div>
+        <div
+            class="absolute bottom-0 left-0 w-80 h-80 bg-queenPink/60 rounded-full blur-3xl translate-y-1/2 -translate-x-1/3">
+        </div>
+
+        <div class="glass-card max-w-4xl w-full p-12 rounded-3xl shadow-2xl z-10 text-center">
+
+
+            <h1
+                class="text-5xl md:text-7xl font-bold mb-6 bg-clip-text text-transparent bg-gradient-to-r from-egyptianBlue to-purple-600">
+                Journey Vibrantly.
+            </h1>
+
+            <p class="text-xl md:text-2xl text-gray-700 mb-10 max-w-2xl mx-auto leading-relaxed">
+                Connect deeply with a social network built on <strong>Data Minimization</strong>,
+                <strong>End-to-End Encryption</strong>, and <strong>Authenticity</strong>.
+            </p>
+
+            <!-- Features Grid -->
+            <div class="grid md:grid-cols-3 gap-8 mb-12 text-left">
+                <div class="p-6 bg-white/50 rounded-2xl hover:bg-white/80 transition duration-300">
+                    <div class="w-12 h-12 bg-egyptianBlue/10 rounded-xl flex items-center justify-center mb-4 text-2xl">
+                        🛡️</div>
+                    <h3 class="font-bold text-lg mb-2">Data Minimization</h3>
+                    <p class="text-sm text-gray-600">We collect only what is strictly necessary. No tracking pixels, no
+                        shadow profiles, no selling data.</p>
+                </div>
+                <div class="p-6 bg-white/50 rounded-2xl hover:bg-white/80 transition duration-300">
+                    <div class="w-12 h-12 bg-egyptianBlue/10 rounded-xl flex items-center justify-center mb-4 text-2xl">
+                        🔒</div>
+                    <h3 class="font-bold text-lg mb-2">Zero-Knowledge E2EE</h3>
+                    <p class="text-sm text-gray-600">Chat with total privacy. Keys are generated on your device; we
+                        cannot read your messages.</p>
+                </div>
+                <div class="p-6 bg-white/50 rounded-2xl hover:bg-white/80 transition duration-300">
+                    <div class="w-12 h-12 bg-egyptianBlue/10 rounded-xl flex items-center justify-center mb-4 text-2xl">
+                        📍</div>
+                    <h3 class="font-bold text-lg mb-2">Beacons</h3>
+                    <p class="text-sm text-gray-600">Discover ephemeral local events and connect with your immediate
+                        community.</p>
+                </div>
+            </div>
+
+            <!-- Email Signup -->
+            <div class="max-w-md mx-auto mb-6">
+                <p class="text-lg font-semibold text-egyptianBlue mb-4">Coming Soon</p>
+                <p class="text-sm text-gray-600 mb-6">Be the first to know when Sojorn launches. Drop your email and we'll notify you.</p>
+                <form id="waitlistForm" class="flex gap-3">
+                    <input type="email" id="waitlistEmail" required placeholder="your@email.com"
+                        class="flex-1 px-4 py-3 rounded-lg border border-gray-300 focus:outline-none focus:ring-2 focus:ring-egyptianBlue/50 focus:border-egyptianBlue text-sm">
+                    <button type="submit" id="waitlistBtn"
+                        class="px-6 py-3 bg-egyptianBlue text-white font-bold rounded-lg shadow-lg hover:bg-blue-800 transition text-sm whitespace-nowrap">
+                        Notify Me
+                    </button>
+                </form>
+                <p id="waitlistMsg" class="mt-3 text-sm hidden"></p>
+            </div>
+
+            <p class="text-xs text-gray-400">
+                Available soon on iOS, Android, and Web.
+            </p>
+
+            <script>
+                document.getElementById('waitlistForm').addEventListener('submit', async (e) => {
+                    e.preventDefault();
+                    const email = document.getElementById('waitlistEmail').value;
+                    const btn = document.getElementById('waitlistBtn');
+                    const msg = document.getElementById('waitlistMsg');
+                    btn.disabled = true;
+                    btn.textContent = '...';
+                    try {
+                        const res = await fetch('https://api.sojorn.net/api/v1/waitlist', {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({ email })
+                        });
+                        const data = await res.json();
+                        if (res.ok) {
+                            msg.textContent = "You're on the list! We'll be in touch.";
+                            msg.className = 'mt-3 text-sm text-green-600';
+                            document.getElementById('waitlistEmail').value = '';
+                        } else {
+                            msg.textContent = data.error || 'Something went wrong.';
+                            msg.className = 'mt-3 text-sm text-red-500';
+                        }
+                    } catch {
+                        msg.textContent = 'Connection error. Try again later.';
+                        msg.className = 'mt-3 text-sm text-red-500';
+                    }
+                    btn.disabled = false;
+                    btn.textContent = 'Notify Me';
+                });
+            </script>
+        </div>
+    </main>
+
+    <footer class="py-6 text-center text-gray-500 text-sm">
+        <div class="flex justify-center gap-6 mb-2">
+            <a href="/privacy" class="hover:text-egyptianBlue">Privacy</a>
+            <a href="/terms" class="hover:text-egyptianBlue">Terms</a>
+        </div>
+        &copy; 2026 <a href="https://mp.ls" target="_blank" class="hover:text-egyptianBlue transition">MP.LS LLC</a>.
+        All rights reserved.
+    </footer>
+
+</body>
+
+</html>

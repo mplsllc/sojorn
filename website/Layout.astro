@@ -1,0 +1,132 @@
+---
+import '../styles/global.css';
+import '@fontsource-variable/inter';
+import '@fontsource-variable/space-grotesk';
+
+interface Props {
+	title?: string;
+	description?: string;
+}
+
+const { 
+	title = 'MPLS LLC | Software Development & Digital Infrastructure',
+	description = 'MPLS LLC is a Minneapolis-based software development company specializing in privacy-first applications, custom web and mobile development, and scalable digital infrastructure.'
+} = Astro.props;
+---
+
+<!doctype html>
+<html lang="en" class="h-full">
+	<head>
+		<meta charset="utf-8" />
+		<meta name="viewport" content="width=device-width, initial-scale=1" />
+		<meta name="description" content={description} />
+		<meta name="keywords" content="software development, Minneapolis, privacy, mobile apps, web development, MPLS LLC, digital infrastructure" />
+		<meta name="author" content="MPLS LLC" />
+		<link rel="icon" type="image/svg+xml" href="/icons/favicon.svg" />
+		<link rel="icon" type="image/png" sizes="96x96" href="/icons/favicon-96x96.png" />
+		<link rel="icon" type="image/x-icon" href="/icons/favicon.ico" />
+		<link rel="apple-touch-icon" sizes="180x180" href="/icons/apple-touch-icon.png" />
+		<link rel="manifest" href="/icons/site.webmanifest" />
+		<meta name="theme-color" content="#1a3a5c" />
+		<title>{title}</title>
+		
+		<!-- Open Graph -->
+		<meta property="og:type" content="website" />
+		<meta property="og:title" content={title} />
+		<meta property="og:description" content={description} />
+		<meta property="og:image" content="/img/lightlogo.png" />
+		
+		<!-- Twitter -->
+		<meta property="twitter:card" content="summary_large_image" />
+		<meta property="twitter:title" content={title} />
+		<meta property="twitter:description" content={description} />
+		
+		<!-- Security headers -->
+		<meta http-equiv="X-Content-Type-Options" content="nosniff" />
+		<meta http-equiv="X-Frame-Options" content="DENY" />
+		<meta http-equiv="Referrer-Policy" content="strict-origin-when-cross-origin" />
+	</head>
+	<body class="min-h-screen antialiased bg-white text-zinc-900">
+		<!-- Skip to main content -->
+		<a href="#main-content" class="sr-only focus:not-sr-only focus:absolute focus:top-4 focus:left-4 bg-brand-700 text-white px-4 py-2 rounded-md z-50">
+			Skip to main content
+		</a>
+
+		<!-- Navigation -->
+		<header class="sticky top-0 z-40 w-full border-b border-zinc-200 bg-white/90 backdrop-blur-md">
+			<nav class="mx-auto flex max-w-6xl items-center justify-between px-6 py-4">
+				<a href="/" class="flex items-center">
+					<img src="/img/lightlogo.png" alt="MPLS LLC" class="h-[6.5rem]" />
+				</a>
+				<div class="hidden md:flex items-center gap-8">
+					<a href="/#products" class="text-sm font-medium text-zinc-600 hover:text-zinc-900 transition-colors">Products</a>
+					<a href="/sojorn" class="text-sm font-medium text-zinc-600 hover:text-zinc-900 transition-colors">Sojorn</a>
+					<a href="/lesotho" class="text-sm font-medium text-zinc-600 hover:text-zinc-900 transition-colors">Why .ls?</a>
+					<a href="/#about" class="text-sm font-medium text-zinc-600 hover:text-zinc-900 transition-colors">About</a>
+					<a href="/#contact" class="inline-flex items-center rounded-lg bg-brand-700 px-4 py-2 text-sm font-semibold text-white hover:bg-brand-800 transition-colors">Contact</a>
+				</div>
+				<!-- Mobile menu button -->
+				<button id="mobile-menu-btn" class="md:hidden p-2 text-zinc-600 hover:text-zinc-900" aria-label="Toggle menu">
+					<svg class="h-6 w-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+						<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 12h16M4 18h16" />
+					</svg>
+				</button>
+			</nav>
+			<!-- Mobile menu -->
+			<div id="mobile-menu" class="hidden md:hidden border-t border-zinc-200 bg-white px-6 py-4 space-y-3">
+				<a href="/#products" class="block text-sm font-medium text-zinc-600 hover:text-zinc-900">Products</a>
+				<a href="/sojorn" class="block text-sm font-medium text-zinc-600 hover:text-zinc-900">Sojorn</a>
+				<a href="/lesotho" class="block text-sm font-medium text-zinc-600 hover:text-zinc-900">Why .ls?</a>
+				<a href="/#about" class="block text-sm font-medium text-zinc-600 hover:text-zinc-900">About</a>
+				<a href="/#contact" class="block text-sm font-semibold text-brand-700 hover:text-brand-800">Contact</a>
+			</div>
+		</header>
+
+		<!-- Main Content -->
+		<main id="main-content">
+			<slot />
+		</main>
+
+		<!-- Footer -->
+		<footer class="bg-zinc-900 text-zinc-300">
+			<div class="mx-auto max-w-6xl px-6 py-16">
+				<div class="grid gap-12 md:grid-cols-4">
+					<div class="md:col-span-2">
+						<img src="/img/darklogo.png" alt="MPLS LLC" class="h-[6.5rem] mb-4" />
+						<p class="text-sm text-zinc-400 max-w-sm leading-relaxed">
+							Minneapolis-based software development company building privacy-first applications and scalable digital infrastructure.
+						</p>
+					</div>
+					<div>
+						<h4 class="text-sm font-semibold text-zinc-100 uppercase tracking-wider mb-4">Company</h4>
+						<ul class="space-y-2">
+							<li><a href="#products" class="text-sm text-zinc-400 hover:text-white transition-colors">Products</a></li>
+							<li><a href="#about" class="text-sm text-zinc-400 hover:text-white transition-colors">About</a></li>
+							<li><a href="#contact" class="text-sm text-zinc-400 hover:text-white transition-colors">Contact</a></li>
+						</ul>
+					</div>
+					<div>
+						<h4 class="text-sm font-semibold text-zinc-100 uppercase tracking-wider mb-4">Legal</h4>
+						<ul class="space-y-2">
+							<li><a href="/privacy" class="text-sm text-zinc-400 hover:text-white transition-colors">Privacy Policy</a></li>
+							<li><a href="/terms" class="text-sm text-zinc-400 hover:text-white transition-colors">Terms of Service</a></li>
+						</ul>
+					</div>
+				</div>
+				<div class="mt-12 pt-8 border-t border-zinc-800 flex flex-col md:flex-row items-center justify-between gap-4">
+					<p class="text-sm text-zinc-500">&copy; 2026 MPLS LLC. All rights reserved.</p>
+					<p class="text-sm text-zinc-500">Minneapolis, Minnesota</p>
+				</div>
+			</div>
+		</footer>
+
+		<script is:inline>
+			const btn = document.getElementById('mobile-menu-btn');
+			const menu = document.getElementById('mobile-menu');
+			if (btn && menu) {
+				btn.addEventListener('click', () => menu.classList.toggle('hidden'));
+				menu.querySelectorAll('a').forEach(a => a.addEventListener('click', () => menu.classList.add('hidden')));
+			}
+		</script>
+	</body>
+</html>

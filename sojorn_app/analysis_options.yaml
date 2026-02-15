@@ -1,0 +1,27 @@
+# This file configures the analyzer, which statically analyzes Dart code to
+# check for errors, warnings, and lints.
+#
+# The issues identified by the analyzer are surfaced in the UI of Dart-enabled
+# IDEs (https://dart.dev/tools#ides-and-editors). The analyzer can also be
+# invoked from the command line by running `flutter analyze`.
+
+# The following line activates a set of recommended lints for Flutter apps,
+# packages, and plugins designed to encourage good coding practices.
+include: package:flutter_lints/flutter.yaml
+
+linter:
+  rules:
+    # Suppress deprecated_member_use warnings for withOpacity (known migration work)
+    - ignore: deprecated_member_use
+    - ignore: deprecated_member_use_from_same_package
+    
+    # Allow print for debugging in development
+    - ignore: avoid_print
+    
+    # Suppress unused code warnings (cleanup backlog)
+    - ignore: unused_element
+    - ignore: unused_import
+    - ignore: unused_local_variable
+
+# Additional information about this file can be found at
+# https://dart.dev/guides/language/analysis-options

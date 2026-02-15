@@ -1,0 +1,215 @@
+---
+import Layout from '../layouts/Layout.astro';
+---
+
+<Layout title="Sojorn Beta | Join the Sanctuary" description="Sign up for early access to Sojorn — the privacy-first social network built on Buddhist principles of conscious connection.">
+
+	<!-- Hero with Signup -->
+	<section class="relative overflow-hidden bg-gradient-to-br from-zinc-950 via-zinc-900 to-brand-950">
+		<div class="absolute inset-0 opacity-10">
+			<div class="absolute top-20 right-10 w-[500px] h-[500px] rounded-full bg-brand-500 blur-[120px]"></div>
+			<div class="absolute bottom-0 left-20 w-[300px] h-[300px] rounded-full bg-violet-500 blur-[100px]"></div>
+		</div>
+		<div class="relative mx-auto max-w-6xl px-6 py-16 md:py-24">
+			<div class="lg:flex lg:items-center lg:gap-16">
+				<!-- Left: Pitch -->
+				<div class="lg:flex-1 mb-12 lg:mb-0">
+					<span class="inline-flex items-center rounded-full bg-brand-500/20 border border-brand-500/30 px-4 py-1.5 text-xs font-semibold text-brand-300 mb-6">
+						Beta Access &mdash; Limited Spots
+					</span>
+					<h1 class="font-display text-4xl font-bold tracking-tight text-white sm:text-5xl leading-[1.08]">
+						Your Data Is Not<br /><span class="text-brand-400">a Product.</span>
+					</h1>
+					<p class="mt-6 text-lg text-zinc-400 leading-relaxed max-w-xl">
+						Sojorn is a social network that treats you like a human, not a data point. No tracking. No ads. No algorithms designed to make you angry.
+					</p>
+					<p class="mt-3 text-zinc-500 leading-relaxed max-w-xl">
+						Just real connection &mdash; private, encrypted, and yours.
+					</p>
+				</div>
+
+				<!-- Right: Signup Form -->
+				<div class="lg:flex-1 lg:max-w-md">
+					<div class="rounded-2xl border border-white/10 bg-white/5 backdrop-blur-sm p-8">
+						<h2 class="font-display text-2xl font-bold text-white mb-2">Join the Beta</h2>
+						<p class="text-sm text-zinc-400 mb-6">
+							Be among the first to experience social media without surveillance.
+						</p>
+
+						<form id="beta-signup-form" class="space-y-4">
+							<input
+								type="email"
+								id="email-input"
+								name="email"
+								required
+								placeholder="you@example.com"
+								class="w-full rounded-lg border border-white/20 bg-white/10 px-4 py-3 text-white placeholder-zinc-500 focus:outline-none focus:ring-2 focus:ring-brand-400/50 backdrop-blur-sm"
+							/>
+							<div class="cf-turnstile" data-sitekey="0x4AAAAAACZFIzt7kzHHfSBF" data-size="invisible" data-callback="onTurnstileSuccess" data-expired-callback="onTurnstileExpired"></div>
+							<button
+								type="submit"
+								id="submit-btn"
+								class="w-full rounded-lg bg-brand-600 px-6 py-3 text-sm font-semibold text-white shadow-lg hover:bg-brand-500 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+							>
+								Get Early Access
+							</button>
+							<p id="form-message" class="text-sm hidden"></p>
+						</form>
+
+						<p class="mt-4 text-xs text-zinc-500 text-center">
+							No spam. No selling your email. Unsubscribe anytime.<br />
+							By signing up you agree to our <a href="/privacy" class="underline hover:text-zinc-300 transition-colors">Privacy Policy</a>.
+						</p>
+					</div>
+				</div>
+			</div>
+		</div>
+	</section>
+
+	<!-- Elevator Pitch -->
+	<section class="py-20 bg-white">
+		<div class="mx-auto max-w-5xl px-6">
+			<div class="grid gap-12 md:grid-cols-3 text-center">
+				<div>
+					<div class="flex h-14 w-14 items-center justify-center rounded-xl bg-brand-50 text-brand-700 mx-auto mb-4">
+						<svg class="h-7 w-7" fill="none" stroke="currentColor" stroke-width="1.5" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M16.5 10.5V6.75a4.5 4.5 0 1 0-9 0v3.75m-.75 11.25h10.5a2.25 2.25 0 0 0 2.25-2.25v-6.75a2.25 2.25 0 0 0-2.25-2.25H6.75a2.25 2.25 0 0 0-2.25 2.25v6.75a2.25 2.25 0 0 0 2.25 2.25Z" /></svg>
+					</div>
+					<h3 class="font-semibold text-zinc-900 mb-2">You Own Everything</h3>
+					<p class="text-sm text-zinc-500">100% copyright stays with you. We can't use your content for AI training, ads, or anything else &mdash; ever.</p>
+				</div>
+				<div>
+					<div class="flex h-14 w-14 items-center justify-center rounded-xl bg-brand-50 text-brand-700 mx-auto mb-4">
+						<svg class="h-7 w-7" fill="none" stroke="currentColor" stroke-width="1.5" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M9.813 15.904 9 18.75l-.813-2.846a4.5 4.5 0 0 0-3.09-3.09L2.25 12l2.846-.813a4.5 4.5 0 0 0 3.09-3.09L9 5.25l.813 2.846a4.5 4.5 0 0 0 3.09 3.09L15.75 12l-2.846.813a4.5 4.5 0 0 0-3.09 3.09ZM18.259 8.715 18 9.75l-.259-1.035a3.375 3.375 0 0 0-2.455-2.456L14.25 6l1.036-.259a3.375 3.375 0 0 0 2.455-2.456L18 2.25l.259 1.035a3.375 3.375 0 0 0 2.455 2.456L21.75 6l-1.036.259a3.375 3.375 0 0 0-2.455 2.456ZM16.894 20.567 16.5 21.75l-.394-1.183a2.25 2.25 0 0 0-1.423-1.423L13.5 18.75l1.183-.394a2.25 2.25 0 0 0 1.423-1.423l.394-1.183.394 1.183a2.25 2.25 0 0 0 1.423 1.423l1.183.394-1.183.394a2.25 2.25 0 0 0-1.423 1.423Z" /></svg>
+					</div>
+					<h3 class="font-semibold text-zinc-900 mb-2">End-to-End Encrypted</h3>
+					<p class="text-sm text-zinc-500">Private messages use E2EE with keys only you control. We literally cannot read your conversations.</p>
+				</div>
+				<div>
+					<div class="flex h-14 w-14 items-center justify-center rounded-xl bg-brand-50 text-brand-700 mx-auto mb-4">
+						<svg class="h-7 w-7" fill="none" stroke="currentColor" stroke-width="1.5" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M15 19.128a9.38 9.38 0 0 0 2.625.372 9.337 9.337 0 0 0 4.121-.952 4.125 4.125 0 0 0-7.533-2.493M15 19.128v-.003c0-1.113-.285-2.16-.786-3.07M15 19.128v.106A12.318 12.318 0 0 1 8.624 21c-2.331 0-4.512-.645-6.374-1.766l-.001-.109a6.375 6.375 0 0 1 11.964-3.07M12 6.375a3.375 3.375 0 1 1-6.75 0 3.375 3.375 0 0 1 6.75 0Zm8.25 2.25a2.625 2.625 0 1 1-5.25 0 2.625 2.625 0 0 1 5.25 0Z" /></svg>
+					</div>
+					<h3 class="font-semibold text-zinc-900 mb-2">Community Safety</h3>
+					<p class="text-sm text-zinc-500">Real-time safety beacons, AI-assisted moderation with human review, and restorative justice over punishment.</p>
+				</div>
+			</div>
+
+			<div class="mt-16 max-w-2xl mx-auto text-center">
+				<h2 class="font-display text-2xl font-bold text-zinc-900 sm:text-3xl mb-4">What Makes Sojorn Different</h2>
+				<p class="text-zinc-600 leading-relaxed">
+					Every major social network profits from your attention and your data. Sojorn was built from scratch on a different premise: <strong>technology should serve humanity, not harvest it.</strong>
+				</p>
+				<p class="text-zinc-600 leading-relaxed mt-4">
+					We're a small team in Minneapolis building a social network rooted in Buddhist principles of Right Speech, Right Action, and Right Livelihood. Our code is <a href="https://github.com/patbritton/sojorn" class="text-brand-700 hover:text-brand-800 font-medium transition-colors">source-available on GitHub</a> because we believe trust is earned through transparency, not marketing.
+				</p>
+			</div>
+		</div>
+	</section>
+
+	<!-- What to Expect -->
+	<section class="py-20 bg-zinc-50">
+		<div class="mx-auto max-w-4xl px-6">
+			<h2 class="font-display text-2xl font-bold text-zinc-900 text-center mb-12">What Beta Users Get</h2>
+			<div class="grid gap-8 md:grid-cols-2">
+				<div class="flex gap-4">
+					<div class="flex-shrink-0 flex h-10 w-10 items-center justify-center rounded-lg bg-brand-100 text-brand-700 font-bold text-sm">1</div>
+					<div>
+						<h3 class="font-semibold text-zinc-900 mb-1">Early Access</h3>
+						<p class="text-sm text-zinc-500">Be among the first to experience a social network that respects you.</p>
+					</div>
+				</div>
+				<div class="flex gap-4">
+					<div class="flex-shrink-0 flex h-10 w-10 items-center justify-center rounded-lg bg-brand-100 text-brand-700 font-bold text-sm">2</div>
+					<div>
+						<h3 class="font-semibold text-zinc-900 mb-1">Shape the Product</h3>
+						<p class="text-sm text-zinc-500">Direct line to the dev team. Your feedback builds the features.</p>
+					</div>
+				</div>
+				<div class="flex gap-4">
+					<div class="flex-shrink-0 flex h-10 w-10 items-center justify-center rounded-lg bg-brand-100 text-brand-700 font-bold text-sm">3</div>
+					<div>
+						<h3 class="font-semibold text-zinc-900 mb-1">Founding Member Status</h3>
+						<p class="text-sm text-zinc-500">Permanent recognition as an original member of the Sojorn community.</p>
+					</div>
+				</div>
+				<div class="flex gap-4">
+					<div class="flex-shrink-0 flex h-10 w-10 items-center justify-center rounded-lg bg-brand-100 text-brand-700 font-bold text-sm">4</div>
+					<div>
+						<h3 class="font-semibold text-zinc-900 mb-1">Source Available</h3>
+						<p class="text-sm text-zinc-500">Review our code on GitHub. We have nothing to hide.</p>
+					</div>
+				</div>
+			</div>
+		</div>
+	</section>
+
+</Layout>
+
+<script is:inline src="https://challenges.cloudflare.com/turnstile/v0/api.js" async defer></script>
+<script is:inline>
+var turnstileToken = null;
+var pendingSubmit = false;
+
+function onTurnstileSuccess(token) {
+	turnstileToken = token;
+	if (pendingSubmit) {
+		pendingSubmit = false;
+		document.getElementById('beta-signup-form').requestSubmit();
+	}
+}
+
+function onTurnstileExpired() {
+	turnstileToken = null;
+}
+
+(function() {
+	var form = document.getElementById('beta-signup-form');
+	var emailInput = document.getElementById('email-input');
+	var submitBtn = document.getElementById('submit-btn');
+	var formMessage = document.getElementById('form-message');
+
+	function showMessage(text, isError) {
+		formMessage.textContent = text;
+		formMessage.classList.remove('hidden', 'text-red-300', 'text-green-300');
+		formMessage.classList.add(isError ? 'text-red-300' : 'text-green-300');
+	}
+
+	form.addEventListener('submit', async function(e) {
+		e.preventDefault();
+		var email = emailInput.value.trim();
+		if (!email) return;
+
+		if (!turnstileToken) {
+			pendingSubmit = true;
+			submitBtn.disabled = true;
+			submitBtn.textContent = 'Verifying...';
+			return;
+		}
+
+		submitBtn.disabled = true;
+		submitBtn.textContent = 'Signing up...';
+
+		try {
+			var res = await fetch('/api/beta-signup', {
+				method: 'POST',
+				headers: { 'Content-Type': 'application/json' },
+				body: JSON.stringify({ email: email, turnstileToken: turnstileToken })
+			});
+			var data = await res.json();
+
+			if (res.ok && data.success) {
+				showMessage(data.message || "You're in! We'll notify you when the beta opens.", false);
+				emailInput.value = '';
+				submitBtn.textContent = 'Signed Up!';
+			} else {
+				showMessage(data.error || 'Something went wrong. Please try again.', true);
+				submitBtn.disabled = false;
+				submitBtn.textContent = 'Get Early Access';
+			}
+		} catch (err) {
+			showMessage('Network error. Please try again.', true);
+			submitBtn.disabled = false;
+			submitBtn.textContent = 'Get Early Access';
+		}
+	});
+})();
+</script>

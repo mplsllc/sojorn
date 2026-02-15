@@ -1,0 +1,56 @@
+diff --git a/go-backend/cmd/api/main.go b/go-backend/cmd/api/main.go
+index b70ff5b..be3eaf4 100644
+--- a/go-backend/cmd/api/main.go
++++ b/go-backend/cmd/api/main.go
+@@ -171,6 +171,9 @@ func main() {
+ 	r.GET("/ping", func(c *gin.Context) {
+ 		c.String(200, "pong")
+ 	})
++	r.GET("/health", func(c *gin.Context) {
++		c.JSON(200, gin.H{"status": "ok"})
++	})
+ 
+ 	v1 := r.Group("/api/v1")
+ 	{
+diff --git a/go-backend/internal/repository/post_repository.go b/go-backend/internal/repository/post_repository.go
+index 893ecbd..25c3b50 100644
+--- a/go-backend/internal/repository/post_repository.go
++++ b/go-backend/internal/repository/post_repository.go
+@@ -134,7 +134,8 @@ func (r *PostRepository) GetFeed(ctx context.Context, userID string, categorySlu
+ 			p.created_at,
+ 			pr.handle as author_handle, pr.display_name as author_display_name, COALESCE(pr.avatar_url, '') as author_avatar_url,
+ 			COALESCE(m.like_count, 0) as like_count, COALESCE(m.comment_count, 0) as comment_count,
+-			CASE WHEN ($4::text) != '' THEN EXISTS(SELECT 1 FROM public.post_likes WHERE post_id = p.id AND user_id = NULLIF($4::text, '')::uuid) ELSE FALSE END as is_liked
++			CASE WHEN ($4::text) != '' THEN EXISTS(SELECT 1 FROM public.post_likes WHERE post_id = p.id AND user_id = NULLIF($4::text, '')::uuid) ELSE FALSE END as is_liked,
++			p.allow_chain, p.visibility
+ 		FROM public.posts p
+ 		JOIN public.profiles pr ON p.author_id = pr.id
+ 		LEFT JOIN public.post_metrics m ON p.id = m.post_id
+@@ -166,6 +167,7 @@ func (r *PostRepository) GetFeed(ctx context.Context, userID string, categorySlu
+ 			&p.ID, &p.AuthorID, &p.CategoryID, &p.Body, &p.ImageURL, &p.VideoURL, &p.ThumbnailURL, &p.DurationMS, &p.Tags, &p.CreatedAt,
+ 			&p.AuthorHandle, &p.AuthorDisplayName, &p.AuthorAvatarURL,
+ 			&p.LikeCount, &p.CommentCount, &p.IsLiked,
++			&p.AllowChain, &p.Visibility,
+ 		)
+ 		if err != nil {
+ 			return nil, err
+@@ -588,7 +590,7 @@ func (r *PostRepository) GetPostChain(ctx context.Context, rootID string) ([]mod
+ 			WHERE p.deleted_at IS NULL
+ 		)
+ 		SELECT 
+-			id, author_id, category_id, body, image_url, video_url, thumbnail_url, duration_ms, tags, created_at,
++			id, author_id, category_id, body, image_url, video_url, thumbnail_url, duration_ms, tags, created_at, chain_parent_id, -- Fixed: Added chain_parent_id
+ 			author_handle, author_display_name, author_avatar_url,
+ 			like_count, comment_count, FALSE as is_liked
+ 		FROM object_chain
+@@ -603,8 +605,9 @@ func (r *PostRepository) GetPostChain(ctx context.Context, rootID string) ([]mod
+ 	var posts []models.Post
+ 	for rows.Next() {
+ 		var p models.Post
++		// Fixed: Added Scan for &p.ChainParentID
+ 		err := rows.Scan(
+-			&p.ID, &p.AuthorID, &p.CategoryID, &p.Body, &p.ImageURL, &p.VideoURL, &p.ThumbnailURL, &p.DurationMS, &p.Tags, &p.CreatedAt,
++			&p.ID, &p.AuthorID, &p.CategoryID, &p.Body, &p.ImageURL, &p.VideoURL, &p.ThumbnailURL, &p.DurationMS, &p.Tags, &p.CreatedAt, &p.ChainParentID,
+ 			&p.AuthorHandle, &p.AuthorDisplayName, &p.AuthorAvatarURL,
+ 			&p.LikeCount, &p.CommentCount, &p.IsLiked,
+ 		)

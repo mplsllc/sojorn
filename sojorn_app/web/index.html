@@ -1,0 +1,85 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <base href="$FLUTTER_BASE_HREF">
+
+  <meta charset="UTF-8">
+  <meta content="IE=Edge" http-equiv="X-UA-Compatible">
+  <meta name="description" content="Sojorn - Friend's Only. A product of MPLS LLC.">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="theme-color" content="#0A1128">
+
+  <!-- iOS meta tags & icons -->
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black">
+  <meta name="apple-mobile-web-app-title" content="sojorn">
+  <link rel="apple-touch-icon" href="icons/Icon-192.png">
+
+  <!-- Favicon -->
+  <link rel="icon" type="image/png" href="favicon.png"/>
+
+  <!-- Preconnect to CDN origins for faster sub-resource fetching -->
+  <link rel="preconnect" href="https://www.gstatic.com" crossorigin>
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+
+  <title>sojorn</title>
+  <link rel="manifest" href="manifest.json">
+
+  <!-- Pre-Flutter loading screen (renders before any JS executes) -->
+  <style>
+    body { margin: 0; padding: 0; }
+    #loading {
+      position: fixed; inset: 0; z-index: 9999;
+      display: flex; flex-direction: column;
+      align-items: center; justify-content: center;
+      background: #0A1128;
+      transition: opacity .3s ease;
+    }
+    #loading .logo {
+      width: 64px; height: 64px;
+      border-radius: 16px;
+      margin-bottom: 24px;
+    }
+    #loading .spinner {
+      width: 28px; height: 28px;
+      border: 3px solid rgba(255,255,255,.15);
+      border-top-color: #4A90D9;
+      border-radius: 50%;
+      animation: spin .8s linear infinite;
+    }
+    @keyframes spin { to { transform: rotate(360deg); } }
+  </style>
+
+  <script src="https://www.gstatic.com/firebasejs/10.7.0/firebase-app-compat.js" async></script>
+  <script src="https://www.gstatic.com/firebasejs/10.7.0/firebase-messaging-compat.js" async></script>
+</head>
+<body>
+  <!-- Shown instantly while Flutter engine + app JS loads -->
+  <div id="loading">
+    <img class="logo" src="icons/Icon-192.png" alt="sojorn">
+    <div class="spinner"></div>
+  </div>
+
+  <script src="flutter_bootstrap.js" async></script>
+  <script>
+    // Remove loading screen once Flutter's glass pane is in the DOM
+    (function() {
+      var observer = new MutationObserver(function() {
+        if (document.querySelector('flt-glass-pane')) {
+          var el = document.getElementById('loading');
+          if (el) {
+            el.style.opacity = '0';
+            setTimeout(function() { el.remove(); }, 300);
+          }
+          observer.disconnect();
+        }
+      });
+      observer.observe(document.body, { childList: true, subtree: true });
+    })();
+
+    if ('serviceWorker' in navigator) {
+      navigator.serviceWorker.register('/firebase-messaging-sw.js');
+    }
+  </script>
+</body>
+</html>

@@ -1,0 +1,26 @@
+version: '3'
+services:
+  directus:
+    image: directus/directus:latest
+    ports:
+      - 8055:8055
+    volumes:
+      - ./uploads:/directus/uploads
+      - ./extensions:/directus/extensions
+    network_mode: "host"
+    environment:
+      KEY: "sj_auth_key_replace_me_securely"
+      SECRET: "sj_auth_secret_replace_me_securely"
+
+      # Connect directly to the main 'postgres' database (Sojorn's DB)
+      DB_CLIENT: "pg"
+      DB_HOST: "127.0.0.1"
+      DB_PORT: "5432"
+      DB_DATABASE: "postgres"
+      DB_USER: "postgres"
+      DB_PASSWORD: "${DIRECTUS_DB_PASSWORD}"
+
+      ADMIN_EMAIL: "admin@sojorn.com"
+      ADMIN_PASSWORD: "${DIRECTUS_ADMIN_PASSWORD}"
+
+      PUBLIC_URL: "https://sojorn.net/cms"

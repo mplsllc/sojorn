@@ -1,0 +1,4 @@
+<resources>
+    <string name="default_notification_channel_id">sojorn_notifications</string>
+    <string name="default_notification_channel_name">Sojorn Notifications</string>
+</resources>

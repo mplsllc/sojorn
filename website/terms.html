@@ -1,0 +1,88 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Terms of Service - Sojorn</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link
+        href="https://fonts.googleapis.com/css2?family=Literata:opsz,wght@7..72,400;600;700&family=Outfit:wght@300;400;600;700&display=swap"
+        rel="stylesheet">
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    colors: {
+                        egyptianBlue: '#1034A6',
+                        queenPink: '#E8CCD7',
+                        navyText: '#0A2351',
+                    },
+                    fontFamily: {
+                        sans: ['Outfit', 'sans-serif'],
+                        serif: ['Literata', 'serif'],
+                    }
+                }
+            }
+        }
+    </script>
+    <style>
+        body {
+            font-family: 'Outfit', sans-serif;
+        }
+    </style>
+</head>
+
+<body class="bg-gray-50 text-navyText">
+    <nav class="w-full py-6 px-8 flex justify-between items-center bg-white border-b border-gray-200">
+        <a href="/" class="flex items-center gap-3">
+            <img src="/leaf.png" alt="Sojorn Leaf" class="h-12 w-auto">
+            <span class="text-5xl font-serif font-bold tracking-tight text-egyptianBlue">sojorn</span>
+        </a>
+        <a href="/" class="text-sm font-semibold hover:text-egyptianBlue">Home</a>
+    </nav>
+
+    <main class="max-w-3xl mx-auto px-6 py-12">
+        <h1 class="text-3xl font-bold mb-8 text-egyptianBlue">Terms of Service</h1>
+        <p class="mb-4 text-sm text-gray-500">Last Updated: January 26, 2026</p>
+
+        <div class="prose prose-blue max-w-none text-gray-700">
+            <h2 class="text-xl font-bold mt-6 mb-4">1. The Agreement</h2>
+            <p class="mb-4">By accessing our website or services, you acknowledge that you are entering a space
+                dedicated to respect, safety, and progressive action. We prioritize the safety of our community above
+                all else.</p>
+
+            <h2 class="text-xl font-bold mt-6 mb-4">2. Zero Tolerance Policy</h2>
+            <p class="mb-4">We do not tolerate intolerance. Hate speech, racism, sexism, homophobia, transphobia,
+                ableism, and fascist ideologies are strictly prohibited. Violations will result in immediate and
+                permanent bans.</p>
+
+            <h2 class="text-xl font-bold mt-6 mb-4">3. No Misinformation</h2>
+            <p class="mb-4">We reject the spread of verifiable falsehoods, conspiracy theories, and disinformation
+                campaigns. Posting content designed to deceive or manipulate will result in account termination.</p>
+
+            <h2 class="text-xl font-bold mt-6 mb-4">4. Content Ownership</h2>
+            <p class="mb-4">You own the content you create. You grant us a license to display it within the private
+                Sojorn network, but we claim no ownership over your intellectual property and will never sell it to
+                third parties.</p>
+
+            <h2 class="text-xl font-bold mt-6 mb-4">5. Liability</h2>
+            <p class="mb-4">Sojorn Inc. provides this service "as is." We are not liable for interactions that occur
+                between users, though we commit to active moderation to maintain community safety.</p>
+
+            <h2 class="text-xl font-bold mt-6 mb-4">6. Governing Law</h2>
+            <p class="mb-4">These terms are governed by the laws of the United States.</p>
+        </div>
+    </main>
+
+    <footer class="py-8 bg-white border-t border-gray-200 text-center text-gray-500 text-sm">
+        <div class="flex justify-center gap-6 mb-4">
+            <a href="/privacy" class="hover:text-egyptianBlue">Privacy</a>
+            <a href="/terms" class="hover:text-egyptianBlue">Terms</a>
+        </div>
+        &copy; 2026 <a href="https://mp.ls" target="_blank" class="hover:text-egyptianBlue transition">MP.LS LLC</a>.
+        All rights reserved.
+    </footer>
+</body>
+
+</html>

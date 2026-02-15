@@ -1,0 +1,75 @@
+{
+  "reaction_sets": {
+    "emoji": {
+      "type": "emoji",
+      "reactions": [
+        "❤️",
+        "👍",
+        "😂",
+        "😮",
+        "😢",
+        "😡",
+        "🎉",
+        "🔥",
+        "👏",
+        "🙏",
+        "💯",
+        "🤔",
+        "😍",
+        "🤣",
+        "😊",
+        "👌",
+        "🙌",
+        "💪",
+        "🎯",
+        "⭐",
+        "✨",
+        "🌟",
+        "💫",
+        "☀️"
+      ]
+    },
+    "dotto": {
+      "type": "folder",
+      "folder": "dotto",
+      "file_types": [
+        "svg"
+      ],
+      "files": [
+        "anguished_face.svg",
+        "beaming_face.svg",
+        "blue_heart.svg",
+        "broken_heart.svg",
+        "disappointed_face.svg",
+        "downcast_face.svg",
+        "face_with_monocle.svg",
+        "face_with_tears.svg",
+        "fearful_face.svg",
+        "ghost.svg",
+        "green_heart.svg",
+        "grinning_face.svg",
+        "heart_with_arrow.svg",
+        "laughing_face.svg",
+        "loudly_crying_face.svg",
+        "melting_face.svg",
+        "nerd_face.svg",
+        "party_face.svg",
+        "purple_heart.svg",
+        "robot_face.svg",
+        "rolling_face.svg",
+        "skull.svg",
+        "slightly_smiling_face.svg",
+        "smiling_face.svg",
+        "smiling_face_with_halo.svg",
+        "smiling_face_with_hearts.svg",
+        "sparkling_heart.svg",
+        "sunglasses_face.svg",
+        "upside_down_face.svg",
+        "winking_face.svg",
+        "worried_face.svg"
+      ]
+    }
+  },
+  "generated_at": "2026-02-01T15:16:54.716500",
+  "total_sets": 2
+}

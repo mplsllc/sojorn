@@ -1,0 +1,695 @@
+import 'package:flutter/material.dart';
+import 'package:google_fonts/google_fonts.dart';
+import 'package:timeago/timeago.dart' as timeago;
+import '../../models/secure_chat.dart';
+import '../../services/secure_chat_service.dart';
+import '../security/encryption_hub_screen.dart';
+import '../../theme/app_theme.dart';
+import '../../theme/tokens.dart';
+import '../../widgets/media/signed_media_image.dart';
+import '../home/full_screen_shell.dart';
+import 'secure_chat_screen.dart';
+import 'new_conversation_sheet.dart';
+
+/// Full-screen secure chat with proper navigation bars
+/// Replaces the modal sheet for a native app experience
+class SecureChatFullScreen extends StatefulWidget {
+  const SecureChatFullScreen({super.key});
+
+  @override
+  State<SecureChatFullScreen> createState() => _SecureChatFullScreenState();
+}
+
+class _SecureChatFullScreenState extends State<SecureChatFullScreen> {
+  final SecureChatService _chatService = SecureChatService();
+
+  List<SecureConversation> _conversations = [];
+  bool _isLoading = true;
+  bool _isInitializing = false;
+  String? _error;
+
+  late Stream<List<SecureConversation>> _conversationStream;
+
+  @override
+  void initState() {
+    super.initState();
+    
+    // Create LIVE stream that automatically updates every 2 seconds
+    _conversationStream = Stream.periodic(const Duration(seconds: 2))
+        .asyncMap((_) => _chatService.getConversations())
+        .asBroadcastStream();
+    
+    // Also trigger immediate reload on conversation changes
+    _chatService.conversationListChanges.listen((_) {
+      if (mounted) {
+        setState(() {}); // Force rebuild to get latest from stream
+      }
+    });
+    
+    _initialize();
+  }
+
+  Future<void> _initialize() async {
+    setState(() {
+      _isLoading = true;
+      _error = null;
+      _isInitializing = true;
+    });
+
+    try {
+      
+      // Initialize chat service with key generation if needed
+      await _chatService.initialize(generateIfMissing: true);
+      
+      // Load conversations
+      await _loadConversations();
+      
+    } catch (e) {
+      setState(() {
+        _error = e.toString();
+      });
+    } finally {
+      setState(() {
+        _isLoading = false;
+        _isInitializing = false;
+      });
+    }
+  }
+
+  Future<void> _loadConversations() async {
+    try {
+      final conversations = await _chatService.getConversations();
+      
+      if (mounted) {
+        setState(() {
+          _conversations = conversations;
+          _error = null;
+        });
+      }
+    } catch (e) {
+      if (mounted) {
+        setState(() {
+          _error = e.toString();
+        });
+      }
+    }
+  }
+
+  void _showNewConversationSheet() {
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: SojornColors.transparent,
+      builder: (context) => NewConversationSheet(
+        onConversationStarted: (conversation) {
+          Navigator.pop(context); // Close new conversation sheet
+          Navigator.push(
+            context,
+            MaterialPageRoute(
+              builder: (context) => SecureChatScreen(conversation: conversation),
+            ),
+          );
+        },
+      ),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return FullScreenShell(
+      title: Row(
+        children: [
+          Flexible(
+            child: Text(
+              'Messages',
+              style: GoogleFonts.literata(
+                fontWeight: FontWeight.w600,
+                color: AppTheme.navyBlue,
+                fontSize: 20,
+              ),
+              overflow: TextOverflow.ellipsis,
+            ),
+          ),
+          const SizedBox(width: 8),
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+            decoration: BoxDecoration(
+              color: AppTheme.brightNavy.withValues(alpha: 0.1),
+              borderRadius: BorderRadius.circular(12),
+            ),
+            child: Text(
+              'End-to-end encrypted',
+              style: GoogleFonts.inter(
+                color: AppTheme.brightNavy,
+                fontSize: 10,
+                fontWeight: FontWeight.w500,
+              ),
+            ),
+          ),
+        ],
+      ),
+      showSearch: false,
+      showMessages: false,
+      leadingActions: [
+        IconButton(
+          onPressed: _loadConversations,
+          icon: Icon(Icons.refresh, color: AppTheme.navyBlue),
+          tooltip: 'Refresh conversations',
+        ),
+        IconButton(
+          onPressed: () async {
+            try {
+              await _chatService.uploadKeysManually();
+              if (mounted) {
+                ScaffoldMessenger.of(context).showSnackBar(
+                  SnackBar(
+                    content: Text('Keys uploaded successfully'),
+                    backgroundColor: const Color(0xFF4CAF50),
+                  ),
+                );
+              }
+            } catch (e) {
+              if (mounted) {
+                ScaffoldMessenger.of(context).showSnackBar(
+                  SnackBar(
+                    content: Text('Failed to upload keys: $e'),
+                    backgroundColor: SojornColors.destructive,
+                  ),
+                );
+              }
+            }
+          },
+          icon: Icon(Icons.key, color: AppTheme.navyBlue),
+          tooltip: 'Upload encryption keys',
+        ),
+      ],
+      body: _buildBody(),
+      bottomNavigationBar: Container(
+        decoration: BoxDecoration(
+          color: AppTheme.scaffoldBg,
+          border: Border(
+            top: BorderSide(
+              color: AppTheme.navyBlue.withValues(alpha: 0.1),
+              width: 1,
+            ),
+          ),
+        ),
+        child: SafeArea(
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+            child: Row(
+              children: [
+                Expanded(
+                  child: ElevatedButton.icon(
+                    onPressed: _showNewConversationSheet,
+                    icon: Icon(Icons.add, size: 18),
+                    label: Text('New Conversation'),
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: AppTheme.brightNavy,
+                      foregroundColor: SojornColors.basicWhite,
+                      padding: const EdgeInsets.symmetric(vertical: 12),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(8),
+                      ),
+                    ),
+                  ),
+                ),
+                const SizedBox(width: 12),
+                IconButton(
+                  onPressed: () {
+                    Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                        builder: (context) => const EncryptionHubScreen(),
+                      ),
+                    );
+                  },
+                  icon: Icon(Icons.backup, color: AppTheme.navyBlue),
+                  tooltip: 'Backup & Recovery',
+                ),
+                IconButton(
+                  onPressed: () {
+                    // TODO: Show device management
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      SnackBar(content: Text('Device management coming soon')),
+                    );
+                  },
+                  icon: Icon(Icons.devices, color: AppTheme.navyBlue),
+                  tooltip: 'Device Management',
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildBody() {
+    if (_isLoading && _conversations.isEmpty) {
+      return Center(
+        child: CircularProgressIndicator(
+          valueColor: AlwaysStoppedAnimation<Color>(AppTheme.brightNavy),
+        ),
+      );
+    }
+
+    if (_error != null) {
+      return Center(
+        child: Padding(
+          padding: const EdgeInsets.all(24),
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Icon(
+                Icons.error_outline,
+                size: 64,
+                color: SojornColors.destructive,
+              ),
+              const SizedBox(height: 16),
+              Text(
+                'Something went wrong',
+                style: GoogleFonts.literata(
+                  fontSize: 20,
+                  fontWeight: FontWeight.w600,
+                  color: AppTheme.navyBlue,
+                ),
+              ),
+              const SizedBox(height: 8),
+              Text(
+                _error!,
+                textAlign: TextAlign.center,
+                style: GoogleFonts.inter(
+                  fontSize: 14,
+                  color: AppTheme.textSecondary,
+                ),
+              ),
+              const SizedBox(height: 24),
+              ElevatedButton(
+                onPressed: _loadConversations,
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: AppTheme.brightNavy,
+                  foregroundColor: SojornColors.basicWhite,
+                  padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
+                ),
+                child: Text('Try Again'),
+              ),
+            ],
+          ),
+        ),
+      );
+    }
+
+    if (_conversations.isEmpty) {
+      return Center(
+        child: Padding(
+          padding: const EdgeInsets.all(24),
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Icon(
+                Icons.lock,
+                size: 64,
+                color: AppTheme.brightNavy.withValues(alpha: 0.3),
+              ),
+              const SizedBox(height: 16),
+              Text(
+                'No messages yet',
+                style: GoogleFonts.literata(
+                  fontSize: 20,
+                  fontWeight: FontWeight.w600,
+                  color: AppTheme.navyBlue,
+                ),
+              ),
+              const SizedBox(height: 8),
+              Text(
+                'Start a secure conversation with someone',
+                textAlign: TextAlign.center,
+                style: GoogleFonts.inter(
+                  fontSize: 14,
+                  color: AppTheme.textSecondary,
+                ),
+              ),
+              const SizedBox(height: 24),
+              ElevatedButton(
+                onPressed: _showNewConversationSheet,
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: AppTheme.brightNavy,
+                  foregroundColor: SojornColors.basicWhite,
+                  padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
+                ),
+                child: Text('Start Conversation'),
+              ),
+            ],
+          ),
+        ),
+      );
+    }
+
+    return StreamBuilder<List<SecureConversation>>(
+      stream: _conversationStream,
+      builder: (context, snapshot) {
+        if (snapshot.connectionState == ConnectionState.waiting && _conversations.isEmpty) {
+          return Center(
+            child: CircularProgressIndicator(
+              valueColor: AlwaysStoppedAnimation<Color>(AppTheme.brightNavy),
+            ),
+          );
+        }
+
+        if (snapshot.hasError) {
+          return Center(
+            child: Text(
+              'Error loading conversations: ${snapshot.error}',
+              style: GoogleFonts.inter(color: SojornColors.destructive),
+            ),
+          );
+        }
+
+        final conversations = snapshot.data ?? _conversations;
+
+        if (conversations.isEmpty) {
+          return Center(
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                Icon(
+                  Icons.lock,
+                  size: 64,
+                  color: AppTheme.brightNavy.withValues(alpha: 0.3),
+                ),
+                const SizedBox(height: 16),
+                Text(
+                  'No messages yet',
+                  style: GoogleFonts.literata(
+                    fontSize: 20,
+                    fontWeight: FontWeight.w600,
+                    color: AppTheme.navyBlue,
+                  ),
+                ),
+                const SizedBox(height: 8),
+                Text(
+                  'Start a secure conversation with someone',
+                  textAlign: TextAlign.center,
+                  style: GoogleFonts.inter(
+                    fontSize: 14,
+                    color: AppTheme.textSecondary,
+                  ),
+                ),
+              ],
+            ),
+          );
+        }
+
+        return RefreshIndicator(
+          onRefresh: _loadConversations,
+          color: AppTheme.brightNavy,
+          child: ListView.builder(
+            padding: const EdgeInsets.symmetric(vertical: 8),
+            itemCount: conversations.length,
+            itemBuilder: (context, index) {
+              final conversation = conversations[index];
+              return _ConversationTile(
+                conversation: conversation,
+                onTap: () {
+                  Navigator.push(
+                    context,
+                    MaterialPageRoute(
+                      builder: (context) => SecureChatScreen(conversation: conversation),
+                    ),
+                  );
+                },
+                onDelete: () => _confirmDeleteConversation(conversation),
+              );
+            },
+          ),
+        );
+      },
+    );
+  }
+
+  Future<void> _confirmDeleteConversation(SecureConversation conversation) async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        backgroundColor: AppTheme.cardSurface,
+        title: Text(
+          'Delete Conversation?',
+          style: GoogleFonts.literata(
+            fontWeight: FontWeight.w600,
+            color: AppTheme.navyBlue,
+          ),
+        ),
+        content: Text(
+          'Are you sure you want to delete this conversation with ${conversation.otherUserDisplayName ?? conversation.otherUserHandle}? This will remove all messages for everyone.',
+          style: GoogleFonts.inter(color: AppTheme.navyText),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: Text(
+              'Cancel',
+              style: GoogleFonts.inter(color: AppTheme.egyptianBlue),
+            ),
+          ),
+          ElevatedButton(
+            onPressed: () => Navigator.pop(context, true),
+            style: ElevatedButton.styleFrom(
+              backgroundColor: AppTheme.error,
+              foregroundColor: SojornColors.basicWhite,
+            ),
+            child: Text('Delete'),
+          ),
+        ],
+      ),
+    );
+
+    if (confirmed == true) {
+      try {
+        await _chatService.deleteConversation(conversation.id, fullDelete: true);
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('Conversation deleted'),
+              backgroundColor: const Color(0xFF4CAF50),
+            ),
+          );
+          _loadConversations();
+        }
+      } catch (e) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text('Failed to delete: $e'),
+              backgroundColor: SojornColors.destructive,
+            ),
+          );
+        }
+      }
+    }
+  }
+}
+
+class _ConversationTile extends StatefulWidget {
+  final SecureConversation conversation;
+  final VoidCallback onTap;
+  final VoidCallback onDelete;
+
+  const _ConversationTile({
+    required this.conversation,
+    required this.onTap,
+    required this.onDelete,
+  });
+
+  @override
+  State<_ConversationTile> createState() => _ConversationTileState();
+}
+
+class _ConversationTileState extends State<_ConversationTile> {
+  bool _isHovered = false;
+
+  @override
+  Widget build(BuildContext context) {
+    return MouseRegion(
+      onEnter: (_) => setState(() => _isHovered = true),
+      onExit: (_) => setState(() => _isHovered = false),
+      child: Dismissible(
+        key: Key('conv_${widget.conversation.id}'),
+        direction: DismissDirection.endToStart,
+        confirmDismiss: (direction) async {
+          widget.onDelete();
+          return false; // Let the full screen state handle the actual removal
+        },
+        background: Container(
+          margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
+          decoration: BoxDecoration(
+            color: AppTheme.error,
+            borderRadius: BorderRadius.circular(12),
+          ),
+          alignment: Alignment.centerRight,
+          padding: const EdgeInsets.only(right: 24),
+          child: const Icon(
+            Icons.delete_outline,
+            color: SojornColors.basicWhite,
+            size: 28,
+          ),
+        ),
+        child: Container(
+          margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
+          decoration: BoxDecoration(
+            color: AppTheme.cardSurface,
+            borderRadius: BorderRadius.circular(12),
+            border: Border.all(
+              color: AppTheme.navyBlue.withValues(alpha: 0.1),
+              width: 1,
+            ),
+          ),
+          child: Material(
+            color: SojornColors.transparent,
+            child: InkWell(
+              borderRadius: BorderRadius.circular(12),
+              onTap: widget.onTap,
+              child: Padding(
+                padding: const EdgeInsets.all(16),
+                child: Row(
+                  children: [
+                    // Avatar
+                    Container(
+                      width: 56,
+                      height: 56,
+                      decoration: BoxDecoration(
+                        color: AppTheme.brightNavy.withValues(alpha: 0.1),
+                        borderRadius: BorderRadius.circular(28),
+                      ),
+                      child: widget.conversation.otherUserAvatarUrl != null
+                          ? ClipRRect(
+                              borderRadius: BorderRadius.circular(28),
+                              child: SignedMediaImage(
+                                url: widget.conversation.otherUserAvatarUrl!,
+                                width: 56,
+                                height: 56,
+                                fit: BoxFit.cover,
+                              ),
+                            )
+                          : Center(
+                              child: Text(
+                                (widget.conversation.otherUserDisplayName ??
+                                            '@${widget.conversation.otherUserHandle ?? 'Unknown'}')
+                                        .isNotEmpty
+                                    ? (widget.conversation.otherUserDisplayName ??
+                                            '@${widget.conversation.otherUserHandle ?? 'Unknown'}')[0]
+                                        .toUpperCase()
+                                    : '?',
+                                style: GoogleFonts.inter(
+                                  color: AppTheme.navyBlue,
+                                  fontWeight: FontWeight.bold,
+                                  fontSize: 20,
+                                ),
+                              ),
+                            ),
+                    ),
+                    const SizedBox(width: 16),
+                    // Content
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Row(
+                            children: [
+                              Expanded(
+                                child: Text(
+                                  widget.conversation.otherUserDisplayName ??
+                                      '@${widget.conversation.otherUserHandle ?? 'Unknown'}',
+                                  style: GoogleFonts.literata(
+                                    fontWeight: FontWeight.w600,
+                                    color: AppTheme.navyBlue,
+                                    fontSize: 16,
+                                  ),
+                                  overflow: TextOverflow.ellipsis,
+                                ),
+                              ),
+                              if (widget.conversation.lastMessageAt != null)
+                                Text(
+                                  timeago.format(widget.conversation.lastMessageAt!),
+                                  style: GoogleFonts.inter(
+                                    color: AppTheme.textDisabled,
+                                    fontSize: 12,
+                                  ),
+                                ),
+                            ],
+                          ),
+                          const SizedBox(height: 4),
+                          Row(
+                            children: [
+                              Icon(
+                                Icons.lock,
+                                size: 12,
+                                color: AppTheme.brightNavy.withValues(alpha: 0.5),
+                              ),
+                              const SizedBox(width: 4),
+                              Expanded(
+                                  child: Text(
+                                    widget.conversation.lastMessageAt != null
+                                        ? 'Recent message'
+                                        : 'Start a conversation',
+                                    style: GoogleFonts.inter(
+                                      color: widget.conversation.lastMessageAt != null
+                                          ? AppTheme.textSecondary
+                                          : AppTheme.textDisabled,
+                                      fontSize: 14,
+                                    ),
+                                    overflow: TextOverflow.ellipsis,
+                                    maxLines: 1,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ],
+                        ),
+                      ),
+                      // Unread badge
+                      if (widget.conversation.unreadCount != null && widget.conversation.unreadCount! > 0)
+                        Container(
+                          margin: const EdgeInsets.only(left: 8),
+                          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                          decoration: BoxDecoration(
+                            color: AppTheme.brightNavy,
+                            borderRadius: BorderRadius.circular(10),
+                          ),
+                          child: Text(
+                            widget.conversation.unreadCount.toString(),
+                            style: GoogleFonts.inter(
+                              color: SojornColors.basicWhite,
+                              fontSize: 12,
+                              fontWeight: FontWeight.bold,
+                            ),
+                          ),
+                        ),
+                      // Hover delete button for web/desktop
+                    if (_isHovered)
+                      Padding(
+                        padding: const EdgeInsets.only(left: 8),
+                        child: IconButton(
+                          onPressed: widget.onDelete,
+                          icon: const Icon(
+                            Icons.delete_outline,
+                            color: AppTheme.error,
+                            size: 20,
+                          ),
+                          tooltip: 'Delete conversation',
+                          style: IconButton.styleFrom(
+                            backgroundColor: AppTheme.error.withValues(alpha: 0.1),
+                            padding: const EdgeInsets.all(8),
+                          ),
+                        ),
+                      ),
+                  ],
+                ),
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
