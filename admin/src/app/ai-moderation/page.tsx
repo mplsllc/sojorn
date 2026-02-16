@@ -3,7 +3,7 @@
 import AdminShell from '@/components/AdminShell';
 import { api } from '@/lib/api';
 import { useEffect, useState, useCallback, useRef } from 'react';
-import { Brain, Search, Check, ChevronDown, Play, Loader2, Eye, MessageSquare, Video, Shield, MapPin, Users, AlertTriangle, Server, Cloud, Cpu, Terminal } from 'lucide-react';
+import { Brain, Search, Check, ChevronDown, Play, Loader2, Eye, MessageSquare, Video, Shield, MapPin, Users, AlertTriangle, Server, Cloud, Cpu, Terminal, Upload } from 'lucide-react';
 
 const MODERATION_TYPES = [
   { key: 'text', label: 'Text Moderation', icon: MessageSquare },
@@ -80,6 +80,8 @@ export default function AIModerationPage() {
   const [testResponse, setTestResponse] = useState<any>(null);
   const [testing, setTesting] = useState(false);
   const [testHistory, setTestHistory] = useState<any[]>([]);
+  const [uploadedFile, setUploadedFile] = useState<File | null>(null);
+  const [uploading, setUploading] = useState(false);
 
   const loadConfigs = useCallback(() => {
     setLoading(true);
@@ -141,18 +143,48 @@ export default function AIModerationPage() {
     }
   };
 
+  const handleFileUpload = async (file: File) => {
+    setUploading(true);
+    try {
+      // Create FormData and upload to get a URL
+      const formData = new FormData();
+      formData.append('file', file);
+      
+      const response = await fetch('/api/v1/admin/upload-test-image', {
+        method: 'POST',
+        body: formData,
+      });
+      
+      if (!response.ok) {
+        throw new Error('Upload failed');
+      }
+      
+      const result = await response.json();
+      setTestInput(result.url);
+      setUploadedFile(file);
+    } catch (e: any) {
+      alert('Upload failed: ' + e.message);
+    } finally {
+      setUploading(false);
+    }
+  };
+
   const handleTest = async () => {
-    if (!testInput.trim()) return;
+    if (!testInput.trim() && !uploadedFile) return;
     setTesting(true);
     const startTime = Date.now();
     try {
-      const isImage = selectedType.includes('image') || selectedType === 'video';
-      const data: any = {
+      const data = {
         moderation_type: selectedType,
         engine: selectedEngine,
       };
+      const isImage = selectedType.includes('image') || selectedType === 'video';
       if (isImage) {
-        data.image_url = testInput;
+        if (uploadedFile) {
+          data.image_file = uploadedFile;
+        } else {
+          data.image_url = testInput;
+        }
       } else {
         data.content = testInput;
       }
@@ -402,23 +434,79 @@ export default function AIModerationPage() {
             <h3 className="text-sm font-semibold text-gray-700 mb-3 flex items-center gap-2">
               <Play className="w-4 h-4" /> Test Moderation
             </h3>
-            <div className="flex gap-2">
-              <input
-                type="text"
-                value={testInput}
-                onChange={(e) => setTestInput(e.target.value)}
-                placeholder={selectedType.includes('image') || selectedType === 'video' ? 'Image URL...' : 'Test text...'}
-                className="flex-1 text-sm border border-gray-300 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-brand-500"
-                onKeyDown={(e) => e.key === 'Enter' && handleTest()}
-              />
+            
+            {(selectedType.includes('image') || selectedType === 'video') ? (
+              <div className="space-y-3">
+                {/* File Upload */}
+                <div className="flex gap-2">
+                  <label className="flex-1">
+                    <input
+                      type="file"
+                      accept="image/*"
+                      onChange={(e) => {
+                        const file = e.target.files?.[0];
+                        if (file) {
+                          handleFileUpload(file);
+                        }
+                      }}
+                      className="hidden"
+                    />
+                    <div className="w-full text-sm border border-gray-300 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-brand-500 cursor-pointer hover:bg-gray-50 flex items-center justify-center gap-2">
+                      <Upload className="w-4 h-4" />
+                      {uploading ? 'Uploading...' : (uploadedFile ? `Uploaded: ${uploadedFile.name}` : 'Click to upload image...')}
+                    </div>
+                  </label>
+                </div>
+                
+                {/* URL Input */}
+                <div className="flex items-center gap-2 text-xs text-gray-500">
+                  <span>OR</span>
+                </div>
+                
+                <div className="flex gap-2">
+                  <input
+                    type="text"
+                    value={testInput}
+                    onChange={(e) => setTestInput(e.target.value)}
+                    placeholder="Image URL..."
+                    className="flex-1 text-sm border border-gray-300 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-brand-500"
+                    onKeyDown={(e) => e.key === 'Enter' && handleTest()}
+                  />
+                </div>
+              </div>
+            ) : (
+              <div className="flex gap-2">
+                <input
+                  type="text"
+                  value={testInput}
+                  onChange={(e) => setTestInput(e.target.value)}
+                  placeholder="Test text..."
+                  className="flex-1 text-sm border border-gray-300 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-brand-500"
+                  onKeyDown={(e) => e.key === 'Enter' && handleTest()}
+                />
+              </div>
+            )}
+            
+            <div className="flex gap-2 mt-3">
               <button
                 onClick={handleTest}
-                disabled={testing || !testInput.trim()}
+                disabled={testing || (!testInput.trim() && !uploadedFile)}
                 className="btn-primary text-sm flex items-center gap-1.5 disabled:opacity-40"
               >
                 {testing ? <Loader2 className="w-4 h-4 animate-spin" /> : <Play className="w-4 h-4" />}
                 Test
               </button>
+              {uploadedFile && (
+                <button
+                  onClick={() => {
+                    setUploadedFile(null);
+                    setTestInput('');
+                  }}
+                  className="text-sm text-gray-500 hover:text-gray-700"
+                >
+                  Clear Upload
+                </button>
+              )}
             </div>
           </div>
 

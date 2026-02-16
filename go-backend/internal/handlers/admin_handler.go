@@ -1,10 +1,13 @@
 package handlers
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"fmt"
+	"io"
 	"net/http"
+	"path/filepath"
 	"strconv"
 	"strings"
 	"time"
@@ -3817,6 +3820,59 @@ func (h *AdminHandler) GetAIEngines(c *gin.Context) {
 	engines = append(engines, azureEngine)
 
 	c.JSON(http.StatusOK, gin.H{"engines": engines})
+}
+
+func (h *AdminHandler) UploadTestImage(c *gin.Context) {
+	file, header, err := c.Request.FormFile("file")
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "No file uploaded"})
+		return
+	}
+	defer file.Close()
+
+	// Validate file type
+	if !strings.HasPrefix(header.Header.Get("Content-Type"), "image/") {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Only image files are allowed"})
+		return
+	}
+
+	// Validate file size (5MB limit)
+	if header.Size > 5*1024*1024 {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "File too large (max 5MB)"})
+		return
+	}
+
+	// Generate unique filename
+	ext := filepath.Ext(header.Filename)
+	filename := fmt.Sprintf("test-%s%s", uuid.New().String()[:8], ext)
+
+	// Upload to R2
+	key := fmt.Sprintf("test-images/%s", filename)
+
+	// Read file content
+	fileData, err := io.ReadAll(file)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to read file"})
+		return
+	}
+
+	// Upload to R2
+	contentType := header.Header.Get("Content-Type")
+	_, err = h.s3Client.PutObject(c.Request.Context(), &s3.PutObjectInput{
+		Bucket:      aws.String(h.mediaBucket),
+		Key:         aws.String(key),
+		Body:        bytes.NewReader(fileData),
+		ContentType: aws.String(contentType),
+	})
+
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Upload failed"})
+		return
+	}
+
+	// Return the URL
+	url := fmt.Sprintf("https://%s/%s", h.imgDomain, key)
+	c.JSON(http.StatusOK, gin.H{"url": url, "filename": filename})
 }
 
 func (h *AdminHandler) CheckURLSafety(c *gin.Context) {

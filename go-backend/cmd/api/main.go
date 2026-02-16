@@ -629,6 +629,7 @@ func main() {
 
 		// AI Engines Status
 		admin.GET("/ai-engines", adminHandler.GetAIEngines)
+		admin.POST("/upload-test-image", adminHandler.UploadTestImage)
 
 		// Safe Domains Management
 		admin.GET("/safe-domains", adminHandler.ListSafeDomains)
