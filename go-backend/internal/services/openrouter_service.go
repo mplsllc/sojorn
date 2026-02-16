@@ -3,6 +3,7 @@ package services
 import (
 	"bytes"
 	"context"
+	"encoding/base64"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -84,6 +85,48 @@ type OpenRouterChatRequest struct {
 
 func floatPtr(f float64) *float64 { return &f }
 func intPtr(i int) *int           { return &i }
+
+// downloadImage downloads an image from URL and returns base64 encoded data
+func (s *OpenRouterService) downloadImage(ctx context.Context, url string) (string, error) {
+	req, err := http.NewRequestWithContext(ctx, "GET", url, nil)
+	if err != nil {
+		return "", fmt.Errorf("failed to create image request: %w", err)
+	}
+
+	resp, err := s.httpClient.Do(req)
+	if err != nil {
+		return "", fmt.Errorf("failed to download image: %w", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		return "", fmt.Errorf("image download failed: %d", resp.StatusCode)
+	}
+
+	// Limit image size to 5MB
+	const maxImageSize = 5 * 1024 * 1024
+	limitedReader := io.LimitReader(resp.Body, maxImageSize)
+
+	imageData, err := io.ReadAll(limitedReader)
+	if err != nil {
+		return "", fmt.Errorf("failed to read image data: %w", err)
+	}
+
+	// Detect content type
+	contentType := resp.Header.Get("Content-Type")
+	if contentType == "" {
+		contentType = http.DetectContentType(imageData)
+	}
+
+	// Only allow image formats
+	if !strings.HasPrefix(contentType, "image/") {
+		return "", fmt.Errorf("unsupported content type: %s", contentType)
+	}
+
+	// Convert to base64
+	base64Data := base64.StdEncoding.EncodeToString(imageData)
+	return fmt.Sprintf("data:%s;base64,%s", contentType, base64Data), nil
+}
 
 // OpenRouterChatResponse represents a chat completion response
 type OpenRouterChatResponse struct {
@@ -334,15 +377,27 @@ func (s *OpenRouterService) callModel(ctx context.Context, modelID, systemPrompt
 	moderationSuffix := "\n---END CONTENT---\n\nNow output ONLY the JSON moderation result. No other text."
 
 	if len(imageURLs) > 0 {
-		// Multimodal content array
+		// Multimodal content array with downloaded images
 		parts := []map[string]any{}
 		wrappedText := moderationPrefix + textContent + moderationSuffix
 		parts = append(parts, map[string]any{"type": "text", "text": wrappedText})
+
 		for _, url := range imageURLs {
-			parts = append(parts, map[string]any{
-				"type":      "image_url",
-				"image_url": map[string]string{"url": url},
-			})
+			// Download image and convert to base64
+			base64Image, err := s.downloadImage(ctx, url)
+			if err != nil {
+				// If download fails, fall back to URL (some models might support it)
+				parts = append(parts, map[string]any{
+					"type":      "image_url",
+					"image_url": map[string]string{"url": url},
+				})
+			} else {
+				// Use base64 data
+				parts = append(parts, map[string]any{
+					"type":      "image_url",
+					"image_url": map[string]string{"url": base64Image},
+				})
+			}
 		}
 		messages = append(messages, OpenRouterChatMessage{Role: "user", Content: parts})
 	} else {
