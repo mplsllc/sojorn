@@ -46,14 +46,12 @@ export default function LoginPage() {
     }
     widgetIdRef.current = (window as any).turnstile.render(turnstileRef.current, {
       sitekey: TURNSTILE_SITE_KEY,
-      size: 'invisible',
+      size: 'normal',
       theme: 'light',
       callback: (token: string) => { 
       setTurnstileToken(token); 
       tokenRef.current = token; 
       setTurnstileReady(true);
-      // Auto-submit after invisible verification
-      performLogin(); 
     },
       'error-callback': () => { setTurnstileToken(''); tokenRef.current = ''; setTurnstileReady(false); },
       'expired-callback': () => { setTurnstileToken(''); tokenRef.current = ''; setTurnstileReady(false); },
@@ -90,22 +88,9 @@ export default function LoginPage() {
       return;
     }
 
-    if (TURNSTILE_SITE_KEY && widgetIdRef.current && !tokenRef.current) {
-      setLoading(true);
-      try {
-        (window as any).turnstile.execute(widgetIdRef.current);
-        // The Turnstile callback will call performLogin() once a token is issued.
-      } catch {
-        setError('Security verification failed. Please try again.');
-        setLoading(false);
-        refreshTurnstile();
-      }
-      return;
-    }
-
-    // If Turnstile is enabled, we must have a token at this point.
+    // Managed widget flow: require token before submitting.
     if (TURNSTILE_SITE_KEY && !tokenRef.current) {
-      setError('Security verification failed. Please try again.');
+      setError('Please complete the security check first.');
       return;
     }
 
