@@ -262,12 +262,26 @@ export default function AIModerationPage() {
 
           {/* Engine Configuration */}
           <div className="card p-4">
-            <h3 className="text-sm font-semibold text-gray-700 mb-3">{engineLabel} Configuration</h3>
+            <div className="flex items-center justify-between mb-3">
+              <h3 className="text-sm font-semibold text-gray-700">{engineLabel} Configuration</h3>
+              <div className="text-xs text-gray-500">
+                Current: {modelName || 'Not configured'}
+              </div>
+            </div>
             
             {selectedEngine === 'local_ai' && (
               <div>
                 <label className="text-xs font-medium text-gray-600 block mb-1">Model</label>
-                <select className="w-full text-sm border border-gray-300 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-brand-500">
+                <select 
+                  value={modelId}
+                  onChange={(e) => {
+                    const selected = LOCAL_MODELS.find(m => m.id === e.target.value);
+                    setModelId(e.target.value);
+                    setModelName(selected?.name || '');
+                  }}
+                  className="w-full text-sm border border-gray-300 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-brand-500"
+                >
+                  <option value="">Select model...</option>
                   {LOCAL_MODELS.map(m => (
                     <option key={m.id} value={m.id}>{m.name}</option>
                   ))}
