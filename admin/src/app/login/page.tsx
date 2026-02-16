@@ -78,13 +78,15 @@ export default function LoginPage() {
     e.preventDefault();
     setError('');
 
-    if (TURNSTILE_SITE_KEY && widgetIdRef.current) {
-      // Trigger invisible Turnstile verification
+    // Invisible Turnstile flow:
+    // - If we don't have a token yet, execute Turnstile first.
+    // - If we already have a token, proceed with login.
+    if (TURNSTILE_SITE_KEY && widgetIdRef.current && !tokenRef.current) {
       setLoading(true);
       try {
         (window as any).turnstile.execute(widgetIdRef.current);
-        // The callback will handle the actual login
-      } catch (err: any) {
+        // The Turnstile callback will call performLogin() once a token is issued.
+      } catch {
         setError('Security verification failed. Please try again.');
         setLoading(false);
         refreshTurnstile();
@@ -92,8 +94,7 @@ export default function LoginPage() {
       return;
     }
 
-    // No Turnstile or direct execution
-    performLogin();
+    await performLogin();
   };
 
   return (
@@ -161,7 +162,7 @@ export default function LoginPage() {
             <button
               type="submit"
               className="btn-primary w-full"
-              disabled={loading || (!!TURNSTILE_SITE_KEY && !turnstileReady)}
+              disabled={loading}
             >
               {loading ? 'Signing in...' : 'Sign In'}
             </button>
