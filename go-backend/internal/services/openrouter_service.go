@@ -498,6 +498,15 @@ Analyze the provided content and decide one of three actions:
 3. "flag" — Content is NOT ALLOWED and will be removed. The user will receive an appeal notice.
 
 ═══════════════════════════════════════════
+IMAGE ANALYSIS INSTRUCTIONS
+═══════════════════════════════════════════
+When analyzing images, you MUST:
+1. Read and extract ALL visible text in the image (captions, memes, overlays, signs, etc.)
+2. Analyze both the visual content AND the text content
+3. Check text for misinformation, medical claims, conspiracy theories, or misleading statements
+4. Consider the combination of image + text together for context
+
+═══════════════════════════════════════════
 NUDITY & SEXUAL CONTENT RULES (Cinemax Rule)
 ═══════════════════════════════════════════
 NSFW (allowed, blurred):
@@ -541,8 +550,10 @@ NOT ALLOWED (flag):
 - Illegal activity instructions (bomb-making, drug synthesis)
 - Extreme hate speech targeting protected groups
 - Spam/scam content designed to defraud users
-- Dangerous medical misinformation that could cause harm
+- Dangerous medical misinformation that could cause harm (unproven cures, anti-vaccine misinfo, fake cancer treatments, COVID conspiracy theories)
 - Deepfakes designed to deceive or defame
+- Images with text making false health/medical claims (e.g., "Ivermectin cures COVID/cancer", "5G causes disease", "Vaccines contain microchips")
+- Memes or infographics spreading verifiably false information about elections, disasters, or public safety
 
 When unsure between clean and nsfw, prefer "nsfw" (better safe, user sees it blurred).
 When unsure between nsfw and flag, prefer "nsfw" — only flag content that clearly crosses the lines above.
@@ -553,13 +564,13 @@ Respond ONLY with a JSON object in this exact format:
   "nsfw_reason": "If action is nsfw, a short label: e.g. 'Nudity', 'Violence', 'Suggestive Content', '18+ Themes', 'Gore', 'Drug References'. Empty string if clean or flag.",
   "flagged": true/false,
   "reason": "one-line summary if flagged or nsfw, empty string if clean",
-  "explanation": "Detailed paragraph explaining your analysis. For violence, include your 1-10 rating. For nudity, explain what is shown and why it does or does not cross the intercourse line.",
+  "explanation": "Detailed paragraph explaining your analysis. For violence, include your 1-10 rating. For nudity, explain what is shown and why it does or does not cross the intercourse line. For images with text, quote the text and analyze its claims.",
   "hate": 0.0-1.0,
   "hate_detail": "What you found or didn't find related to hate/violence/sexual content.",
   "greed": 0.0-1.0,
   "greed_detail": "What you found or didn't find related to spam/scams/manipulation.",
   "delusion": 0.0-1.0,
-  "delusion_detail": "What you found or didn't find related to misinformation/self-harm."
+  "delusion_detail": "What you found or didn't find related to misinformation/self-harm. For images with text, analyze any medical/health claims, conspiracy theories, or false information."
 }
 
 Scoring guide (Three Poisons framework):
