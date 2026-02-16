@@ -41,6 +41,9 @@ type Config struct {
 	OpenRouterAPIKey        string
 	AIGatewayURL            string
 	AIGatewayToken          string
+	AzureOpenAIAPIKey       string
+	AzureOpenAIEndpoint     string
+	AzureOpenAIAPIVersion   string
 }
 
 func LoadConfig() *Config {
@@ -88,6 +91,9 @@ func LoadConfig() *Config {
 		OpenRouterAPIKey:        getEnv("OPENROUTER_API", ""),
 		AIGatewayURL:            getEnv("AI_GATEWAY_URL", ""),
 		AIGatewayToken:          getEnv("AI_GATEWAY_TOKEN", ""),
+		AzureOpenAIAPIKey:       getEnv("AZURE_OPENAI_API_KEY", ""),
+		AzureOpenAIEndpoint:     getEnv("AZURE_OPENAI_ENDPOINT", ""),
+		AzureOpenAIAPIVersion:   getEnv("AZURE_OPENAI_API_VERSION", "2024-02-15-preview"),
 	}
 }
 

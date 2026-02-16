@@ -124,6 +124,15 @@ func main() {
 	// Initialize OpenRouter service
 	openRouterService := services.NewOpenRouterService(dbPool, cfg.OpenRouterAPIKey)
 
+	// Initialize Azure OpenAI service
+	var azureOpenAIService *services.AzureOpenAIService
+	if cfg.AzureOpenAIAPIKey != "" && cfg.AzureOpenAIEndpoint != "" {
+		azureOpenAIService = services.NewAzureOpenAIService(dbPool, cfg.AzureOpenAIAPIKey, cfg.AzureOpenAIEndpoint, cfg.AzureOpenAIAPIVersion)
+		log.Info().Msg("Azure OpenAI service initialized")
+	} else {
+		log.Warn().Msg("Azure OpenAI credentials not provided, Azure OpenAI service disabled")
+	}
+
 	// Initialize content filter (hard blocklist + strike system)
 	contentFilter := services.NewContentFilter(dbPool)
 
@@ -177,7 +186,7 @@ func main() {
 
 	moderationHandler := handlers.NewModerationHandler(moderationService, openRouterService, localAIService)
 
-	adminHandler := handlers.NewAdminHandler(dbPool, moderationService, appealService, emailService, openRouterService, officialAccountsService, linkPreviewService, localAIService, cfg.JWTSecret, cfg.TurnstileSecretKey, s3Client, cfg.R2MediaBucket, cfg.R2VideoBucket, cfg.R2ImgDomain, cfg.R2VidDomain)
+	adminHandler := handlers.NewAdminHandler(dbPool, moderationService, appealService, emailService, openRouterService, azureOpenAIService, officialAccountsService, linkPreviewService, localAIService, cfg.JWTSecret, cfg.TurnstileSecretKey, s3Client, cfg.R2MediaBucket, cfg.R2VideoBucket, cfg.R2ImgDomain, cfg.R2VidDomain)
 
 	accountHandler := handlers.NewAccountHandler(userRepo, emailService, cfg)
 

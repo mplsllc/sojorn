@@ -20,6 +20,7 @@ const ENGINES = [
   { id: 'openrouter', label: 'OpenRouter', icon: Cloud },
   { id: 'openai', label: 'OpenAI', icon: Server },
   { id: 'google', label: 'Google Vision', icon: Eye },
+  { id: 'azure', label: 'Azure OpenAI', icon: Cloud },
 ];
 
 const LOCAL_MODELS = [
@@ -351,6 +352,25 @@ export default function AIModerationPage() {
 
             {selectedEngine === 'google' && (
               <p className="text-xs text-gray-500">Google Vision SafeSearch is configured via service account. No additional settings needed.</p>
+            )}
+
+            {selectedEngine === 'azure' && (
+              <div>
+                <label className="text-xs font-medium text-gray-600 block mb-1">Deployment Name</label>
+                <input
+                  type="text"
+                  value={modelId}
+                  onChange={(e) => {
+                    setModelId(e.target.value);
+                    setModelName(e.target.value);
+                  }}
+                  placeholder="e.g., gpt-4o-vision"
+                  className="w-full text-sm border border-gray-300 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-brand-500"
+                />
+                <p className="text-xs text-gray-500 mt-2">
+                  Azure OpenAI deployment name (configured in Azure portal). Uses your Azure credits.
+                </p>
+              </div>
             )}
           </div>
 

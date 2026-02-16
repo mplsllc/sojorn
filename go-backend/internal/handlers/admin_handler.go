@@ -26,6 +26,7 @@ type AdminHandler struct {
 	appealService           *services.AppealService
 	emailService            *services.EmailService
 	openRouterService       *services.OpenRouterService
+	azureOpenAIService      *services.AzureOpenAIService
 	officialAccountsService *services.OfficialAccountsService
 	linkPreviewService      *services.LinkPreviewService
 	localAIService          *services.LocalAIService
@@ -38,13 +39,14 @@ type AdminHandler struct {
 	vidDomain               string
 }
 
-func NewAdminHandler(pool *pgxpool.Pool, moderationService *services.ModerationService, appealService *services.AppealService, emailService *services.EmailService, openRouterService *services.OpenRouterService, officialAccountsService *services.OfficialAccountsService, linkPreviewService *services.LinkPreviewService, localAIService *services.LocalAIService, jwtSecret string, turnstileSecret string, s3Client *s3.Client, mediaBucket string, videoBucket string, imgDomain string, vidDomain string) *AdminHandler {
+func NewAdminHandler(pool *pgxpool.Pool, moderationService *services.ModerationService, appealService *services.AppealService, emailService *services.EmailService, openRouterService *services.OpenRouterService, azureOpenAIService *services.AzureOpenAIService, officialAccountsService *services.OfficialAccountsService, linkPreviewService *services.LinkPreviewService, localAIService *services.LocalAIService, jwtSecret string, turnstileSecret string, s3Client *s3.Client, mediaBucket string, videoBucket string, imgDomain string, vidDomain string) *AdminHandler {
 	return &AdminHandler{
 		pool:                    pool,
 		moderationService:       moderationService,
 		appealService:           appealService,
 		emailService:            emailService,
 		openRouterService:       openRouterService,
+		azureOpenAIService:      azureOpenAIService,
 		officialAccountsService: officialAccountsService,
 		linkPreviewService:      linkPreviewService,
 		localAIService:          localAIService,
@@ -2850,6 +2852,36 @@ func (h *AdminHandler) TestAIModeration(c *gin.Context) {
 		}
 		response["result"] = result
 
+	case "azure":
+		if h.azureOpenAIService == nil {
+			c.JSON(http.StatusServiceUnavailable, gin.H{"error": "Azure OpenAI not configured"})
+			return
+		}
+		var result *services.ModerationResult
+		var err error
+		isImage := strings.Contains(req.ModerationType, "image") || req.ModerationType == "video"
+		if isImage && req.ImageURL != "" {
+			if req.ModerationType == "video" {
+				urls := strings.Split(req.ImageURL, ",")
+				result, err = h.azureOpenAIService.ModerateVideo(ctx, urls)
+			} else {
+				result, err = h.azureOpenAIService.ModerateImage(ctx, req.ImageURL)
+			}
+		} else {
+			// Use type-specific config if available, fall back to generic text
+			result, err = h.azureOpenAIService.ModerateWithType(ctx, req.ModerationType, req.Content, nil)
+			if err != nil {
+				// Fall back to generic text moderation
+				result, err = h.azureOpenAIService.ModerateText(ctx, req.Content)
+			}
+		}
+		if err != nil {
+			response["error"] = err.Error()
+			c.JSON(http.StatusOK, response)
+			return
+		}
+		response["result"] = result
+
 	default:
 		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid engine: " + engine})
 		return
@@ -3766,6 +3798,23 @@ func (h *AdminHandler) GetAIEngines(c *gin.Context) {
 		googleEngine.Status = "not_configured"
 	}
 	engines = append(engines, googleEngine)
+
+	// 5. Azure OpenAI
+	azureEngine := EngineStatus{
+		ID:          "azure",
+		Name:        "Azure OpenAI",
+		Description: "Microsoft Azure OpenAI service with vision models. Uses your Azure credits. Supports text and image moderation with customizable prompts.",
+		Configured:  h.azureOpenAIService != nil,
+	}
+	if h.azureOpenAIService != nil {
+		azureEngine.Status = "ready"
+		azureEngine.Details = map[string]any{
+			"uses_azure_credits": true,
+		}
+	} else {
+		azureEngine.Status = "not_configured"
+	}
+	engines = append(engines, azureEngine)
 
 	c.JSON(http.StatusOK, gin.H{"engines": engines})
 }
