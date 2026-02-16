@@ -66,6 +66,8 @@ desktop.ini
 *.tar.gz
 *.tar
 *.gz
+*.backup
+*.orig
 *.exe
 *.bin
 *.db

@@ -25,9 +25,18 @@ class GroupForumTab extends StatefulWidget {
 class _GroupForumTabState extends State<GroupForumTab> {
   List<Map<String, dynamic>> _threads = [];
   bool _loading = true;
-  String? _selectedCategory;
+  String? _activeSubforum;
 
-  static const _categories = ['General', 'Events', 'Information', 'Safety', 'Recommendations', 'Marketplace'];
+  static const _subforums = ['General', 'Events', 'Information', 'Safety', 'Recommendations', 'Marketplace'];
+
+  static const _subforumDescriptions = {
+    'General': 'Open neighborhood discussion',
+    'Events': 'Plans, meetups, and happenings',
+    'Information': 'Updates, notices, and resources',
+    'Safety': 'Alerts and local safety conversations',
+    'Recommendations': 'Trusted local picks and referrals',
+    'Marketplace': 'Buy, sell, and trade nearby',
+  };
 
   @override
   void initState() {
@@ -41,10 +50,12 @@ class _GroupForumTabState extends State<GroupForumTab> {
       if (widget.isEncrypted) {
         await _loadEncryptedThreads();
       } else {
-        // Direct call to support category filtering
-        final queryParams = <String, String>{'limit': '30'};
-        if (_selectedCategory != null) {
-          queryParams['category'] = _selectedCategory!;
+        // Non-encrypted neighborhood forums support sub-forums via category.
+        final queryParams = <String, String>{
+          'limit': _activeSubforum == null ? '120' : '30',
+        };
+        if (_activeSubforum != null) {
+          queryParams['category'] = _activeSubforum!;
         }
         final data = await ApiService.instance.callGoApi(
           '/capsules/${widget.groupId}/threads',
@@ -107,7 +118,8 @@ class _GroupForumTabState extends State<GroupForumTab> {
       isScrollControlled: true,
       builder: (ctx) => _NewThreadSheet(
         isEncrypted: widget.isEncrypted,
-        initialCategory: _selectedCategory,
+        initialCategory: widget.isEncrypted ? null : (_activeSubforum ?? 'General'),
+        lockCategory: !widget.isEncrypted && _activeSubforum != null,
       ),
     );
     if (result == null) return;
@@ -177,145 +189,239 @@ class _GroupForumTabState extends State<GroupForumTab> {
 
   @override
   Widget build(BuildContext context) {
+    final showSubforumDirectory = !widget.isEncrypted && _activeSubforum == null;
+
     return Column(
       children: [
-        // Category Filters
-        if (!widget.isEncrypted)
-          Container(
-            padding: const EdgeInsets.fromLTRB(12, 8, 12, 8),
-            color: AppTheme.cardSurface,
-            child: SingleChildScrollView(
-              scrollDirection: Axis.horizontal,
+        if (showSubforumDirectory)
+          Expanded(
+            child: _loading
+                ? const Center(child: CircularProgressIndicator())
+                : _buildSubforumDirectory(),
+          )
+        else ...[
+          if (!widget.isEncrypted)
+            Container(
+              padding: const EdgeInsets.fromLTRB(12, 8, 12, 8),
+              color: AppTheme.cardSurface,
               child: Row(
                 children: [
-                  _buildCategoryChip(null, 'All'),
+                  InkWell(
+                    borderRadius: BorderRadius.circular(20),
+                    onTap: () {
+                      setState(() => _activeSubforum = null);
+                      _loadThreads();
+                    },
+                    child: Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Icon(Icons.arrow_back, size: 15, color: SojornColors.textDisabled),
+                          const SizedBox(width: 6),
+                          Text(
+                            'Subforums',
+                            style: TextStyle(
+                              color: SojornColors.textDisabled,
+                              fontSize: 12,
+                              fontWeight: FontWeight.w600,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
                   const SizedBox(width: 8),
-                  ..._categories.map((c) => Padding(
-                    padding: const EdgeInsets.only(right: 8),
-                    child: _buildCategoryChip(c, c),
-                  )),
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                    decoration: BoxDecoration(
+                      color: AppTheme.brightNavy.withValues(alpha: 0.1),
+                      borderRadius: BorderRadius.circular(16),
+                    ),
+                    child: Text(
+                      _activeSubforum ?? 'General',
+                      style: TextStyle(
+                        fontSize: 12,
+                        fontWeight: FontWeight.w700,
+                        color: AppTheme.brightNavy,
+                      ),
+                    ),
+                  ),
                 ],
               ),
             ),
-          ),
-        Expanded(
-        child: Stack(
-      children: [
-        _loading
-            ? const Center(child: CircularProgressIndicator())
-            : _threads.isEmpty
-                ? Center(
-                    child: Column(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        Icon(Icons.forum, size: 48, color: AppTheme.navyBlue.withValues(alpha: 0.15)),
-                        const SizedBox(height: 12),
-                        Text('No discussions yet', style: TextStyle(color: SojornColors.postContentLight, fontSize: 14)),
-                        const SizedBox(height: 4),
-                        Text('Start a thread to get the conversation going',
-                            style: TextStyle(color: SojornColors.textDisabled, fontSize: 12)),
-                      ],
-                    ),
-                  )
-                : RefreshIndicator(
-                    onRefresh: _loadThreads,
-                    child: ListView.separated(
-                      padding: const EdgeInsets.fromLTRB(12, 8, 12, 80),
-                      itemCount: _threads.length,
-                      separatorBuilder: (_, __) => Divider(color: AppTheme.navyBlue.withValues(alpha: 0.06), height: 1),
-                      itemBuilder: (_, i) {
-                        final thread = _threads[i];
-                        final title = thread['title'] as String? ?? 'Untitled';
-                        final body = thread['body'] as String? ?? '';
-                        final category = thread['category'] as String? ?? '';
-                        final handle = thread['author_handle'] as String? ?? '';
-                        final displayName = thread['author_display_name'] as String? ?? handle;
-                        final replyCount = thread['reply_count'] as int? ?? 0;
-                        final createdAt = thread['created_at']?.toString() ?? thread['last_activity_at']?.toString();
-
-                        return ListTile(
-                          onTap: () => _openThread(thread),
-                          contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-                          title: Row(
-                            children: [
-                              if (category.isNotEmpty) ...[
-                                Container(
-                                  padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                                  decoration: BoxDecoration(
-                                    color: AppTheme.brightNavy.withValues(alpha: 0.1),
-                                    borderRadius: BorderRadius.circular(4),
-                                  ),
-                                  child: Text(category, style: TextStyle(fontSize: 10, fontWeight: FontWeight.bold, color: AppTheme.brightNavy)),
-                                ),
-                                const SizedBox(width: 8),
+          Expanded(
+            child: Stack(
+              children: [
+                _loading
+                    ? const Center(child: CircularProgressIndicator())
+                    : _threads.isEmpty
+                        ? Center(
+                            child: Column(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                Icon(Icons.forum, size: 48, color: AppTheme.navyBlue.withValues(alpha: 0.15)),
+                                const SizedBox(height: 12),
+                                Text('No discussions yet', style: TextStyle(color: SojornColors.postContentLight, fontSize: 14)),
+                                const SizedBox(height: 4),
+                                Text('Start a thread to get the conversation going',
+                                    style: TextStyle(color: SojornColors.textDisabled, fontSize: 12)),
                               ],
-                              Expanded(child: Text(title, style: TextStyle(color: AppTheme.navyBlue, fontWeight: FontWeight.w600, fontSize: 14))),
-                            ],
+                            ),
+                          )
+                        : RefreshIndicator(
+                            onRefresh: _loadThreads,
+                            child: ListView.separated(
+                              padding: const EdgeInsets.fromLTRB(12, 8, 12, 80),
+                              itemCount: _threads.length,
+                              separatorBuilder: (_, __) => Divider(color: AppTheme.navyBlue.withValues(alpha: 0.06), height: 1),
+                              itemBuilder: (_, i) {
+                                final thread = _threads[i];
+                                final title = thread['title'] as String? ?? 'Untitled';
+                                final body = thread['body'] as String? ?? '';
+                                final category = thread['category'] as String? ?? '';
+                                final handle = thread['author_handle'] as String? ?? '';
+                                final displayName = thread['author_display_name'] as String? ?? handle;
+                                final replyCount = thread['reply_count'] as int? ?? 0;
+                                final createdAt = thread['created_at']?.toString() ?? thread['last_activity_at']?.toString();
+
+                                return ListTile(
+                                  onTap: () => _openThread(thread),
+                                  contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                                  title: Row(
+                                    children: [
+                                      if (category.isNotEmpty) ...[
+                                        Container(
+                                          padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                                          decoration: BoxDecoration(
+                                            color: AppTheme.brightNavy.withValues(alpha: 0.1),
+                                            borderRadius: BorderRadius.circular(4),
+                                          ),
+                                          child: Text(category, style: TextStyle(fontSize: 10, fontWeight: FontWeight.bold, color: AppTheme.brightNavy)),
+                                        ),
+                                        const SizedBox(width: 8),
+                                      ],
+                                      Expanded(child: Text(title, style: TextStyle(color: AppTheme.navyBlue, fontWeight: FontWeight.w600, fontSize: 14))),
+                                    ],
+                                  ),
+                                  subtitle: Column(
+                                    crossAxisAlignment: CrossAxisAlignment.start,
+                                    children: [
+                                      if (body.isNotEmpty)
+                                        Padding(
+                                          padding: const EdgeInsets.only(top: 4),
+                                          child: Text(body, maxLines: 2, overflow: TextOverflow.ellipsis,
+                                              style: TextStyle(color: SojornColors.postContentLight, fontSize: 12)),
+                                        ),
+                                      const SizedBox(height: 6),
+                                      Row(
+                                        children: [
+                                          Text(displayName.isNotEmpty ? displayName : handle,
+                                              style: TextStyle(color: AppTheme.brightNavy, fontSize: 11, fontWeight: FontWeight.w500)),
+                                          const SizedBox(width: 8),
+                                          Icon(Icons.chat_bubble_outline, size: 12, color: SojornColors.textDisabled),
+                                          const SizedBox(width: 3),
+                                          Text('$replyCount', style: TextStyle(color: SojornColors.textDisabled, fontSize: 11)),
+                                          const SizedBox(width: 8),
+                                          Text(_timeAgo(createdAt), style: TextStyle(color: SojornColors.textDisabled, fontSize: 11)),
+                                        ],
+                                      ),
+                                    ],
+                                  ),
+                                  trailing: Icon(Icons.chevron_right, size: 18, color: SojornColors.textDisabled),
+                                );
+                              },
+                            ),
                           ),
-                          subtitle: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              if (body.isNotEmpty)
-                                Padding(
-                                  padding: const EdgeInsets.only(top: 4),
-                                  child: Text(body, maxLines: 2, overflow: TextOverflow.ellipsis,
-                                      style: TextStyle(color: SojornColors.postContentLight, fontSize: 12)),
-                                ),
-                              const SizedBox(height: 6),
-                              Row(
-                                children: [
-                                  Text(displayName.isNotEmpty ? displayName : handle,
-                                      style: TextStyle(color: AppTheme.brightNavy, fontSize: 11, fontWeight: FontWeight.w500)),
-                                  const SizedBox(width: 8),
-                                  Icon(Icons.chat_bubble_outline, size: 12, color: SojornColors.textDisabled),
-                                  const SizedBox(width: 3),
-                                  Text('$replyCount', style: TextStyle(color: SojornColors.textDisabled, fontSize: 11)),
-                                  const SizedBox(width: 8),
-                                  Text(_timeAgo(createdAt), style: TextStyle(color: SojornColors.textDisabled, fontSize: 11)),
-                                ],
-                              ),
-                            ],
-                          ),
-                          trailing: Icon(Icons.chevron_right, size: 18, color: SojornColors.textDisabled),
-                        );
-                      },
-                    ),
+                Positioned(
+                  bottom: 16, right: 16,
+                  child: FloatingActionButton.small(
+                    heroTag: 'new_thread',
+                    onPressed: _showCreateThread,
+                    backgroundColor: widget.isEncrypted ? const Color(0xFF4CAF50) : AppTheme.brightNavy,
+                    child: const Icon(Icons.add, color: SojornColors.basicWhite),
                   ),
-        Positioned(
-          bottom: 16, right: 16,
-          child: FloatingActionButton.small(
-            heroTag: 'new_thread',
-            onPressed: _showCreateThread,
-            backgroundColor: widget.isEncrypted ? const Color(0xFF4CAF50) : AppTheme.brightNavy,
-            child: const Icon(Icons.add, color: SojornColors.basicWhite),
+                ),
+              ],
+            ),
           ),
-        ),
-      ],
-    ),
-    ),
+        ],
       ],
     );
   }
 
-  Widget _buildCategoryChip(String? category, String label) {
-    final isSelected = _selectedCategory == category;
-    return FilterChip(
-      selected: isSelected,
-      label: Text(label),
-      labelStyle: TextStyle(
-        fontSize: 12, fontWeight: FontWeight.w600,
-        color: isSelected ? SojornColors.basicWhite : AppTheme.navyBlue,
-      ),
-      backgroundColor: AppTheme.scaffoldBg,
-      selectedColor: AppTheme.brightNavy,
-      checkmarkColor: SojornColors.basicWhite,
-      shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(20),
-        side: BorderSide(color: isSelected ? Colors.transparent : AppTheme.navyBlue.withValues(alpha: 0.1)),
-      ),
-      onSelected: (_) {
-        setState(() => _selectedCategory = isSelected ? null : category);
-        _loadThreads();
+  Widget _buildSubforumDirectory() {
+    return ListView.separated(
+      padding: const EdgeInsets.fromLTRB(12, 12, 12, 20),
+      itemCount: _subforums.length,
+      separatorBuilder: (_, __) => const SizedBox(height: 8),
+      itemBuilder: (_, i) {
+        final subforum = _subforums[i];
+        final count = _threads.where((t) => (t['category'] as String? ?? 'General') == subforum).length;
+        final description = _subforumDescriptions[subforum] ?? '';
+
+        return InkWell(
+          borderRadius: BorderRadius.circular(12),
+          onTap: () {
+            setState(() => _activeSubforum = subforum);
+            _loadThreads();
+          },
+          child: Container(
+            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+            decoration: BoxDecoration(
+              color: AppTheme.cardSurface,
+              borderRadius: BorderRadius.circular(12),
+              border: Border.all(color: AppTheme.navyBlue.withValues(alpha: 0.08)),
+            ),
+            child: Row(
+              children: [
+                Container(
+                  width: 34,
+                  height: 34,
+                  decoration: BoxDecoration(
+                    color: AppTheme.brightNavy.withValues(alpha: 0.1),
+                    borderRadius: BorderRadius.circular(9),
+                  ),
+                  child: Icon(Icons.forum, size: 18, color: AppTheme.brightNavy),
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        subforum,
+                        style: TextStyle(
+                          color: AppTheme.navyBlue,
+                          fontSize: 14,
+                          fontWeight: FontWeight.w700,
+                        ),
+                      ),
+                      const SizedBox(height: 2),
+                      Text(
+                        description,
+                        style: TextStyle(
+                          color: SojornColors.textDisabled,
+                          fontSize: 12,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                Text(
+                  '$count',
+                  style: TextStyle(
+                    color: AppTheme.brightNavy,
+                    fontSize: 13,
+                    fontWeight: FontWeight.w700,
+                  ),
+                ),
+                const SizedBox(width: 4),
+                Icon(Icons.chevron_right, size: 18, color: SojornColors.textDisabled),
+              ],
+            ),
+          ),
+        );
       },
     );
   }
@@ -325,7 +431,12 @@ class _GroupForumTabState extends State<GroupForumTab> {
 class _NewThreadSheet extends StatefulWidget {
   final bool isEncrypted;
   final String? initialCategory;
-  const _NewThreadSheet({this.isEncrypted = false, this.initialCategory});
+  final bool lockCategory;
+  const _NewThreadSheet({
+    this.isEncrypted = false,
+    this.initialCategory,
+    this.lockCategory = false,
+  });
 
   @override
   State<_NewThreadSheet> createState() => _NewThreadSheetState();
@@ -372,7 +483,7 @@ class _NewThreadSheetState extends State<_NewThreadSheet> {
           ),
           const SizedBox(height: 16),
           // Category Selector
-          if (!widget.isEncrypted) ...[
+          if (!widget.isEncrypted && !widget.lockCategory) ...[
             SingleChildScrollView(
               scrollDirection: Axis.horizontal,
               child: Row(
@@ -395,6 +506,23 @@ class _NewThreadSheetState extends State<_NewThreadSheet> {
                     ),
                   );
                 }).toList(),
+              ),
+            ),
+            const SizedBox(height: 16),
+          ] else if (!widget.isEncrypted && widget.lockCategory) ...[
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 7),
+              decoration: BoxDecoration(
+                color: AppTheme.brightNavy.withValues(alpha: 0.1),
+                borderRadius: BorderRadius.circular(20),
+              ),
+              child: Text(
+                'Posting in $_selectedCategory',
+                style: TextStyle(
+                  color: AppTheme.brightNavy,
+                  fontSize: 12,
+                  fontWeight: FontWeight.w700,
+                ),
               ),
             ),
             const SizedBox(height: 16),

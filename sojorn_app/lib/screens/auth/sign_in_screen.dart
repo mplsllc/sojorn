@@ -534,25 +534,27 @@ class _SignInScreenState extends ConsumerState<SignInScreen> {
                                 ),
                               ],
                               const SizedBox(height: AppTheme.spacingMd),
-                              Row(
-                                mainAxisAlignment: MainAxisAlignment.center,
-                                children: [
-                                  Text(
-                                    'New to Sojorn? ',
-                                    style: AppTheme.textTheme.bodyMedium,
-                                  ),
-                                  TextButton(
-                                    onPressed: () {
-                                      Navigator.of(context).push(
-                                        MaterialPageRoute(
-                                          builder: (_) => const SignUpScreen(),
-                                        ),
-                                      );
-                                    },
-                                    child: const Text('Create an account'),
-                                  ),
-                                ],
-                              ),
+                              if (!kIsWeb) ...[
+                                Row(
+                                  mainAxisAlignment: MainAxisAlignment.center,
+                                  children: [
+                                    Text(
+                                      'New to Sojorn? ',
+                                      style: AppTheme.textTheme.bodyMedium,
+                                    ),
+                                    TextButton(
+                                      onPressed: () {
+                                        Navigator.of(context).push(
+                                          MaterialPageRoute(
+                                            builder: (_) => const SignUpScreen(),
+                                          ),
+                                        );
+                                      },
+                                      child: const Text('Create an account'),
+                                    ),
+                                  ],
+                                ),
+                              ],
                             ],
                           ),
                         ),

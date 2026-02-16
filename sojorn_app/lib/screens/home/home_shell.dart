@@ -261,6 +261,8 @@ class _HomeShellState extends ConsumerState<HomeShell> with WidgetsBindingObserv
           _buildBeaconCreateButton()
         else
           IconButton(
+            constraints: const BoxConstraints(minWidth: 48, minHeight: 48),
+            padding: const EdgeInsets.all(12),
             icon: Icon(Icons.search, color: AppTheme.navyBlue),
             tooltip: 'Discover',
             onPressed: () {
@@ -271,7 +273,10 @@ class _HomeShellState extends ConsumerState<HomeShell> with WidgetsBindingObserv
               );
             },
           ),
+        const SizedBox(width: 4),
         IconButton(
+          constraints: const BoxConstraints(minWidth: 48, minHeight: 48),
+          padding: const EdgeInsets.all(12),
           icon: Consumer(
             builder: (context, ref, child) {
               final badge = ref.watch(currentBadgeProvider);
@@ -293,7 +298,10 @@ class _HomeShellState extends ConsumerState<HomeShell> with WidgetsBindingObserv
               );
           },
         ),
+        const SizedBox(width: 2),
         IconButton(
+          constraints: const BoxConstraints(minWidth: 48, minHeight: 48),
+          padding: const EdgeInsets.all(12),
           icon: Consumer(
             builder: (context, ref, child) {
               final badge = ref.watch(currentBadgeProvider);
@@ -314,7 +322,7 @@ class _HomeShellState extends ConsumerState<HomeShell> with WidgetsBindingObserv
             );
           },
         ),
-        const SizedBox(width: 4),
+        const SizedBox(width: 8),
       ],
     );
   }
@@ -323,7 +331,7 @@ class _HomeShellState extends ConsumerState<HomeShell> with WidgetsBindingObserv
     final beaconState = BeaconScreen.globalKey.currentState;
     final label = beaconState?.createLabel ?? 'Create';
     return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 8),
+      padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 2),
       child: FilledButton.icon(
         onPressed: () {
           final state = BeaconScreen.globalKey.currentState;
@@ -340,9 +348,10 @@ class _HomeShellState extends ConsumerState<HomeShell> with WidgetsBindingObserv
         style: FilledButton.styleFrom(
           backgroundColor: AppTheme.navyBlue,
           foregroundColor: SojornColors.basicWhite,
-          padding: const EdgeInsets.symmetric(horizontal: 12),
+          padding: const EdgeInsets.symmetric(horizontal: 14),
           shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-          minimumSize: const Size(0, 34),
+          minimumSize: const Size(0, 38),
+          elevation: 1.5,
         ),
       ),
     );

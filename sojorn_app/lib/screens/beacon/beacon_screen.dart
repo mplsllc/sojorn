@@ -24,11 +24,13 @@ import 'board_entry_detail_screen.dart';
 import '../clusters/group_screen.dart';
 import '../clusters/group_chat_tab.dart';
 import '../clusters/group_forum_tab.dart';
+import '../clusters/group_members_tab.dart';
 import '../../theme/tokens.dart';
 import '../../theme/app_theme.dart';
 import '../../widgets/neighborhood/neighborhood_picker_sheet.dart';
 
 enum BeaconTab { map, board, search, groups }
+enum NeighborhoodHubTab { feed, chat, forum, members }
 
 class BeaconScreen extends ConsumerStatefulWidget {
   static final GlobalKey<BeaconScreenState> globalKey = GlobalKey<BeaconScreenState>();
@@ -78,6 +80,13 @@ class BeaconScreenState extends ConsumerState<BeaconScreen> with TickerProviderS
   bool _isNeighborhoodAdmin = false;
   BoardTopic? _selectedBoardTopic;
   String _boardSort = 'new';
+  NeighborhoodHubTab _activeNeighborhoodHubTab = NeighborhoodHubTab.feed;
+  int _activeNeighborhoodMemberCount = 0;
+  int _chatActivityCount = 0;
+  int _forumActivityCount = 0;
+  int _activeNowCount = 0;
+  bool _isLoadingNeighborhoodHubMeta = false;
+  String? _lastNeighborhoodMetaGroupId;
 
   // Groups / clusters data
   List<Cluster> _clusters = [];
@@ -375,28 +384,32 @@ class BeaconScreenState extends ConsumerState<BeaconScreen> with TickerProviderS
 
   Widget _buildBoardSortChip(String key, String label) {
     final selected = _boardSort == key;
-    return InkWell(
-      onTap: () {
-        if (selected) return;
-        setState(() => _boardSort = key);
-        _loadBoardEntries();
-      },
-      borderRadius: BorderRadius.circular(999),
-      child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-        decoration: BoxDecoration(
-          color: selected ? AppTheme.brightNavy.withValues(alpha: 0.15) : AppTheme.navyBlue.withValues(alpha: 0.05),
-          borderRadius: BorderRadius.circular(999),
-          border: Border.all(
-            color: selected ? AppTheme.brightNavy.withValues(alpha: 0.35) : AppTheme.navyBlue.withValues(alpha: 0.12),
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        onTap: () {
+          if (selected) return;
+          setState(() => _boardSort = key);
+          _loadBoardEntries();
+        },
+        borderRadius: BorderRadius.circular(8),
+        child: Container(
+          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+          decoration: BoxDecoration(
+            color: selected ? AppTheme.brightNavy : AppTheme.cardSurface,
+            borderRadius: BorderRadius.circular(8),
+            border: Border.all(
+              color: selected ? AppTheme.brightNavy : AppTheme.navyBlue.withValues(alpha: 0.12),
+              width: 1,
+            ),
           ),
-        ),
-        child: Text(
-          label,
-          style: TextStyle(
-            fontSize: 11,
-            fontWeight: FontWeight.w700,
-            color: selected ? AppTheme.brightNavy : SojornColors.textDisabled,
+          child: Text(
+            label,
+            style: TextStyle(
+              color: selected ? SojornColors.basicWhite : AppTheme.brightNavy,
+              fontSize: 12,
+              fontWeight: FontWeight.w600,
+            ),
           ),
         ),
       ),
@@ -451,6 +464,80 @@ class BeaconScreenState extends ConsumerState<BeaconScreen> with TickerProviderS
       if (kDebugMode) print('[Board] Load error: $e');
       if (mounted) setState(() => _isLoadingBoard = false);
     }
+
+    final groupId = _neighborhoodGroupId;
+    if (groupId != null && groupId.isNotEmpty) {
+      _loadNeighborhoodHubMeta(groupId);
+    }
+  }
+
+  String? get _neighborhoodGroupId {
+    if (_neighborhood == null) return null;
+    final direct = _neighborhood!['group_id'] as String?;
+    if (direct != null && direct.isNotEmpty) return direct;
+    final nested = _neighborhood!['neighborhood'] as Map<String, dynamic>?;
+    return nested?['group_id'] as String?;
+  }
+
+  String get _neighborhoodName {
+    if (_neighborhood == null) return 'Neighborhood';
+    final direct = _neighborhood!['name'] as String?;
+    if (direct != null && direct.isNotEmpty) return direct;
+    final nested = _neighborhood!['neighborhood'] as Map<String, dynamic>?;
+    final nestedName = nested?['name'] as String?;
+    return (nestedName != null && nestedName.isNotEmpty) ? nestedName : 'Neighborhood';
+  }
+
+  Future<void> _loadNeighborhoodHubMeta(String groupId) async {
+    if (_isLoadingNeighborhoodHubMeta) return;
+    setState(() => _isLoadingNeighborhoodHubMeta = true);
+    try {
+      final members = await ApiService.instance.fetchGroupMembers(groupId);
+      final messages = await ApiService.instance.fetchGroupMessages(groupId, limit: 40);
+      final threads = await ApiService.instance.fetchGroupThreads(groupId, limit: 40);
+
+      final nowUtc = DateTime.now().toUtc();
+      final activeCutoff = nowUtc.subtract(const Duration(minutes: 30));
+      final chatCutoff = nowUtc.subtract(const Duration(hours: 12));
+      final forumCutoff = nowUtc.subtract(const Duration(hours: 18));
+      final activeUserIds = <String>{};
+
+      int chatActivity = 0;
+      for (final m in messages) {
+        final createdAtRaw = m['created_at']?.toString();
+        final authorId = m['author_id']?.toString();
+        if (createdAtRaw == null || authorId == null) continue;
+        final createdAt = DateTime.tryParse(createdAtRaw)?.toUtc();
+        if (createdAt == null) continue;
+        if (createdAt.isAfter(chatCutoff)) chatActivity++;
+        if (createdAt.isAfter(activeCutoff)) activeUserIds.add(authorId);
+      }
+
+      int forumActivity = 0;
+      for (final t in threads) {
+        final stampRaw = t['last_activity_at']?.toString() ?? t['created_at']?.toString();
+        final authorId = t['author_id']?.toString();
+        if (stampRaw == null || authorId == null) continue;
+        final stamp = DateTime.tryParse(stampRaw)?.toUtc();
+        if (stamp == null) continue;
+        if (stamp.isAfter(forumCutoff)) forumActivity++;
+        if (stamp.isAfter(activeCutoff)) activeUserIds.add(authorId);
+      }
+
+      if (mounted) {
+        setState(() {
+          _activeNeighborhoodMemberCount = members.length;
+          _chatActivityCount = chatActivity;
+          _forumActivityCount = forumActivity;
+          _activeNowCount = activeUserIds.length;
+          _isLoadingNeighborhoodHubMeta = false;
+        });
+      }
+    } catch (_) {
+      if (mounted) {
+        setState(() => _isLoadingNeighborhoodHubMeta = false);
+      }
+    }
   }
 
   Future<void> _removeBoardEntry(BoardEntry entry) async {
@@ -464,9 +551,12 @@ class BeaconScreenState extends ConsumerState<BeaconScreen> with TickerProviderS
           children: [
             const Text('Are you sure you want to remove this post? This action will be logged.'),
             const SizedBox(height: 10),
-            TextField(
-              controller: reasonController,
-              decoration: const InputDecoration(labelText: 'Reason for removal', hintText: 'e.g. Hate speech, spam...'),
+            Material(
+              color: Colors.transparent,
+              child: TextField(
+                controller: reasonController,
+                decoration: const InputDecoration(labelText: 'Reason for removal', hintText: 'e.g. Hate speech, spam...'),
+              ),
             ),
           ],
         ),
@@ -501,9 +591,12 @@ class BeaconScreenState extends ConsumerState<BeaconScreen> with TickerProviderS
       context: context,
       builder: (ctx) => AlertDialog(
         title: const Text('Report Content'),
-        content: TextField(
-          controller: reasonController,
-          decoration: const InputDecoration(labelText: 'Reason', hintText: 'Why is this inappropriate?'),
+        content: Material(
+          color: Colors.transparent,
+          child: TextField(
+            controller: reasonController,
+            decoration: const InputDecoration(labelText: 'Reason', hintText: 'Why is this inappropriate?'),
+          ),
         ),
         actions: [
           TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Cancel')),
@@ -608,7 +701,7 @@ class BeaconScreenState extends ConsumerState<BeaconScreen> with TickerProviderS
     return Column(
       children: [
         // Top tab bar
-        Container(
+        Material(
           color: AppTheme.scaffoldBg,
           child: TabBar(
             controller: _tabController,
@@ -832,152 +925,389 @@ class BeaconScreenState extends ConsumerState<BeaconScreen> with TickerProviderS
       );
     }
 
-    final groupId = _neighborhood!['group_id'] as String;
-    final groupName = _neighborhood!['name'] as String? ?? 'Neighborhood';
-    final isAdmin = _isNeighborhoodAdmin;
+    final groupId = _neighborhoodGroupId;
+    if (groupId == null || groupId.isEmpty) {
+      return Center(
+        child: Text('Neighborhood unavailable', style: TextStyle(color: SojornColors.textDisabled)),
+      );
+    }
 
-    return DefaultTabController(
-      length: 3,
-      child: Column(
-        children: [
-          // Header
-          Container(
-            color: AppTheme.cardSurface,
-            child: Column(
-              children: [
-                Padding(
-                  padding: const EdgeInsets.fromLTRB(16, 12, 16, 4),
-                  child: Row(
-                    children: [
-                      Icon(Icons.home_filled, color: AppTheme.brightNavy),
-                      const SizedBox(width: 10),
-                      Text(groupName, style: TextStyle(color: AppTheme.navyBlue, fontSize: 18, fontWeight: FontWeight.w700)),
-                      const Spacer(),
-                      if (isAdmin)
-                        Container(
-                          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-                          decoration: BoxDecoration(color: AppTheme.brightNavy.withValues(alpha: 0.1), borderRadius: BorderRadius.circular(4)),
-                          child: Text('ADMIN', style: TextStyle(color: AppTheme.brightNavy, fontSize: 10, fontWeight: FontWeight.bold)),
-                        ),
-                    ],
-                  ),
-                ),
-                TabBar(
-                  labelColor: AppTheme.brightNavy,
-                  unselectedLabelColor: SojornColors.textDisabled,
-                  indicatorColor: AppTheme.brightNavy,
-                  labelStyle: const TextStyle(fontSize: 13, fontWeight: FontWeight.w600),
-                  tabs: const [
-                    Tab(text: 'Feed'),
-                    Tab(text: 'Chat'),
-                    Tab(text: 'Forum'),
-                  ],
-                ),
-              ],
-            ),
-          ),
-          // Tab Content
-          Expanded(
-            child: TabBarView(
-              children: [
-                // 1. Feed (The original Board Entries view)
-                Column(
+    final groupName = _neighborhoodName;
+    final isAdmin = _isNeighborhoodAdmin;
+    if (_lastNeighborhoodMetaGroupId != groupId) {
+      _lastNeighborhoodMetaGroupId = groupId;
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) _loadNeighborhoodHubMeta(groupId);
+      });
+    }
+
+    final matchedCluster = _clusters.where((c) => c.id == groupId).firstOrNull;
+    final hubCluster = matchedCluster ?? Cluster(
+      id: groupId,
+      name: groupName,
+      type: 'geo',
+      memberCount: _activeNeighborhoodMemberCount,
+      createdAt: DateTime.now(),
+    );
+
+    final availableSwitchTargets = _clusters.where((c) => c.id != groupId).take(8).toList();
+
+    return Column(
+      children: [
+        Container(
+          color: AppTheme.cardSurface,
+          child: Column(
+            children: [
+              Padding(
+                padding: const EdgeInsets.fromLTRB(14, 12, 14, 6),
+                child: Row(
                   children: [
-                    // Filters
                     Container(
-                      padding: const EdgeInsets.fromLTRB(12, 8, 12, 8),
-                      color: AppTheme.scaffoldBg,
-                      child: Row(
+                      width: 32,
+                      height: 32,
+                      decoration: BoxDecoration(
+                        color: AppTheme.brightNavy.withValues(alpha: 0.12),
+                        borderRadius: BorderRadius.circular(10),
+                      ),
+                      child: Icon(Icons.home_filled, size: 18, color: AppTheme.brightNavy),
+                    ),
+                    const SizedBox(width: 10),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          Icon(Icons.filter_list, size: 14, color: SojornColors.textDisabled),
-                          const SizedBox(width: 6),
-                          _buildBoardSortChip('new', 'New'),
-                          const SizedBox(width: 6),
-                          _buildBoardSortChip('hot', 'Hot'),
-                          const Spacer(),
-                           OutlinedButton.icon(
-                            onPressed: _onCreateBoardPost,
-                            icon: const Icon(Icons.edit, size: 14),
-                            label: const Text('Post'),
-                            style: OutlinedButton.styleFrom(
-                              visualDensity: VisualDensity.compact,
-                              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 0),
-                              foregroundColor: AppTheme.brightNavy,
-                              side: BorderSide(color: AppTheme.brightNavy.withValues(alpha: 0.3)),
-                              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-                            ),
+                          Row(
+                            children: [
+                              Flexible(
+                                child: Text(
+                                  groupName,
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
+                                  style: TextStyle(color: AppTheme.navyBlue, fontSize: 18, fontWeight: FontWeight.w800),
+                                ),
+                              ),
+                              const SizedBox(width: 4),
+                              if (availableSwitchTargets.isNotEmpty)
+                                PopupMenuButton<String>(
+                                  tooltip: 'Quick switch',
+                                  icon: Icon(Icons.keyboard_arrow_down, size: 18, color: SojornColors.textDisabled),
+                                  onSelected: (value) {
+                                    final target = _clusters.where((c) => c.id == value).firstOrNull;
+                                    if (target != null) {
+                                      _navigateToCluster(target);
+                                    }
+                                  },
+                                  itemBuilder: (_) => availableSwitchTargets
+                                      .map(
+                                        (c) => PopupMenuItem<String>(
+                                          value: c.id,
+                                          child: Row(
+                                            children: [
+                                              Icon(
+                                                c.isCapsule ? Icons.lock : Icons.location_on,
+                                                size: 14,
+                                                color: c.isCapsule ? const Color(0xFF4CAF50) : AppTheme.brightNavy,
+                                              ),
+                                              const SizedBox(width: 8),
+                                              Expanded(
+                                                child: Text(
+                                                  c.name,
+                                                  maxLines: 1,
+                                                  overflow: TextOverflow.ellipsis,
+                                                ),
+                                              ),
+                                            ],
+                                          ),
+                                        ),
+                                      )
+                                      .toList(),
+                                ),
+                            ],
+                          ),
+                          const SizedBox(height: 3),
+                          Row(
+                            children: [
+                              Icon(Icons.bolt, size: 12, color: AppTheme.brightNavy.withValues(alpha: 0.8)),
+                              const SizedBox(width: 4),
+                              Text(
+                                _isLoadingNeighborhoodHubMeta
+                                    ? 'Checking activity...'
+                                    : '$_activeNowCount active now',
+                                style: TextStyle(color: SojornColors.textDisabled, fontSize: 11, fontWeight: FontWeight.w600),
+                              ),
+                              const SizedBox(width: 10),
+                              Icon(Icons.people, size: 12, color: SojornColors.textDisabled),
+                              const SizedBox(width: 4),
+                              Text(
+                                '${_activeNeighborhoodMemberCount > 0 ? _activeNeighborhoodMemberCount : hubCluster.memberCount} members',
+                                style: TextStyle(color: SojornColors.textDisabled, fontSize: 11),
+                              ),
+                            ],
                           ),
                         ],
                       ),
                     ),
-                    Expanded(
-                      child: _isLoadingBoard && _boardEntries.isEmpty
-                          ? const Center(child: CircularProgressIndicator())
-                          : _boardEntries.isEmpty
-                              ? Center(
-                                  child: Text('No posts yet in $groupName', style: TextStyle(color: SojornColors.textDisabled)),
-                                )
-                              : RefreshIndicator(
-                                  onRefresh: _loadBoardEntries,
-                                  child: ListView.separated(
-                                    padding: const EdgeInsets.all(12),
-                                    itemCount: _boardEntries.length,
-                                    separatorBuilder: (_, __) => const SizedBox(height: 8),
-                                    itemBuilder: (context, i) => _buildBoardEntryCard(_boardEntries[i]),
-                                  ),
-                                ),
+                    if (isAdmin)
+                      Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                        decoration: BoxDecoration(color: AppTheme.brightNavy.withValues(alpha: 0.1), borderRadius: BorderRadius.circular(6)),
+                        child: Text('ADMIN', style: TextStyle(color: AppTheme.brightNavy, fontSize: 10, fontWeight: FontWeight.bold)),
+                      ),
+                    IconButton(
+                      onPressed: _showNeighborhoodPicker,
+                      icon: Icon(Icons.tune, size: 18, color: SojornColors.textDisabled),
+                      tooltip: 'Neighborhood settings',
                     ),
                   ],
                 ),
-                // 2. Chat
-                GroupChatTab(
-                  groupId: groupId,
-                  currentUserId: AuthService.instance.currentUser?.id,
+              ),
+              Padding(
+                padding: const EdgeInsets.fromLTRB(12, 2, 12, 10),
+                child: Container(
+                  padding: const EdgeInsets.all(4),
+                  decoration: BoxDecoration(
+                    color: AppTheme.scaffoldBg,
+                    borderRadius: BorderRadius.circular(999),
+                    border: Border.all(color: AppTheme.navyBlue.withValues(alpha: 0.08)),
+                  ),
+                  child: Row(
+                    children: [
+                      Expanded(
+                        child: _buildHubSegment(
+                          label: 'Feed',
+                          icon: Icons.rss_feed,
+                          selected: _activeNeighborhoodHubTab == NeighborhoodHubTab.feed,
+                          onTap: () => setState(() => _activeNeighborhoodHubTab = NeighborhoodHubTab.feed),
+                        ),
+                      ),
+                      Expanded(
+                        child: _buildHubSegment(
+                          label: 'Chat',
+                          icon: Icons.chat_bubble_outline,
+                          badgeCount: _chatActivityCount,
+                          selected: _activeNeighborhoodHubTab == NeighborhoodHubTab.chat,
+                          onTap: () => setState(() => _activeNeighborhoodHubTab = NeighborhoodHubTab.chat),
+                        ),
+                      ),
+                      Expanded(
+                        child: _buildHubSegment(
+                          label: 'Forum',
+                          icon: Icons.forum_outlined,
+                          badgeCount: _forumActivityCount,
+                          selected: _activeNeighborhoodHubTab == NeighborhoodHubTab.forum,
+                          onTap: () => setState(() => _activeNeighborhoodHubTab = NeighborhoodHubTab.forum),
+                        ),
+                      ),
+                      Expanded(
+                        child: _buildHubSegment(
+                          label: 'Members',
+                          icon: Icons.groups_2_outlined,
+                          selected: _activeNeighborhoodHubTab == NeighborhoodHubTab.members,
+                          onTap: () => setState(() => _activeNeighborhoodHubTab = NeighborhoodHubTab.members),
+                        ),
+                      ),
+                    ],
+                  ),
                 ),
-                // 3. Forum
-                GroupForumTab(groupId: groupId),
-              ],
+              ),
+            ],
+          ),
+        ),
+        Expanded(
+          child: switch (_activeNeighborhoodHubTab) {
+            NeighborhoodHubTab.feed => _buildNeighborhoodFeedPane(groupName),
+            NeighborhoodHubTab.chat => GroupChatTab(
+                groupId: groupId,
+                currentUserId: AuthService.instance.currentUser?.id,
+              ),
+            NeighborhoodHubTab.forum => GroupForumTab(groupId: groupId),
+            NeighborhoodHubTab.members => GroupMembersTab(
+                groupId: groupId,
+                group: hubCluster,
+                isEncrypted: false,
+              ),
+          },
+        ),
+      ],
+    );
+  }
+
+  Widget _buildHubSegment({
+    required String label,
+    required IconData icon,
+    required bool selected,
+    required VoidCallback onTap,
+    int badgeCount = 0,
+  }) {
+    return GestureDetector(
+      onTap: onTap,
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 160),
+        curve: Curves.easeOut,
+        padding: const EdgeInsets.symmetric(vertical: 7),
+        decoration: BoxDecoration(
+          color: selected ? AppTheme.navyBlue : Colors.transparent,
+          borderRadius: BorderRadius.circular(999),
+        ),
+        child: Row(
+          mainAxisAlignment: MainAxisAlignment.center,
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(icon, size: 14, color: selected ? SojornColors.basicWhite : SojornColors.textDisabled),
+            const SizedBox(width: 5),
+            Text(
+              label,
+              style: TextStyle(
+                fontSize: 11,
+                fontWeight: FontWeight.w700,
+                color: selected ? SojornColors.basicWhite : SojornColors.textDisabled,
+              ),
+            ),
+            if (badgeCount > 0) ...[
+              const SizedBox(width: 5),
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1),
+                decoration: BoxDecoration(
+                  color: selected ? SojornColors.basicWhite : AppTheme.brightNavy,
+                  borderRadius: BorderRadius.circular(999),
+                ),
+                child: Text(
+                  badgeCount > 9 ? '9+' : '$badgeCount',
+                  style: TextStyle(
+                    color: selected ? AppTheme.navyBlue : SojornColors.basicWhite,
+                    fontSize: 9,
+                    fontWeight: FontWeight.w800,
+                  ),
+                ),
+              ),
+            ],
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildNeighborhoodFeedPane(String groupName) {
+    return Column(
+      children: [
+        Container(
+          margin: const EdgeInsets.fromLTRB(12, 10, 12, 6),
+          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+          decoration: BoxDecoration(
+            color: AppTheme.cardSurface,
+            borderRadius: BorderRadius.circular(12),
+            border: Border.all(color: AppTheme.navyBlue.withValues(alpha: 0.08)),
+          ),
+          child: Material(
+            color: Colors.transparent,
+            child: InkWell(
+              borderRadius: BorderRadius.circular(10),
+              onTap: _onCreateBoardPost,
+              child: Row(
+                children: [
+                  CircleAvatar(
+                    radius: 14,
+                    backgroundColor: AppTheme.brightNavy.withValues(alpha: 0.12),
+                    child: Icon(Icons.edit, size: 14, color: AppTheme.brightNavy.withValues(alpha: 0.8)),
+                  ),
+                  const SizedBox(width: 10),
+                  Expanded(
+                    child: Text(
+                      "What's happening in $groupName?",
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: TextStyle(color: SojornColors.textDisabled, fontSize: 13),
+                    ),
+                  ),
+                  FilledButton(
+                    onPressed: _onCreateBoardPost,
+                    style: FilledButton.styleFrom(
+                      backgroundColor: AppTheme.navyBlue,
+                      foregroundColor: SojornColors.basicWhite,
+                      minimumSize: const Size(0, 30),
+                      padding: const EdgeInsets.symmetric(horizontal: 12),
+                      visualDensity: VisualDensity.compact,
+                    ),
+                    child: const Text('Post', style: TextStyle(fontSize: 12, fontWeight: FontWeight.w700)),
+                  ),
+                ],
+              ),
             ),
           ),
-        ],
-      ),
+        ),
+        Container(
+          padding: const EdgeInsets.fromLTRB(12, 4, 12, 8),
+          color: AppTheme.scaffoldBg,
+          child: Row(
+            children: [
+              Icon(Icons.filter_list, size: 14, color: SojornColors.textDisabled),
+              const SizedBox(width: 6),
+              _buildBoardSortChip('new', 'New'),
+              const SizedBox(width: 6),
+              _buildBoardSortChip('hot', 'Hot'),
+            ],
+          ),
+        ),
+        Expanded(
+          child: _isLoadingBoard && _boardEntries.isEmpty
+              ? const Center(child: CircularProgressIndicator())
+              : _boardEntries.isEmpty
+                  ? Center(
+                      child: Text('No posts yet in $groupName', style: TextStyle(color: SojornColors.textDisabled)),
+                    )
+                  : RefreshIndicator(
+                      onRefresh: _loadBoardEntries,
+                      child: ListView.separated(
+                        padding: const EdgeInsets.all(12),
+                        itemCount: _boardEntries.length,
+                        separatorBuilder: (_, __) => const SizedBox(height: 8),
+                        itemBuilder: (context, i) => _buildBoardEntryCard(_boardEntries[i]),
+                      ),
+                    ),
+        ),
+      ],
     );
   }
 
   Widget _buildBoardFilterChip(BoardTopic? topic, String label, IconData icon, Color color) {
     final isSelected = _selectedBoardTopic == topic;
-    return FilterChip(
-      selected: isSelected,
-      label: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Icon(icon, size: 14, color: isSelected ? SojornColors.basicWhite : color),
-          const SizedBox(width: 4),
-          Text(label),
-        ],
+    return Material(
+      color: Colors.transparent,
+      child: FilterChip(
+        selected: isSelected,
+        label: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(icon, size: 14, color: isSelected ? SojornColors.basicWhite : color),
+            const SizedBox(width: 4),
+            Text(label),
+          ],
+        ),
+        labelStyle: TextStyle(
+          fontSize: 12,
+          fontWeight: FontWeight.w600,
+          color: isSelected ? SojornColors.basicWhite : color,
+        ),
+        selectedColor: color,
+        backgroundColor: color.withValues(alpha: 0.08),
+        side: BorderSide(color: color.withValues(alpha: 0.2)),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+        showCheckmark: false,
+        padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 0),
+        materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
+        visualDensity: VisualDensity.compact,
+        onSelected: (_) {
+          setState(() => _selectedBoardTopic = isSelected ? null : topic);
+          _loadBoardEntries();
+        },
       ),
-      labelStyle: TextStyle(
-        fontSize: 12,
-        fontWeight: FontWeight.w600,
-        color: isSelected ? SojornColors.basicWhite : color,
-      ),
-      selectedColor: color,
-      backgroundColor: color.withValues(alpha: 0.08),
-      side: BorderSide(color: color.withValues(alpha: 0.2)),
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
-      showCheckmark: false,
-      padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 0),
-      materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
-      visualDensity: VisualDensity.compact,
-      onSelected: (_) {
-        setState(() => _selectedBoardTopic = isSelected ? null : topic);
-        _loadBoardEntries();
-      },
     );
   }
 
   Widget _buildBoardEntryCard(BoardEntry entry) {
     final topicColor = entry.topic.color;
+    final authorName = entry.authorDisplayName.isNotEmpty ? entry.authorDisplayName : entry.authorHandle;
+    final avatarInitial = authorName.isNotEmpty ? authorName[0].toUpperCase() : 'N';
     return GestureDetector(
       onTap: () async {
         final updated = await Navigator.of(context).push<BoardEntry>(
@@ -991,125 +1321,178 @@ class BeaconScreenState extends ConsumerState<BeaconScreen> with TickerProviderS
         }
       },
       child: Container(
-      padding: const EdgeInsets.all(14),
-      decoration: BoxDecoration(
-        color: entry.isPinned ? AppTheme.brightNavy.withValues(alpha: 0.03) : AppTheme.cardSurface,
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(
-          color: entry.isPinned ? AppTheme.brightNavy.withValues(alpha: 0.24) : AppTheme.navyBlue.withValues(alpha: 0.08),
+        padding: const EdgeInsets.all(12),
+        decoration: BoxDecoration(
+          color: entry.isPinned ? AppTheme.brightNavy.withValues(alpha: 0.03) : AppTheme.cardSurface,
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(
+            color: entry.isPinned ? AppTheme.brightNavy.withValues(alpha: 0.24) : AppTheme.navyBlue.withValues(alpha: 0.08),
+          ),
         ),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          if (entry.isPinned) ...[
-            Container(
-              margin: const EdgeInsets.only(bottom: 8),
-              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-              decoration: BoxDecoration(
-                color: AppTheme.brightNavy.withValues(alpha: 0.12),
-                borderRadius: BorderRadius.circular(6),
-              ),
-              child: Row(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Icon(Icons.push_pin, size: 12, color: AppTheme.brightNavy),
-                  const SizedBox(width: 4),
-                  Text('Pinned by moderators', style: TextStyle(fontSize: 11, color: AppTheme.brightNavy, fontWeight: FontWeight.w700)),
-                ],
-              ),
-            ),
-          ],
-          Row(
-            children: [
-              // Topic badge
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            if (entry.isPinned) ...[
               Container(
-                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                margin: const EdgeInsets.only(bottom: 6),
+                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
                 decoration: BoxDecoration(
-                  color: topicColor.withValues(alpha: 0.1),
+                  color: AppTheme.brightNavy.withValues(alpha: 0.12),
                   borderRadius: BorderRadius.circular(6),
                 ),
-                child: Row(mainAxisSize: MainAxisSize.min, children: [
-                  Icon(entry.topic.icon, size: 12, color: topicColor),
-                  const SizedBox(width: 4),
-                  Text(entry.topic.displayName,
-                    style: TextStyle(fontSize: 11, fontWeight: FontWeight.w600, color: topicColor)),
-                ]),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Icon(Icons.push_pin, size: 12, color: AppTheme.brightNavy),
+                    const SizedBox(width: 4),
+                    Text('Pinned by moderators', style: TextStyle(fontSize: 11, color: AppTheme.brightNavy, fontWeight: FontWeight.w700)),
+                  ],
+                ),
               ),
-              if (entry.isPinned) ...[
-                const SizedBox(width: 6),
-                Icon(Icons.push_pin, size: 12, color: AppTheme.brightNavy),
-              ],
-              const Spacer(),
-              Text(entry.getTimeAgo(), style: TextStyle(color: SojornColors.textDisabled, fontSize: 11)),
             ],
-          ),
-          // Admin/Flag menu
-          if (_isNeighborhoodAdmin)
-            Align(
-              alignment: Alignment.topRight,
-              child: PopupMenuButton<String>(
-                icon: Icon(Icons.more_horiz, size: 16, color: SojornColors.textDisabled),
-                onSelected: (val) {
-                  if (val == 'remove') _removeBoardEntry(entry);
-                  if (val == 'flag') _flagBoardEntry(entry);
-                },
-                itemBuilder: (_) => [
-                  const PopupMenuItem(value: 'flag', child: Text('Flag Content')),
-                  const PopupMenuItem(value: 'remove', child: Text('Remove (Admin)', style: TextStyle(color: SojornColors.destructive))),
+            // Header: topic badge + time
+            Row(
+              children: [
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                  decoration: BoxDecoration(
+                    color: topicColor.withValues(alpha: 0.1),
+                    borderRadius: BorderRadius.circular(6),
+                  ),
+                  child: Row(mainAxisSize: MainAxisSize.min, children: [
+                    Icon(entry.topic.icon, size: 12, color: topicColor),
+                    const SizedBox(width: 4),
+                    Text(entry.topic.displayName,
+                      style: TextStyle(fontSize: 11, fontWeight: FontWeight.w600, color: topicColor)),
+                  ]),
+                ),
+                if (entry.isPinned) ...[
+                  const SizedBox(width: 6),
+                  Icon(Icons.push_pin, size: 12, color: AppTheme.brightNavy),
                 ],
-              ),
-            )
-          else
-            Align(
-              alignment: Alignment.topRight,
-              child: IconButton(
-                icon: Icon(Icons.flag_outlined, size: 16, color: SojornColors.textDisabled.withValues(alpha: 0.5)),
-                onPressed: () => _flagBoardEntry(entry),
-                tooltip: 'Report Content',
-              ),
+                const Spacer(),
+                Text(entry.getTimeAgo(), style: TextStyle(color: SojornColors.textDisabled, fontSize: 11)),
+              ],
             ),
-          const SizedBox(height: 10),
-          // Body
-          Text(entry.body, maxLines: 4, overflow: TextOverflow.ellipsis,
-            style: TextStyle(color: SojornColors.postContentLight, fontSize: 14, height: 1.4)),
-          // Image
-          if (entry.imageUrl != null) ...[
+            const SizedBox(height: 8),
+            // User row: avatar + name + resident badge
+            Row(
+              children: [
+                CircleAvatar(
+                  radius: 12,
+                  backgroundColor: AppTheme.brightNavy.withValues(alpha: 0.12),
+                  backgroundImage: entry.authorAvatarUrl.isNotEmpty ? NetworkImage(entry.authorAvatarUrl) : null,
+                  child: entry.authorAvatarUrl.isEmpty
+                      ? Text(
+                          avatarInitial,
+                          style: TextStyle(color: AppTheme.brightNavy, fontSize: 11, fontWeight: FontWeight.w700),
+                        )
+                      : null,
+                ),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: Row(
+                    children: [
+                      Text(
+                        authorName,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: TextStyle(color: SojornColors.postContent, fontSize: 13, fontWeight: FontWeight.w600),
+                      ),
+                      const SizedBox(width: 6),
+                      Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                        decoration: BoxDecoration(
+                          color: AppTheme.brightNavy.withValues(alpha: 0.1),
+                          borderRadius: BorderRadius.circular(999),
+                        ),
+                        child: Text(
+                          'Resident',
+                          style: TextStyle(fontSize: 9, fontWeight: FontWeight.w700, color: AppTheme.brightNavy),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 8),
+            // Body
+            Text(entry.body, maxLines: 4, overflow: TextOverflow.ellipsis,
+              style: TextStyle(color: SojornColors.postContentLight, fontSize: 14, height: 1.4)),
+            // Image
+            if (entry.imageUrl != null) ...[
+              const SizedBox(height: 8),
+              ClipRRect(
+                borderRadius: BorderRadius.circular(8),
+                child: Image.network(entry.imageUrl!, height: 140, width: double.infinity, fit: BoxFit.cover),
+              ),
+            ],
             const SizedBox(height: 10),
-            ClipRRect(
-              borderRadius: BorderRadius.circular(8),
-              child: Image.network(entry.imageUrl!, height: 140, width: double.infinity, fit: BoxFit.cover),
+            // Bottom action bar: upvote | comments | flag
+            Row(
+              children: [
+                // Upvote button
+                Material(
+                  color: Colors.transparent,
+                  child: InkWell(
+                    onTap: () => _toggleBoardVote(entry),
+                    borderRadius: BorderRadius.circular(18),
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                      constraints: const BoxConstraints(minHeight: 36, minWidth: 48),
+                      child: Row(mainAxisSize: MainAxisSize.min, children: [
+                        Icon(
+                          entry.hasVoted ? Icons.arrow_upward : Icons.arrow_upward_outlined,
+                          size: 16,
+                          color: entry.hasVoted ? AppTheme.brightNavy : SojornColors.textDisabled,
+                        ),
+                        const SizedBox(width: 4),
+                        Text('${entry.upvotes}', style: TextStyle(
+                          color: entry.hasVoted ? AppTheme.brightNavy : SojornColors.textDisabled,
+                          fontSize: 12,
+                          fontWeight: FontWeight.w600,
+                        )),
+                      ]),
+                    ),
+                  ),
+                ),
+                const SizedBox(width: 12),
+                // Reply count
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                  constraints: const BoxConstraints(minHeight: 36, minWidth: 48),
+                  child: Row(mainAxisSize: MainAxisSize.min, children: [
+                    Icon(Icons.chat_bubble_outline, size: 15, color: SojornColors.textDisabled),
+                    const SizedBox(width: 4),
+                    Text('${entry.replyCount}', style: TextStyle(color: SojornColors.textDisabled, fontSize: 12, fontWeight: FontWeight.w600)),
+                  ]),
+                ),
+                const Spacer(),
+                // Flag/Report button
+                if (_isNeighborhoodAdmin)
+                  PopupMenuButton<String>(
+                    icon: Icon(Icons.more_horiz, size: 16, color: SojornColors.textDisabled),
+                    onSelected: (val) {
+                      if (val == 'remove') _removeBoardEntry(entry);
+                      if (val == 'flag') _flagBoardEntry(entry);
+                    },
+                    itemBuilder: (_) => [
+                      const PopupMenuItem(value: 'flag', child: Text('Flag Content')),
+                      const PopupMenuItem(value: 'remove', child: Text('Remove (Admin)', style: TextStyle(color: SojornColors.destructive))),
+                    ],
+                  )
+                else
+                  IconButton(
+                    icon: Icon(Icons.flag_outlined, size: 16, color: SojornColors.textDisabled.withValues(alpha: 0.5)),
+                    onPressed: () => _flagBoardEntry(entry),
+                    tooltip: 'Report Content',
+                    constraints: const BoxConstraints(minWidth: 40, minHeight: 40),
+                  ),
+              ],
             ),
           ],
-          const SizedBox(height: 10),
-          // Footer: author, upvote, replies
-          Row(
-            children: [
-              Text(entry.authorDisplayName.isNotEmpty ? entry.authorDisplayName : entry.authorHandle,
-                style: TextStyle(color: SojornColors.textDisabled, fontSize: 11, fontWeight: FontWeight.w500)),
-              const Spacer(),
-              // Upvote button
-              GestureDetector(
-                onTap: () => _toggleBoardVote(entry),
-                child: Row(mainAxisSize: MainAxisSize.min, children: [
-                  Icon(entry.hasVoted ? Icons.arrow_upward : Icons.arrow_upward_outlined,
-                    size: 14, color: entry.hasVoted ? AppTheme.brightNavy : SojornColors.textDisabled),
-                  const SizedBox(width: 3),
-                  Text('${entry.upvotes}', style: TextStyle(
-                    color: entry.hasVoted ? AppTheme.brightNavy : SojornColors.textDisabled, fontSize: 12)),
-                ]),
-              ),
-              const SizedBox(width: 14),
-              // Reply count
-              Row(mainAxisSize: MainAxisSize.min, children: [
-                Icon(Icons.chat_bubble_outline, size: 13, color: SojornColors.textDisabled),
-                const SizedBox(width: 3),
-                Text('${entry.replyCount}', style: TextStyle(color: SojornColors.textDisabled, fontSize: 12)),
-              ]),
-            ],
-          ),
-        ],
-      ),
+        ),
       ),
     );
   }
@@ -1131,25 +1514,28 @@ class BeaconScreenState extends ConsumerState<BeaconScreen> with TickerProviderS
               borderRadius: BorderRadius.circular(12),
               border: Border.all(color: AppTheme.navyBlue.withValues(alpha: 0.1)),
             ),
-            child: TextField(
-              controller: _searchController,
-              onChanged: _onSearchChanged,
-              style: TextStyle(color: SojornColors.postContent, fontSize: 14),
-              decoration: InputDecoration(
-                hintText: 'Search beacons, boards, groups…',
-                hintStyle: TextStyle(color: SojornColors.textDisabled),
-                prefixIcon: Icon(Icons.search, size: 20, color: SojornColors.textDisabled),
-                suffixIcon: hasQuery
-                    ? IconButton(
-                        icon: Icon(Icons.close, size: 18, color: SojornColors.textDisabled),
-                        onPressed: () {
-                          _searchController.clear();
-                          _onSearchChanged('');
-                        },
-                      )
-                    : null,
-                border: InputBorder.none,
-                contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+            child: Material(
+              color: Colors.transparent,
+              child: TextField(
+                controller: _searchController,
+                onChanged: _onSearchChanged,
+                style: TextStyle(color: SojornColors.postContent, fontSize: 14),
+                decoration: InputDecoration(
+                  hintText: 'Search beacons, boards, groups…',
+                  hintStyle: TextStyle(color: SojornColors.textDisabled),
+                  prefixIcon: Icon(Icons.search, size: 20, color: SojornColors.textDisabled),
+                  suffixIcon: hasQuery
+                      ? IconButton(
+                          icon: Icon(Icons.close, size: 18, color: SojornColors.textDisabled),
+                          onPressed: () {
+                            _searchController.clear();
+                            _onSearchChanged('');
+                          },
+                        )
+                      : null,
+                  border: InputBorder.none,
+                  contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+                ),
               ),
             ),
           ),
@@ -1443,10 +1829,32 @@ class BeaconScreenState extends ConsumerState<BeaconScreen> with TickerProviderS
                             if (capsules.isNotEmpty) ...[
                               Padding(
                                 padding: const EdgeInsets.fromLTRB(4, 16, 4, 8),
-                                child: Text('CAPSULES', style: TextStyle(
-                                  color: AppTheme.navyBlue.withValues(alpha: 0.4),
-                                  fontSize: 10, fontWeight: FontWeight.w700, letterSpacing: 1,
-                                )),
+                                child: Row(
+                                  children: [
+                                    Icon(Icons.lock, size: 12, color: const Color(0xFF4CAF50)),
+                                    const SizedBox(width: 6),
+                                    Text('CAPSULES', style: TextStyle(
+                                      color: const Color(0xFF2E7D32),
+                                      fontSize: 10, fontWeight: FontWeight.w700, letterSpacing: 1,
+                                    )),
+                                    const SizedBox(width: 6),
+                                    Container(
+                                      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                                      decoration: BoxDecoration(
+                                        color: const Color(0xFF4CAF50).withValues(alpha: 0.12),
+                                        borderRadius: BorderRadius.circular(999),
+                                      ),
+                                      child: const Text(
+                                        'E2E',
+                                        style: TextStyle(
+                                          color: Color(0xFF2E7D32),
+                                          fontSize: 9,
+                                          fontWeight: FontWeight.w700,
+                                        ),
+                                      ),
+                                    ),
+                                  ],
+                                ),
                               ),
                               ...capsules.map((c) => _buildClusterCard(c, isCapsule: true)),
                             ],
@@ -1462,48 +1870,82 @@ class BeaconScreenState extends ConsumerState<BeaconScreen> with TickerProviderS
 
   Widget _buildGroupCategoryChip(GroupCategory? category, String label, IconData icon, Color color) {
     final isSelected = _selectedGroupCategory == category;
-    return FilterChip(
-      selected: isSelected,
-      label: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Icon(icon, size: 14, color: isSelected ? SojornColors.basicWhite : color),
-          const SizedBox(width: 4),
-          Text(label),
-        ],
+    final selectedColor = AppTheme.navyBlue;
+    return Material(
+      color: Colors.transparent,
+      child: FilterChip(
+        selected: isSelected,
+        label: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Container(
+              width: 20,
+              height: 20,
+              decoration: BoxDecoration(
+                color: isSelected ? SojornColors.basicWhite.withValues(alpha: 0.18) : color.withValues(alpha: 0.14),
+                shape: BoxShape.circle,
+              ),
+              child: Icon(icon, size: 13, color: isSelected ? SojornColors.basicWhite : color),
+            ),
+            const SizedBox(width: 6),
+            Text(label),
+          ],
+        ),
+        labelStyle: TextStyle(
+          fontSize: 12,
+          fontWeight: FontWeight.w600,
+          color: isSelected ? SojornColors.basicWhite : AppTheme.navyBlue,
+        ),
+        selectedColor: selectedColor,
+        backgroundColor: AppTheme.cardSurface,
+        side: BorderSide(color: isSelected ? selectedColor : AppTheme.navyBlue.withValues(alpha: 0.14)),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+        elevation: isSelected ? 1 : 0,
+        shadowColor: selectedColor.withValues(alpha: 0.25),
+        showCheckmark: false,
+        padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 4),
+        materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
+        visualDensity: VisualDensity.compact,
+        onSelected: (_) {
+          setState(() => _selectedGroupCategory = isSelected ? null : category);
+        },
       ),
-      labelStyle: TextStyle(
-        fontSize: 12,
-        fontWeight: FontWeight.w600,
-        color: isSelected ? SojornColors.basicWhite : color,
-      ),
-      selectedColor: color,
-      backgroundColor: color.withValues(alpha: 0.08),
-      side: BorderSide(color: color.withValues(alpha: 0.2)),
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
-      showCheckmark: false,
-      padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 0),
-      materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
-      visualDensity: VisualDensity.compact,
-      onSelected: (_) {
-        setState(() => _selectedGroupCategory = isSelected ? null : category);
-      },
     );
   }
 
   Widget _buildClusterCard(Cluster cluster, {required bool isCapsule}) {
     final capsuleGreen = const Color(0xFF4CAF50);
+    final capsuleDark = const Color(0xFF2E7D32);
     return GestureDetector(
       onTap: () => _navigateToCluster(cluster),
       child: Container(
         margin: const EdgeInsets.only(bottom: 8),
         padding: const EdgeInsets.all(14),
         decoration: BoxDecoration(
-          color: isCapsule ? const Color(0xFFF0F8F0) : AppTheme.cardSurface,
+          gradient: isCapsule
+              ? LinearGradient(
+                  begin: Alignment.topLeft,
+                  end: Alignment.bottomRight,
+                  colors: [
+                    const Color(0xFFF4FBF4),
+                    const Color(0xFFE9F6EC),
+                  ],
+                )
+              : null,
+          color: isCapsule ? null : AppTheme.cardSurface,
           borderRadius: BorderRadius.circular(14),
           border: Border.all(
-            color: isCapsule ? capsuleGreen.withValues(alpha: 0.15) : AppTheme.navyBlue.withValues(alpha: 0.08),
+            color: isCapsule ? capsuleGreen.withValues(alpha: 0.32) : AppTheme.navyBlue.withValues(alpha: 0.08),
           ),
+          boxShadow: isCapsule
+              ? [
+                  BoxShadow(
+                    color: capsuleGreen.withValues(alpha: 0.12),
+                    blurRadius: 10,
+                    offset: const Offset(0, 3),
+                  ),
+                ]
+              : null,
         ),
         child: Row(
           children: [
@@ -1531,9 +1973,9 @@ class BeaconScreenState extends ConsumerState<BeaconScreen> with TickerProviderS
                   const SizedBox(height: 3),
                   Row(children: [
                     if (isCapsule) ...[
-                      Icon(Icons.shield, size: 11, color: capsuleGreen.withValues(alpha: 0.7)),
+                      Icon(Icons.shield, size: 11, color: capsuleDark),
                       const SizedBox(width: 3),
-                      Text('E2E Encrypted', style: TextStyle(fontSize: 10, color: capsuleGreen.withValues(alpha: 0.7))),
+                      Text('E2E Encrypted', style: TextStyle(fontSize: 10, color: capsuleDark, fontWeight: FontWeight.w600)),
                     ] else ...[
                       Icon(Icons.public, size: 11, color: SojornColors.textDisabled),
                       const SizedBox(width: 3),
@@ -1774,13 +2216,16 @@ class BeaconScreenState extends ConsumerState<BeaconScreen> with TickerProviderS
                 style: Theme.of(context).textTheme.bodyMedium?.copyWith(color: SojornColors.postContentLight),
                 textAlign: TextAlign.center),
               const SizedBox(height: 24),
-              ElevatedButton.icon(
-                onPressed: _isLoadingLocation ? null : _requestLocationPermission,
-                icon: _isLoadingLocation
-                    ? const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2))
-                    : const Icon(Icons.location_on),
-                label: const Text('Enable Location'),
-                style: ElevatedButton.styleFrom(backgroundColor: AppTheme.brightNavy, foregroundColor: SojornColors.basicWhite),
+              Material(
+                color: Colors.transparent,
+                child: ElevatedButton.icon(
+                  onPressed: _isLoadingLocation ? null : _requestLocationPermission,
+                  icon: _isLoadingLocation
+                      ? const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2))
+                      : const Icon(Icons.location_on),
+                  label: const Text('Enable Location'),
+                  style: ElevatedButton.styleFrom(backgroundColor: AppTheme.brightNavy, foregroundColor: SojornColors.basicWhite),
+                ),
               ),
             ],
           ),
@@ -2012,29 +2457,35 @@ class _CreateGroupInlineState extends State<_CreateGroupInline> {
           const SizedBox(height: 20),
           const Text('Create Group', style: TextStyle(fontSize: 18, fontWeight: FontWeight.w700)),
           const SizedBox(height: 16),
-          TextField(
-            controller: _nameCtrl,
-            decoration: InputDecoration(
-              labelText: 'Group name',
-              filled: true,
-              fillColor: SojornColors.basicBlack.withValues(alpha: 0.04),
-              border: OutlineInputBorder(borderRadius: BorderRadius.circular(10),
-                borderSide: BorderSide(color: SojornColors.basicBlack.withValues(alpha: 0.1))),
-              enabledBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(10),
-                borderSide: BorderSide(color: SojornColors.basicBlack.withValues(alpha: 0.1))),
+          Material(
+            color: Colors.transparent,
+            child: TextField(
+              controller: _nameCtrl,
+              decoration: InputDecoration(
+                labelText: 'Group name',
+                filled: true,
+                fillColor: SojornColors.basicBlack.withValues(alpha: 0.04),
+                border: OutlineInputBorder(borderRadius: BorderRadius.circular(10),
+                  borderSide: BorderSide(color: SojornColors.basicBlack.withValues(alpha: 0.1))),
+                enabledBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(10),
+                  borderSide: BorderSide(color: SojornColors.basicBlack.withValues(alpha: 0.1))),
+              ),
             ),
           ),
           const SizedBox(height: 12),
-          TextField(
-            controller: _descCtrl, maxLines: 2,
-            decoration: InputDecoration(
-              labelText: 'Description (optional)',
-              filled: true,
-              fillColor: SojornColors.basicBlack.withValues(alpha: 0.04),
-              border: OutlineInputBorder(borderRadius: BorderRadius.circular(10),
-                borderSide: BorderSide(color: SojornColors.basicBlack.withValues(alpha: 0.1))),
-              enabledBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(10),
-                borderSide: BorderSide(color: SojornColors.basicBlack.withValues(alpha: 0.1))),
+          Material(
+            color: Colors.transparent,
+            child: TextField(
+              controller: _descCtrl, maxLines: 2,
+              decoration: InputDecoration(
+                labelText: 'Description (optional)',
+                filled: true,
+                fillColor: SojornColors.basicBlack.withValues(alpha: 0.04),
+                border: OutlineInputBorder(borderRadius: BorderRadius.circular(10),
+                  borderSide: BorderSide(color: SojornColors.basicBlack.withValues(alpha: 0.1))),
+                enabledBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(10),
+                  borderSide: BorderSide(color: SojornColors.basicBlack.withValues(alpha: 0.1))),
+              ),
             ),
           ),
           const SizedBox(height: 14),
@@ -2161,25 +2612,31 @@ class _CreateCapsuleInlineState extends State<_CreateCapsuleInline> {
           Text('End-to-end encrypted. The server never sees your content.',
             style: TextStyle(fontSize: 12, color: SojornColors.textDisabled)),
           const SizedBox(height: 20),
-          TextField(
-            controller: _nameCtrl,
-            style: TextStyle(color: SojornColors.postContent),
-            decoration: InputDecoration(
-              labelText: 'Capsule name',
-              labelStyle: TextStyle(color: SojornColors.textDisabled),
-              filled: true, fillColor: AppTheme.scaffoldBg,
-              border: OutlineInputBorder(borderRadius: BorderRadius.circular(10), borderSide: BorderSide.none),
+          Material(
+            color: Colors.transparent,
+            child: TextField(
+              controller: _nameCtrl,
+              style: TextStyle(color: SojornColors.postContent),
+              decoration: InputDecoration(
+                labelText: 'Capsule name',
+                labelStyle: TextStyle(color: SojornColors.textDisabled),
+                filled: true, fillColor: AppTheme.scaffoldBg,
+                border: OutlineInputBorder(borderRadius: BorderRadius.circular(10), borderSide: BorderSide.none),
+              ),
             ),
           ),
           const SizedBox(height: 12),
-          TextField(
-            controller: _descCtrl, maxLines: 2,
-            style: TextStyle(color: SojornColors.postContent),
-            decoration: InputDecoration(
-              labelText: 'Description (optional)',
-              labelStyle: TextStyle(color: SojornColors.textDisabled),
-              filled: true, fillColor: AppTheme.scaffoldBg,
-              border: OutlineInputBorder(borderRadius: BorderRadius.circular(10), borderSide: BorderSide.none),
+          Material(
+            color: Colors.transparent,
+            child: TextField(
+              controller: _descCtrl, maxLines: 2,
+              style: TextStyle(color: SojornColors.postContent),
+              decoration: InputDecoration(
+                labelText: 'Description (optional)',
+                labelStyle: TextStyle(color: SojornColors.textDisabled),
+                filled: true, fillColor: AppTheme.scaffoldBg,
+                border: OutlineInputBorder(borderRadius: BorderRadius.circular(10), borderSide: BorderSide.none),
+              ),
             ),
           ),
           const SizedBox(height: 8),

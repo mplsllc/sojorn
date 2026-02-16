@@ -133,14 +133,14 @@ class _sojornAppState extends ConsumerState<sojornApp> with WidgetsBindingObserv
     // Defer heavy work with real delays to avoid jank on first paint
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (kDebugMode) debugPrint('[APP] Post-frame: starting deferred init');
-      // Stagger init with real delays so the UI can paint between tasks
-      Future.delayed(const Duration(milliseconds: 100), () {
+      // Stagger init with longer delays to reduce jank from heavy synchronous work
+      Future.delayed(const Duration(milliseconds: 300), () {
         _initE2ee();
       });
-      Future.delayed(const Duration(milliseconds: 500), () {
+      Future.delayed(const Duration(milliseconds: 800), () {
         _initNotifications();
       });
-      Future.delayed(const Duration(milliseconds: 800), () {
+      Future.delayed(const Duration(milliseconds: 1200), () {
         _initSyncManagerIfAuthenticated();
       });
     });

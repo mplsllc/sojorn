@@ -97,9 +97,6 @@ flutter:
     - assets/images/toplogo.png
     - assets/reactions/
     - assets/reactions/dotto/
-    - assets/reactions/blue/
-    - assets/reactions/green/
-    - assets/reactions/purple/
     - assets/icon/
     - assets/rive/
     - assets/audio/

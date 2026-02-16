@@ -52,6 +52,10 @@
 
   <script src="https://www.gstatic.com/firebasejs/10.7.0/firebase-app-compat.js" async></script>
   <script src="https://www.gstatic.com/firebasejs/10.7.0/firebase-messaging-compat.js" async></script>
+  <script>
+    // Suppress flutter_inappwebview plugin warning on web platform
+    window.flutter_inappwebview_plugin = { ready: Promise.resolve() };
+  </script>
 </head>
 <body>
   <!-- Shown instantly while Flutter engine + app JS loads -->

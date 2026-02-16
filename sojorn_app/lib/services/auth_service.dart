@@ -204,6 +204,10 @@ class AuthService {
   }) async {
     try {
       final uri = Uri.parse('${ApiConfig.baseUrl}/auth/login');
+      // DEBUG: Log the API URL being used
+      print('[AUTH] Login URL: $uri');
+      print('[AUTH] API_BASE_URL from env: ${ApiConfig.baseUrl}');
+      
       final response = await http.post(
         uri,
         headers: {'Content-Type': 'application/json'},
