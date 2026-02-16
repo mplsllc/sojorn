@@ -153,6 +153,9 @@ export default function AIModerationPage() {
       const response = await fetch('/api/v1/admin/upload-test-image', {
         method: 'POST',
         body: formData,
+        headers: {
+          'Authorization': `Bearer ${localStorage.getItem('token') || ''}`,
+        },
       });
       
       if (!response.ok) {
