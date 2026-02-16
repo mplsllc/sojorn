@@ -237,6 +237,11 @@ function ConfigEditor({ moderationType, config, onSaved }: {
     });
   };
 
+  // Sync testEngine with activeTab when tab changes
+  useEffect(() => {
+    setTestEngine(activeTab);
+  }, [activeTab]);
+
   // OpenRouter model picker
   const [showPicker, setShowPicker] = useState(false);
   const [models, setModels] = useState<ModelInfo[]>([]);
