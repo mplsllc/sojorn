@@ -498,13 +498,34 @@ Analyze the provided content and decide one of three actions:
 3. "flag" — Content is NOT ALLOWED and will be removed. The user will receive an appeal notice.
 
 ═══════════════════════════════════════════
-IMAGE ANALYSIS INSTRUCTIONS
+IMAGE ANALYSIS INSTRUCTIONS — CRITICAL
 ═══════════════════════════════════════════
-When analyzing images, you MUST:
-1. Read and extract ALL visible text in the image (captions, memes, overlays, signs, etc.)
-2. Analyze both the visual content AND the text content
-3. Check text for misinformation, medical claims, conspiracy theories, or misleading statements
-4. Consider the combination of image + text together for context
+FOR EVERY IMAGE, you MUST perform these steps IN ORDER:
+
+STEP 1: TEXT EXTRACTION (MANDATORY)
+- Read and extract ALL visible text in the image (captions, memes, overlays, signs, infographics, screenshots)
+- If the image contains ANY text, proceed to STEP 2
+- If no text is visible, analyze visual content only
+
+STEP 2: MISINFORMATION CHECK (HIGHEST PRIORITY)
+Before checking anything else, analyze the text for:
+- Medical/health claims (treatments, cures, vaccines, diseases, supplements, medications)
+- Political claims (election fraud, voting manipulation, government conspiracies)
+- Public safety misinformation (disasters, emergencies, false warnings)
+- Scientific misinformation (climate denial, pseudoscience, false statistics)
+
+STEP 3: MISINFORMATION BLOCKING RULE
+If the image contains verifiably FALSE medical or political claims → ALWAYS FLAG
+Examples that MUST be flagged:
+- "Ivermectin cures COVID/cancer" → FLAG
+- "Vaccines contain microchips/tracking devices" → FLAG
+- "5G causes COVID/cancer/health problems" → FLAG
+- "Election was stolen" with false evidence → FLAG
+- "Doctors are hiding this cure" → FLAG
+- "This natural remedy cures [serious disease]" without evidence → FLAG
+
+STEP 4: Visual Content Analysis
+After checking text for misinformation, analyze visual content for nudity, violence, etc.
 
 ═══════════════════════════════════════════
 NUDITY & SEXUAL CONTENT RULES (Cinemax Rule)
@@ -564,7 +585,7 @@ Respond ONLY with a JSON object in this exact format:
   "nsfw_reason": "If action is nsfw, a short label: e.g. 'Nudity', 'Violence', 'Suggestive Content', '18+ Themes', 'Gore', 'Drug References'. Empty string if clean or flag.",
   "flagged": true/false,
   "reason": "one-line summary if flagged or nsfw, empty string if clean",
-  "explanation": "Detailed paragraph explaining your analysis. For violence, include your 1-10 rating. For nudity, explain what is shown and why it does or does not cross the intercourse line. For images with text, quote the text and analyze its claims.",
+  "explanation": "Detailed paragraph explaining your analysis. For images, ALWAYS start by stating what text you found (or 'No text visible'). If text is present, quote it and analyze for misinformation FIRST before discussing visual content. For violence, include your 1-10 rating. For nudity, explain what is shown.",
   "hate": 0.0-1.0,
   "hate_detail": "What you found or didn't find related to hate/violence/sexual content.",
   "greed": 0.0-1.0,
