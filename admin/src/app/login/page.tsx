@@ -17,6 +17,8 @@ export default function LoginPage() {
   const turnstileRef = useRef<HTMLDivElement>(null);
   const widgetIdRef = useRef<string | null>(null);
   const tokenRef = useRef('');
+  const emailRef = useRef('');
+  const passwordRef = useRef('');
   const { login } = useAuth();
   const router = useRouter();
 
@@ -26,16 +28,15 @@ export default function LoginPage() {
   const performLogin = useCallback(async () => {
     setLoading(true);
     try {
-      await login(email, password, tokenRef.current);
+      await login(emailRef.current, passwordRef.current, tokenRef.current);
       router.push('/');
     } catch (err: any) {
       setError(err.message || 'Login failed. Check your credentials.');
-      // Reset turnstile for retry
       refreshTurnstile();
     } finally {
       setLoading(false);
     }
-  }, [email, password, tokenRef.current, login, router]);
+  }, [login, router]);
 
   const renderTurnstile = useCallback(() => {
     if (!TURNSTILE_SITE_KEY || !turnstileRef.current || !(window as any).turnstile) return;
@@ -130,7 +131,11 @@ export default function LoginPage() {
                 type="email"
                 className="input"
                 value={email}
-                onChange={(e) => setEmail(e.target.value)}
+                onChange={(e) => {
+                  const v = e.target.value;
+                  emailRef.current = v;
+                  setEmail(v);
+                }}
                 placeholder="admin@sojorn.net"
                 required
               />
@@ -141,7 +146,11 @@ export default function LoginPage() {
                 type="password"
                 className="input"
                 value={password}
-                onChange={(e) => setPassword(e.target.value)}
+                onChange={(e) => {
+                  const v = e.target.value;
+                  passwordRef.current = v;
+                  setPassword(v);
+                }}
                 placeholder="••••••••"
                 required
               />
