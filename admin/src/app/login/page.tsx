@@ -23,6 +23,20 @@ export default function LoginPage() {
   // Keep ref in sync with state so the submit handler always has the latest value
   useEffect(() => { tokenRef.current = turnstileToken; }, [turnstileToken]);
 
+  const performLogin = useCallback(async () => {
+    setLoading(true);
+    try {
+      await login(email, password, tokenRef.current);
+      router.push('/');
+    } catch (err: any) {
+      setError(err.message || 'Login failed. Check your credentials.');
+      // Reset turnstile for retry
+      refreshTurnstile();
+    } finally {
+      setLoading(false);
+    }
+  }, [email, password, tokenRef.current, login, router]);
+
   const renderTurnstile = useCallback(() => {
     if (!TURNSTILE_SITE_KEY || !turnstileRef.current || !(window as any).turnstile) return;
     if (widgetIdRef.current) {
@@ -30,13 +44,19 @@ export default function LoginPage() {
     }
     widgetIdRef.current = (window as any).turnstile.render(turnstileRef.current, {
       sitekey: TURNSTILE_SITE_KEY,
-      size: 'normal',
+      size: 'invisible',
       theme: 'light',
-      callback: (token: string) => { setTurnstileToken(token); tokenRef.current = token; setTurnstileReady(true); },
+      callback: (token: string) => { 
+      setTurnstileToken(token); 
+      tokenRef.current = token; 
+      setTurnstileReady(true);
+      // Auto-submit after invisible verification
+      performLogin(); 
+    },
       'error-callback': () => { setTurnstileToken(''); tokenRef.current = ''; setTurnstileReady(false); },
       'expired-callback': () => { setTurnstileToken(''); tokenRef.current = ''; setTurnstileReady(false); },
     });
-  }, []);
+  }, [performLogin]);
 
   useEffect(() => {
     if ((window as any).turnstile && TURNSTILE_SITE_KEY) {
@@ -58,22 +78,22 @@ export default function LoginPage() {
     e.preventDefault();
     setError('');
 
-    if (TURNSTILE_SITE_KEY && !tokenRef.current) {
-      setError('Please complete the security check first.');
+    if (TURNSTILE_SITE_KEY && widgetIdRef.current) {
+      // Trigger invisible Turnstile verification
+      setLoading(true);
+      try {
+        (window as any).turnstile.execute(widgetIdRef.current);
+        // The callback will handle the actual login
+      } catch (err: any) {
+        setError('Security verification failed. Please try again.');
+        setLoading(false);
+        refreshTurnstile();
+      }
       return;
     }
 
-    setLoading(true);
-    try {
-      await login(email, password, tokenRef.current);
-      router.push('/');
-    } catch (err: any) {
-      setError(err.message || 'Login failed. Check your credentials.');
-      // Reset turnstile for retry
-      refreshTurnstile();
-    } finally {
-      setLoading(false);
-    }
+    // No Turnstile or direct execution
+    performLogin();
   };
 
   return (
