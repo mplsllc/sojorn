@@ -83,17 +83,24 @@ func (h *AdminHandler) AdminLogin(c *gin.Context) {
 
 	// Verify Turnstile token
 	if h.turnstileSecret != "" {
+		if strings.TrimSpace(req.TurnstileToken) == "" {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "Security verification failed"})
+			return
+		}
 		turnstileService := services.NewTurnstileService(h.turnstileSecret)
-		remoteIP := c.ClientIP()
-		turnstileResp, err := turnstileService.VerifyToken(req.TurnstileToken, remoteIP)
+		turnstileResp, err := turnstileService.VerifyToken(req.TurnstileToken, "")
 		if err != nil {
 			log.Error().Err(err).Msg("Admin login: Turnstile verification failed")
 			c.JSON(http.StatusBadRequest, gin.H{"error": "Security verification failed"})
 			return
 		}
 		if !turnstileResp.Success {
-			log.Warn().Strs("errors", turnstileResp.ErrorCodes).Msg("Admin login: Turnstile validation failed")
-			c.JSON(http.StatusForbidden, gin.H{"error": "Security verification failed. Please try again."})
+			log.Warn().
+				Strs("errors", turnstileResp.ErrorCodes).
+				Str("hostname", turnstileResp.Hostname).
+				Str("action", turnstileResp.Action).
+				Msg("Admin login: Turnstile validation failed")
+			c.JSON(http.StatusBadRequest, gin.H{"error": "Security verification failed"})
 			return
 		}
 	}

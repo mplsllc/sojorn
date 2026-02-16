@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"net/url"
 	"time"
 )
 
@@ -39,22 +40,18 @@ func (s *TurnstileService) VerifyToken(token, remoteIP string) (*TurnstileRespon
 		return &TurnstileResponse{Success: true}, nil
 	}
 
-	// Prepare the request data
-	data := fmt.Sprintf(
-		"secret=%s&response=%s",
-		s.secretKey,
-		token,
-	)
-	
-	if remoteIP != "" {
-		data += fmt.Sprintf("&remoteip=%s", remoteIP)
-	}
+	// Prepare the request data (properly form-encoded)
+	// Note: We intentionally do NOT send remoteip. In practice this often causes false negatives
+	// behind proxies/CDNs (Cloudflare), and Turnstile does not require it.
+	form := url.Values{}
+	form.Set("secret", s.secretKey)
+	form.Set("response", token)
 
 	// Make the request to Cloudflare
 	resp, err := s.client.Post(
 		"https://challenges.cloudflare.com/turnstile/v0/siteverify",
 		"application/x-www-form-urlencoded",
-		bytes.NewBufferString(data),
+		bytes.NewBufferString(form.Encode()),
 	)
 	if err != nil {
 		return nil, fmt.Errorf("failed to verify turnstile token: %w", err)
@@ -79,13 +76,13 @@ func (s *TurnstileService) VerifyToken(token, remoteIP string) (*TurnstileRespon
 // GetErrorMessage returns a user-friendly error message for error codes
 func (s *TurnstileService) GetErrorMessage(errorCodes []string) string {
 	errorMessages := map[string]string{
-		"missing-input-secret":     "Server configuration error",
-		"invalid-input-secret":     "Server configuration error", 
-		"missing-input-response":    "Please complete the security check",
-		"invalid-input-response":    "Security check failed, please try again",
-		"bad-request":               "Invalid request format",
-		"timeout-or-duplicate":      "Security check expired, please try again",
-		"internal-error":            "Verification service unavailable",
+		"missing-input-secret":   "Server configuration error",
+		"invalid-input-secret":   "Server configuration error",
+		"missing-input-response": "Please complete the security check",
+		"invalid-input-response": "Security check failed, please try again",
+		"bad-request":            "Invalid request format",
+		"timeout-or-duplicate":   "Security check expired, please try again",
+		"internal-error":         "Verification service unavailable",
 	}
 
 	for _, code := range errorCodes {
