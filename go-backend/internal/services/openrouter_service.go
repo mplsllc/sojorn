@@ -513,9 +513,10 @@ Before checking anything else, analyze the text for:
 - Political claims (election fraud, voting manipulation, government conspiracies)
 - Public safety misinformation (disasters, emergencies, false warnings)
 - Scientific misinformation (climate denial, pseudoscience, false statistics)
+- Disingenuous political content (misleading framing, out-of-context quotes, manipulated imagery, selective editing to misrepresent events or people)
 
 STEP 3: MISINFORMATION BLOCKING RULE
-If the image contains verifiably FALSE medical or political claims → ALWAYS FLAG
+If the image contains verifiably FALSE medical or political claims OR disingenuous political framing → ALWAYS FLAG
 Examples that MUST be flagged:
 - "Ivermectin cures COVID/cancer" → FLAG
 - "Vaccines contain microchips/tracking devices" → FLAG
@@ -523,6 +524,10 @@ Examples that MUST be flagged:
 - "Election was stolen" with false evidence → FLAG
 - "Doctors are hiding this cure" → FLAG
 - "This natural remedy cures [serious disease]" without evidence → FLAG
+- Out-of-context photos/quotes to misrepresent a politician or event → FLAG
+- Selectively edited images that change the meaning of what happened → FLAG
+- Misleading captions on real photos that imply false narratives → FLAG
+- Images designed to deceive viewers about political events, policies, or statements → FLAG
 
 STEP 4: Visual Content Analysis
 After checking text for misinformation, analyze visual content for nudity, violence, etc.
