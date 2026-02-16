@@ -14,6 +14,7 @@ export default function LoginPage() {
   const [loading, setLoading] = useState(false);
   const [turnstileToken, setTurnstileToken] = useState('');
   const [turnstileReady, setTurnstileReady] = useState(false);
+  const [turnstileWidgetRendered, setTurnstileWidgetRendered] = useState(false);
   const turnstileRef = useRef<HTMLDivElement>(null);
   const widgetIdRef = useRef<string | null>(null);
   const tokenRef = useRef('');
@@ -57,6 +58,7 @@ export default function LoginPage() {
       'error-callback': () => { setTurnstileToken(''); tokenRef.current = ''; setTurnstileReady(false); },
       'expired-callback': () => { setTurnstileToken(''); tokenRef.current = ''; setTurnstileReady(false); },
     });
+    setTurnstileWidgetRendered(true);
   }, [performLogin]);
 
   useEffect(() => {
@@ -69,6 +71,7 @@ export default function LoginPage() {
     setTurnstileToken('');
     tokenRef.current = '';
     setTurnstileReady(false);
+    setTurnstileWidgetRendered(false);
     setError('');
     if (widgetIdRef.current && (window as any).turnstile) {
       (window as any).turnstile.reset(widgetIdRef.current);
@@ -82,6 +85,11 @@ export default function LoginPage() {
     // Invisible Turnstile flow:
     // - If we don't have a token yet, execute Turnstile first.
     // - If we already have a token, proceed with login.
+    if (TURNSTILE_SITE_KEY && !widgetIdRef.current) {
+      setError('Security check is still loading. Please wait a moment and try again.');
+      return;
+    }
+
     if (TURNSTILE_SITE_KEY && widgetIdRef.current && !tokenRef.current) {
       setLoading(true);
       try {
@@ -92,6 +100,12 @@ export default function LoginPage() {
         setLoading(false);
         refreshTurnstile();
       }
+      return;
+    }
+
+    // If Turnstile is enabled, we must have a token at this point.
+    if (TURNSTILE_SITE_KEY && !tokenRef.current) {
+      setError('Security verification failed. Please try again.');
       return;
     }
 

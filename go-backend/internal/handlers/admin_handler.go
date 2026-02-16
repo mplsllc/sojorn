@@ -84,6 +84,7 @@ func (h *AdminHandler) AdminLogin(c *gin.Context) {
 	// Verify Turnstile token
 	if h.turnstileSecret != "" {
 		if strings.TrimSpace(req.TurnstileToken) == "" {
+			log.Warn().Str("email", req.Email).Msg("Admin login: missing Turnstile token")
 			c.JSON(http.StatusBadRequest, gin.H{"error": "Security verification failed"})
 			return
 		}
