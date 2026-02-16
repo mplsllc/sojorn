@@ -174,11 +174,11 @@ export default function AIModerationPage() {
     setTesting(true);
     const startTime = Date.now();
     try {
-      const data = {
+      const isImage = selectedType.includes('image') || selectedType === 'video';
+      const data: any = {
         moderation_type: selectedType,
         engine: selectedEngine,
       };
-      const isImage = selectedType.includes('image') || selectedType === 'video';
       if (isImage) {
         data.image_url = testInput; // Use the uploaded file URL
       } else {
