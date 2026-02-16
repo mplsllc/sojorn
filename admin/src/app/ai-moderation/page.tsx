@@ -180,11 +180,7 @@ export default function AIModerationPage() {
       };
       const isImage = selectedType.includes('image') || selectedType === 'video';
       if (isImage) {
-        if (uploadedFile) {
-          data.image_file = uploadedFile;
-        } else {
-          data.image_url = testInput;
-        }
+        data.image_url = testInput; // Use the uploaded file URL
       } else {
         data.content = testInput;
       }
