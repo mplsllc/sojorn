@@ -243,6 +243,23 @@ export default function AIModerationPage() {
             </select>
           </div>
 
+          {/* AI Moderation Instructions */}
+          <div className="card p-4">
+            <label className="text-sm font-semibold text-gray-700 block mb-2">
+              Moderation Instructions
+            </label>
+            <p className="text-xs text-gray-500 mb-2">
+              Provide specific guidelines for the AI to follow when moderating {typeLabel.toLowerCase()} content.
+            </p>
+            <textarea
+              rows={4}
+              value={systemPrompt}
+              onChange={(e) => setSystemPrompt(e.target.value)}
+              placeholder="Example: Flag content that promotes violence, hate speech, or illegal activities. Allow political discussion and criticism. Be lenient with humor and satire..."
+              className="w-full text-sm border border-gray-300 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-brand-500"
+            />
+          </div>
+
           {/* Engine Configuration */}
           <div className="card p-4">
             <h3 className="text-sm font-semibold text-gray-700 mb-3">{engineLabel} Configuration</h3>
@@ -310,17 +327,6 @@ export default function AIModerationPage() {
                       </div>
                     </div>
                   )}
-                </div>
-
-                <div>
-                  <label className="text-xs font-medium text-gray-600 block mb-1">System Prompt (optional)</label>
-                  <textarea
-                    rows={3}
-                    value={systemPrompt}
-                    onChange={(e) => setSystemPrompt(e.target.value)}
-                    placeholder="Custom system prompt..."
-                    className="w-full text-sm border border-gray-300 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-brand-500 font-mono"
-                  />
                 </div>
               </div>
             )}
