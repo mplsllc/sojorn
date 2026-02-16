@@ -146,26 +146,11 @@ export default function AIModerationPage() {
   const handleFileUpload = async (file: File) => {
     setUploading(true);
     try {
-      // Create FormData and upload to get a URL
-      const formData = new FormData();
-      formData.append('file', file);
-      
-      const response = await fetch('/api/v1/admin/upload-test-image', {
-        method: 'POST',
-        body: formData,
-        headers: {
-          'Authorization': `Bearer ${localStorage.getItem('token') || ''}`,
-        },
-      });
-      
-      if (!response.ok) {
-        throw new Error('Upload failed');
-      }
-      
-      const result = await response.json();
+      const result = await api.uploadTestImage(file);
       setTestInput(result.url);
       setUploadedFile(file);
     } catch (e: any) {
+      console.error('Upload error:', e);
       alert('Upload failed: ' + e.message);
     } finally {
       setUploading(false);

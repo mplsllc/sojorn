@@ -438,6 +438,30 @@ class ApiClient {
     });
   }
 
+  async uploadTestImage(file: File) {
+    const formData = new FormData();
+    formData.append('file', file);
+    
+    const token = this.getToken();
+    const headers: Record<string, string> = {};
+    if (token) {
+      headers['Authorization'] = `Bearer ${token}`;
+    }
+    
+    const response = await fetch(`${API_BASE}/api/v1/admin/upload-test-image`, {
+      method: 'POST',
+      body: formData,
+      headers,
+    });
+    
+    if (!response.ok) {
+      const errorText = await response.text();
+      throw new Error(`Upload failed: ${response.status} - ${errorText}`);
+    }
+    
+    return response.json();
+  }
+
   // AI Moderation Audit Log
   async getAIModerationLog(params: { limit?: number; offset?: number; decision?: string; content_type?: string; search?: string; feedback?: string } = {}) {
     const qs = new URLSearchParams();
