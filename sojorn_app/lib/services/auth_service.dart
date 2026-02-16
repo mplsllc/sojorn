@@ -328,6 +328,22 @@ class AuthService {
   String? get accessToken => _accessToken ?? _temporaryToken ?? currentSession?.accessToken;
 
   Future<void> resetPassword(String email) async {
+    try {
+      final uri = Uri.parse('${ApiConfig.baseUrl}/auth/forgot-password');
+      final response = await http.post(
+        uri,
+        headers: {'Content-Type': 'application/json'},
+        body: jsonEncode({'email': email}),
+      );
+
+      if (response.statusCode != 200) {
+        final data = jsonDecode(response.body);
+        throw AuthException(data['error'] ?? 'Failed to send reset email');
+      }
+    } catch (e) {
+      if (e is AuthException) rethrow;
+      throw AuthException('Connection failed: $e');
+    }
   }
 
   Future<void> updatePassword(String newPassword) async {

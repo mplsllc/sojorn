@@ -10,6 +10,7 @@ import '../../widgets/auth/turnstile_widget.dart';
 import '../../widgets/sojorn_button.dart';
 import '../../widgets/sojorn_input.dart';
 import 'sign_up_screen.dart';
+import 'forgot_password_screen.dart';
 
 class SignInScreen extends ConsumerStatefulWidget {
   const SignInScreen({super.key});
@@ -399,6 +400,31 @@ class _SignInScreenState extends ConsumerState<SignInScreen> {
                                     });
                                   }
                                 },
+                              ),
+                              Align(
+                                alignment: Alignment.centerRight,
+                                child: TextButton(
+                                  onPressed: () {
+                                    Navigator.of(context).push(
+                                      MaterialPageRoute(
+                                        builder: (_) =>
+                                            const ForgotPasswordScreen(),
+                                      ),
+                                    );
+                                  },
+                                  style: TextButton.styleFrom(
+                                    padding: EdgeInsets.zero,
+                                    minimumSize: const Size(0, 32),
+                                    tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                                  ),
+                                  child: Text(
+                                    'Forgot Password?',
+                                    style: AppTheme.textTheme.labelSmall?.copyWith(
+                                      color: AppTheme.primary,
+                                      fontWeight: FontWeight.w600,
+                                    ),
+                                  ),
+                                ),
                               ),
                               const SizedBox(height: AppTheme.spacingLg),
                               

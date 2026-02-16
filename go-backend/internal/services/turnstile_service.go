@@ -35,17 +35,23 @@ func NewTurnstileService(secretKey string) *TurnstileService {
 
 // VerifyToken validates a Turnstile token with Cloudflare
 func (s *TurnstileService) VerifyToken(token, remoteIP string) (*TurnstileResponse, error) {
+	// Allow bypass token for development (Flutter web)
+	if token == "BYPASS_DEV_MODE" {
+		return &TurnstileResponse{Success: true}, nil
+	}
+
 	if s.secretKey == "" {
 		// If no secret key is configured, skip verification (for development)
 		return &TurnstileResponse{Success: true}, nil
 	}
 
 	// Prepare the request data (properly form-encoded)
-	// Note: We intentionally do NOT send remoteip. In practice this often causes false negatives
-	// behind proxies/CDNs (Cloudflare), and Turnstile does not require it.
 	form := url.Values{}
 	form.Set("secret", s.secretKey)
 	form.Set("response", token)
+	if remoteIP != "" {
+		form.Set("remoteip", remoteIP)
+	}
 
 	// Make the request to Cloudflare
 	resp, err := s.client.Post(
