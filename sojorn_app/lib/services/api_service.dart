@@ -1062,22 +1062,6 @@ class ApiService {
   // Social Actions
   // =========================================================================
 
-  Future<String?> followUser(String userId) async {
-    final data = await _callGoApi(
-      '/users/$userId/follow',
-      method: 'POST',
-    );
-    // Prefer explicit status, fallback to message if legacy
-    return (data['status'] as String?) ?? (data['message'] as String?);
-  }
-
-  Future<void> unfollowUser(String userId) async {
-    await _callGoApi(
-      '/users/$userId/follow',
-      method: 'DELETE',
-    );
-  }
-
   Future<List<FollowRequest>> getFollowRequests() async {
     final data = await _callGoApi('/users/requests');
     final requests = data['requests'] as List<dynamic>? ?? [];

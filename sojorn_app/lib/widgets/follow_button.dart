@@ -1,9 +1,10 @@
 import 'package:flutter/material.dart';
-import '../services/api_service.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+import '../providers/api_provider.dart';
 import '../theme/app_theme.dart';
 
 /// Follow/Unfollow button with loading state and animations
-class FollowButton extends StatefulWidget {
+class FollowButton extends ConsumerStatefulWidget {
   final String targetUserId;
   final bool initialIsFollowing;
   final Function(bool)? onFollowChanged;
@@ -18,10 +19,10 @@ class FollowButton extends StatefulWidget {
   });
 
   @override
-  State<FollowButton> createState() => _FollowButtonState();
+  ConsumerState<FollowButton> createState() => _FollowButtonState();
 }
 
-class _FollowButtonState extends State<FollowButton> {
+class _FollowButtonState extends ConsumerState<FollowButton> {
   late bool _isFollowing;
   bool _isLoading = false;
 
@@ -45,7 +46,7 @@ class _FollowButtonState extends State<FollowButton> {
     setState(() => _isLoading = true);
 
     try {
-      final api = ApiService();
+      final api = ref.read(apiServiceProvider);
       if (_isFollowing) {
         await api.unfollowUser(widget.targetUserId);
       } else {
