@@ -213,6 +213,13 @@ func main() {
 		cfg.R2VidDomain,
 	)
 
+	// Feed algorithm service (scores posts for ranked feed)
+	feedAlgorithmService := services.NewFeedAlgorithmService(dbPool)
+
+	// Repost & profile layout handlers
+	repostHandler := handlers.NewRepostHandler(dbPool)
+	profileLayoutHandler := handlers.NewProfileLayoutHandler(dbPool)
+
 	r.GET("/ws", wsHandler.ServeWS)
 
 	r.GET("/health", func(c *gin.Context) {
@@ -394,15 +401,12 @@ func main() {
 			authorized.POST("/hashtags/:name/follow", discoverHandler.FollowHashtag)
 			authorized.DELETE("/hashtags/:name/follow", discoverHandler.UnfollowHashtag)
 
-			// Follow System
+			// Follow System (unique routes only — followers/following covered by users group above)
 			followHandler := handlers.NewFollowHandler(dbPool)
-			authorized.POST("/users/:userId/follow", followHandler.FollowUser)
 			authorized.POST("/users/:userId/unfollow", followHandler.UnfollowUser)
 			authorized.GET("/users/:userId/is-following", followHandler.IsFollowing)
 			authorized.GET("/users/:userId/mutual-followers", followHandler.GetMutualFollowers)
 			authorized.GET("/users/suggested", followHandler.GetSuggestedUsers)
-			authorized.GET("/users/:userId/followers", followHandler.GetFollowers)
-			authorized.GET("/users/:userId/following", followHandler.GetFollowing)
 
 			// Notifications
 			notificationHandler := handlers.NewNotificationHandler(notifRepo, notificationService)
@@ -541,6 +545,24 @@ func main() {
 				escrow.GET("/backup", capsuleEscrowHandler.GetBackup)
 				escrow.DELETE("/backup", capsuleEscrowHandler.DeleteBackup)
 			}
+
+			// Repost & amplification system
+			authorized.POST("/posts/repost", repostHandler.CreateRepost)
+			authorized.POST("/posts/boost", repostHandler.BoostPost)
+			authorized.GET("/posts/trending", repostHandler.GetTrendingPosts)
+			authorized.GET("/posts/:id/reposts", repostHandler.GetRepostsForPost)
+			authorized.GET("/posts/:id/amplification", repostHandler.GetAmplificationAnalytics)
+			authorized.POST("/posts/:id/calculate-score", repostHandler.CalculateAmplificationScore)
+			authorized.DELETE("/reposts/:id", repostHandler.DeleteRepost)
+			authorized.POST("/reposts/:id/report", repostHandler.ReportRepost)
+			authorized.GET("/amplification/rules", repostHandler.GetAmplificationRules)
+			authorized.GET("/users/:id/reposts", repostHandler.GetUserReposts)
+			authorized.GET("/users/:id/can-boost/:postId", repostHandler.CanBoostPost)
+			authorized.GET("/users/:id/daily-boosts", repostHandler.GetDailyBoostCount)
+
+			// Profile widget layout
+			authorized.GET("/profile/layout", profileLayoutHandler.GetProfileLayout)
+			authorized.PUT("/profile/layout", profileLayoutHandler.SaveProfileLayout)
 
 		}
 	}
@@ -693,6 +715,18 @@ func main() {
 	go func() {
 		if err := srv.ListenAndServe(); err != nil && err != http.ErrServerClosed {
 			log.Fatal().Err(err).Msg("Failed to start server")
+		}
+	}()
+
+	// Background job: update feed algorithm scores every 15 minutes
+	go func() {
+		ticker := time.NewTicker(15 * time.Minute)
+		defer ticker.Stop()
+		for range ticker.C {
+			log.Debug().Msg("[FeedAlgorithm] Refreshing feed scores")
+			if err := feedAlgorithmService.UpdateFeedScores(context.Background(), []string{}, ""); err != nil {
+				log.Error().Err(err).Msg("[FeedAlgorithm] Failed to refresh feed scores")
+			}
 		}
 	}()
 

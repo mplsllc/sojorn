@@ -2,6 +2,7 @@ import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import '../theme/app_theme.dart';
 import '../utils/link_handler.dart';
+import '../routes/app_routes.dart';
 import '../screens/discover/discover_screen.dart';
 
 /// Rich text widget that automatically detects and styles URLs and mentions.
@@ -107,11 +108,11 @@ class sojornRichText extends StatelessWidget {
           recognizer: TapGestureRecognizer()
             ..onTap = () {
               if (isMention) {
-                _navigateToProfile(matchText);
+                _navigateToProfile(context, matchText);
               } else if (isHashtag) {
-                _navigateToHashtag(matchText);
+                _navigateToHashtag(context, matchText);
               } else {
-                _navigateToUrl(matchText);
+                _navigateToUrl(context, matchText);
               }
             },
         ),
@@ -144,23 +145,22 @@ class sojornRichText extends StatelessWidget {
     }
   }
 
-  void _navigateToProfile(String username) {
-    // Remove @ prefix if present
+  void _navigateToProfile(BuildContext context, String username) {
     final cleanUsername = username.startsWith('@') ? username.substring(1) : username;
-    // Navigate to profile screen
-    // This would typically use GoRouter or Navigator
-    print('Navigate to profile: $cleanUsername');
+    AppRoutes.navigateToProfile(context, cleanUsername);
   }
 
-  void _navigateToHashtag(String hashtag) {
-    // Remove # prefix if present
+  void _navigateToHashtag(BuildContext context, String hashtag) {
     final cleanHashtag = hashtag.startsWith('#') ? hashtag.substring(1) : hashtag;
-    // Navigate to search/discover with hashtag
-    print('Navigate to hashtag: $cleanHashtag');
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (_) => DiscoverScreen(initialQuery: '#$cleanHashtag'),
+      ),
+    );
   }
 
-  void _navigateToUrl(String url) {
-    // Launch URL in browser or handle in-app
-    print('Navigate to URL: $url');
+  void _navigateToUrl(BuildContext context, String url) {
+    LinkHandler.launchLink(context, url);
   }
 }

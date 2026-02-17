@@ -15,7 +15,6 @@ import (
 
 func ParseToken(tokenString string, jwtSecret string) (string, jwt.MapClaims, error) {
 	token, err := jwt.Parse(tokenString, func(token *jwt.Token) (interface{}, error) {
-		// Validate the algorithm (Supabase uses HS256 usually)
 		if _, ok := token.Method.(*jwt.SigningMethodHMAC); !ok {
 			return nil, fmt.Errorf("unexpected signing method: %v", token.Header["alg"])
 		}
@@ -31,7 +30,6 @@ func ParseToken(tokenString string, jwtSecret string) (string, jwt.MapClaims, er
 		return "", nil, fmt.Errorf("invalid token claims")
 	}
 
-	// Supabase uses 'sub' field for user ID
 	userID, ok := claims["sub"].(string)
 	if !ok {
 		return "", nil, fmt.Errorf("token missing user ID")

@@ -1050,56 +1050,6 @@ class _SecureChatScreenState extends State<SecureChatScreen>
     _chatService.markMessageLocallyDeleted(messageId);
   }
 
-  Future<void> _forceResetBrokenKeys() async {
-    final confirmed = await showDialog<bool>(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('Force Reset All Keys?'),
-        content: const Text(
-          'This will DELETE all encryption keys and generate fresh 256-bit keys. '
-          'This fixes the 208-bit key bug that causes MAC errors. '
-          'All existing messages will become undecryptable.',
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context, false),
-            child: const Text('Cancel'),
-          ),
-          TextButton(
-            onPressed: () => Navigator.pop(context, true),
-            style: TextButton.styleFrom(foregroundColor: SojornColors.destructive),
-            child: const Text('Force Reset'),
-          ),
-        ],
-      ),
-    );
-
-    if (confirmed == true && mounted) {
-      try {
-        await _chatService.forceResetBrokenKeys();
-        if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(
-              content: Text('Keys force reset! Restart chat to test.'),
-              backgroundColor: SojornColors.destructive,
-            ),
-          );
-        }
-      } catch (e) {
-        if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(
-              content: Text('Error resetting keys: $e'),
-              backgroundColor: AppTheme.error,
-            ),
-          );
-        }
-      }
-    }
-  }
-
-  
-  
   Widget _buildInputArea() {
     return ComposerWidget(
       controller: _messageController,

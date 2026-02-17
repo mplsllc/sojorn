@@ -81,9 +81,8 @@ class SecureChatService {
     }
   }
 
-  // Force reset to fix 208-bit key bug
-  Future<void> forceResetBrokenKeys() async {
-    await _e2ee.forceResetBrokenKeys();
+  Future<void> resetIdentityKeys() async {
+    await _e2ee.resetIdentityKeys();
   }
 
   // Manual key upload for testing

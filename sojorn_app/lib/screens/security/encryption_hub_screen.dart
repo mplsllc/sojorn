@@ -84,7 +84,7 @@ class _EncryptionHubScreenState extends State<EncryptionHubScreen> {
     );
     if (confirmed != true) return;
     final e2ee = SimpleE2EEService();
-    await e2ee.forceResetBrokenKeys();
+    await e2ee.resetIdentityKeys();
     await _loadStatus();
     if (mounted) {
       ScaffoldMessenger.of(context).showSnackBar(

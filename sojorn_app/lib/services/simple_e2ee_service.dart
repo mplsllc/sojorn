@@ -96,36 +96,18 @@ class SimpleE2EEService {
     
   }
 
-  // Force reset to fix 208-bit key bug
-  Future<void> forceResetBrokenKeys() async {
-    
-    // Clear ALL storage completely
+  // Reset all local encryption keys and generate a fresh identity.
+  // Existing encrypted messages will become undecryptable after this.
+  Future<void> resetIdentityKeys() async {
     await _storage.deleteAll();
-    
-    // Clear local key variables
     _identityDhKeyPair = null;
     _identitySigningKeyPair = null;
     _signedPreKey = null;
     _oneTimePreKeys = null;
     _initializedForUserId = null;
     _initFuture = null;
-    
-    // Clear session cache
     _sessionCache.clear();
-    
-    
-    // Generate fresh identity with proper key lengths
     await generateNewIdentity();
-    
-    // Verify the new keys are proper length
-    if (_identityDhKeyPair != null) {
-      final publicKey = await _identityDhKeyPair!.extractPublicKey();
-    }
-    
-    if (_identitySigningKeyPair != null) {
-      final publicKey = await _identitySigningKeyPair!.extractPublicKey();
-    }
-    
   }
 
   // Manual key upload for testing

@@ -18,7 +18,7 @@ class RepostService {
     Map<String, dynamic>? metadata,
   }) async {
     try {
-      final response = await ApiService.instance.post('/api/posts/repost', {
+      final response = await ApiService.instance.post('/posts/repost', {
         'original_post_id': originalPostId,
         'type': type.name,
         'comment': comment,
@@ -41,7 +41,7 @@ class RepostService {
     int? boostAmount,
   }) async {
     try {
-      final response = await ApiService.instance.post('/api/posts/boost', {
+      final response = await ApiService.instance.post('/posts/boost', {
         'post_id': postId,
         'boost_type': boostType.name,
         'boost_amount': boostAmount ?? 1,
@@ -57,7 +57,7 @@ class RepostService {
   /// Get all reposts for a post
   static Future<List<Repost>> getRepostsForPost(String postId) async {
     try {
-      final response = await ApiService.instance.get('/api/posts/$postId/reposts');
+      final response = await ApiService.instance.get('/posts/$postId/reposts');
       
       if (response['success'] == true) {
         final repostsData = response['reposts'] as List<dynamic>? ?? [];
@@ -72,7 +72,7 @@ class RepostService {
   /// Get user's repost history
   static Future<List<Repost>> getUserReposts(String userId, {int limit = 20}) async {
     try {
-      final response = await ApiService.instance.get('/api/users/$userId/reposts?limit=$limit');
+      final response = await ApiService.instance.get('/users/$userId/reposts?limit=$limit');
       
       if (response['success'] == true) {
         final repostsData = response['reposts'] as List<dynamic>? ?? [];
@@ -87,7 +87,7 @@ class RepostService {
   /// Delete a repost
   static Future<bool> deleteRepost(String repostId) async {
     try {
-      final response = await ApiService.instance.delete('/api/reposts/$repostId');
+      final response = await ApiService.instance.delete('/reposts/$repostId');
       return response['success'] == true;
     } catch (e) {
       print('Error deleting repost: $e');
@@ -98,7 +98,7 @@ class RepostService {
   /// Get amplification analytics for a post
   static Future<AmplificationAnalytics?> getAmplificationAnalytics(String postId) async {
     try {
-      final response = await ApiService.instance.get('/api/posts/$postId/amplification');
+      final response = await ApiService.instance.get('/posts/$postId/amplification');
       
       if (response['success'] == true) {
         return AmplificationAnalytics.fromJson(response['analytics']);
@@ -112,7 +112,7 @@ class RepostService {
   /// Get trending posts based on amplification
   static Future<List<Post>> getTrendingPosts({int limit = 10, String? category}) async {
     try {
-      String url = '/api/posts/trending?limit=$limit';
+      String url = '/posts/trending?limit=$limit';
       if (category != null) {
         url += '&category=$category';
       }
@@ -132,7 +132,7 @@ class RepostService {
   /// Get amplification rules
   static Future<List<FeedAmplificationRule>> getAmplificationRules() async {
     try {
-      final response = await ApiService.instance.get('/api/amplification/rules');
+      final response = await ApiService.instance.get('/amplification/rules');
       
       if (response['success'] == true) {
         final rulesData = response['rules'] as List<dynamic>? ?? [];
@@ -147,7 +147,7 @@ class RepostService {
   /// Calculate amplification score for a post
   static Future<int> calculateAmplificationScore(String postId) async {
     try {
-      final response = await ApiService.instance.post('/api/posts/$postId/calculate-score', {});
+      final response = await ApiService.instance.post('/posts/$postId/calculate-score', {});
       
       if (response['success'] == true) {
         return response['score'] as int? ?? 0;
@@ -161,7 +161,7 @@ class RepostService {
   /// Check if user can boost a post
   static Future<bool> canBoostPost(String userId, String postId, RepostType boostType) async {
     try {
-      final response = await ApiService.instance.get('/api/users/$userId/can-boost/$postId?type=${boostType.name}');
+      final response = await ApiService.instance.get('/users/$userId/can-boost/$postId?type=${boostType.name}');
       
       return response['can_boost'] == true;
     } catch (e) {
@@ -173,7 +173,7 @@ class RepostService {
   /// Get user's daily boost count
   static Future<Map<RepostType, int>> getDailyBoostCount(String userId) async {
     try {
-      final response = await ApiService.instance.get('/api/users/$userId/daily-boosts');
+      final response = await ApiService.instance.get('/users/$userId/daily-boosts');
       
       if (response['success'] == true) {
         final boostCounts = response['boost_counts'] as Map<String, dynamic>? ?? {};
@@ -195,7 +195,7 @@ class RepostService {
   /// Report inappropriate repost
   static Future<bool> reportRepost(String repostId, String reason) async {
     try {
-      final response = await ApiService.instance.post('/api/reposts/$repostId/report', {
+      final response = await ApiService.instance.post('/reposts/$repostId/report', {
         'reason': reason,
       });
       

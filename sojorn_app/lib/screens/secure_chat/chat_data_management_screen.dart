@@ -833,7 +833,7 @@ class _ChatDataManagementScreenState extends State<ChatDataManagementScreen> {
     );
 
     if (confirmed != true) return;
-    await _e2ee.forceResetBrokenKeys();
+    await _e2ee.resetIdentityKeys();
     if (mounted) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('Encryption keys reset. New identity generated.')),
