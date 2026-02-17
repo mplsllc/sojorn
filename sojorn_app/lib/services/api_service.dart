@@ -10,6 +10,7 @@ import '../models/user_settings.dart';
 import '../models/comment.dart';
 import '../models/notification.dart';
 import '../models/beacon.dart';
+import '../models/group.dart';
 import '../config/api_config.dart';
 import '../services/auth_service.dart';
 import '../models/search_results.dart';
@@ -1589,5 +1590,105 @@ class ApiService {
   Future<List<Map<String, dynamic>>> getFollowing(String userId) async {
     final data = await _callGoApi('/users/$userId/following', method: 'GET');
     return (data['following'] as List?)?.cast<Map<String, dynamic>>() ?? [];
+  }
+
+  // Groups System
+  // =========================================================================
+
+  /// List all groups with optional category filter
+  Future<List<Group>> listGroups({String? category, int page = 0, int limit = 20}) async {
+    final queryParams = <String, String>{
+      'page': page.toString(),
+      'limit': limit.toString(),
+    };
+    if (category != null) {
+      queryParams['category'] = category;
+    }
+
+    final data = await _callGoApi('/groups', method: 'GET', queryParams: queryParams);
+    final groups = (data['groups'] as List?) ?? [];
+    return groups.map((g) => Group.fromJson(g)).toList();
+  }
+
+  /// Get groups the user is a member of
+  Future<List<Group>> getMyGroups() async {
+    final data = await _callGoApi('/groups/mine', method: 'GET');
+    final groups = (data['groups'] as List?) ?? [];
+    return groups.map((g) => Group.fromJson(g)).toList();
+  }
+
+  /// Get suggested groups for the user
+  Future<List<SuggestedGroup>> getSuggestedGroups({int limit = 10}) async {
+    final data = await _callGoApi('/groups/suggested', method: 'GET', 
+      queryParams: {'limit': limit.toString()});
+    final suggestions = (data['suggestions'] as List?) ?? [];
+    return suggestions.map((s) => SuggestedGroup.fromJson(s)).toList();
+  }
+
+  /// Get group details by ID
+  Future<Group> getGroup(String groupId) async {
+    final data = await _callGoApi('/groups/$groupId', method: 'GET');
+    return Group.fromJson(data['group']);
+  }
+
+  /// Create a new group
+  Future<Map<String, dynamic>> createGroup({
+    required String name,
+    String? description,
+    required GroupCategory category,
+    bool isPrivate = false,
+    String? avatarUrl,
+    String? bannerUrl,
+  }) async {
+    final body = {
+      'name': name,
+      'description': description ?? '',
+      'category': category.value,
+      'is_private': isPrivate,
+      if (avatarUrl != null) 'avatar_url': avatarUrl,
+      if (bannerUrl != null) 'banner_url': bannerUrl,
+    };
+
+    return await _callGoApi('/groups', method: 'POST', body: body);
+  }
+
+  /// Join a group or request to join (for private groups)
+  Future<Map<String, dynamic>> joinGroup(String groupId, {String? message}) async {
+    final body = <String, dynamic>{};
+    if (message != null) {
+      body['message'] = message;
+    }
+
+    return await _callGoApi('/groups/$groupId/join', method: 'POST', body: body);
+  }
+
+  /// Leave a group
+  Future<void> leaveGroup(String groupId) async {
+    await _callGoApi('/groups/$groupId/leave', method: 'POST');
+  }
+
+  /// Get group members
+  Future<List<GroupMember>> getGroupMembers(String groupId, {int page = 0, int limit = 50}) async {
+    final data = await _callGoApi('/groups/$groupId/members', method: 'GET',
+      queryParams: {'page': page.toString(), 'limit': limit.toString()});
+    final members = (data['members'] as List?) ?? [];
+    return members.map((m) => GroupMember.fromJson(m)).toList();
+  }
+
+  /// Get pending join requests (admin only)
+  Future<List<JoinRequest>> getPendingRequests(String groupId) async {
+    final data = await _callGoApi('/groups/$groupId/requests', method: 'GET');
+    final requests = (data['requests'] as List?) ?? [];
+    return requests.map((r) => JoinRequest.fromJson(r)).toList();
+  }
+
+  /// Approve a join request (admin only)
+  Future<void> approveJoinRequest(String groupId, String requestId) async {
+    await _callGoApi('/groups/$groupId/requests/$requestId/approve', method: 'POST');
+  }
+
+  /// Reject a join request (admin only)
+  Future<void> rejectJoinRequest(String groupId, String requestId) async {
+    await _callGoApi('/groups/$groupId/requests/$requestId/reject', method: 'POST');
   }
 }
