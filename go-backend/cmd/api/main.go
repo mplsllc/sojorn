@@ -518,9 +518,6 @@ func main() {
 		}
 	}
 
-	// Admin ALTCHA challenge endpoint (no auth required)
-	r.GET("/api/v1/admin/altcha-challenge", adminHandler.GetAltchaChallenge)
-
 	// Admin login (no auth middleware - this IS the auth step)
 	r.POST("/api/v1/admin/login", adminHandler.AdminLogin)
 
