@@ -6,7 +6,7 @@ import 'package:local_auth/local_auth.dart';
 import '../../providers/auth_provider.dart';
 import '../../providers/api_provider.dart';
 import '../../theme/app_theme.dart';
-import '../../widgets/auth/turnstile_widget.dart';
+import '../widgets/altcha_widget.dart';
 import '../../widgets/sojorn_button.dart';
 import '../../widgets/sojorn_input.dart';
 import 'sign_up_screen.dart';
@@ -32,7 +32,7 @@ class _SignInScreenState extends ConsumerState<SignInScreen> {
   bool _saveCredentials = true;
   String? _storedEmail;
   String? _storedPassword;
-  String? _turnstileToken;
+  String? _altchaToken;
 
   // Turnstile site key from environment or default production key
   static const String _turnstileSiteKey = String.fromEnvironment(
@@ -101,7 +101,7 @@ class _SignInScreenState extends ConsumerState<SignInScreen> {
       _supportsBiometric &&
       _hasStoredCredentials &&
       !_isBiometricAuthenticating &&
-      (_turnstileToken != null || kDebugMode); // Allow bypass for development
+      (_altchaToken != null || kDebugMode); // Allow bypass for development
 
   Future<void> _signIn() async {
     final email = _emailController.text.trim();
@@ -121,11 +121,11 @@ class _SignInScreenState extends ConsumerState<SignInScreen> {
       return;
     }
 
-    // Validate Turnstile token
-    if (_turnstileToken == null || _turnstileToken!.isEmpty) {
+    // Validate ALTCHA token
+    if (_altchaToken == null || _altchaToken!.isEmpty) {
       if (kDebugMode) {
         // Allow bypass for development
-        _turnstileToken = "BYPASS_DEV_MODE";
+        _altchaToken = "BYPASS_DEV_MODE";
       } else {
         setState(() {
           _errorMessage = 'Please complete the security verification';
@@ -144,21 +144,23 @@ class _SignInScreenState extends ConsumerState<SignInScreen> {
       await authService.signInWithGoBackend(
         email: email,
         password: password,
-        turnstileToken: _turnstileToken!,
+        altchaToken: _altchaToken!,
       );
       await _persistCredentials(email, password);
     } catch (e) {
       if (mounted) {
         setState(() {
           _errorMessage = e.toString().replaceAll('Exception: ', '');
-          // Reset Turnstile token on error so user must re-verify
-          _turnstileToken = null;
+          // Reset ALTCHA token on error so user must re-verify
+          _altchaToken = null;
         });
       }
     } finally {
       if (mounted) {
         setState(() {
           _isLoading = false;
+          // Reset ALTCHA token after successful login
+          _altchaToken = null;
         });
       }
     }
@@ -433,11 +435,11 @@ class _SignInScreenState extends ConsumerState<SignInScreen> {
                               ),
                               const SizedBox(height: AppTheme.spacingLg),
                               
-                              // Turnstile CAPTCHA
+                              // ALTCHA verification
                               Container(
                                 decoration: BoxDecoration(
                                   border: Border.all(
-                                    color: _turnstileToken != null 
+                                    color: _altchaToken != null 
                                         ? AppTheme.success 
                                         : AppTheme.egyptianBlue.withValues(alpha: 0.3),
                                     width: 1,
@@ -447,12 +449,16 @@ class _SignInScreenState extends ConsumerState<SignInScreen> {
                                 padding: const EdgeInsets.all(AppTheme.spacingMd),
                                 child: Column(
                                   children: [
-                                    if (_turnstileToken == null) ...[
-                                      TurnstileWidget(
-                                        siteKey: _turnstileSiteKey,
-                                        onToken: (token) {
+                                    if (_altchaToken == null) ...[
+                                      AltchaWidget(
+                                        onVerified: (token) {
                                           setState(() {
-                                            _turnstileToken = token;
+                                            _altchaToken = token;
+                                          });
+                                        },
+                                        onError: (error) {
+                                          setState(() {
+                                            _errorMessage = error;
                                           });
                                         },
                                       ),

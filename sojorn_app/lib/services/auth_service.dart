@@ -200,7 +200,7 @@ class AuthService {
   Future<Map<String, dynamic>> signInWithGoBackend({
     required String email,
     required String password,
-    required String turnstileToken,
+    required String altchaToken,
   }) async {
     try {
       final uri = Uri.parse('${ApiConfig.baseUrl}/auth/login');
@@ -214,7 +214,7 @@ class AuthService {
         body: jsonEncode({
           'email': email,
           'password': password,
-          'turnstile_token': turnstileToken,
+          'altcha_token': altchaToken,
         }),
       );
 
@@ -271,7 +271,7 @@ class AuthService {
     required String password,
     required String handle,
     required String displayName,
-    required String turnstileToken,
+    required String altchaToken,
     required bool acceptTerms,
     required bool acceptPrivacy,
     bool emailNewsletter = false,
@@ -289,7 +289,7 @@ class AuthService {
           'password': password,
           'handle': handle,
           'display_name': displayName,
-          'turnstile_token': turnstileToken,
+          'altcha_token': altchaToken,
           'accept_terms': acceptTerms,
           'accept_privacy': acceptPrivacy,
           'email_newsletter': emailNewsletter,

@@ -64,57 +64,46 @@ func NewAdminHandler(pool *pgxpool.Pool, moderationService *services.ModerationS
 }
 
 // ──────────────────────────────────────────────
-// Admin Login (invisible Turnstile verification)
+// Admin Login (invisible ALTCHA verification)
 // ──────────────────────────────────────────────
+
+type AdminLoginRequest struct {
+	Email       string `json:"email" binding:"required,email"`
+	Password    string `json:"password" binding:"required"`
+	AltchaToken string `json:"altcha_token"`
+}
 
 func (h *AdminHandler) AdminLogin(c *gin.Context) {
 	ctx := c.Request.Context()
 
-	var req struct {
-		Email          string `json:"email" binding:"required,email"`
-		Password       string `json:"password" binding:"required"`
-		TurnstileToken string `json:"turnstile_token"`
-	}
+	var req AdminLoginRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
 	}
 	req.Email = strings.ToLower(strings.TrimSpace(req.Email))
 
-	// Verify Turnstile token
-	if h.turnstileSecret != "" {
-		// Allow bypass for development
-		if req.TurnstileToken != "BYPASS_DEV_MODE" {
-			if strings.TrimSpace(req.TurnstileToken) == "" {
-				log.Warn().Str("email", req.Email).Msg("Admin login: missing Turnstile token")
-				c.JSON(http.StatusBadRequest, gin.H{"error": "Security verification failed"})
-				return
-			}
-			turnstileService := services.NewTurnstileService(h.turnstileSecret)
-			turnstileResp, err := turnstileService.VerifyToken(req.TurnstileToken, "")
-			if err != nil {
-				log.Error().Err(err).Msg("Admin login: Turnstile verification failed")
-				c.JSON(http.StatusBadRequest, gin.H{"error": "Security verification failed"})
-				return
-			}
-			if !turnstileResp.Success {
-				log.Warn().
-					Strs("errors", turnstileResp.ErrorCodes).
-					Str("hostname", turnstileResp.Hostname).
-					Str("action", turnstileResp.Action).
-					Msg("Admin login: Turnstile validation failed")
-				c.JSON(http.StatusBadRequest, gin.H{"error": "Security verification failed"})
-				return
-			}
-		} else {
-			log.Info().Str("email", req.Email).Msg("Admin login: using development bypass")
-		}
+	// Verify ALTCHA token
+	altchaService := services.NewAltchaService(h.jwtSecret)
+	remoteIP := c.ClientIP()
+	altchaResp, err := altchaService.VerifyToken(req.AltchaToken, remoteIP)
+	if err != nil {
+		log.Error().Err(err).Msg("Admin login: ALTCHA verification failed")
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Security verification failed"})
+		return
+	}
+
+	if !altchaResp.Verified {
+		errorMsg := altchaService.GetErrorMessage(altchaResp.Error)
+		log.Warn().Str("email", req.Email).Str("error", errorMsg).Msg("Admin login: ALTCHA validation failed")
+		c.JSON(http.StatusBadRequest, gin.H{"error": errorMsg})
+		return
 	}
 
 	// Look up user
 	var userID uuid.UUID
 	var passwordHash, status string
-	err := h.pool.QueryRow(ctx,
+	err = h.pool.QueryRow(ctx,
 		`SELECT id, encrypted_password, COALESCE(status, 'active') FROM users WHERE email = $1 AND deleted_at IS NULL`,
 		req.Email).Scan(&userID, &passwordHash, &status)
 	if err != nil {

@@ -18,8 +18,8 @@ export default function LoginPage() {
     setLoading(true);
     try {
       // Use development bypass if in development mode
-      const turnstileToken = process.env.NODE_ENV === 'development' ? 'BYPASS_DEV_MODE' : '';
-      await login(emailRef.current, passwordRef.current, turnstileToken);
+      const altchaToken = process.env.NODE_ENV === 'development' ? 'BYPASS_DEV_MODE' : '';
+      await login(emailRef.current, passwordRef.current, altchaToken);
       router.push('/');
     } catch (err: any) {
       setError(err.message || 'Login failed. Check your credentials.');

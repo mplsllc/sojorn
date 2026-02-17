@@ -38,7 +38,7 @@ type RegisterRequest struct {
 	Password        string `json:"password" binding:"required,min=6"`
 	Handle          string `json:"handle" binding:"required,min=3"`
 	DisplayName     string `json:"display_name" binding:"required"`
-	TurnstileToken  string `json:"turnstile_token" binding:"required"`
+	AltchaToken     string `json:"altcha_token" binding:"required"`
 	AcceptTerms     bool   `json:"accept_terms" binding:"required,eq=true"`
 	AcceptPrivacy   bool   `json:"accept_privacy" binding:"required,eq=true"`
 	EmailNewsletter bool   `json:"email_newsletter"`
@@ -48,9 +48,9 @@ type RegisterRequest struct {
 }
 
 type LoginRequest struct {
-	Email          string `json:"email" binding:"required,email"`
-	Password       string `json:"password" binding:"required"`
-	TurnstileToken string `json:"turnstile_token"`
+	Email       string `json:"email" binding:"required,email"`
+	Password    string `json:"password" binding:"required"`
+	AltchaToken string `json:"altcha_token"`
 }
 
 func (h *AuthHandler) Register(c *gin.Context) {
@@ -61,19 +61,19 @@ func (h *AuthHandler) Register(c *gin.Context) {
 	}
 	req.Email = strings.ToLower(strings.TrimSpace(req.Email))
 
-	// Validate Turnstile token
-	turnstileService := services.NewTurnstileService(h.config.TurnstileSecretKey)
+	// Validate ALTCHA token
+	altchaService := services.NewAltchaService(h.config.JWTSecret)
 	remoteIP := c.ClientIP()
-	turnstileResp, err := turnstileService.VerifyToken(req.TurnstileToken, remoteIP)
+	altchaResp, err := altchaService.VerifyToken(req.AltchaToken, remoteIP)
 	if err != nil {
-		log.Printf("[Auth] Turnstile verification failed: %v", err)
+		log.Printf("[Auth] ALTCHA verification failed: %v", err)
 		c.JSON(http.StatusBadRequest, gin.H{"error": "Security verification failed"})
 		return
 	}
 
-	if !turnstileResp.Success {
-		errorMsg := turnstileService.GetErrorMessage(turnstileResp.ErrorCodes)
-		log.Printf("[Auth] Turnstile validation failed: %s", errorMsg)
+	if !altchaResp.Verified {
+		errorMsg := altchaService.GetErrorMessage(altchaResp.Error)
+		log.Printf("[Auth] ALTCHA validation failed: %s", errorMsg)
 		c.JSON(http.StatusBadRequest, gin.H{"error": errorMsg})
 		return
 	}
@@ -198,19 +198,19 @@ func (h *AuthHandler) Login(c *gin.Context) {
 	}
 	req.Email = strings.ToLower(strings.TrimSpace(req.Email))
 
-	// Validate Turnstile token
-	turnstileService := services.NewTurnstileService(h.config.TurnstileSecretKey)
+	// Validate ALTCHA token
+	altchaService := services.NewAltchaService(h.config.JWTSecret)
 	remoteIP := c.ClientIP()
-	turnstileResp, err := turnstileService.VerifyToken(req.TurnstileToken, remoteIP)
+	altchaResp, err := altchaService.VerifyToken(req.AltchaToken, remoteIP)
 	if err != nil {
-		log.Printf("[Auth] Login Turnstile verification failed: %v", err)
+		log.Printf("[Auth] Login ALTCHA verification failed: %v", err)
 		c.JSON(http.StatusBadRequest, gin.H{"error": "Security verification failed"})
 		return
 	}
 
-	if !turnstileResp.Success {
-		errorMsg := turnstileService.GetErrorMessage(turnstileResp.ErrorCodes)
-		log.Printf("[Auth] Login Turnstile validation failed: %s", errorMsg)
+	if !altchaResp.Verified {
+		errorMsg := altchaService.GetErrorMessage(altchaResp.Error)
+		log.Printf("[Auth] Login ALTCHA validation failed: %s", errorMsg)
 		c.JSON(http.StatusBadRequest, gin.H{"error": errorMsg})
 		return
 	}

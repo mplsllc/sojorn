@@ -52,9 +52,9 @@ class ApiClient {
   }
 
   // Auth
-  async login(email: string, password: string, turnstileToken?: string) {
+  async login(email: string, password: string, altchaToken?: string) {
     const body: Record<string, string> = { email, password };
-    if (turnstileToken) body.turnstile_token = turnstileToken;
+    if (altchaToken) body.altcha_token = altchaToken;
     const data = await this.request<{ access_token: string; user: any }>('/api/v1/admin/login', {
       method: 'POST',
       body: JSON.stringify(body),
