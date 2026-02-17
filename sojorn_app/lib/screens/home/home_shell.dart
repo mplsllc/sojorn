@@ -147,11 +147,8 @@ class _HomeShellState extends ConsumerState<HomeShell> with WidgetsBindingObserv
               );
             },
             onBeaconTap: () {
-              Navigator.of(context).push(
-                MaterialPageRoute(
-                  builder: (_) => BeaconScreen(),
-                ),
-              );
+              setState(() => _isRadialMenuVisible = false);
+              widget.navigationShell.goBranch(2); // Navigate to beacon tab (index 2)
             },
                 ),
               ],
