@@ -7,6 +7,7 @@ import '../../services/capsule_security_service.dart';
 import '../../theme/tokens.dart';
 import '../../theme/app_theme.dart';
 import 'group_screen.dart';
+import '../../widgets/skeleton_loader.dart';
 
 /// ClustersScreen — Discovery-first groups page.
 /// Shows "Your Groups" at top, then "Discover Communities" with category filtering.
@@ -156,7 +157,7 @@ class _ClustersScreenState extends ConsumerState<ClustersScreen>
 
   // ── Groups Tab (Your Groups + Discover) ──────────────────────────────
   Widget _buildGroupsTab() {
-    if (_isLoading) return const Center(child: CircularProgressIndicator());
+    if (_isLoading) return const SingleChildScrollView(child: SkeletonGroupList(count: 6));
     return RefreshIndicator(
       onRefresh: _loadAll,
       child: ListView(
@@ -220,10 +221,7 @@ class _ClustersScreenState extends ConsumerState<ClustersScreen>
 
           // Discover results
           if (_isDiscoverLoading)
-            const Padding(
-              padding: EdgeInsets.all(32),
-              child: Center(child: CircularProgressIndicator()),
-            )
+            const SkeletonGroupList(count: 4)
           else if (_discoverGroups.isEmpty)
             _EmptyDiscoverState(
               onCreateGroup: () => _showCreateSheet(context),
@@ -265,7 +263,7 @@ class _ClustersScreenState extends ConsumerState<ClustersScreen>
 
   // ── Capsules Tab ─────────────────────────────────────────────────────
   Widget _buildCapsuleTab() {
-    if (_isLoading) return const Center(child: CircularProgressIndicator());
+    if (_isLoading) return const SingleChildScrollView(child: SkeletonGroupList(count: 4));
     if (_myCapsules.isEmpty) return _EmptyState(
       icon: Icons.lock,
       title: 'No Capsules Yet',
