@@ -1,6 +1,7 @@
 package handlers
 
 import (
+	"crypto/hmac"
 	"crypto/rand"
 	"crypto/sha256"
 	"encoding/base64"
@@ -598,12 +599,23 @@ func (h *AuthHandler) ResetPassword(c *gin.Context) {
 }
 
 func (h *AuthHandler) GetAltchaChallenge(c *gin.Context) {
-	// Simple ALTCHA challenge implementation
-	challenge := map[string]interface{}{
+	// Generate a proper ALTCHA challenge
+	salt := fmt.Sprintf("%d", time.Now().UnixNano())
+
+	// Create a simple number challenge (find a number that when hashed with salt produces a hash starting with certain digits)
+	challenge := fmt.Sprintf("%x", sha256.Sum256([]byte(salt)))[:10]
+
+	// Create HMAC signature using JWT secret as the key
+	h := hmac.New(sha256.New, []byte(h.config.JWTSecret))
+	h.Write([]byte(challenge + salt))
+	signature := hex.EncodeToString(h.Sum(nil))
+
+	response := map[string]interface{}{
 		"algorithm": "SHA-256",
-		"challenge": fmt.Sprintf("%d", time.Now().UnixNano()),
-		"salt":      fmt.Sprintf("%d", time.Now().Unix()),
-		"signature": "test-signature",
+		"challenge": challenge,
+		"salt":      salt,
+		"signature": signature,
 	}
-	c.JSON(http.StatusOK, challenge)
+
+	c.JSON(http.StatusOK, response)
 }
