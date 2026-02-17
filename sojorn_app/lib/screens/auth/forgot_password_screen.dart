@@ -65,7 +65,7 @@ class _ForgotPasswordScreenState extends ConsumerState<ForgotPasswordScreen> {
         backgroundColor: Colors.transparent,
         elevation: 0,
         leading: IconButton(
-          icon: const Icon(Icons.arrow_back, color: AppTheme.navyText),
+          icon: Icon(Icons.arrow_back, color: AppTheme.navyText),
           onPressed: () => Navigator.of(context).pop(),
         ),
       ),
@@ -106,7 +106,7 @@ class _ForgotPasswordScreenState extends ConsumerState<ForgotPasswordScreen> {
                       ? Column(
                           mainAxisSize: MainAxisSize.min,
                           children: [
-                            const Icon(
+                            Icon(
                               Icons.mark_email_read_outlined,
                               size: 64,
                               color: AppTheme.success,

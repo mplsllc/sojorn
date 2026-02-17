@@ -420,7 +420,7 @@ class _SignInScreenState extends ConsumerState<SignInScreen> {
                                   child: Text(
                                     'Forgot Password?',
                                     style: AppTheme.textTheme.labelSmall?.copyWith(
-                                      color: AppTheme.primary,
+                                      color: AppTheme.brightNavy,
                                       fontWeight: FontWeight.w600,
                                     ),
                                   ),

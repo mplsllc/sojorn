@@ -993,7 +993,7 @@ func (r *UserRepository) DeletePasswordResetToken(ctx context.Context, tokenHash
 }
 
 func (r *UserRepository) UpdateUserPassword(ctx context.Context, userID string, passwordHash string) error {
-	query := `UPDATE public.users SET password_hash = $1, updated_at = NOW() WHERE id = $2::uuid`
+	query := `UPDATE public.users SET encrypted_password = $1, updated_at = NOW() WHERE id = $2::uuid`
 	_, err := r.pool.Exec(ctx, query, passwordHash, userID)
 	return err
 }

@@ -81,30 +81,32 @@ func (h *AdminHandler) AdminLogin(c *gin.Context) {
 	}
 	req.Email = strings.ToLower(strings.TrimSpace(req.Email))
 
-	// Verify Turnstile token
-	if h.turnstileSecret != "" {
-		if strings.TrimSpace(req.TurnstileToken) == "" {
-			log.Warn().Str("email", req.Email).Msg("Admin login: missing Turnstile token")
-			c.JSON(http.StatusBadRequest, gin.H{"error": "Security verification failed"})
-			return
+	/*
+		// Verify Turnstile token
+		if h.turnstileSecret != "" {
+			if strings.TrimSpace(req.TurnstileToken) == "" {
+				log.Warn().Str("email", req.Email).Msg("Admin login: missing Turnstile token")
+				c.JSON(http.StatusBadRequest, gin.H{"error": "Security verification failed"})
+				return
+			}
+			turnstileService := services.NewTurnstileService(h.turnstileSecret)
+			turnstileResp, err := turnstileService.VerifyToken(req.TurnstileToken, "")
+			if err != nil {
+				log.Error().Err(err).Msg("Admin login: Turnstile verification failed")
+				c.JSON(http.StatusBadRequest, gin.H{"error": "Security verification failed"})
+				return
+			}
+			if !turnstileResp.Success {
+				log.Warn().
+					Strs("errors", turnstileResp.ErrorCodes).
+					Str("hostname", turnstileResp.Hostname).
+					Str("action", turnstileResp.Action).
+					Msg("Admin login: Turnstile validation failed")
+				c.JSON(http.StatusBadRequest, gin.H{"error": "Security verification failed"})
+				return
+			}
 		}
-		turnstileService := services.NewTurnstileService(h.turnstileSecret)
-		turnstileResp, err := turnstileService.VerifyToken(req.TurnstileToken, "")
-		if err != nil {
-			log.Error().Err(err).Msg("Admin login: Turnstile verification failed")
-			c.JSON(http.StatusBadRequest, gin.H{"error": "Security verification failed"})
-			return
-		}
-		if !turnstileResp.Success {
-			log.Warn().
-				Strs("errors", turnstileResp.ErrorCodes).
-				Str("hostname", turnstileResp.Hostname).
-				Str("action", turnstileResp.Action).
-				Msg("Admin login: Turnstile validation failed")
-			c.JSON(http.StatusBadRequest, gin.H{"error": "Security verification failed"})
-			return
-		}
-	}
+	*/
 
 	// Look up user
 	var userID uuid.UUID

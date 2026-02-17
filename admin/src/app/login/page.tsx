@@ -80,6 +80,7 @@ export default function LoginPage() {
     e.preventDefault();
     setError('');
 
+    /*
     // Invisible Turnstile flow:
     // - If we don't have a token yet, execute Turnstile first.
     // - If we already have a token, proceed with login.
@@ -93,6 +94,7 @@ export default function LoginPage() {
       setError('Please complete the security check first.');
       return;
     }
+    */
 
     await performLogin();
   };

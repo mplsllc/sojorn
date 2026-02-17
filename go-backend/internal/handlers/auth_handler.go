@@ -50,7 +50,7 @@ type RegisterRequest struct {
 type LoginRequest struct {
 	Email          string `json:"email" binding:"required,email"`
 	Password       string `json:"password" binding:"required"`
-	TurnstileToken string `json:"turnstile_token" binding:"required"`
+	TurnstileToken string `json:"turnstile_token"`
 }
 
 func (h *AuthHandler) Register(c *gin.Context) {
