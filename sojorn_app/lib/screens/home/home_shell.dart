@@ -13,6 +13,7 @@ import '../discover/discover_screen.dart';
 import '../beacon/beacon_screen.dart';
 import '../quips/create/quip_creation_flow.dart';
 import '../secure_chat/secure_chat_full_screen.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import '../../widgets/radial_menu_overlay.dart';
 import '../../widgets/onboarding_modal.dart';
 import '../../providers/quip_upload_provider.dart';
@@ -35,15 +36,54 @@ class _HomeShellState extends ConsumerState<HomeShell> with WidgetsBindingObserv
   final SecureChatService _chatService = SecureChatService();
   StreamSubscription<RemoteMessage>? _notifSub;
 
+  // Nav helper badges — show descriptive subtitle for first N taps
+  static const _maxHelperShows = 3;
+  Map<int, int> _navTapCounts = {};
+
+  static const _helperBadges = {
+    1: 'Videos',   // Quips tab
+    2: 'Alerts',   // Beacons tab
+  };
+
+  static const _longPressTooltips = {
+    0: 'Your main feed with posts from people you follow',
+    1: 'Quips are short-form videos — your stories',
+    2: 'Beacons are local alerts and real-time updates',
+    3: 'Your profile, settings, and saved posts',
+  };
+
   @override
   void initState() {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
     _chatService.startBackgroundSync();
     _initNotificationListener();
+    _loadNavTapCounts();
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (mounted) OnboardingModal.showIfNeeded(context);
     });
+  }
+
+  Future<void> _loadNavTapCounts() async {
+    final prefs = await SharedPreferences.getInstance();
+    if (mounted) {
+      setState(() {
+        _navTapCounts = {
+          for (final i in [1, 2])
+            i: prefs.getInt('nav_tap_$i') ?? 0,
+        };
+      });
+    }
+  }
+
+  Future<void> _incrementNavTap(int index) async {
+    if (!_helperBadges.containsKey(index)) return;
+    final prefs = await SharedPreferences.getInstance();
+    final current = prefs.getInt('nav_tap_$index') ?? 0;
+    await prefs.setInt('nav_tap_$index', current + 1);
+    if (mounted) {
+      setState(() => _navTapCounts[index] = current + 1);
+    }
   }
 
   void _initNotificationListener() {
@@ -369,45 +409,126 @@ class _HomeShellState extends ConsumerState<HomeShell> with WidgetsBindingObserv
     String? assetPath,
   }) {
     final isActive = widget.navigationShell.currentIndex == index;
+    final helperBadge = _helperBadges[index];
+    final tapCount = _navTapCounts[index] ?? 0;
+    final showHelper = helperBadge != null && tapCount < _maxHelperShows;
+    final tooltip = _longPressTooltips[index];
+
     return Expanded(
-      child: InkWell(
-        onTap: () {
-          widget.navigationShell.goBranch(
-            index,
-            initialLocation: index == widget.navigationShell.currentIndex,
+      child: GestureDetector(
+        onLongPress: tooltip != null ? () {
+          final overlay = Overlay.of(context);
+          late OverlayEntry entry;
+          entry = OverlayEntry(
+            builder: (ctx) => _NavTooltipOverlay(
+              message: tooltip,
+              onDismiss: () => entry.remove(),
+            ),
           );
-        },
-        child: Container(
-          height: double.infinity,
-          alignment: Alignment.center,
-          child: Column(
-            mainAxisAlignment: MainAxisAlignment.center,
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              assetPath != null
-                  ? Image.asset(
-                      assetPath,
-                      width: SojornNav.bottomBarIconSize,
-                      height: SojornNav.bottomBarIconSize,
-                      color: isActive ? AppTheme.navyBlue : SojornColors.bottomNavUnselected,
-                    )
-                  : Icon(
-                      isActive ? activeIcon : icon,
-                      color: isActive ? AppTheme.navyBlue : SojornColors.bottomNavUnselected,
-                      size: SojornNav.bottomBarIconSize,
-                    ),
-              SizedBox(height: SojornNav.bottomBarLabelTopGap),
-              Text(
-                label,
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-                style: TextStyle(
-                  fontSize: SojornNav.bottomBarLabelSize,
-                  fontWeight: isActive ? FontWeight.w700 : FontWeight.w600,
-                  color: isActive ? AppTheme.navyBlue : SojornColors.bottomNavUnselected,
+          overlay.insert(entry);
+          Future.delayed(const Duration(seconds: 2), () {
+            if (entry.mounted) entry.remove();
+          });
+        } : null,
+        child: InkWell(
+          onTap: () {
+            _incrementNavTap(index);
+            widget.navigationShell.goBranch(
+              index,
+              initialLocation: index == widget.navigationShell.currentIndex,
+            );
+          },
+          child: Container(
+            height: double.infinity,
+            alignment: Alignment.center,
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Stack(
+                  clipBehavior: Clip.none,
+                  children: [
+                    assetPath != null
+                        ? Image.asset(
+                            assetPath,
+                            width: SojornNav.bottomBarIconSize,
+                            height: SojornNav.bottomBarIconSize,
+                            color: isActive ? AppTheme.navyBlue : SojornColors.bottomNavUnselected,
+                          )
+                        : Icon(
+                            isActive ? activeIcon : icon,
+                            color: isActive ? AppTheme.navyBlue : SojornColors.bottomNavUnselected,
+                            size: SojornNav.bottomBarIconSize,
+                          ),
+                    if (showHelper)
+                      Positioned(
+                        right: -18,
+                        top: -4,
+                        child: Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 1),
+                          decoration: BoxDecoration(
+                            color: AppTheme.brightNavy,
+                            borderRadius: BorderRadius.circular(6),
+                          ),
+                          child: Text(helperBadge, style: const TextStyle(
+                            fontSize: 8, fontWeight: FontWeight.w700, color: Colors.white,
+                          )),
+                        ),
+                      ),
+                  ],
                 ),
-              ),
-            ],
+                SizedBox(height: SojornNav.bottomBarLabelTopGap),
+                Text(
+                  label,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: TextStyle(
+                    fontSize: SojornNav.bottomBarLabelSize,
+                    fontWeight: isActive ? FontWeight.w700 : FontWeight.w600,
+                    color: isActive ? AppTheme.navyBlue : SojornColors.bottomNavUnselected,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+// ── Nav Tooltip Overlay (long-press on nav items) ─────────────────────────
+class _NavTooltipOverlay extends StatelessWidget {
+  final String message;
+  final VoidCallback onDismiss;
+
+  const _NavTooltipOverlay({required this.message, required this.onDismiss});
+
+  @override
+  Widget build(BuildContext context) {
+    return Positioned.fill(
+      child: GestureDetector(
+        onTap: onDismiss,
+        behavior: HitTestBehavior.translucent,
+        child: Align(
+          alignment: const Alignment(0, 0.85),
+          child: Container(
+            margin: const EdgeInsets.symmetric(horizontal: 32),
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+            decoration: BoxDecoration(
+              color: AppTheme.navyBlue,
+              borderRadius: BorderRadius.circular(12),
+              boxShadow: [
+                BoxShadow(
+                  color: Colors.black.withValues(alpha: 0.2),
+                  blurRadius: 12,
+                  offset: const Offset(0, 4),
+                ),
+              ],
+            ),
+            child: Text(message, style: const TextStyle(
+              color: Colors.white, fontSize: 13, fontWeight: FontWeight.w500,
+            ), textAlign: TextAlign.center),
           ),
         ),
       ),
