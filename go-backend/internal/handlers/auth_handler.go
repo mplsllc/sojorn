@@ -5,6 +5,7 @@ import (
 	"crypto/sha256"
 	"encoding/base64"
 	"encoding/hex"
+	"fmt"
 	"net/http"
 	"time"
 
@@ -594,4 +595,15 @@ func (h *AuthHandler) ResetPassword(c *gin.Context) {
 	_ = h.repo.DeletePasswordResetToken(c.Request.Context(), hashString)
 
 	c.JSON(http.StatusOK, gin.H{"message": "Password reset successfully"})
+}
+
+func (h *AuthHandler) GetAltchaChallenge(c *gin.Context) {
+	// Simple ALTCHA challenge implementation
+	challenge := map[string]interface{}{
+		"algorithm": "SHA-256",
+		"challenge": fmt.Sprintf("%d", time.Now().UnixNano()),
+		"salt":      fmt.Sprintf("%d", time.Now().Unix()),
+		"signature": "test-signature",
+	}
+	c.JSON(http.StatusOK, challenge)
 }
