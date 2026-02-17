@@ -81,6 +81,19 @@ class _GroupThreadDetailScreenState extends State<GroupThreadDetailScreen> {
     if (mounted) setState(() => _sending = false);
   }
 
+  int _uniqueParticipants() {
+    final authors = <String>{};
+    if (_thread != null) {
+      final a = _thread!['author_id']?.toString() ?? _thread!['author_handle']?.toString() ?? '';
+      if (a.isNotEmpty) authors.add(a);
+    }
+    for (final r in _replies) {
+      final a = r['author_id']?.toString() ?? r['author_handle']?.toString() ?? '';
+      if (a.isNotEmpty) authors.add(a);
+    }
+    return authors.length;
+  }
+
   String _timeAgo(String? dateStr) {
     if (dateStr == null) return '';
     try {
@@ -114,42 +127,67 @@ class _GroupThreadDetailScreenState extends State<GroupThreadDetailScreen> {
                   child: ListView(
                     padding: const EdgeInsets.all(16),
                     children: [
-                      // Thread body
+                      // Original post (highlighted)
                       if (_thread != null) ...[
-                        Text(
-                          _thread!['title'] as String? ?? '',
-                          style: TextStyle(color: AppTheme.navyBlue, fontSize: 18, fontWeight: FontWeight.w700),
+                        Container(
+                          padding: const EdgeInsets.all(14),
+                          decoration: BoxDecoration(
+                            color: AppTheme.cardSurface,
+                            borderRadius: BorderRadius.circular(14),
+                            border: Border.all(color: AppTheme.brightNavy.withValues(alpha: 0.25), width: 1.5),
+                          ),
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                _thread!['title'] as String? ?? '',
+                                style: TextStyle(color: AppTheme.navyBlue, fontSize: 18, fontWeight: FontWeight.w700),
+                              ),
+                              const SizedBox(height: 8),
+                              Row(
+                                children: [
+                                  Text(
+                                    _thread!['author_display_name'] as String? ??
+                                        _thread!['author_handle'] as String? ?? '',
+                                    style: TextStyle(color: AppTheme.brightNavy, fontSize: 12, fontWeight: FontWeight.w500),
+                                  ),
+                                  const SizedBox(width: 8),
+                                  Text(
+                                    _timeAgo(_thread!['created_at']?.toString()),
+                                    style: TextStyle(color: SojornColors.textDisabled, fontSize: 11),
+                                  ),
+                                ],
+                              ),
+                              if ((_thread!['body'] as String? ?? '').isNotEmpty) ...[
+                                const SizedBox(height: 12),
+                                Text(
+                                  _thread!['body'] as String,
+                                  style: TextStyle(color: SojornColors.postContent, fontSize: 14, height: 1.5),
+                                ),
+                              ],
+                            ],
+                          ),
                         ),
-                        const SizedBox(height: 8),
+                        const SizedBox(height: 16),
+                        // Chain metadata
                         Row(
                           children: [
+                            Icon(Icons.forum_outlined, size: 14, color: AppTheme.navyBlue.withValues(alpha: 0.5)),
+                            const SizedBox(width: 6),
                             Text(
-                              _thread!['author_display_name'] as String? ??
-                                  _thread!['author_handle'] as String? ?? '',
-                              style: TextStyle(color: AppTheme.brightNavy, fontSize: 12, fontWeight: FontWeight.w500),
+                              '${_replies.length} ${_replies.length == 1 ? 'reply' : 'replies'}',
+                              style: TextStyle(color: AppTheme.navyBlue, fontWeight: FontWeight.w600, fontSize: 13),
                             ),
-                            const SizedBox(width: 8),
+                            const SizedBox(width: 12),
+                            Icon(Icons.people_outline, size: 14, color: AppTheme.navyBlue.withValues(alpha: 0.5)),
+                            const SizedBox(width: 4),
                             Text(
-                              _timeAgo(_thread!['created_at']?.toString()),
-                              style: TextStyle(color: SojornColors.textDisabled, fontSize: 11),
+                              '${_uniqueParticipants()} participants',
+                              style: TextStyle(color: SojornColors.textDisabled, fontSize: 12),
                             ),
                           ],
                         ),
-                        if ((_thread!['body'] as String? ?? '').isNotEmpty) ...[
-                          const SizedBox(height: 12),
-                          Text(
-                            _thread!['body'] as String,
-                            style: TextStyle(color: SojornColors.postContent, fontSize: 14, height: 1.5),
-                          ),
-                        ],
-                        const SizedBox(height: 16),
-                        Divider(color: AppTheme.navyBlue.withValues(alpha: 0.08)),
-                        const SizedBox(height: 8),
-                        Text(
-                          '${_replies.length} ${_replies.length == 1 ? 'Reply' : 'Replies'}',
-                          style: TextStyle(color: AppTheme.navyBlue, fontWeight: FontWeight.w600, fontSize: 13),
-                        ),
-                        const SizedBox(height: 8),
+                        const SizedBox(height: 12),
                       ],
                       if (widget.isEncrypted && _replies.isEmpty)
                         Padding(
@@ -161,11 +199,13 @@ class _GroupThreadDetailScreenState extends State<GroupThreadDetailScreen> {
                             ),
                           ),
                         ),
-                      // Replies
-                      ..._replies.map((reply) => _ReplyCard(
-                        reply: reply,
-                        timeAgo: _timeAgo(reply['created_at']?.toString()),
-                      )),
+                      // Replies with thread connector
+                      for (int i = 0; i < _replies.length; i++)
+                        _ReplyCard(
+                          reply: _replies[i],
+                          timeAgo: _timeAgo(_replies[i]['created_at']?.toString()),
+                          showConnector: i < _replies.length - 1,
+                        ),
                     ],
                   ),
                 ),
@@ -184,7 +224,7 @@ class _GroupThreadDetailScreenState extends State<GroupThreadDetailScreen> {
                             controller: _replyCtrl,
                             style: TextStyle(color: SojornColors.postContent, fontSize: 14),
                             decoration: InputDecoration(
-                              hintText: 'Write a reply…',
+                              hintText: 'Add to this chain…',
                               hintStyle: TextStyle(color: SojornColors.textDisabled),
                               filled: true, fillColor: AppTheme.scaffoldBg,
                               contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
@@ -216,7 +256,8 @@ class _GroupThreadDetailScreenState extends State<GroupThreadDetailScreen> {
 class _ReplyCard extends StatelessWidget {
   final Map<String, dynamic> reply;
   final String timeAgo;
-  const _ReplyCard({required this.reply, required this.timeAgo});
+  final bool showConnector;
+  const _ReplyCard({required this.reply, required this.timeAgo, this.showConnector = false});
 
   @override
   Widget build(BuildContext context) {
@@ -225,34 +266,71 @@ class _ReplyCard extends StatelessWidget {
     final avatarUrl = reply['author_avatar_url'] as String? ?? '';
     final body = reply['body'] as String? ?? '';
 
-    return Container(
-      margin: const EdgeInsets.only(bottom: 8),
-      padding: const EdgeInsets.all(12),
-      decoration: BoxDecoration(
-        color: AppTheme.cardSurface,
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: AppTheme.navyBlue.withValues(alpha: 0.06)),
-      ),
-      child: Column(
+    return IntrinsicHeight(
+      child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Row(
-            children: [
-              CircleAvatar(
-                radius: 14,
-                backgroundColor: AppTheme.brightNavy.withValues(alpha: 0.1),
-                backgroundImage: avatarUrl.isNotEmpty ? NetworkImage(avatarUrl) : null,
-                child: avatarUrl.isEmpty ? Icon(Icons.person, size: 14, color: AppTheme.brightNavy) : null,
-              ),
-              const SizedBox(width: 8),
-              Text(displayName.isNotEmpty ? displayName : handle,
-                  style: TextStyle(color: AppTheme.navyBlue, fontWeight: FontWeight.w600, fontSize: 12)),
-              const SizedBox(width: 6),
-              Text(timeAgo, style: TextStyle(color: SojornColors.textDisabled, fontSize: 10)),
-            ],
+          // Thread connector line
+          SizedBox(
+            width: 20,
+            child: Column(
+              children: [
+                Container(
+                  width: 2, height: 8,
+                  color: AppTheme.navyBlue.withValues(alpha: 0.12),
+                ),
+                Container(
+                  width: 8, height: 8,
+                  decoration: BoxDecoration(
+                    shape: BoxShape.circle,
+                    color: AppTheme.navyBlue.withValues(alpha: 0.15),
+                  ),
+                ),
+                if (showConnector)
+                  Expanded(
+                    child: Container(
+                      width: 2,
+                      color: AppTheme.navyBlue.withValues(alpha: 0.12),
+                    ),
+                  ),
+              ],
+            ),
           ),
-          const SizedBox(height: 8),
-          Text(body, style: TextStyle(color: SojornColors.postContent, fontSize: 13, height: 1.4)),
+          const SizedBox(width: 6),
+          // Reply content
+          Expanded(
+            child: Container(
+              margin: const EdgeInsets.only(bottom: 8),
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                color: AppTheme.cardSurface,
+                borderRadius: BorderRadius.circular(12),
+                border: Border.all(color: AppTheme.navyBlue.withValues(alpha: 0.06)),
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    children: [
+                      CircleAvatar(
+                        radius: 14,
+                        backgroundColor: AppTheme.brightNavy.withValues(alpha: 0.1),
+                        backgroundImage: avatarUrl.isNotEmpty ? NetworkImage(avatarUrl) : null,
+                        child: avatarUrl.isEmpty ? Icon(Icons.person, size: 14, color: AppTheme.brightNavy) : null,
+                      ),
+                      const SizedBox(width: 8),
+                      Text(displayName.isNotEmpty ? displayName : handle,
+                          style: TextStyle(color: AppTheme.navyBlue, fontWeight: FontWeight.w600, fontSize: 12)),
+                      const SizedBox(width: 6),
+                      Text(timeAgo, style: TextStyle(color: SojornColors.textDisabled, fontSize: 10)),
+                    ],
+                  ),
+                  const SizedBox(height: 8),
+                  Text(body, style: TextStyle(color: SojornColors.postContent, fontSize: 13, height: 1.4)),
+                ],
+              ),
+            ),
+          ),
         ],
       ),
     );
