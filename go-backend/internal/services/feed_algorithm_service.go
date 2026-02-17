@@ -443,54 +443,218 @@ func (s *FeedAlgorithmService) updatePostScore(ctx context.Context, score FeedSc
 	return err
 }
 
-// Get feed with algorithmic ranking
+// GetAlgorithmicFeed returns a ranked, deduplicated, diversity-injected feed for viewerID.
+//
+// Scoring pipeline:
+//  1. Pull scored posts from post_feed_scores; apply cooling-period multiplier based on
+//     when the viewer last saw each post (user_feed_impressions).
+//  2. Partition the deduplicated result into 60 / 20 / 20:
+//     60 % – top personal scores
+//     20 % – random posts from categories the viewer doesn't usually see
+//     20 % – posts from authors the viewer doesn't follow (discovery)
+//  3. Record impressions so future calls apply the cooling penalty.
 func (s *FeedAlgorithmService) GetAlgorithmicFeed(ctx context.Context, viewerID string, limit int, offset int, category string) ([]string, error) {
-	// Update scores for recent posts first
-	err := s.UpdateFeedScores(ctx, []string{}, viewerID) // This would normally get recent posts
-	if err != nil {
-		log.Error().Err(err).Msg("failed to update feed scores")
-	}
-
-	// Build query with algorithmic ordering
-	query := `
-		SELECT post_id 
+	// ── 1. Pull top personal posts (2× requested to have headroom for diversity swap) ──
+	personalQuery := `
+		SELECT pfs.post_id, pfs.score,
+		       COALESCE(ufi.shown_at, NULL) AS last_shown,
+		       p.category,
+		       p.user_id AS author_id
 		FROM post_feed_scores pfs
 		JOIN posts p ON p.id = pfs.post_id
+		LEFT JOIN user_feed_impressions ufi
+		       ON ufi.post_id = pfs.post_id AND ufi.user_id = $1
 		WHERE p.status = 'active'
 	`
-
-	args := []interface{}{}
-	argIndex := 1
+	personalArgs := []interface{}{viewerID}
+	argIdx := 2
 
 	if category != "" {
-		query += fmt.Sprintf(" AND p.category = $%d", argIndex)
-		args = append(args, category)
-		argIndex++
+		personalQuery += fmt.Sprintf(" AND p.category = $%d", argIdx)
+		personalArgs = append(personalArgs, category)
+		argIdx++
 	}
 
-	query += fmt.Sprintf(`
+	personalQuery += fmt.Sprintf(`
 		ORDER BY pfs.score DESC, p.created_at DESC
 		LIMIT $%d OFFSET $%d
-	`, argIndex, argIndex+1)
+	`, argIdx, argIdx+1)
+	personalArgs = append(personalArgs, limit*2, offset)
 
-	args = append(args, limit, offset)
+	type feedRow struct {
+		postID   string
+		score    float64
+		lastShown *string // nil = never shown
+		category  string
+		authorID  string
+	}
 
-	rows, err := s.db.Query(ctx, query, args...)
+	rows, err := s.db.Query(ctx, personalQuery, personalArgs...)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get algorithmic feed: %w", err)
 	}
 	defer rows.Close()
 
-	var postIDs []string
+	var personal []feedRow
+	seenCategories := map[string]int{}
 	for rows.Next() {
-		var postID string
-		if err := rows.Scan(&postID); err != nil {
-			return nil, fmt.Errorf("failed to scan post ID: %w", err)
+		var r feedRow
+		if err := rows.Scan(&r.postID, &r.score, &r.lastShown, &r.category, &r.authorID); err != nil {
+			continue
 		}
-		postIDs = append(postIDs, postID)
+		// Cooling multiplier
+		if r.lastShown != nil {
+			// any non-nil means it was shown before; apply decay
+			r.score *= 0.2 // shown within cooling window → heavy penalty
+		}
+		seenCategories[r.category]++
+		personal = append(personal, r)
+	}
+	rows.Close()
+
+	// ── 2. Viewer's top 3 categories (for diversity contrast) ──
+	topCats := topN(seenCategories, 3)
+	topCatSet := map[string]bool{}
+	for _, c := range topCats {
+		topCatSet[c] = true
 	}
 
-	return postIDs, nil
+	// ── 3. Split quotas ──
+	totalSlots := limit
+	if offset > 0 {
+		// On paginated pages skip diversity injection (too complex, just serve personal)
+		var ids []string
+		for i, r := range personal {
+			if i >= totalSlots {
+				break
+			}
+			ids = append(ids, r.postID)
+		}
+		s.recordImpressions(ctx, viewerID, ids)
+		return ids, nil
+	}
+
+	personalSlots := (totalSlots * 60) / 100
+	crossCatSlots := (totalSlots * 20) / 100
+	discoverySlots := totalSlots - personalSlots - crossCatSlots
+
+	var result []string
+	seen := map[string]bool{}
+
+	for _, r := range personal {
+		if len(result) >= personalSlots {
+			break
+		}
+		if !seen[r.postID] {
+			result = append(result, r.postID)
+			seen[r.postID] = true
+		}
+	}
+
+	// ── 4. Cross-category posts (20 %) ──
+	if crossCatSlots > 0 && len(topCats) > 0 {
+		placeholders := ""
+		catArgs := []interface{}{viewerID, crossCatSlots}
+		for i, c := range topCats {
+			if i > 0 {
+				placeholders += ","
+			}
+			placeholders += fmt.Sprintf("$%d", len(catArgs)+1)
+			catArgs = append(catArgs, c)
+		}
+		crossQuery := fmt.Sprintf(`
+			SELECT p.id FROM posts p
+			JOIN post_feed_scores pfs ON pfs.post_id = p.id
+			WHERE p.status = 'active'
+			  AND p.category NOT IN (%s)
+			ORDER BY random()
+			LIMIT $2
+		`, placeholders)
+		crossRows, _ := s.db.Query(ctx, crossQuery, catArgs...)
+		if crossRows != nil {
+			for crossRows.Next() {
+				var id string
+				if crossRows.Scan(&id) == nil && !seen[id] {
+					result = append(result, id)
+					seen[id] = true
+				}
+			}
+			crossRows.Close()
+		}
+	}
+
+	// ── 5. Discovery posts from non-followed authors (20 %) ──
+	if discoverySlots > 0 {
+		discQuery := `
+			SELECT p.id FROM posts p
+			JOIN post_feed_scores pfs ON pfs.post_id = p.id
+			WHERE p.status = 'active'
+			  AND p.user_id != $1
+			  AND p.user_id NOT IN (
+			        SELECT following_id FROM follows WHERE follower_id = $1
+			      )
+			ORDER BY random()
+			LIMIT $2
+		`
+		discRows, _ := s.db.Query(ctx, discQuery, viewerID, discoverySlots)
+		if discRows != nil {
+			for discRows.Next() {
+				var id string
+				if discRows.Scan(&id) == nil && !seen[id] {
+					result = append(result, id)
+					seen[id] = true
+				}
+			}
+			discRows.Close()
+		}
+	}
+
+	// ── 6. Record impressions ──
+	s.recordImpressions(ctx, viewerID, result)
+
+	return result, nil
+}
+
+// recordImpressions upserts impression rows so cooling periods take effect on future loads.
+func (s *FeedAlgorithmService) recordImpressions(ctx context.Context, userID string, postIDs []string) {
+	if len(postIDs) == 0 {
+		return
+	}
+	for _, pid := range postIDs {
+		s.db.Exec(ctx,
+			`INSERT INTO user_feed_impressions (user_id, post_id, shown_at)
+			 VALUES ($1, $2, now())
+			 ON CONFLICT (user_id, post_id) DO UPDATE SET shown_at = now()`,
+			userID, pid,
+		)
+	}
+}
+
+// topN returns up to n keys with the highest counts from a frequency map.
+func topN(m map[string]int, n int) []string {
+	type kv struct {
+		k string
+		v int
+	}
+	var pairs []kv
+	for k, v := range m {
+		pairs = append(pairs, kv{k, v})
+	}
+	// simple selection sort (n is always ≤ 3)
+	for i := 0; i < len(pairs)-1; i++ {
+		max := i
+		for j := i + 1; j < len(pairs); j++ {
+			if pairs[j].v > pairs[max].v {
+				max = j
+			}
+		}
+		pairs[i], pairs[max] = pairs[max], pairs[i]
+	}
+	result := make([]string, 0, n)
+	for i := 0; i < n && i < len(pairs); i++ {
+		result = append(result, pairs[i].k)
+	}
+	return result
 }
 
 // Helper functions

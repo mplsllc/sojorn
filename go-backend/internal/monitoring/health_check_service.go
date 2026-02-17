@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/jackc/pgx/v5/pgxpool"
+	"github.com/rs/zerolog"
 	"github.com/rs/zerolog/log"
 )
 
@@ -314,7 +315,7 @@ func (s *HealthCheckService) checkMemoryUsage() HealthCheck {
 
 	// Check memory usage (threshold: 80% of available memory)
 	memoryUsageMB := m.Alloc / 1024 / 1024
-	thresholdMB := 1024 // 1GB threshold
+	thresholdMB := uint64(1024) // 1GB threshold
 
 	check.Status = "healthy"
 	check.Message = "Memory usage is normal"

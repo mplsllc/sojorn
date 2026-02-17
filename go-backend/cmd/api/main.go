@@ -21,6 +21,7 @@ import (
 	"gitlab.com/patrickbritton3/sojorn/go-backend/internal/config"
 	"gitlab.com/patrickbritton3/sojorn/go-backend/internal/handlers"
 	"gitlab.com/patrickbritton3/sojorn/go-backend/internal/middleware"
+	"gitlab.com/patrickbritton3/sojorn/go-backend/internal/monitoring"
 	"gitlab.com/patrickbritton3/sojorn/go-backend/internal/realtime"
 	"gitlab.com/patrickbritton3/sojorn/go-backend/internal/repository"
 	"gitlab.com/patrickbritton3/sojorn/go-backend/internal/services"
@@ -169,7 +170,7 @@ func main() {
 	linkPreviewService := services.NewLinkPreviewService(dbPool, s3Client, cfg.R2MediaBucket, cfg.R2ImgDomain)
 
 	userHandler := handlers.NewUserHandler(userRepo, postRepo, notificationService, assetService)
-	postHandler := handlers.NewPostHandler(postRepo, userRepo, feedService, assetService, notificationService, moderationService, contentFilter, openRouterService, linkPreviewService, localAIService)
+	postHandler := handlers.NewPostHandler(postRepo, userRepo, feedService, assetService, notificationService, moderationService, contentFilter, openRouterService, linkPreviewService, localAIService, s3Client, cfg.R2VideoBucket, cfg.R2VidDomain)
 	chatHandler := handlers.NewChatHandler(chatRepo, notificationService, hub)
 	authHandler := handlers.NewAuthHandler(userRepo, cfg, emailService, sendPulseService)
 	categoryHandler := handlers.NewCategoryHandler(categoryRepo)
@@ -216,6 +217,9 @@ func main() {
 	// Feed algorithm service (scores posts for ranked feed)
 	feedAlgorithmService := services.NewFeedAlgorithmService(dbPool)
 
+	// Health check service
+	hcService := monitoring.NewHealthCheckService(dbPool)
+
 	// Repost & profile layout handlers
 	repostHandler := handlers.NewRepostHandler(dbPool)
 	profileLayoutHandler := handlers.NewProfileLayoutHandler(dbPool)
@@ -228,6 +232,9 @@ func main() {
 	r.HEAD("/health", func(c *gin.Context) {
 		c.Status(200)
 	})
+	r.GET("/health/detailed", gin.WrapF(hcService.HealthCheckHandler))
+	r.GET("/health/ready", gin.WrapF(hcService.ReadinessHandler))
+	r.GET("/health/live", gin.WrapF(hcService.LivenessHandler))
 
 	// ALTCHA challenge endpoints (direct to main router for testing)
 	r.GET("/api/v1/auth/altcha-challenge", authHandler.GetAltchaChallenge)
@@ -308,6 +315,7 @@ func main() {
 				users.GET("/blocked", userHandler.GetBlockedUsers)
 				users.POST("/report", userHandler.ReportUser)
 				users.POST("/block_by_handle", userHandler.BlockUserByHandle)
+				users.POST("/me/blocks/bulk", userHandler.BulkBlockUsers)
 
 				// Social Graph: Followers & Following
 				users.GET("/:id/followers", userHandler.GetFollowers)
@@ -489,6 +497,13 @@ func main() {
 				groups.GET("/:id/requests", groupsHandler.GetPendingRequests)                     // Get pending join requests (admin)
 				groups.POST("/:id/requests/:requestId/approve", groupsHandler.ApproveJoinRequest) // Approve join request
 				groups.POST("/:id/requests/:requestId/reject", groupsHandler.RejectJoinRequest)   // Reject join request
+				groups.GET("/:id/feed", groupsHandler.GetGroupFeed)
+				groups.GET("/:id/key-status", groupsHandler.GetGroupKeyStatus)
+				groups.POST("/:id/keys", groupsHandler.DistributeGroupKeys)
+				groups.GET("/:id/members/public-keys", groupsHandler.GetGroupMemberPublicKeys)
+				groups.POST("/:id/invite-member", groupsHandler.InviteMember)
+				groups.DELETE("/:id/members/:userId", groupsHandler.RemoveMember)
+				groups.PATCH("/:id/settings", groupsHandler.UpdateGroupSettings)
 			}
 
 			// Capsule system (E2EE groups + clusters)
@@ -699,6 +714,21 @@ func main() {
 		admin.GET("/email-templates/:id", adminHandler.GetEmailTemplate)
 		admin.PATCH("/email-templates/:id", adminHandler.UpdateEmailTemplate)
 		admin.POST("/email-templates/test", adminHandler.SendTestEmail)
+
+		// Groups admin
+		admin.GET("/groups", adminHandler.AdminListGroups)
+		admin.GET("/groups/:id", adminHandler.AdminGetGroup)
+		admin.DELETE("/groups/:id", adminHandler.AdminDeleteGroup)
+		admin.GET("/groups/:id/members", adminHandler.AdminListGroupMembers)
+		admin.DELETE("/groups/:id/members/:userId", adminHandler.AdminRemoveGroupMember)
+
+		// Quip repair
+		admin.GET("/quips/broken", adminHandler.GetBrokenQuips)
+		admin.PATCH("/posts/:id/thumbnail", adminHandler.SetPostThumbnail)
+		admin.POST("/quips/:id/repair", adminHandler.RepairQuip)
+
+		// Feed scores viewer
+		admin.GET("/feed-scores", adminHandler.AdminGetFeedScores)
 	}
 
 	// Public claim request endpoint (no auth)

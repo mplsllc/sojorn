@@ -2,7 +2,9 @@ package handlers
 
 import (
 	"database/sql"
+	"fmt"
 	"net/http"
+	"strconv"
 	"strings"
 	"time"
 
@@ -367,6 +369,10 @@ func (h *GroupsHandler) LeaveGroup(c *gin.Context) {
 		return
 	}
 
+	// Flag key rotation so admin client silently rotates on next open
+	h.db.Exec(c.Request.Context(),
+		`UPDATE groups SET key_rotation_needed = true WHERE id = $1`, groupID)
+
 	c.JSON(http.StatusOK, gin.H{"message": "Left group successfully"})
 }
 
@@ -547,7 +553,7 @@ func (h *GroupsHandler) RejectJoinRequest(c *gin.Context) {
 	}
 
 	_, err = h.db.Exec(c.Request.Context(), `
-		UPDATE group_join_requests 
+		UPDATE group_join_requests
 		SET status = 'rejected', reviewed_at = NOW(), reviewed_by = $1
 		WHERE id = $2 AND group_id = $3 AND status = 'pending'
 	`, userID, requestID, groupID)
@@ -559,3 +565,347 @@ func (h *GroupsHandler) RejectJoinRequest(c *gin.Context) {
 
 	c.JSON(http.StatusOK, gin.H{"message": "Request rejected"})
 }
+
+// ──────────────────────────────────────────────────────────────────────────────
+// Group feed
+// ──────────────────────────────────────────────────────────────────────────────
+
+// GetGroupFeed GET /groups/:id/feed?limit=20&offset=0
+func (h *GroupsHandler) GetGroupFeed(c *gin.Context) {
+	groupID := c.Param("id")
+	limit, _ := strconv.Atoi(c.DefaultQuery("limit", "20"))
+	offset, _ := strconv.Atoi(c.DefaultQuery("offset", "0"))
+	if limit <= 0 || limit > 100 {
+		limit = 20
+	}
+
+	rows, err := h.db.Query(c.Request.Context(), `
+		SELECT p.id, p.user_id, p.content, p.image_url, p.video_url,
+		       p.thumbnail_url, p.created_at, p.status
+		FROM posts p
+		JOIN group_posts gp ON gp.post_id = p.id
+		WHERE gp.group_id = $1 AND p.status = 'active'
+		ORDER BY p.created_at DESC
+		LIMIT $2 OFFSET $3
+	`, groupID, limit, offset)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to fetch group feed"})
+		return
+	}
+	defer rows.Close()
+
+	type feedPost struct {
+		ID           string    `json:"id"`
+		UserID       string    `json:"user_id"`
+		Content      string    `json:"content"`
+		ImageURL     *string   `json:"image_url"`
+		VideoURL     *string   `json:"video_url"`
+		ThumbnailURL *string   `json:"thumbnail_url"`
+		CreatedAt    time.Time `json:"created_at"`
+		Status       string    `json:"status"`
+	}
+
+	var posts []feedPost
+	for rows.Next() {
+		var p feedPost
+		if err := rows.Scan(&p.ID, &p.UserID, &p.Content, &p.ImageURL, &p.VideoURL,
+			&p.ThumbnailURL, &p.CreatedAt, &p.Status); err != nil {
+			continue
+		}
+		posts = append(posts, p)
+	}
+	c.JSON(http.StatusOK, gin.H{"posts": posts, "limit": limit, "offset": offset})
+}
+
+// ──────────────────────────────────────────────────────────────────────────────
+// E2EE group key management
+// ──────────────────────────────────────────────────────────────────────────────
+
+// GetGroupKeyStatus GET /groups/:id/key-status
+// Returns the current key version, whether rotation is needed, and the caller's
+// encrypted group key (if they have one).
+func (h *GroupsHandler) GetGroupKeyStatus(c *gin.Context) {
+	groupID := c.Param("id")
+	userID, _ := c.Get("user_id")
+
+	var keyVersion int
+	var keyRotationNeeded bool
+	err := h.db.QueryRow(c.Request.Context(),
+		`SELECT key_version, key_rotation_needed FROM groups WHERE id = $1`, groupID,
+	).Scan(&keyVersion, &keyRotationNeeded)
+	if err != nil {
+		c.JSON(http.StatusNotFound, gin.H{"error": "group not found"})
+		return
+	}
+
+	// Fetch this user's encrypted key for the current version
+	var encryptedKey *string
+	h.db.QueryRow(c.Request.Context(),
+		`SELECT encrypted_key FROM group_member_keys
+		 WHERE group_id = $1 AND user_id = $2 AND key_version = $3`,
+		groupID, userID, keyVersion,
+	).Scan(&encryptedKey)
+
+	c.JSON(http.StatusOK, gin.H{
+		"key_version":        keyVersion,
+		"key_rotation_needed": keyRotationNeeded,
+		"my_encrypted_key":   encryptedKey,
+	})
+}
+
+// DistributeGroupKeys POST /groups/:id/keys
+// Called by an admin/owner client after local key rotation to push new
+// encrypted copies to each member.
+// Body: {"keys": [{"user_id": "...", "encrypted_key": "...", "key_version": N}]}
+func (h *GroupsHandler) DistributeGroupKeys(c *gin.Context) {
+	groupID := c.Param("id")
+	callerID, _ := c.Get("user_id")
+
+	// Only owner/admin may distribute keys
+	var role string
+	err := h.db.QueryRow(c.Request.Context(),
+		`SELECT role FROM group_members WHERE group_id = $1 AND user_id = $2`,
+		groupID, callerID,
+	).Scan(&role)
+	if err != nil || (role != "owner" && role != "admin") {
+		c.JSON(http.StatusForbidden, gin.H{"error": "only group owners or admins may rotate keys"})
+		return
+	}
+
+	var req struct {
+		Keys []struct {
+			UserID       string `json:"user_id" binding:"required"`
+			EncryptedKey string `json:"encrypted_key" binding:"required"`
+			KeyVersion   int    `json:"key_version" binding:"required"`
+		} `json:"keys" binding:"required"`
+	}
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+
+	// Determine the new key version (max of submitted versions)
+	newVersion := 0
+	for _, k := range req.Keys {
+		if k.KeyVersion > newVersion {
+			newVersion = k.KeyVersion
+		}
+	}
+
+	for _, k := range req.Keys {
+		h.db.Exec(c.Request.Context(), `
+			INSERT INTO group_member_keys (group_id, user_id, key_version, encrypted_key, updated_at)
+			VALUES ($1, $2, $3, $4, now())
+			ON CONFLICT (group_id, user_id, key_version)
+			DO UPDATE SET encrypted_key = EXCLUDED.encrypted_key, updated_at = now()
+		`, groupID, k.UserID, k.KeyVersion, k.EncryptedKey)
+	}
+
+	// Clear the rotation flag and bump key_version on the group
+	h.db.Exec(c.Request.Context(),
+		`UPDATE groups SET key_rotation_needed = false, key_version = $1 WHERE id = $2`,
+		newVersion, groupID)
+
+	c.JSON(http.StatusOK, gin.H{"message": "keys distributed", "key_version": newVersion})
+}
+
+// GetGroupMemberPublicKeys GET /groups/:id/members/public-keys
+// Returns RSA public keys for all members so a rotating client can encrypt for each.
+func (h *GroupsHandler) GetGroupMemberPublicKeys(c *gin.Context) {
+	groupID := c.Param("id")
+	callerID, _ := c.Get("user_id")
+
+	// Caller must be a member
+	var memberCount int
+	err := h.db.QueryRow(c.Request.Context(),
+		`SELECT COUNT(*) FROM group_members WHERE group_id = $1 AND user_id = $2`,
+		groupID, callerID,
+	).Scan(&memberCount)
+	if err != nil || memberCount == 0 {
+		c.JSON(http.StatusForbidden, gin.H{"error": "not a group member"})
+		return
+	}
+
+	rows, err := h.db.Query(c.Request.Context(), `
+		SELECT gm.user_id, u.public_key
+		FROM group_members gm
+		JOIN users u ON u.id = gm.user_id
+		WHERE gm.group_id = $1 AND u.public_key IS NOT NULL AND u.public_key != ''
+	`, groupID)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to fetch member keys"})
+		return
+	}
+	defer rows.Close()
+
+	type memberKey struct {
+		UserID    string `json:"user_id"`
+		PublicKey string `json:"public_key"`
+	}
+	var keys []memberKey
+	for rows.Next() {
+		var mk memberKey
+		if rows.Scan(&mk.UserID, &mk.PublicKey) == nil {
+			keys = append(keys, mk)
+		}
+	}
+	c.JSON(http.StatusOK, gin.H{"keys": keys})
+}
+
+// ──────────────────────────────────────────────────────────────────────────────
+// Member invite / remove / settings
+// ──────────────────────────────────────────────────────────────────────────────
+
+// InviteMember POST /groups/:id/invite-member
+// Body: {"user_id": "...", "encrypted_key": "..."}
+func (h *GroupsHandler) InviteMember(c *gin.Context) {
+	groupID := c.Param("id")
+	callerID, _ := c.Get("user_id")
+
+	var role string
+	err := h.db.QueryRow(c.Request.Context(),
+		`SELECT role FROM group_members WHERE group_id = $1 AND user_id = $2`,
+		groupID, callerID,
+	).Scan(&role)
+	if err != nil || (role != "owner" && role != "admin") {
+		c.JSON(http.StatusForbidden, gin.H{"error": "only group owners or admins may invite members"})
+		return
+	}
+
+	var req struct {
+		UserID       string `json:"user_id" binding:"required"`
+		EncryptedKey string `json:"encrypted_key"`
+	}
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+
+	// Fetch current key version
+	var keyVersion int
+	h.db.QueryRow(c.Request.Context(),
+		`SELECT key_version FROM groups WHERE id = $1`, groupID,
+	).Scan(&keyVersion)
+
+	// Add member
+	_, err = h.db.Exec(c.Request.Context(), `
+		INSERT INTO group_members (group_id, user_id, role, joined_at)
+		VALUES ($1, $2, 'member', now())
+		ON CONFLICT (group_id, user_id) DO NOTHING
+	`, groupID, req.UserID)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to add member"})
+		return
+	}
+
+	// Store their encrypted key if provided
+	if req.EncryptedKey != "" {
+		h.db.Exec(c.Request.Context(), `
+			INSERT INTO group_member_keys (group_id, user_id, key_version, encrypted_key, updated_at)
+			VALUES ($1, $2, $3, $4, now())
+			ON CONFLICT (group_id, user_id, key_version)
+			DO UPDATE SET encrypted_key = EXCLUDED.encrypted_key, updated_at = now()
+		`, groupID, req.UserID, keyVersion, req.EncryptedKey)
+	}
+
+	c.JSON(http.StatusOK, gin.H{"message": "member invited"})
+}
+
+// RemoveMember DELETE /groups/:id/members/:userId
+func (h *GroupsHandler) RemoveMember(c *gin.Context) {
+	groupID := c.Param("id")
+	targetUserID := c.Param("userId")
+	callerID, _ := c.Get("user_id")
+
+	var role string
+	err := h.db.QueryRow(c.Request.Context(),
+		`SELECT role FROM group_members WHERE group_id = $1 AND user_id = $2`,
+		groupID, callerID,
+	).Scan(&role)
+	if err != nil || (role != "owner" && role != "admin") {
+		c.JSON(http.StatusForbidden, gin.H{"error": "only group owners or admins may remove members"})
+		return
+	}
+
+	_, err = h.db.Exec(c.Request.Context(),
+		`DELETE FROM group_members WHERE group_id = $1 AND user_id = $2`,
+		groupID, targetUserID)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to remove member"})
+		return
+	}
+
+	// Trigger automatic key rotation on next admin open
+	h.db.Exec(c.Request.Context(),
+		`UPDATE groups SET key_rotation_needed = true WHERE id = $1`, groupID)
+
+	c.JSON(http.StatusOK, gin.H{"message": "member removed"})
+}
+
+// UpdateGroupSettings PATCH /groups/:id/settings
+// Body: {"chat_enabled": true, "forum_enabled": false, "vault_enabled": true}
+func (h *GroupsHandler) UpdateGroupSettings(c *gin.Context) {
+	groupID := c.Param("id")
+	callerID, _ := c.Get("user_id")
+
+	var role string
+	err := h.db.QueryRow(c.Request.Context(),
+		`SELECT role FROM group_members WHERE group_id = $1 AND user_id = $2`,
+		groupID, callerID,
+	).Scan(&role)
+	if err != nil || (role != "owner" && role != "admin") {
+		c.JSON(http.StatusForbidden, gin.H{"error": "only group owners or admins may change settings"})
+		return
+	}
+
+	var req struct {
+		ChatEnabled  *bool `json:"chat_enabled"`
+		ForumEnabled *bool `json:"forum_enabled"`
+		VaultEnabled *bool `json:"vault_enabled"`
+	}
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+
+	// Build dynamic UPDATE (only fields provided)
+	setClauses := []string{}
+	args := []interface{}{}
+	argIdx := 1
+
+	if req.ChatEnabled != nil {
+		setClauses = append(setClauses, fmt.Sprintf("chat_enabled = $%d", argIdx))
+		args = append(args, *req.ChatEnabled)
+		argIdx++
+	}
+	if req.ForumEnabled != nil {
+		setClauses = append(setClauses, fmt.Sprintf("forum_enabled = $%d", argIdx))
+		args = append(args, *req.ForumEnabled)
+		argIdx++
+	}
+	if req.VaultEnabled != nil {
+		setClauses = append(setClauses, fmt.Sprintf("vault_enabled = $%d", argIdx))
+		args = append(args, *req.VaultEnabled)
+		argIdx++
+	}
+
+	if len(setClauses) == 0 {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "no settings provided"})
+		return
+	}
+
+	query := fmt.Sprintf(
+		"UPDATE groups SET %s WHERE id = $%d",
+		strings.Join(setClauses, ", "),
+		argIdx,
+	)
+	args = append(args, groupID)
+
+	if _, err := h.db.Exec(c.Request.Context(), query, args...); err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to update settings: " + err.Error()})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{"message": "settings updated"})
+}
+

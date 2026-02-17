@@ -4138,3 +4138,323 @@ func (h *AdminHandler) GetAltchaChallenge(c *gin.Context) {
 
 	c.JSON(http.StatusOK, challenge)
 }
+
+// ──────────────────────────────────────────────────────────────────────────────
+// Groups admin
+// ──────────────────────────────────────────────────────────────────────────────
+
+// AdminListGroups GET /admin/groups?search=&limit=50&offset=0
+func (h *AdminHandler) AdminListGroups(c *gin.Context) {
+	search := c.Query("search")
+	limit, _ := strconv.Atoi(c.DefaultQuery("limit", "50"))
+	offset, _ := strconv.Atoi(c.DefaultQuery("offset", "0"))
+	if limit <= 0 || limit > 200 {
+		limit = 50
+	}
+
+	query := `
+		SELECT g.id, g.name, g.description, g.is_private, g.status,
+		       g.created_at, g.key_version, g.key_rotation_needed,
+		       COUNT(DISTINCT gm.user_id) AS member_count,
+		       COUNT(DISTINCT gp.post_id)  AS post_count
+		FROM groups g
+		LEFT JOIN group_members gm ON gm.group_id = g.id
+		LEFT JOIN group_posts   gp ON gp.group_id = g.id
+	`
+	args := []interface{}{}
+	if search != "" {
+		query += " WHERE g.name ILIKE $1 OR g.description ILIKE $1"
+		args = append(args, "%"+search+"%")
+	}
+	query += fmt.Sprintf(`
+		GROUP BY g.id
+		ORDER BY g.created_at DESC
+		LIMIT $%d OFFSET $%d`, len(args)+1, len(args)+2)
+	args = append(args, limit, offset)
+
+	rows, err := h.pool.Query(c.Request.Context(), query, args...)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+	defer rows.Close()
+
+	type groupRow struct {
+		ID                 string    `json:"id"`
+		Name               string    `json:"name"`
+		Description        string    `json:"description"`
+		IsPrivate          bool      `json:"is_private"`
+		Status             string    `json:"status"`
+		CreatedAt          time.Time `json:"created_at"`
+		KeyVersion         int       `json:"key_version"`
+		KeyRotationNeeded  bool      `json:"key_rotation_needed"`
+		MemberCount        int       `json:"member_count"`
+		PostCount          int       `json:"post_count"`
+	}
+
+	var groups []groupRow
+	for rows.Next() {
+		var g groupRow
+		if err := rows.Scan(&g.ID, &g.Name, &g.Description, &g.IsPrivate, &g.Status,
+			&g.CreatedAt, &g.KeyVersion, &g.KeyRotationNeeded, &g.MemberCount, &g.PostCount); err != nil {
+			continue
+		}
+		groups = append(groups, g)
+	}
+	c.JSON(http.StatusOK, gin.H{"groups": groups, "limit": limit, "offset": offset})
+}
+
+// AdminGetGroup GET /admin/groups/:id
+func (h *AdminHandler) AdminGetGroup(c *gin.Context) {
+	groupID := c.Param("id")
+	row := h.pool.QueryRow(c.Request.Context(), `
+		SELECT g.id, g.name, g.description, g.is_private, g.status, g.created_at,
+		       g.key_version, g.key_rotation_needed,
+		       COUNT(DISTINCT gm.user_id) AS member_count,
+		       COUNT(DISTINCT gp.post_id)  AS post_count
+		FROM groups g
+		LEFT JOIN group_members gm ON gm.group_id = g.id
+		LEFT JOIN group_posts   gp ON gp.group_id = g.id
+		WHERE g.id = $1
+		GROUP BY g.id
+	`, groupID)
+
+	var g struct {
+		ID                string    `json:"id"`
+		Name              string    `json:"name"`
+		Description       string    `json:"description"`
+		IsPrivate         bool      `json:"is_private"`
+		Status            string    `json:"status"`
+		CreatedAt         time.Time `json:"created_at"`
+		KeyVersion        int       `json:"key_version"`
+		KeyRotationNeeded bool      `json:"key_rotation_needed"`
+		MemberCount       int       `json:"member_count"`
+		PostCount         int       `json:"post_count"`
+	}
+	if err := row.Scan(&g.ID, &g.Name, &g.Description, &g.IsPrivate, &g.Status, &g.CreatedAt,
+		&g.KeyVersion, &g.KeyRotationNeeded, &g.MemberCount, &g.PostCount); err != nil {
+		c.JSON(http.StatusNotFound, gin.H{"error": "group not found"})
+		return
+	}
+	c.JSON(http.StatusOK, g)
+}
+
+// AdminDeleteGroup DELETE /admin/groups/:id  (soft delete)
+func (h *AdminHandler) AdminDeleteGroup(c *gin.Context) {
+	groupID := c.Param("id")
+	_, err := h.pool.Exec(c.Request.Context(),
+		`UPDATE groups SET status = 'inactive' WHERE id = $1`, groupID)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"message": "group deactivated"})
+}
+
+// AdminListGroupMembers GET /admin/groups/:id/members
+func (h *AdminHandler) AdminListGroupMembers(c *gin.Context) {
+	groupID := c.Param("id")
+	rows, err := h.pool.Query(c.Request.Context(), `
+		SELECT gm.user_id, u.username, u.display_name, gm.role, gm.joined_at
+		FROM group_members gm
+		JOIN users u ON u.id = gm.user_id
+		WHERE gm.group_id = $1
+		ORDER BY gm.joined_at
+	`, groupID)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+	defer rows.Close()
+
+	type member struct {
+		UserID      string    `json:"user_id"`
+		Username    string    `json:"username"`
+		DisplayName string    `json:"display_name"`
+		Role        string    `json:"role"`
+		JoinedAt    time.Time `json:"joined_at"`
+	}
+	var members []member
+	for rows.Next() {
+		var m member
+		if err := rows.Scan(&m.UserID, &m.Username, &m.DisplayName, &m.Role, &m.JoinedAt); err != nil {
+			continue
+		}
+		members = append(members, m)
+	}
+	c.JSON(http.StatusOK, gin.H{"members": members})
+}
+
+// AdminRemoveGroupMember DELETE /admin/groups/:id/members/:userId
+func (h *AdminHandler) AdminRemoveGroupMember(c *gin.Context) {
+	groupID := c.Param("id")
+	userID := c.Param("userId")
+	_, err := h.pool.Exec(c.Request.Context(),
+		`DELETE FROM group_members WHERE group_id = $1 AND user_id = $2`, groupID, userID)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+	// Flag group for key rotation (client will auto-rotate on next open)
+	h.pool.Exec(c.Request.Context(),
+		`UPDATE groups SET key_rotation_needed = true WHERE id = $1`, groupID)
+	c.JSON(http.StatusOK, gin.H{"message": "member removed"})
+}
+
+// ──────────────────────────────────────────────────────────────────────────────
+// Quip (video post) repair
+// ──────────────────────────────────────────────────────────────────────────────
+
+// GetBrokenQuips GET /admin/quips/broken
+// Returns posts that have a video_url but are missing a thumbnail.
+func (h *AdminHandler) GetBrokenQuips(c *gin.Context) {
+	limit, _ := strconv.Atoi(c.DefaultQuery("limit", "50"))
+	if limit <= 0 || limit > 200 {
+		limit = 50
+	}
+	rows, err := h.pool.Query(c.Request.Context(), `
+		SELECT id, user_id, video_url, created_at
+		FROM posts
+		WHERE video_url IS NOT NULL
+		  AND (thumbnail_url IS NULL OR thumbnail_url = '')
+		  AND status = 'active'
+		ORDER BY created_at DESC
+		LIMIT $1
+	`, limit)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+	defer rows.Close()
+
+	type quip struct {
+		ID        string    `json:"id"`
+		UserID    string    `json:"user_id"`
+		VideoURL  string    `json:"video_url"`
+		CreatedAt time.Time `json:"created_at"`
+	}
+	var quips []quip
+	for rows.Next() {
+		var q quip
+		if err := rows.Scan(&q.ID, &q.UserID, &q.VideoURL, &q.CreatedAt); err != nil {
+			continue
+		}
+		quips = append(quips, q)
+	}
+	c.JSON(http.StatusOK, gin.H{"quips": quips})
+}
+
+// SetPostThumbnail PATCH /admin/posts/:id/thumbnail
+// Body: {"thumbnail_url": "..."}
+func (h *AdminHandler) SetPostThumbnail(c *gin.Context) {
+	postID := c.Param("id")
+	var req struct {
+		ThumbnailURL string `json:"thumbnail_url" binding:"required"`
+	}
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+	_, err := h.pool.Exec(c.Request.Context(),
+		`UPDATE posts SET thumbnail_url = $1 WHERE id = $2`, req.ThumbnailURL, postID)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"message": "thumbnail updated"})
+}
+
+// RepairQuip POST /admin/quips/:id/repair
+// Triggers FFmpeg frame extraction on the server and sets thumbnail_url.
+func (h *AdminHandler) RepairQuip(c *gin.Context) {
+	postID := c.Param("id")
+
+	// Fetch video_url
+	var videoURL string
+	err := h.pool.QueryRow(c.Request.Context(),
+		`SELECT video_url FROM posts WHERE id = $1`, postID).Scan(&videoURL)
+	if err != nil {
+		c.JSON(http.StatusNotFound, gin.H{"error": "post not found"})
+		return
+	}
+	if videoURL == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "post has no video_url"})
+		return
+	}
+
+	vp := services.NewVideoProcessor(h.s3Client, h.videoBucket, h.vidDomain)
+	frames, err := vp.ExtractFrames(c.Request.Context(), videoURL, 3)
+	if err != nil || len(frames) == 0 {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "frame extraction failed: " + func() string {
+			if err != nil {
+				return err.Error()
+			}
+			return "no frames"
+		}()})
+		return
+	}
+
+	thumbnail := frames[0]
+	_, err = h.pool.Exec(c.Request.Context(),
+		`UPDATE posts SET thumbnail_url = $1 WHERE id = $2`, thumbnail, postID)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"thumbnail_url": thumbnail})
+}
+
+// ──────────────────────────────────────────────────────────────────────────────
+// Feed scores viewer
+// ──────────────────────────────────────────────────────────────────────────────
+
+// AdminGetFeedScores GET /admin/feed-scores?limit=50
+func (h *AdminHandler) AdminGetFeedScores(c *gin.Context) {
+	limit, _ := strconv.Atoi(c.DefaultQuery("limit", "50"))
+	if limit <= 0 || limit > 200 {
+		limit = 50
+	}
+	rows, err := h.pool.Query(c.Request.Context(), `
+		SELECT pfs.post_id,
+		       LEFT(p.content, 80)  AS excerpt,
+		       pfs.engagement_score,
+		       pfs.quality_score,
+		       pfs.recency_score,
+		       pfs.network_score,
+		       pfs.personalization,
+		       pfs.score            AS total_score,
+		       pfs.updated_at
+		FROM post_feed_scores pfs
+		JOIN posts p ON p.id = pfs.post_id
+		WHERE p.status = 'active'
+		ORDER BY pfs.score DESC
+		LIMIT $1
+	`, limit)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+	defer rows.Close()
+
+	type scoreRow struct {
+		PostID          string    `json:"post_id"`
+		Excerpt         string    `json:"excerpt"`
+		EngagementScore float64   `json:"engagement_score"`
+		QualityScore    float64   `json:"quality_score"`
+		RecencyScore    float64   `json:"recency_score"`
+		NetworkScore    float64   `json:"network_score"`
+		Personalization float64   `json:"personalization"`
+		TotalScore      float64   `json:"total_score"`
+		UpdatedAt       time.Time `json:"updated_at"`
+	}
+	var scores []scoreRow
+	for rows.Next() {
+		var s scoreRow
+		if err := rows.Scan(&s.PostID, &s.Excerpt, &s.EngagementScore, &s.QualityScore,
+			&s.RecencyScore, &s.NetworkScore, &s.Personalization, &s.TotalScore, &s.UpdatedAt); err != nil {
+			continue
+		}
+		scores = append(scores, s)
+	}
+	c.JSON(http.StatusOK, gin.H{"scores": scores})
+}

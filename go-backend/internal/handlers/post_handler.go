@@ -7,6 +7,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/aws/aws-sdk-go-v2/service/s3"
 	"github.com/gin-gonic/gin"
 	"github.com/google/uuid"
 	"github.com/rs/zerolog/log"
@@ -30,7 +31,7 @@ type PostHandler struct {
 	videoProcessor      *services.VideoProcessor
 }
 
-func NewPostHandler(postRepo *repository.PostRepository, userRepo *repository.UserRepository, feedService *services.FeedService, assetService *services.AssetService, notificationService *services.NotificationService, moderationService *services.ModerationService, contentFilter *services.ContentFilter, openRouterService *services.OpenRouterService, linkPreviewService *services.LinkPreviewService, localAIService *services.LocalAIService) *PostHandler {
+func NewPostHandler(postRepo *repository.PostRepository, userRepo *repository.UserRepository, feedService *services.FeedService, assetService *services.AssetService, notificationService *services.NotificationService, moderationService *services.ModerationService, contentFilter *services.ContentFilter, openRouterService *services.OpenRouterService, linkPreviewService *services.LinkPreviewService, localAIService *services.LocalAIService, s3Client *s3.Client, videoBucket, vidDomain string) *PostHandler {
 	return &PostHandler{
 		postRepo:            postRepo,
 		userRepo:            userRepo,
@@ -42,7 +43,7 @@ func NewPostHandler(postRepo *repository.PostRepository, userRepo *repository.Us
 		openRouterService:   openRouterService,
 		linkPreviewService:  linkPreviewService,
 		localAIService:      localAIService,
-		videoProcessor:      services.NewVideoProcessor(),
+		videoProcessor:      services.NewVideoProcessor(s3Client, videoBucket, vidDomain),
 	}
 }
 

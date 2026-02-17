@@ -609,6 +609,60 @@ func (h *UserHandler) GetCircleMembers(c *gin.Context) {
 // Data Export (Portability)
 // ========================================================================
 
+// ========================================================================
+// Block list bulk import
+// ========================================================================
+
+// BulkBlockUsers POST /users/me/blocks/bulk
+// Body: {"handles": ["alice", "bob", ...]}
+// Blocks each handle, auto-unfollows both ways.
+func (h *UserHandler) BulkBlockUsers(c *gin.Context) {
+	actorID, _ := c.Get("user_id")
+	actorIP := c.ClientIP()
+
+	var req struct {
+		Handles []string `json:"handles" binding:"required"`
+	}
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+	if len(req.Handles) > 500 {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "maximum 500 handles per request"})
+		return
+	}
+
+	var blocked int
+	var notFound []string
+	var alreadyBlocked []string
+
+	for _, handle := range req.Handles {
+		handle = strings.TrimSpace(strings.TrimPrefix(handle, "@"))
+		if handle == "" {
+			continue
+		}
+		err := h.repo.BlockUserByHandle(c.Request.Context(), actorID.(string), handle, actorIP)
+		if err != nil {
+			msg := err.Error()
+			if strings.Contains(msg, "not found") {
+				notFound = append(notFound, handle)
+			} else if strings.Contains(msg, "conflict") || strings.Contains(msg, "duplicate") {
+				alreadyBlocked = append(alreadyBlocked, handle)
+			} else {
+				log.Warn().Err(err).Str("handle", handle).Msg("bulk block: unexpected error")
+			}
+			continue
+		}
+		blocked++
+	}
+
+	c.JSON(http.StatusOK, gin.H{
+		"blocked":        blocked,
+		"not_found":      notFound,
+		"already_blocked": alreadyBlocked,
+	})
+}
+
 // ExportData streams user data as JSON for portability/GDPR compliance
 func (h *UserHandler) ExportData(c *gin.Context) {
 	userID, _ := c.Get("user_id")
