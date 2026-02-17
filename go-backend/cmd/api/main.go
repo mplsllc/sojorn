@@ -262,13 +262,13 @@ func main() {
 		}
 
 		// Test endpoint to verify routing
-		r.GET("/api/v1/test", func(c *gin.Context) {
+		v1.GET("/test", func(c *gin.Context) {
 			c.JSON(200, gin.H{"message": "Route test successful"})
 		})
 
-		// ALTCHA challenge endpoint (no rate limiting)
+		// ALTCHA challenge endpoints (no rate limiting)
 		v1.GET("/auth/altcha-challenge", authHandler.GetAltchaChallenge)
-		r.GET("/api/v1/admin/altcha-challenge", adminHandler.GetAltchaChallenge)
+		v1.GET("/admin/altcha-challenge", adminHandler.GetAltchaChallenge)
 
 		authorized := v1.Group("")
 		authorized.Use(middleware.AuthMiddleware(cfg.JWTSecret, dbPool))
