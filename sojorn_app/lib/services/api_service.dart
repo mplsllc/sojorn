@@ -1547,4 +1547,47 @@ class ApiService {
       },
     );
   }
+
+  // Follow System
+  // =========================================================================
+
+  /// Follow a user
+  Future<void> followUser(String targetUserId) async {
+    await _callGoApi('/users/$targetUserId/follow', method: 'POST');
+  }
+
+  /// Unfollow a user
+  Future<void> unfollowUser(String targetUserId) async {
+    await _callGoApi('/users/$targetUserId/unfollow', method: 'POST');
+  }
+
+  /// Check if current user follows target user
+  Future<bool> isFollowing(String targetUserId) async {
+    final data = await _callGoApi('/users/$targetUserId/is-following', method: 'GET');
+    return data['is_following'] as bool? ?? false;
+  }
+
+  /// Get mutual followers between current user and target user
+  Future<List<Map<String, dynamic>>> getMutualFollowers(String targetUserId) async {
+    final data = await _callGoApi('/users/$targetUserId/mutual-followers', method: 'GET');
+    return (data['mutual_followers'] as List?)?.cast<Map<String, dynamic>>() ?? [];
+  }
+
+  /// Get suggested users to follow
+  Future<List<Map<String, dynamic>>> getSuggestedUsers({int limit = 10}) async {
+    final data = await _callGoApi('/users/suggested', method: 'GET', queryParams: {'limit': '$limit'});
+    return (data['suggestions'] as List?)?.cast<Map<String, dynamic>>() ?? [];
+  }
+
+  /// Get list of followers for a user
+  Future<List<Map<String, dynamic>>> getFollowers(String userId) async {
+    final data = await _callGoApi('/users/$userId/followers', method: 'GET');
+    return (data['followers'] as List?)?.cast<Map<String, dynamic>>() ?? [];
+  }
+
+  /// Get list of users that a user follows
+  Future<List<Map<String, dynamic>>> getFollowing(String userId) async {
+    final data = await _callGoApi('/users/$userId/following', method: 'GET');
+    return (data['following'] as List?)?.cast<Map<String, dynamic>>() ?? [];
+  }
 }

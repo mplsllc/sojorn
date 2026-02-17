@@ -1,0 +1,150 @@
+import 'package:flutter/material.dart';
+import '../services/api_service.dart';
+import '../theme/app_theme.dart';
+
+/// Follow/Unfollow button with loading state and animations
+class FollowButton extends StatefulWidget {
+  final String targetUserId;
+  final bool initialIsFollowing;
+  final Function(bool)? onFollowChanged;
+  final bool compact;
+
+  const FollowButton({
+    super.key,
+    required this.targetUserId,
+    this.initialIsFollowing = false,
+    this.onFollowChanged,
+    this.compact = false,
+  });
+
+  @override
+  State<FollowButton> createState() => _FollowButtonState();
+}
+
+class _FollowButtonState extends State<FollowButton> {
+  late bool _isFollowing;
+  bool _isLoading = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _isFollowing = widget.initialIsFollowing;
+  }
+
+  @override
+  void didUpdateWidget(FollowButton oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.initialIsFollowing != widget.initialIsFollowing) {
+      setState(() => _isFollowing = widget.initialIsFollowing);
+    }
+  }
+
+  Future<void> _toggleFollow() async {
+    if (_isLoading) return;
+
+    setState(() => _isLoading = true);
+
+    try {
+      final api = ApiService();
+      if (_isFollowing) {
+        await api.unfollowUser(widget.targetUserId);
+      } else {
+        await api.followUser(widget.targetUserId);
+      }
+
+      setState(() => _isFollowing = !_isFollowing);
+      widget.onFollowChanged?.call(_isFollowing);
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Failed to ${_isFollowing ? 'unfollow' : 'follow'}. Try again.'),
+            backgroundColor: Colors.red,
+            duration: const Duration(seconds: 2),
+          ),
+        );
+      }
+    } finally {
+      if (mounted) {
+        setState(() => _isLoading = false);
+      }
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return AnimatedContainer(
+      duration: const Duration(milliseconds: 200),
+      child: widget.compact ? _buildCompactButton() : _buildFullButton(),
+    );
+  }
+
+  Widget _buildFullButton() {
+    return SizedBox(
+      height: 44,
+      child: ElevatedButton(
+        onPressed: _isLoading ? null : _toggleFollow,
+        style: ElevatedButton.styleFrom(
+          backgroundColor: _isFollowing ? AppTheme.cardSurface : AppTheme.navyBlue,
+          foregroundColor: _isFollowing ? AppTheme.navyBlue : Colors.white,
+          padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(22)),
+          elevation: 0,
+          side: _isFollowing
+              ? BorderSide(color: AppTheme.navyBlue.withValues(alpha: 0.2))
+              : null,
+        ),
+        child: _isLoading
+            ? SizedBox(
+                width: 16,
+                height: 16,
+                child: CircularProgressIndicator(
+                  strokeWidth: 2,
+                  valueColor: AlwaysStoppedAnimation(
+                    _isFollowing ? AppTheme.navyBlue : Colors.white,
+                  ),
+                ),
+              )
+            : Text(
+                _isFollowing ? 'Following' : 'Follow',
+                style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w600),
+              ),
+      ),
+    );
+  }
+
+  Widget _buildCompactButton() {
+    return SizedBox(
+      height: 32,
+      child: ElevatedButton(
+        onPressed: _isLoading ? null : _toggleFollow,
+        style: ElevatedButton.styleFrom(
+          backgroundColor: _isFollowing ? AppTheme.cardSurface : AppTheme.navyBlue,
+          foregroundColor: _isFollowing ? AppTheme.navyBlue : Colors.white,
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+          elevation: 0,
+          side: _isFollowing
+              ? BorderSide(color: AppTheme.navyBlue.withValues(alpha: 0.2))
+              : null,
+          minimumSize: const Size(80, 32),
+        ),
+        child: _isLoading
+            ? SizedBox(
+                width: 14,
+                height: 14,
+                child: CircularProgressIndicator(
+                  strokeWidth: 2,
+                  valueColor: AlwaysStoppedAnimation(
+                    _isFollowing ? AppTheme.navyBlue : Colors.white,
+                  ),
+                ),
+              )
+            : Text(
+                _isFollowing ? 'Following' : 'Follow',
+                style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600),
+              ),
+      ),
+    );
+  }
+}

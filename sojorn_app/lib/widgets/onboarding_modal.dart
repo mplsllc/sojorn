@@ -176,12 +176,12 @@ class _WelcomePage extends StatelessWidget {
             child: const Icon(Icons.shield_outlined, color: Colors.white, size: 40),
           ),
           const SizedBox(height: 28),
-          Text('Welcome to Your Sanctuary', style: TextStyle(
+          Text('Welcome to Sojorn!', style: TextStyle(
             fontSize: 22, fontWeight: FontWeight.w800, color: AppTheme.navyBlue,
           ), textAlign: TextAlign.center),
           const SizedBox(height: 14),
           Text(
-            'A private, intentional social space.\nYour posts are encrypted. Your data belongs to you.',
+            'Let\'s learn about all the features available to you.',
             style: TextStyle(
               fontSize: 14, color: SojornColors.postContentLight, height: 1.5,
             ),
