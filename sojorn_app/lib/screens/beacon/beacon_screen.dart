@@ -12,7 +12,7 @@ import '../../models/beacon.dart';
 import '../../models/cluster.dart';
 import '../../models/board_entry.dart';
 import '../../models/local_intel.dart';
-import '../../models/group.dart';
+import '../../models/group.dart' as group_models;
 import '../../services/api_service.dart';
 import '../../services/auth_service.dart';
 import '../../services/local_intel_service.dart';
@@ -2408,19 +2408,19 @@ class _PulsingLocationIndicatorState extends State<_PulsingLocationIndicator>
 }
 
 // ─── Create Group inline form ─────────────────────────────────────────
-class _CreateGroupInline extends StatefulWidget {
+class _CreateGroupInline extends ConsumerStatefulWidget {
   final VoidCallback onCreated;
   const _CreateGroupInline({required this.onCreated});
 
   @override
-  State<_CreateGroupInline> createState() => _CreateGroupInlineState();
+  ConsumerState<_CreateGroupInline> createState() => _CreateGroupInlineState();
 }
 
-class _CreateGroupInlineState extends State<_CreateGroupInline> {
+class _CreateGroupInlineState extends ConsumerState<_CreateGroupInline> {
   final _nameCtrl = TextEditingController();
   final _descCtrl = TextEditingController();
   bool _privacy = false;
-  GroupCategory _category = GroupCategory.general;
+  group_models.GroupCategory _category = group_models.GroupCategory.general;
   bool _submitting = false;
 
   @override
@@ -2434,7 +2434,7 @@ class _CreateGroupInlineState extends State<_CreateGroupInline> {
       await api.createGroup(
         name: _nameCtrl.text.trim(),
         description: _descCtrl.text.trim(),
-        category: GroupCategory.fromString(_category.value),
+        category: _category,
         isPrivate: _privacy,
       );
       widget.onCreated();
@@ -2494,12 +2494,12 @@ class _CreateGroupInlineState extends State<_CreateGroupInline> {
           Row(children: [
             Text('Visibility:', style: TextStyle(fontSize: 13, color: SojornColors.basicBlack.withValues(alpha: 0.6))),
             const SizedBox(width: 12),
-            ChoiceChip(label: const Text('Public'), selected: _privacy == 'public',
-              onSelected: (_) => setState(() => _privacy = 'public'),
+            ChoiceChip(label: const Text('Public'), selected: !_privacy,
+              onSelected: (_) => setState(() => _privacy = false),
               selectedColor: AppTheme.brightNavy.withValues(alpha: 0.15)),
             const SizedBox(width: 8),
-            ChoiceChip(label: const Text('Private'), selected: _privacy == 'private',
-              onSelected: (_) => setState(() => _privacy = 'private'),
+            ChoiceChip(label: const Text('Private'), selected: _privacy,
+              onSelected: (_) => setState(() => _privacy = true),
               selectedColor: AppTheme.brightNavy.withValues(alpha: 0.15)),
           ]),
           const SizedBox(height: 14),
@@ -2508,24 +2508,17 @@ class _CreateGroupInlineState extends State<_CreateGroupInline> {
           Wrap(
             spacing: 6,
             runSpacing: 6,
-            children: GroupCategory.values.map((cat) => ChoiceChip(
-              label: Row(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Icon(cat.icon, size: 14, color: _category == cat ? SojornColors.basicWhite : cat.color),
-                  const SizedBox(width: 4),
-                  Text(cat.displayName),
-                ],
-              ),
+            children: group_models.GroupCategory.values.map((cat) => ChoiceChip(
+              label: Text(cat.displayName),
               selected: _category == cat,
               onSelected: (_) => setState(() => _category = cat),
-              selectedColor: cat.color,
+              selectedColor: AppTheme.navyBlue,
               labelStyle: TextStyle(
                 fontSize: 12, fontWeight: FontWeight.w600,
-                color: _category == cat ? SojornColors.basicWhite : cat.color,
+                color: _category == cat ? Colors.white : Colors.black87,
               ),
-              backgroundColor: cat.color.withValues(alpha: 0.08),
-              side: BorderSide(color: cat.color.withValues(alpha: 0.2)),
+              backgroundColor: AppTheme.navyBlue.withValues(alpha: 0.08),
+              side: BorderSide(color: AppTheme.navyBlue.withValues(alpha: 0.2)),
               shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
               showCheckmark: false,
               visualDensity: VisualDensity.compact,

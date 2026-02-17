@@ -395,7 +395,7 @@ class CompactGroupCard extends StatelessWidget {
                 ),
               ],
             ),
-            if (widget.showReason && widget.reason != null) ...[
+            if (showReason && reason != null) ...[
               const SizedBox(height: 6),
               Container(
                 padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
@@ -404,7 +404,7 @@ class CompactGroupCard extends StatelessWidget {
                   borderRadius: BorderRadius.circular(6),
                 ),
                 child: Text(
-                  widget.reason!,
+                  reason!,
                   style: TextStyle(
                     fontSize: 9,
                     color: Colors.blue[700],

@@ -730,15 +730,15 @@ class _CapsuleCard extends StatelessWidget {
 }
 
 // ── Create Group Form (non-encrypted, public/private) ─────────────────
-class _CreateGroupForm extends StatefulWidget {
+class _CreateGroupForm extends ConsumerStatefulWidget {
   final VoidCallback onCreated;
   const _CreateGroupForm({required this.onCreated});
 
   @override
-  State<_CreateGroupForm> createState() => _CreateGroupFormState();
+  ConsumerState<_CreateGroupForm> createState() => _CreateGroupFormState();
 }
 
-class _CreateGroupFormState extends State<_CreateGroupForm> {
+class _CreateGroupFormState extends ConsumerState<_CreateGroupForm> {
   final _nameCtrl = TextEditingController();
   final _descCtrl = TextEditingController();
   bool _privacy = false;
@@ -813,15 +813,15 @@ class _CreateGroupFormState extends State<_CreateGroupForm> {
               const SizedBox(width: 12),
               ChoiceChip(
                 label: const Text('Public'),
-                selected: _privacy == 'public',
-                onSelected: (_) => setState(() => _privacy = 'public'),
+                selected: !_privacy,
+                onSelected: (_) => setState(() => _privacy = false),
                 selectedColor: AppTheme.brightNavy.withValues(alpha: 0.15),
               ),
               const SizedBox(width: 8),
               ChoiceChip(
                 label: const Text('Private'),
-                selected: _privacy == 'private',
-                onSelected: (_) => setState(() => _privacy = 'private'),
+                selected: _privacy,
+                onSelected: (_) => setState(() => _privacy = true),
                 selectedColor: AppTheme.brightNavy.withValues(alpha: 0.15),
               ),
             ],
