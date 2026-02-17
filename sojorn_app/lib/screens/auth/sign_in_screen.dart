@@ -34,12 +34,6 @@ class _SignInScreenState extends ConsumerState<SignInScreen> {
   String? _storedPassword;
   String? _altchaToken;
 
-  // Turnstile site key from environment or default production key
-  static const String _turnstileSiteKey = String.fromEnvironment(
-    'TURNSTILE_SITE_KEY',
-    defaultValue: '0x4AAAAAACYFlz_g513d6xAf', // Cloudflare production key
-  );
-
   static const _savedEmailKey = 'saved_login_email';
   static const _savedPasswordKey = 'saved_login_password';
 

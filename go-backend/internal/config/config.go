@@ -35,7 +35,6 @@ type Config struct {
 	R2SecretKey             string
 	R2MediaBucket           string
 	R2VideoBucket           string
-	TurnstileSecretKey      string
 	APIBaseURL              string
 	AppBaseURL              string
 	OpenRouterAPIKey        string
@@ -85,7 +84,6 @@ func LoadConfig() *Config {
 		R2SecretKey:             getEnv("R2_SECRET_KEY", ""),
 		R2MediaBucket:           getEnv("R2_MEDIA_BUCKET", "sojorn-media"),
 		R2VideoBucket:           getEnv("R2_VIDEO_BUCKET", "sojorn-videos"),
-		TurnstileSecretKey:      getEnv("TURNSTILE_SECRET", ""),
 		APIBaseURL:              getEnv("API_BASE_URL", "https://api.sojorn.net"),
 		AppBaseURL:              getEnv("APP_BASE_URL", "https://mp.ls"),
 		OpenRouterAPIKey:        getEnv("OPENROUTER_API", ""),

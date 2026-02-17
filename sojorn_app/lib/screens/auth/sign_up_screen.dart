@@ -39,12 +39,6 @@ class _SignUpScreenState extends ConsumerState<SignUpScreen> {
   int? _birthMonth;
   int? _birthYear;
 
-  // Turnstile site key from environment or default production key
-  static const String _turnstileSiteKey = String.fromEnvironment(
-    'TURNSTILE_SITE_KEY',
-    defaultValue: '0x4AAAAAACYFlz_g513d6xAf', // Cloudflare production key
-  );
-
   @override
   void dispose() {
     _emailController.dispose();
@@ -433,7 +427,7 @@ class _SignUpScreenState extends ConsumerState<SignUpScreen> {
                     ),
                     const SizedBox(height: AppTheme.spacingLg),
 
-                    // Turnstile CAPTCHA
+                    // ALTCHA verification
                     Container(
                       decoration: BoxDecoration(
                         border: Border.all(

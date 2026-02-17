@@ -16,14 +16,14 @@ import (
 	"github.com/gin-contrib/cors"
 	"github.com/gin-gonic/gin"
 	"github.com/jackc/pgx/v5/pgxpool"
+	"github.com/rs/zerolog"
+	"github.com/rs/zerolog/log"
 	"gitlab.com/patrickbritton3/sojorn/go-backend/internal/config"
 	"gitlab.com/patrickbritton3/sojorn/go-backend/internal/handlers"
 	"gitlab.com/patrickbritton3/sojorn/go-backend/internal/middleware"
 	"gitlab.com/patrickbritton3/sojorn/go-backend/internal/realtime"
 	"gitlab.com/patrickbritton3/sojorn/go-backend/internal/repository"
 	"gitlab.com/patrickbritton3/sojorn/go-backend/internal/services"
-	"github.com/rs/zerolog"
-	"github.com/rs/zerolog/log"
 )
 
 func main() {
@@ -186,7 +186,7 @@ func main() {
 
 	moderationHandler := handlers.NewModerationHandler(moderationService, openRouterService, localAIService)
 
-	adminHandler := handlers.NewAdminHandler(dbPool, moderationService, appealService, emailService, openRouterService, azureOpenAIService, officialAccountsService, linkPreviewService, localAIService, cfg.JWTSecret, cfg.TurnstileSecretKey, s3Client, cfg.R2MediaBucket, cfg.R2VideoBucket, cfg.R2ImgDomain, cfg.R2VidDomain)
+	adminHandler := handlers.NewAdminHandler(dbPool, moderationService, appealService, emailService, openRouterService, azureOpenAIService, officialAccountsService, linkPreviewService, localAIService, cfg.JWTSecret, s3Client, cfg.R2MediaBucket, cfg.R2VideoBucket, cfg.R2ImgDomain, cfg.R2VidDomain)
 
 	accountHandler := handlers.NewAccountHandler(userRepo, emailService, cfg)
 

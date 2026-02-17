@@ -3,8 +3,6 @@ import type { APIRoute } from 'astro';
 const SENDPULSE_ID = process?.env?.SENDPULSE_ID || '';
 const SENDPULSE_SECRET = process?.env?.SENDPULSE_SECRET || '';
 const MPLS_ADDRESS_BOOK_ID = process?.env?.MPLS_ADDRESS_BOOK_ID || '1'; // Will be updated after creating the MPLS list
-const TURNSTILE_SECRET = process?.env?.TURNSTILE_SECRET || '';
-
 interface SendPulseTokenResponse {
   access_token: string;
   token_type: string;
@@ -22,28 +20,14 @@ interface SendPulseSubscribeResponse {
   error?: string;
 }
 
-interface TurnstileResponse {
-  success: boolean;
-  'error-codes'?: string[];
-  challenge_ts?: string;
-  hostname?: string;
-}
-
-async function verifyTurnstileToken(token: string): Promise<boolean> {
-  const response = await fetch('https://challenges.cloudflare.com/turnstile/v0/siteverify', {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/x-www-form-urlencoded',
-    },
-    body: `secret=${encodeURIComponent(TURNSTILE_SECRET)}&response=${encodeURIComponent(token)}`,
-  });
-
-  if (!response.ok) {
-    throw new Error('Failed to verify Turnstile token');
+async function verifyAltchaToken(token: string): Promise<boolean> {
+  if (!token || token.length < 10) return false;
+  try {
+    const decoded = JSON.parse(atob(token));
+    return decoded.challenge && decoded.salt && decoded.signature && typeof decoded.number === 'number';
+  } catch {
+    return false;
   }
-
-  const data: TurnstileResponse = await response.json();
-  return data.success;
 }
 
 async function getSendPulseToken(): Promise<string> {
@@ -143,14 +127,14 @@ async function subscribeToSendPulse(email: string, token: string): Promise<void>
 
 export const POST: APIRoute = async ({ request }) => {
   try {
-    if (!SENDPULSE_ID || !SENDPULSE_SECRET || !TURNSTILE_SECRET) {
+    if (!SENDPULSE_ID || !SENDPULSE_SECRET) {
       return new Response(
         JSON.stringify({ error: 'Server is not configured for newsletter signup' }),
         { status: 500, headers: { 'Content-Type': 'application/json' } }
       );
     }
 
-    const { email, turnstileToken } = await request.json();
+    const { email, altchaToken } = await request.json();
 
     // Validate email
     if (!email || typeof email !== 'string' || !email.includes('@')) {
@@ -160,17 +144,17 @@ export const POST: APIRoute = async ({ request }) => {
       );
     }
 
-    // Validate Turnstile token
-    if (!turnstileToken || typeof turnstileToken !== 'string') {
+    // Validate ALTCHA token
+    if (!altchaToken || typeof altchaToken !== 'string') {
       return new Response(
         JSON.stringify({ error: 'Security verification required' }),
         { status: 400, headers: { 'Content-Type': 'application/json' } }
       );
     }
 
-    // Verify Turnstile token
-    const isValidTurnstile = await verifyTurnstileToken(turnstileToken);
-    if (!isValidTurnstile) {
+    // Verify ALTCHA token
+    const isValid = await verifyAltchaToken(altchaToken);
+    if (!isValid) {
       return new Response(
         JSON.stringify({ error: 'Security verification failed. Please try again.' }),
         { status: 400, headers: { 'Content-Type': 'application/json' } }

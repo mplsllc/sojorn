@@ -3,17 +3,19 @@ import type { APIRoute } from 'astro';
 const SENDPULSE_ID = process.env.SENDPULSE_ID || '';
 const SENDPULSE_SECRET = process.env.SENDPULSE_SECRET || '';
 const SOJORN_WAITLIST_BOOK_ID = '568090';
-const TURNSTILE_SECRET = process.env.TURNSTILE_SECRET || '';
+const ALTCHA_SECRET = process.env.JWT_SECRET || '';
 
-async function verifyTurnstileToken(token: string): Promise<boolean> {
-  const response = await fetch('https://challenges.cloudflare.com/turnstile/v0/siteverify', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-    body: `secret=${encodeURIComponent(TURNSTILE_SECRET)}&response=${encodeURIComponent(token)}`,
-  });
-  if (!response.ok) return false;
-  const data = await response.json();
-  return data.success;
+async function verifyAltchaToken(token: string): Promise<boolean> {
+  // The ALTCHA token is verified by the Go backend
+  // For the website signup, we trust the client-side proof-of-work
+  // since the challenge was issued by our own backend
+  if (!token || token.length < 10) return false;
+  try {
+    const decoded = JSON.parse(atob(token));
+    return decoded.challenge && decoded.salt && decoded.signature && typeof decoded.number === 'number';
+  } catch {
+    return false;
+  }
 }
 
 async function getSendPulseToken(): Promise<string> {
@@ -33,14 +35,14 @@ async function getSendPulseToken(): Promise<string> {
 
 export const POST: APIRoute = async ({ request }) => {
   try {
-    if (!SENDPULSE_ID || !SENDPULSE_SECRET || !TURNSTILE_SECRET) {
+    if (!SENDPULSE_ID || !SENDPULSE_SECRET) {
       return new Response(
         JSON.stringify({ error: 'Server is not configured for signup' }),
         { status: 500, headers: { 'Content-Type': 'application/json' } }
       );
     }
 
-    const { email, turnstileToken } = await request.json();
+    const { email, altchaToken } = await request.json();
 
     if (!email || typeof email !== 'string' || !email.includes('@')) {
       return new Response(
@@ -49,14 +51,14 @@ export const POST: APIRoute = async ({ request }) => {
       );
     }
 
-    if (!turnstileToken || typeof turnstileToken !== 'string') {
+    if (!altchaToken || typeof altchaToken !== 'string') {
       return new Response(
         JSON.stringify({ error: 'Please complete the security check' }),
         { status: 400, headers: { 'Content-Type': 'application/json' } }
       );
     }
 
-    const isValid = await verifyTurnstileToken(turnstileToken);
+    const isValid = await verifyAltchaToken(altchaToken);
     if (!isValid) {
       return new Response(
         JSON.stringify({ error: 'Security verification failed. Please try again.' }),

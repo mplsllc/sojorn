@@ -18,8 +18,8 @@ import (
 	"github.com/golang-jwt/jwt/v5"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgxpool"
-	"gitlab.com/patrickbritton3/sojorn/go-backend/internal/services"
 	"github.com/rs/zerolog/log"
+	"gitlab.com/patrickbritton3/sojorn/go-backend/internal/services"
 	"golang.org/x/crypto/bcrypt"
 )
 
@@ -34,7 +34,6 @@ type AdminHandler struct {
 	linkPreviewService      *services.LinkPreviewService
 	localAIService          *services.LocalAIService
 	jwtSecret               string
-	turnstileSecret         string
 	s3Client                *s3.Client
 	mediaBucket             string
 	videoBucket             string
@@ -42,7 +41,7 @@ type AdminHandler struct {
 	vidDomain               string
 }
 
-func NewAdminHandler(pool *pgxpool.Pool, moderationService *services.ModerationService, appealService *services.AppealService, emailService *services.EmailService, openRouterService *services.OpenRouterService, azureOpenAIService *services.AzureOpenAIService, officialAccountsService *services.OfficialAccountsService, linkPreviewService *services.LinkPreviewService, localAIService *services.LocalAIService, jwtSecret string, turnstileSecret string, s3Client *s3.Client, mediaBucket string, videoBucket string, imgDomain string, vidDomain string) *AdminHandler {
+func NewAdminHandler(pool *pgxpool.Pool, moderationService *services.ModerationService, appealService *services.AppealService, emailService *services.EmailService, openRouterService *services.OpenRouterService, azureOpenAIService *services.AzureOpenAIService, officialAccountsService *services.OfficialAccountsService, linkPreviewService *services.LinkPreviewService, localAIService *services.LocalAIService, jwtSecret string, s3Client *s3.Client, mediaBucket string, videoBucket string, imgDomain string, vidDomain string) *AdminHandler {
 	return &AdminHandler{
 		pool:                    pool,
 		moderationService:       moderationService,
@@ -54,7 +53,6 @@ func NewAdminHandler(pool *pgxpool.Pool, moderationService *services.ModerationS
 		linkPreviewService:      linkPreviewService,
 		localAIService:          localAIService,
 		jwtSecret:               jwtSecret,
-		turnstileSecret:         turnstileSecret,
 		s3Client:                s3Client,
 		mediaBucket:             mediaBucket,
 		videoBucket:             videoBucket,
