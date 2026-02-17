@@ -24,6 +24,7 @@ import '../../services/secure_chat_service.dart';
 import '../post/post_detail_screen.dart';
 import 'profile_settings_screen.dart';
 import 'followers_following_screen.dart';
+import '../../widgets/harmony_explainer_modal.dart';
 
 /// Unified profile screen - handles both own profile and viewing others.
 ///
@@ -1275,7 +1276,9 @@ class _UnifiedProfileScreenState extends ConsumerState<UnifiedProfileScreen>
   }
 
   Widget _buildTrustInfo(TrustState trustState) {
-    return Container(
+    return GestureDetector(
+      onTap: () => HarmonyExplainerModal.show(context, trustState),
+      child: Container(
       padding: const EdgeInsets.all(AppTheme.spacingMd),
       decoration: BoxDecoration(
         color: AppTheme.cardSurface,
@@ -1332,6 +1335,7 @@ class _UnifiedProfileScreenState extends ConsumerState<UnifiedProfileScreen>
           ),
         ],
       ),
+    ),
     );
   }
 
