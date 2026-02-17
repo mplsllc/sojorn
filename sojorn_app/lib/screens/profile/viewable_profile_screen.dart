@@ -25,6 +25,7 @@ import '../post/post_detail_screen.dart';
 import 'profile_settings_screen.dart';
 import 'followers_following_screen.dart';
 import '../../widgets/harmony_explainer_modal.dart';
+import '../../widgets/follow_button.dart';
 
 /// Unified profile screen - handles both own profile and viewing others.
 ///
@@ -70,6 +71,8 @@ class _UnifiedProfileScreenState extends ConsumerState<UnifiedProfileScreen>
   bool _isCreatingProfile = false;
   ProfilePrivacySettings? _privacySettings;
   bool _isPrivacyLoading = false;
+  List<Map<String, dynamic>> _mutualFollowers = [];
+  bool _isMutualFollowersLoading = false;
 
   /// True when no handle was provided (bottom-nav profile tab)
   bool get _isOwnProfileMode => widget.handle == null;

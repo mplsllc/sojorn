@@ -1360,14 +1360,30 @@ class ApiService {
   // Notifications & Feed (Missing Methods)
   // =========================================================================
 
-  Future<List<Post>> getPersonalFeed({int limit = 20, int offset = 0}) async {
-    final data = await callGoApi(
-      '/feed',
+  Future<List<Post>> getPersonalFeed({
+    int limit = 20,
+    int offset = 0,
+    String? filterType,
+  }) async {
+    final queryParams = {
+      'limit': '$limit',
+      'offset': '$offset',
+    };
+    if (filterType != null) {
+      queryParams['type'] = filterType;
+    }
+    
+    final data = await _callGoApi(
+      '/feed/personal',
       method: 'GET',
-      queryParams: {'limit': '$limit', 'offset': '$offset'},
+      queryParams: queryParams,
     );
-    final posts = data['posts'] as List? ?? [];
-    return posts.map((p) => Post.fromJson(p)).toList();
+    if (data['posts'] != null) {
+      return (data['posts'] as List)
+          .map((json) => Post.fromJson(json))
+          .toList();
+    }
+    return [];
   }
 
   Future<List<Post>> getSojornFeed({int limit = 20, int offset = 0}) async {

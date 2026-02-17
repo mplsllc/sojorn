@@ -7,6 +7,7 @@ import '../../models/feed_filter.dart';
 import '../../theme/app_theme.dart';
 import '../../widgets/sojorn_post_card.dart';
 import '../../widgets/app_scaffold.dart';
+import '../../widgets/feed_filter_button.dart';
 import '../compose/compose_screen.dart';
 import '../post/post_detail_screen.dart';
 import '../../widgets/first_use_hint.dart';
@@ -54,6 +55,7 @@ class _FeedPersonalScreenState extends ConsumerState<FeedPersonalScreen> {
       final posts = await apiService.getPersonalFeed(
         limit: 50,
         offset: refresh ? 0 : _posts.length,
+        filterType: _currentFilter.typeValue,
       );
 
       _setStateIfMounted(() {
@@ -93,6 +95,11 @@ class _FeedPersonalScreenState extends ConsumerState<FeedPersonalScreen> {
     FocusManager.instance.primaryFocus?.unfocus();
   }
 
+  void _onFilterChanged(FeedFilter filter) {
+    setState(() => _currentFilter = filter);
+    _loadPosts(refresh: true);
+  }
+
   @override
   Widget build(BuildContext context) {
     ref.listen<int>(feedRefreshProvider, (_, __) {
@@ -102,6 +109,12 @@ class _FeedPersonalScreenState extends ConsumerState<FeedPersonalScreen> {
     return AppScaffold(
       title: '',
       showAppBar: false,
+      actions: [
+        FeedFilterButton(
+          currentFilter: _currentFilter,
+          onFilterChanged: _onFilterChanged,
+        ),
+      ],
       body: _error != null
           ? _ErrorState(
               message: _error!,
