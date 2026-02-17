@@ -204,6 +204,148 @@ func (h *CapsuleHandler) ListPublicClusters(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{"clusters": clusters})
 }
 
+// ── Discover Groups (browse all public, non-encrypted groups) ────────────
+
+// DiscoverGroups returns public groups the user can join, optionally filtered by category
+func (h *CapsuleHandler) DiscoverGroups(c *gin.Context) {
+	userIDStr, _ := c.Get("user_id")
+	userID, err := uuid.Parse(userIDStr.(string))
+	if err != nil {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "unauthorized"})
+		return
+	}
+
+	category := c.Query("category") // optional filter
+	limitStr := c.DefaultQuery("limit", "50")
+	limit, _ := strconv.Atoi(limitStr)
+	if limit <= 0 || limit > 100 {
+		limit = 50
+	}
+
+	query := `
+		SELECT g.id, g.name, g.description, g.type, g.privacy,
+		       COALESCE(g.avatar_url, '') AS avatar_url,
+		       g.member_count, g.is_encrypted,
+		       COALESCE(g.settings::text, '{}') AS settings,
+		       g.key_version, COALESCE(g.category, 'general') AS category, g.created_at,
+		       EXISTS(SELECT 1 FROM group_members gm WHERE gm.group_id = g.id AND gm.user_id = $1) AS is_member
+		FROM groups g
+		WHERE g.is_active = TRUE
+		  AND g.is_encrypted = FALSE
+		  AND g.privacy = 'public'
+	`
+	args := []interface{}{userID}
+	argIdx := 2
+
+	if category != "" && category != "all" {
+		query += fmt.Sprintf(" AND g.category = $%d", argIdx)
+		args = append(args, category)
+		argIdx++
+	}
+
+	query += " ORDER BY g.member_count DESC LIMIT " + strconv.Itoa(limit)
+
+	rows, err := h.pool.Query(c.Request.Context(), query, args...)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to fetch groups"})
+		return
+	}
+	defer rows.Close()
+
+	var groups []gin.H
+	for rows.Next() {
+		var id uuid.UUID
+		var name, desc, typ, privacy, avatarURL, settings, cat string
+		var memberCount, keyVersion int
+		var isEncrypted, isMember bool
+		var createdAt time.Time
+		if err := rows.Scan(&id, &name, &desc, &typ, &privacy, &avatarURL,
+			&memberCount, &isEncrypted, &settings, &keyVersion, &cat, &createdAt, &isMember); err != nil {
+			continue
+		}
+		groups = append(groups, gin.H{
+			"id": id, "name": name, "description": desc, "type": typ,
+			"privacy": privacy, "avatar_url": avatarURL,
+			"member_count": memberCount, "is_encrypted": isEncrypted,
+			"settings": settings, "key_version": keyVersion,
+			"category": cat, "created_at": createdAt, "is_member": isMember,
+		})
+	}
+	if groups == nil {
+		groups = []gin.H{}
+	}
+	c.JSON(http.StatusOK, gin.H{"groups": groups})
+}
+
+// JoinGroup adds the authenticated user to a public, non-encrypted group
+func (h *CapsuleHandler) JoinGroup(c *gin.Context) {
+	userIDStr, _ := c.Get("user_id")
+	userID, err := uuid.Parse(userIDStr.(string))
+	if err != nil {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "unauthorized"})
+		return
+	}
+
+	groupID, err := uuid.Parse(c.Param("id"))
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid group id"})
+		return
+	}
+
+	ctx := c.Request.Context()
+
+	// Verify group exists, is public, and not encrypted
+	var privacy string
+	var isEncrypted bool
+	err = h.pool.QueryRow(ctx, `SELECT privacy, is_encrypted FROM groups WHERE id = $1 AND is_active = TRUE`, groupID).Scan(&privacy, &isEncrypted)
+	if err != nil {
+		c.JSON(http.StatusNotFound, gin.H{"error": "group not found"})
+		return
+	}
+	if isEncrypted {
+		c.JSON(http.StatusForbidden, gin.H{"error": "cannot join encrypted groups directly"})
+		return
+	}
+	if privacy != "public" {
+		c.JSON(http.StatusForbidden, gin.H{"error": "this group requires an invitation"})
+		return
+	}
+
+	// Check if already a member
+	var exists bool
+	h.pool.QueryRow(ctx, `SELECT EXISTS(SELECT 1 FROM group_members WHERE group_id = $1 AND user_id = $2)`, groupID, userID).Scan(&exists)
+	if exists {
+		c.JSON(http.StatusConflict, gin.H{"error": "already a member"})
+		return
+	}
+
+	// Add member and increment count
+	tx, err := h.pool.Begin(ctx)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "transaction failed"})
+		return
+	}
+	defer tx.Rollback(ctx)
+
+	_, err = tx.Exec(ctx, `INSERT INTO group_members (group_id, user_id, role) VALUES ($1, $2, 'member')`, groupID, userID)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to join group"})
+		return
+	}
+	_, err = tx.Exec(ctx, `UPDATE groups SET member_count = member_count + 1 WHERE id = $1`, groupID)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to update count"})
+		return
+	}
+
+	if err := tx.Commit(ctx); err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "commit failed"})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{"message": "joined group"})
+}
+
 // ── Private Capsule Endpoints ────────────────────────────────────────────
 // CRITICAL: The server NEVER decrypts payload. It only checks membership
 // and returns encrypted blobs.

@@ -921,6 +921,17 @@ class ApiService {
     return (data['groups'] as List?)?.cast<Map<String, dynamic>>() ?? [];
   }
 
+  Future<List<Map<String, dynamic>>> discoverGroups({String? category, int limit = 50}) async {
+    final params = <String, String>{'limit': '$limit'};
+    if (category != null && category != 'all') params['category'] = category;
+    final data = await _callGoApi('/capsules/discover', method: 'GET', queryParams: params);
+    return (data['groups'] as List?)?.cast<Map<String, dynamic>>() ?? [];
+  }
+
+  Future<void> joinGroup(String groupId) async {
+    await _callGoApi('/capsules/$groupId/join', method: 'POST');
+  }
+
   Future<Map<String, dynamic>> createGroup({
     required String name,
     String description = '',

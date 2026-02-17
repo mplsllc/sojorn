@@ -465,8 +465,10 @@ func main() {
 			{
 				capsules.GET("/mine", capsuleHandler.ListMyGroups)
 				capsules.GET("/public", capsuleHandler.ListPublicClusters)
+				capsules.GET("/discover", capsuleHandler.DiscoverGroups)
 				capsules.POST("", capsuleHandler.CreateCapsule)
 				capsules.POST("/group", capsuleHandler.CreateGroup)
+				capsules.POST("/:id/join", capsuleHandler.JoinGroup)
 				capsules.GET("/:id", capsuleHandler.GetCapsule)
 				capsules.POST("/:id/entries", capsuleHandler.PostCapsuleEntry)
 				capsules.GET("/:id/entries", capsuleHandler.GetCapsuleEntries)

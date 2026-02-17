@@ -8,8 +8,8 @@ import '../../theme/tokens.dart';
 import '../../theme/app_theme.dart';
 import 'group_screen.dart';
 
-/// ClustersScreen — Discovery and listing of all clusters the user belongs to.
-/// Split into two sections: Public Clusters (geo) and Private Capsules (E2EE).
+/// ClustersScreen — Discovery-first groups page.
+/// Shows "Your Groups" at top, then "Discover Communities" with category filtering.
 class ClustersScreen extends ConsumerStatefulWidget {
   const ClustersScreen({super.key});
 
@@ -21,15 +21,29 @@ class _ClustersScreenState extends ConsumerState<ClustersScreen>
     with SingleTickerProviderStateMixin {
   late TabController _tabController;
   bool _isLoading = true;
-  List<Cluster> _publicClusters = [];
-  List<Cluster> _privateCapsules = [];
+  bool _isDiscoverLoading = false;
+  List<Cluster> _myGroups = [];
+  List<Cluster> _myCapsules = [];
+  List<Map<String, dynamic>> _discoverGroups = [];
   Map<String, String> _encryptedKeys = {};
+  String _selectedCategory = 'all';
+
+  static const _categories = [
+    ('all', 'All', Icons.grid_view),
+    ('general', 'General', Icons.chat_bubble_outline),
+    ('hobby', 'Hobby', Icons.palette),
+    ('sports', 'Sports', Icons.sports),
+    ('professional', 'Professional', Icons.business_center),
+    ('local_business', 'Local', Icons.storefront),
+    ('support', 'Support', Icons.favorite),
+    ('education', 'Education', Icons.school),
+  ];
 
   @override
   void initState() {
     super.initState();
     _tabController = TabController(length: 2, vsync: this);
-    _loadClusters();
+    _loadAll();
   }
 
   @override
@@ -38,27 +52,60 @@ class _ClustersScreenState extends ConsumerState<ClustersScreen>
     super.dispose();
   }
 
-  Future<void> _loadClusters() async {
+  Future<void> _loadAll() async {
     setState(() => _isLoading = true);
+    await Future.wait([_loadMyGroups(), _loadDiscover()]);
+    if (mounted) setState(() => _isLoading = false);
+  }
+
+  Future<void> _loadMyGroups() async {
     try {
       final groups = await ApiService.instance.fetchMyGroups();
       final allClusters = groups.map((g) => Cluster.fromJson(g)).toList();
       if (mounted) {
         setState(() {
-          _publicClusters = allClusters.where((c) => !c.isCapsule).toList();
-          _privateCapsules = allClusters.where((c) => c.isCapsule).toList();
-          // Store encrypted keys for quick access when navigating
+          _myGroups = allClusters.where((c) => !c.isCapsule).toList();
+          _myCapsules = allClusters.where((c) => c.isCapsule).toList();
           _encryptedKeys = {
             for (final g in groups)
               if ((g['encrypted_group_key'] as String?)?.isNotEmpty == true)
                 g['id'] as String: g['encrypted_group_key'] as String,
           };
-          _isLoading = false;
         });
       }
     } catch (e) {
       if (kDebugMode) print('[Clusters] Load error: $e');
-      if (mounted) setState(() => _isLoading = false);
+    }
+  }
+
+  Future<void> _loadDiscover() async {
+    setState(() => _isDiscoverLoading = true);
+    try {
+      final groups = await ApiService.instance.discoverGroups(
+        category: _selectedCategory == 'all' ? null : _selectedCategory,
+      );
+      if (mounted) setState(() => _discoverGroups = groups);
+    } catch (e) {
+      if (kDebugMode) print('[Clusters] Discover error: $e');
+    }
+    if (mounted) setState(() => _isDiscoverLoading = false);
+  }
+
+  Future<void> _joinGroup(String groupId) async {
+    try {
+      await ApiService.instance.joinGroup(groupId);
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Joined group!'), backgroundColor: Color(0xFF4CAF50)),
+        );
+      }
+      await _loadAll();
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('$e'), backgroundColor: Colors.red),
+        );
+      }
     }
   }
 
@@ -76,7 +123,7 @@ class _ClustersScreenState extends ConsumerState<ClustersScreen>
     return Scaffold(
       backgroundColor: AppTheme.scaffoldBg,
       appBar: AppBar(
-        title: const Text('Groups', style: TextStyle(fontWeight: FontWeight.w800)),
+        title: const Text('Communities', style: TextStyle(fontWeight: FontWeight.w800)),
         backgroundColor: AppTheme.scaffoldBg,
         surfaceTintColor: SojornColors.transparent,
         bottom: TabBar(
@@ -100,38 +147,126 @@ class _ClustersScreenState extends ConsumerState<ClustersScreen>
       body: TabBarView(
         controller: _tabController,
         children: [
-          _buildPublicTab(),
+          _buildGroupsTab(),
           _buildCapsuleTab(),
         ],
       ),
     );
   }
 
-  Widget _buildPublicTab() {
+  // ── Groups Tab (Your Groups + Discover) ──────────────────────────────
+  Widget _buildGroupsTab() {
     if (_isLoading) return const Center(child: CircularProgressIndicator());
-    if (_publicClusters.isEmpty) return _EmptyState(
-      icon: Icons.location_on,
-      title: 'No Neighborhoods Yet',
-      subtitle: 'Public clusters based on your location will appear here.',
-      actionLabel: 'Discover Nearby',
-      onAction: _loadClusters,
-    );
     return RefreshIndicator(
-      onRefresh: _loadClusters,
-      child: ListView.builder(
-        padding: const EdgeInsets.all(12),
-        itemCount: _publicClusters.length,
-        itemBuilder: (_, i) => _PublicClusterCard(
-          cluster: _publicClusters[i],
-          onTap: () => _navigateToCluster(_publicClusters[i]),
-        ),
+      onRefresh: _loadAll,
+      child: ListView(
+        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+        children: [
+          // ── Your Groups ──
+          if (_myGroups.isNotEmpty) ...[
+            _SectionHeader(title: 'Your Groups', count: _myGroups.length),
+            const SizedBox(height: 8),
+            ..._myGroups.map((c) => _GroupCard(
+              cluster: c,
+              onTap: () => _navigateToCluster(c),
+            )),
+            const SizedBox(height: 20),
+          ],
+
+          // ── Discover Communities ──
+          _SectionHeader(title: 'Discover Communities'),
+          const SizedBox(height: 10),
+
+          // Category chips (horizontal scroll)
+          SizedBox(
+            height: 36,
+            child: ListView.separated(
+              scrollDirection: Axis.horizontal,
+              itemCount: _categories.length,
+              separatorBuilder: (_, __) => const SizedBox(width: 8),
+              itemBuilder: (_, i) {
+                final (value, label, icon) = _categories[i];
+                final selected = _selectedCategory == value;
+                return FilterChip(
+                  label: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Icon(icon, size: 14, color: selected ? Colors.white : AppTheme.navyBlue),
+                      const SizedBox(width: 5),
+                      Text(label, style: TextStyle(
+                        fontSize: 12, fontWeight: FontWeight.w600,
+                        color: selected ? Colors.white : AppTheme.navyBlue,
+                      )),
+                    ],
+                  ),
+                  selected: selected,
+                  onSelected: (_) {
+                    setState(() => _selectedCategory = value);
+                    _loadDiscover();
+                  },
+                  selectedColor: AppTheme.navyBlue,
+                  backgroundColor: AppTheme.navyBlue.withValues(alpha: 0.06),
+                  side: BorderSide(color: selected ? AppTheme.navyBlue : AppTheme.navyBlue.withValues(alpha: 0.15)),
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+                  showCheckmark: false,
+                  padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 0),
+                  materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                  visualDensity: VisualDensity.compact,
+                );
+              },
+            ),
+          ),
+          const SizedBox(height: 12),
+
+          // Discover results
+          if (_isDiscoverLoading)
+            const Padding(
+              padding: EdgeInsets.all(32),
+              child: Center(child: CircularProgressIndicator()),
+            )
+          else if (_discoverGroups.isEmpty)
+            _EmptyDiscoverState(
+              onCreateGroup: () => _showCreateSheet(context),
+            )
+          else
+            ..._discoverGroups.map((g) {
+              final isMember = g['is_member'] as bool? ?? false;
+              final groupId = g['id']?.toString() ?? '';
+              return _DiscoverGroupCard(
+                name: g['name'] as String? ?? '',
+                description: g['description'] as String? ?? '',
+                memberCount: g['member_count'] as int? ?? 0,
+                category: GroupCategory.fromString(g['category'] as String? ?? 'general'),
+                isMember: isMember,
+                onJoin: isMember ? null : () => _joinGroup(groupId),
+                onTap: isMember ? () {
+                  final cluster = Cluster.fromJson(g);
+                  _navigateToCluster(cluster);
+                } : null,
+              );
+            }),
+
+          // Create group CTA at bottom
+          const SizedBox(height: 16),
+          Center(
+            child: TextButton.icon(
+              onPressed: () => _showCreateSheet(context),
+              icon: Icon(Icons.add_circle_outline, size: 18, color: AppTheme.navyBlue),
+              label: Text('Create a Group', style: TextStyle(
+                color: AppTheme.navyBlue, fontWeight: FontWeight.w600,
+              )),
+            ),
+          ),
+          const SizedBox(height: 32),
+        ],
       ),
     );
   }
 
+  // ── Capsules Tab ─────────────────────────────────────────────────────
   Widget _buildCapsuleTab() {
     if (_isLoading) return const Center(child: CircularProgressIndicator());
-    if (_privateCapsules.isEmpty) return _EmptyState(
+    if (_myCapsules.isEmpty) return _EmptyState(
       icon: Icons.lock,
       title: 'No Capsules Yet',
       subtitle: 'Create an encrypted capsule or join one via invite code.',
@@ -139,13 +274,13 @@ class _ClustersScreenState extends ConsumerState<ClustersScreen>
       onAction: () => _showCreateSheet(context, capsule: true),
     );
     return RefreshIndicator(
-      onRefresh: _loadClusters,
+      onRefresh: _loadAll,
       child: ListView.builder(
         padding: const EdgeInsets.all(12),
-        itemCount: _privateCapsules.length,
+        itemCount: _myCapsules.length,
         itemBuilder: (_, i) => _CapsuleCard(
-          capsule: _privateCapsules[i],
-          onTap: () => _navigateToCluster(_privateCapsules[i]),
+          capsule: _myCapsules[i],
+          onTap: () => _navigateToCluster(_myCapsules[i]),
         ),
       ),
     );
@@ -157,13 +292,80 @@ class _ClustersScreenState extends ConsumerState<ClustersScreen>
       backgroundColor: AppTheme.cardSurface,
       isScrollControlled: true,
       builder: (ctx) => capsule
-          ? _CreateCapsuleForm(onCreated: () { Navigator.pop(ctx); _loadClusters(); })
-          : _CreateGroupForm(onCreated: () { Navigator.pop(ctx); _loadClusters(); }),
+          ? _CreateCapsuleForm(onCreated: () { Navigator.pop(ctx); _loadAll(); })
+          : _CreateGroupForm(onCreated: () { Navigator.pop(ctx); _loadAll(); }),
     );
   }
 }
 
-// ── Empty State ───────────────────────────────────────────────────────────
+// ── Section Header ────────────────────────────────────────────────────────
+class _SectionHeader extends StatelessWidget {
+  final String title;
+  final int? count;
+  const _SectionHeader({required this.title, this.count});
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      children: [
+        Text(title, style: TextStyle(
+          fontSize: 16, fontWeight: FontWeight.w700, color: AppTheme.navyBlue,
+        )),
+        if (count != null) ...[
+          const SizedBox(width: 6),
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 1),
+            decoration: BoxDecoration(
+              color: AppTheme.navyBlue.withValues(alpha: 0.1),
+              borderRadius: BorderRadius.circular(10),
+            ),
+            child: Text('$count', style: TextStyle(
+              fontSize: 11, fontWeight: FontWeight.w700, color: AppTheme.navyBlue,
+            )),
+          ),
+        ],
+      ],
+    );
+  }
+}
+
+// ── Empty Discover State ──────────────────────────────────────────────────
+class _EmptyDiscoverState extends StatelessWidget {
+  final VoidCallback onCreateGroup;
+  const _EmptyDiscoverState({required this.onCreateGroup});
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 32),
+      child: Column(
+        children: [
+          Icon(Icons.explore_outlined, size: 48, color: AppTheme.navyBlue.withValues(alpha: 0.2)),
+          const SizedBox(height: 12),
+          Text('No groups found in this category', style: TextStyle(
+            fontSize: 14, fontWeight: FontWeight.w600,
+            color: AppTheme.navyBlue.withValues(alpha: 0.5),
+          )),
+          const SizedBox(height: 4),
+          Text('Be the first to create one!', style: TextStyle(
+            fontSize: 12, color: AppTheme.navyBlue.withValues(alpha: 0.35),
+          )),
+          const SizedBox(height: 16),
+          OutlinedButton.icon(
+            onPressed: onCreateGroup,
+            icon: const Icon(Icons.add, size: 16),
+            label: const Text('Create Group'),
+            style: OutlinedButton.styleFrom(
+              side: BorderSide(color: AppTheme.navyBlue.withValues(alpha: 0.3)),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+// ── Empty State (for capsules) ────────────────────────────────────────────
 class _EmptyState extends StatelessWidget {
   final IconData icon;
   final String title;
@@ -212,14 +414,15 @@ class _EmptyState extends StatelessWidget {
   }
 }
 
-// ── Public Cluster Card ───────────────────────────────────────────────────
-class _PublicClusterCard extends StatelessWidget {
+// ── Group Card (user's own groups) ────────────────────────────────────────
+class _GroupCard extends StatelessWidget {
   final Cluster cluster;
   final VoidCallback onTap;
-  const _PublicClusterCard({required this.cluster, required this.onTap});
+  const _GroupCard({required this.cluster, required this.onTap});
 
   @override
   Widget build(BuildContext context) {
+    final cat = cluster.category;
     return GestureDetector(
       onTap: onTap,
       child: Container(
@@ -239,14 +442,13 @@ class _PublicClusterCard extends StatelessWidget {
         ),
         child: Row(
           children: [
-            // Avatar / location icon
             Container(
               width: 48, height: 48,
               decoration: BoxDecoration(
-                color: AppTheme.brightNavy.withValues(alpha: 0.08),
+                color: cat.color.withValues(alpha: 0.1),
                 borderRadius: BorderRadius.circular(14),
               ),
-              child: Icon(Icons.location_on, color: AppTheme.brightNavy, size: 24),
+              child: Icon(cat.icon, color: cat.color, size: 24),
             ),
             const SizedBox(width: 14),
             Expanded(
@@ -259,19 +461,134 @@ class _PublicClusterCard extends StatelessWidget {
                   const SizedBox(height: 3),
                   Row(
                     children: [
-                      Icon(Icons.public, size: 12, color: SojornColors.textDisabled),
-                      const SizedBox(width: 4),
-                      Text('Public', style: TextStyle(fontSize: 11, color: SojornColors.textDisabled)),
-                      const SizedBox(width: 10),
                       Icon(Icons.people, size: 12, color: SojornColors.textDisabled),
                       const SizedBox(width: 4),
-                      Text('${cluster.memberCount}', style: TextStyle(fontSize: 11, color: SojornColors.textDisabled)),
+                      Text('${cluster.memberCount} members', style: TextStyle(fontSize: 11, color: SojornColors.textDisabled)),
                     ],
                   ),
                 ],
               ),
             ),
             Icon(Icons.chevron_right, color: SojornColors.textDisabled, size: 20),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+// ── Discover Group Card (with Join button) ────────────────────────────────
+class _DiscoverGroupCard extends StatelessWidget {
+  final String name;
+  final String description;
+  final int memberCount;
+  final GroupCategory category;
+  final bool isMember;
+  final VoidCallback? onJoin;
+  final VoidCallback? onTap;
+
+  const _DiscoverGroupCard({
+    required this.name,
+    required this.description,
+    required this.memberCount,
+    required this.category,
+    required this.isMember,
+    this.onJoin,
+    this.onTap,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return GestureDetector(
+      onTap: onTap,
+      child: Container(
+        margin: const EdgeInsets.only(bottom: 10),
+        padding: const EdgeInsets.all(14),
+        decoration: BoxDecoration(
+          color: AppTheme.cardSurface,
+          borderRadius: BorderRadius.circular(16),
+          border: Border.all(color: AppTheme.navyBlue.withValues(alpha: 0.08)),
+          boxShadow: [
+            BoxShadow(
+              color: AppTheme.brightNavy.withValues(alpha: 0.04),
+              blurRadius: 8,
+              offset: const Offset(0, 2),
+            ),
+          ],
+        ),
+        child: Row(
+          children: [
+            Container(
+              width: 44, height: 44,
+              decoration: BoxDecoration(
+                color: category.color.withValues(alpha: 0.1),
+                borderRadius: BorderRadius.circular(12),
+              ),
+              child: Icon(category.icon, color: category.color, size: 22),
+            ),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(name, style: const TextStyle(
+                    fontSize: 14, fontWeight: FontWeight.w600,
+                  ), maxLines: 1, overflow: TextOverflow.ellipsis),
+                  if (description.isNotEmpty) ...[
+                    const SizedBox(height: 2),
+                    Text(description, style: TextStyle(
+                      fontSize: 12, color: SojornColors.textDisabled,
+                    ), maxLines: 1, overflow: TextOverflow.ellipsis),
+                  ],
+                  const SizedBox(height: 3),
+                  Row(
+                    children: [
+                      Icon(Icons.people_outline, size: 12, color: SojornColors.textDisabled),
+                      const SizedBox(width: 3),
+                      Text('$memberCount', style: TextStyle(fontSize: 11, color: SojornColors.textDisabled)),
+                      const SizedBox(width: 8),
+                      Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 1),
+                        decoration: BoxDecoration(
+                          color: category.color.withValues(alpha: 0.1),
+                          borderRadius: BorderRadius.circular(6),
+                        ),
+                        child: Text(category.displayName, style: TextStyle(
+                          fontSize: 10, fontWeight: FontWeight.w600, color: category.color,
+                        )),
+                      ),
+                    ],
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(width: 8),
+            if (isMember)
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                decoration: BoxDecoration(
+                  color: const Color(0xFF4CAF50).withValues(alpha: 0.1),
+                  borderRadius: BorderRadius.circular(20),
+                ),
+                child: const Text('Joined', style: TextStyle(
+                  fontSize: 12, fontWeight: FontWeight.w600, color: Color(0xFF4CAF50),
+                )),
+              )
+            else
+              SizedBox(
+                height: 32,
+                child: ElevatedButton(
+                  onPressed: onJoin,
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: AppTheme.navyBlue,
+                    foregroundColor: Colors.white,
+                    padding: const EdgeInsets.symmetric(horizontal: 16),
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+                    elevation: 0,
+                  ),
+                  child: const Text('Join', style: TextStyle(fontSize: 12, fontWeight: FontWeight.w700)),
+                ),
+              ),
           ],
         ),
       ),
@@ -306,7 +623,6 @@ class _CapsuleCard extends StatelessWidget {
         ),
         child: Row(
           children: [
-            // Lock avatar
             Container(
               width: 48, height: 48,
               decoration: BoxDecoration(
