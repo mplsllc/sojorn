@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../models/group.dart';
-import '../services/api_service.dart';
+import '../providers/api_provider.dart';
 import '../theme/app_theme.dart';
 import '../theme/tokens.dart';
 import '../utils/error_handler.dart';
@@ -247,7 +247,7 @@ class _GroupCardState extends ConsumerState<GroupCard> {
                 widget.group.description,
                 style: TextStyle(
                   fontSize: 13,
-                  color: SojornColors.textSecondary,
+                  color: Colors.grey[600],
                   height: 1.3,
                 ),
                 maxLines: 2,
@@ -264,23 +264,23 @@ class _GroupCardState extends ConsumerState<GroupCard> {
                   widget.group.memberCountText,
                   style: TextStyle(
                     fontSize: 12,
-                    color: SojornColors.textTertiary,
+                    color: Colors.grey[500],
                     fontWeight: FontWeight.w500,
                   ),
                 ),
-                const Text(' • ', style: TextStyle(fontSize: 12, color: SojornColors.textTertiary)),
+                const Text(' • ', style: TextStyle(fontSize: 12, color: Colors.grey[500])),
                 Text(
                   widget.group.postCountText,
                   style: TextStyle(
                     fontSize: 12,
-                    color: SojornColors.textTertiary,
+                    color: Colors.grey[500],
                     fontWeight: FontWeight.w500,
                   ),
                 ),
               ],
             ),
             
-            if (showReason && reason != null) ...[
+            if (widget.showReason && widget.reason != null) ...[
               const SizedBox(height: 8),
               Container(
                 padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
@@ -289,7 +289,7 @@ class _GroupCardState extends ConsumerState<GroupCard> {
                   borderRadius: BorderRadius.circular(8),
                 ),
                 child: Text(
-                  reason!,
+                  widget.reason!,
                   style: TextStyle(
                     fontSize: 11,
                     color: Colors.blue[700],
@@ -390,12 +390,12 @@ class CompactGroupCard extends StatelessWidget {
                   group.memberCountText,
                   style: TextStyle(
                     fontSize: 11,
-                    color: SojornColors.textTertiary,
+                    color: Colors.grey[500],
                   ),
                 ),
               ],
             ),
-            if (showReason && reason != null) ...[
+            if (widget.showReason && widget.reason != null) ...[
               const SizedBox(height: 6),
               Container(
                 padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
@@ -404,7 +404,7 @@ class CompactGroupCard extends StatelessWidget {
                   borderRadius: BorderRadius.circular(6),
                 ),
                 child: Text(
-                  reason!,
+                  widget.reason!,
                   style: TextStyle(
                     fontSize: 9,
                     color: Colors.blue[700],

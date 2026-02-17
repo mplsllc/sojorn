@@ -929,24 +929,7 @@ class ApiService {
     return (data['groups'] as List?)?.cast<Map<String, dynamic>>() ?? [];
   }
 
-  Future<void> joinGroup(String groupId) async {
-    await _callGoApi('/capsules/$groupId/join', method: 'POST');
-  }
-
-  Future<Map<String, dynamic>> createGroup({
-    required String name,
-    String description = '',
-    String privacy = 'public',
-    String category = 'general',
-  }) async {
-    return await _callGoApi('/capsules/group', body: {
-      'name': name,
-      'description': description,
-      'privacy': privacy,
-      'category': category,
-    });
-  }
-
+  
   Future<Map<String, dynamic>> createCapsule({
     required String name,
     String description = '',
@@ -1033,10 +1016,7 @@ class ApiService {
     await _callGoApi('/capsules/$groupId/members/$memberId', method: 'PATCH', body: {'role': role});
   }
 
-  Future<void> leaveGroup(String groupId) async {
-    await _callGoApi('/capsules/$groupId/leave', method: 'POST');
-  }
-
+  
   Future<void> updateGroup(String groupId, {String? name, String? description, String? settings}) async {
     await _callGoApi('/capsules/$groupId', method: 'PATCH', body: {
       if (name != null) 'name': name,

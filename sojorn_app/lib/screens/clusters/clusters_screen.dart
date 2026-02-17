@@ -2,7 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../models/cluster.dart';
-import '../../models/group.dart';
+import '../../models/group.dart' as group_models;
 import '../../providers/api_provider.dart';
 import '../../services/api_service.dart';
 import '../../services/capsule_security_service.dart';
@@ -34,8 +34,8 @@ class _ClustersScreenState extends ConsumerState<ClustersScreen>
   String _selectedCategory = 'all';
   
   // Groups system state
-  List<Group> _myUserGroups = [];
-  List<SuggestedGroup> _suggestedGroups = [];
+  List<group_models.Group> _myUserGroups = [];
+  List<group_models.SuggestedGroup> _suggestedGroups = [];
   bool _isGroupsLoading = false;
   bool _isSuggestedLoading = false;
 
@@ -159,7 +159,7 @@ class _ClustersScreenState extends ConsumerState<ClustersScreen>
     if (mounted) setState(() => _isSuggestedLoading = false);
   }
 
-  void _navigateToGroup(Group group) {
+  void _navigateToGroup(group_models.Group group) {
     // TODO: Navigate to group detail screen
     if (kDebugMode) print('Navigate to group: ${group.name}');
   }

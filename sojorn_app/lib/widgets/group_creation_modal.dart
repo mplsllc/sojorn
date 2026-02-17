@@ -47,7 +47,7 @@ class _GroupCreationModalState extends ConsumerState<GroupCreationModal> {
         name: _nameController.text.trim(),
         description: _descriptionController.text.trim(),
         category: _selectedCategory,
-        isPrivate: _isPrivate,
+        is_private: _isPrivate,
         avatarUrl: _avatarUrl,
         bannerUrl: _bannerUrl,
       );
