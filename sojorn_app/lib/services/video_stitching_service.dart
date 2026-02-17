@@ -11,8 +11,10 @@ class VideoStitchingService {
     List<Duration> segmentDurations,
     String filter,
     double playbackSpeed,
-    Map<String, dynamic>? textOverlay,
-  ) async {
+    Map<String, dynamic>? textOverlay, {
+    String? audioOverlayPath,
+    double audioVolume = 0.5,
+  }) async {
     if (segments.isEmpty) return null;
     if (segments.length == 1 && filter == 'none' && playbackSpeed == 1.0 && textOverlay == null) {
       return segments.first;
@@ -105,13 +107,30 @@ class VideoStitchingService {
       final session = await FFmpegKit.execute(command);
       final returnCode = await session.getReturnCode();
 
-      if (ReturnCode.isSuccess(returnCode)) {
-        return outputFile;
-      } else {
+      if (!ReturnCode.isSuccess(returnCode)) {
         final logs = await session.getOutput();
         print('FFmpeg error: $logs');
         return null;
       }
+
+      // Audio overlay pass (optional second FFmpeg call to mix in background audio)
+      if (audioOverlayPath != null && audioOverlayPath.isNotEmpty) {
+        final audioOutputFile = File('${tempDir.path}/audio_${DateTime.now().millisecondsSinceEpoch}.mp4');
+        final vol = audioVolume.clamp(0.0, 1.0).toStringAsFixed(2);
+        final audioCmd =
+            "-i '${outputFile.path}' -i '$audioOverlayPath' "
+            "-filter_complex '[1:a]volume=${vol}[a1];[0:a][a1]amix=inputs=2:duration=first:dropout_transition=0' "
+            "-c:v copy -shortest '${audioOutputFile.path}'";
+        final audioSession = await FFmpegKit.execute(audioCmd);
+        final audioCode = await audioSession.getReturnCode();
+        if (ReturnCode.isSuccess(audioCode)) {
+          return audioOutputFile;
+        }
+        // If audio mix fails, fall through and return the video without the overlay
+        print('Audio overlay mix failed — returning video without audio overlay');
+      }
+
+      return outputFile;
     } catch (e) {
       print('Video stitching error: $e');
       return null;

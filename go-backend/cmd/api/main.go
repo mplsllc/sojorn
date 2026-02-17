@@ -224,6 +224,9 @@ func main() {
 	repostHandler := handlers.NewRepostHandler(dbPool)
 	profileLayoutHandler := handlers.NewProfileLayoutHandler(dbPool)
 
+	// Audio library proxy (Funkwhale — gracefully returns 503 until FUNKWHALE_BASE is set)
+	audioHandler := handlers.NewAudioHandler(cfg.FunkwhaleBase)
+
 	r.GET("/ws", wsHandler.ServeWS)
 
 	r.GET("/health", func(c *gin.Context) {
@@ -582,6 +585,10 @@ func main() {
 			// Profile widget layout
 			authorized.GET("/profile/layout", profileLayoutHandler.GetProfileLayout)
 			authorized.PUT("/profile/layout", profileLayoutHandler.SaveProfileLayout)
+
+			// Audio library (Funkwhale proxy — returns 503 until FUNKWHALE_BASE is set in env)
+			authorized.GET("/audio/library", audioHandler.SearchAudioLibrary)
+			authorized.GET("/audio/library/:trackId/listen", audioHandler.GetAudioTrackListen)
 
 		}
 	}

@@ -10,6 +10,7 @@ import 'package:sojorn/services/video_stitching_service.dart';
 import 'package:video_player/video_player.dart';
 import '../../../theme/tokens.dart';
 import '../../../theme/app_theme.dart';
+import '../../audio/audio_library_screen.dart';
 import 'quip_preview_screen.dart';
 
 class EnhancedQuipRecorderScreen extends StatefulWidget {
@@ -57,6 +58,10 @@ class _EnhancedQuipRecorderScreenState extends State<EnhancedQuipRecorderScreen>
   double _textSize = 24.0;
   Color _textColor = Colors.white;
   double _textPositionY = 0.8; // 0=top, 1=bottom
+
+  // Audio Overlay
+  AudioTrack? _selectedAudio;
+  double _audioVolume = 0.5;
 
   // Processing State
   bool _isProcessing = false;
@@ -265,6 +270,8 @@ class _EnhancedQuipRecorderScreenState extends State<EnhancedQuipRecorderScreen>
           'color': _textColor.value.toHex(),
           'position': _textPositionY,
         } : null,
+        audioOverlayPath: _selectedAudio?.path,
+        audioVolume: _audioVolume,
       );
 
       if (finalFile != null && mounted) {
@@ -352,6 +359,16 @@ class _EnhancedQuipRecorderScreenState extends State<EnhancedQuipRecorderScreen>
       _currentSegmentDuration = Duration.zero;
       _totalRecordedDuration = Duration.zero;
     });
+  }
+
+  Future<void> _pickAudio() async {
+    final result = await Navigator.push<AudioTrack>(
+      context,
+      MaterialPageRoute(builder: (_) => const AudioLibraryScreen()),
+    );
+    if (result != null && mounted) {
+      setState(() => _selectedAudio = result);
+    }
   }
 
   @override
@@ -569,6 +586,41 @@ class _EnhancedQuipRecorderScreenState extends State<EnhancedQuipRecorderScreen>
                         ],
                       ),
                       
+                      // Audio track chip (shown when audio is selected)
+                      if (_selectedAudio != null && !_isRecording)
+                        Padding(
+                          padding: const EdgeInsets.only(top: 8),
+                          child: Row(
+                            mainAxisAlignment: MainAxisAlignment.center,
+                            children: [
+                              Chip(
+                                backgroundColor: Colors.deepPurple.shade700,
+                                avatar: const Icon(Icons.music_note, color: Colors.white, size: 16),
+                                label: Text(
+                                  _selectedAudio!.title,
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
+                                  style: const TextStyle(color: Colors.white, fontSize: 12),
+                                ),
+                                deleteIcon: const Icon(Icons.close, color: Colors.white70, size: 16),
+                                onDeleted: () => setState(() => _selectedAudio = null),
+                              ),
+                              const SizedBox(width: 8),
+                              SizedBox(
+                                width: 80,
+                                child: Slider(
+                                  value: _audioVolume,
+                                  min: 0.0,
+                                  max: 1.0,
+                                  activeColor: Colors.deepPurple.shade300,
+                                  inactiveColor: Colors.white24,
+                                  onChanged: (v) => setState(() => _audioVolume = v),
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+
                       // Additional controls row
                       if (_recordedSegments.isNotEmpty && !_isRecording)
                         Row(
@@ -590,7 +642,24 @@ class _EnhancedQuipRecorderScreenState extends State<EnhancedQuipRecorderScreen>
                                 ),
                               ),
                             ),
-                            
+
+                            // Music / audio overlay button
+                            GestureDetector(
+                              onTap: _pickAudio,
+                              child: Container(
+                                padding: const EdgeInsets.all(8),
+                                decoration: BoxDecoration(
+                                  color: _selectedAudio != null ? Colors.deepPurple : Colors.white24,
+                                  shape: BoxShape.circle,
+                                ),
+                                child: Icon(
+                                  Icons.music_note,
+                                  color: _selectedAudio != null ? Colors.white : Colors.white70,
+                                  size: 20,
+                                ),
+                              ),
+                            ),
+
                             // Camera toggle
                             GestureDetector(
                               onTap: _toggleCamera,
@@ -607,7 +676,7 @@ class _EnhancedQuipRecorderScreenState extends State<EnhancedQuipRecorderScreen>
                                 ),
                               ),
                             ),
-                            
+
                             // Flash toggle
                             GestureDetector(
                               onTap: _toggleFlash,

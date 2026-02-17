@@ -43,6 +43,7 @@ type Config struct {
 	AzureOpenAIAPIKey       string
 	AzureOpenAIEndpoint     string
 	AzureOpenAIAPIVersion   string
+	FunkwhaleBase           string // e.g. "http://localhost:5001" — empty means not yet deployed
 }
 
 func LoadConfig() *Config {
@@ -92,6 +93,7 @@ func LoadConfig() *Config {
 		AzureOpenAIAPIKey:       getEnv("AZURE_OPENAI_API_KEY", ""),
 		AzureOpenAIEndpoint:     getEnv("AZURE_OPENAI_ENDPOINT", ""),
 		AzureOpenAIAPIVersion:   getEnv("AZURE_OPENAI_API_VERSION", "2024-02-15-preview"),
+		FunkwhaleBase:           getEnv("FUNKWHALE_BASE", ""),
 	}
 }
 
