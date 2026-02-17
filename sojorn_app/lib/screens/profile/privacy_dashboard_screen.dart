@@ -313,7 +313,7 @@ class _ToggleTile extends StatelessWidget {
           Switch.adaptive(
             value: value,
             onChanged: onChanged,
-            activeColor: AppTheme.navyBlue,
+            activeTrackColor: AppTheme.navyBlue,
           ),
         ],
       ),
