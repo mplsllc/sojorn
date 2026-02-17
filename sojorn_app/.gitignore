@@ -19,6 +19,7 @@ W-2_*.pdf
 
 # --- MISCELLANEOUS & MEDIA ---
 *.sql
+*.ps1
 *.psd
 *.ai
 *.class
