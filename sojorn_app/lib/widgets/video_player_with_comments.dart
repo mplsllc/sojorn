@@ -168,7 +168,7 @@ class _VideoPlayerWithCommentsState extends State<VideoPlayerWithComments> {
                   const Spacer(),
                   IconButton(
                     onPressed: () {
-                      // TODO: More options
+                      _showMoreOptions(context);
                     },
                     icon: const Icon(Icons.more_vert, color: SojornColors.basicWhite),
                   ),
@@ -403,5 +403,133 @@ class _VideoPlayerWithCommentsState extends State<VideoPlayerWithComments> {
     final minutes = duration.inMinutes;
     final seconds = duration.inSeconds % 60;
     return '$minutes:${seconds.toString().padLeft(2, '0')}';
+  }
+
+  void _showMoreOptions(BuildContext context) {
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: Colors.transparent,
+      builder: (context) => Container(
+        decoration: const BoxDecoration(
+          color: Colors.black,
+          borderRadius: BorderRadius.only(
+            topLeft: Radius.circular(20),
+            topRight: Radius.circular(20),
+          ),
+        ),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Container(
+              width: 40,
+              height: 4,
+              margin: const EdgeInsets.symmetric(vertical: 12),
+              decoration: BoxDecoration(
+                color: Colors.grey[600],
+                borderRadius: BorderRadius.circular(2),
+              ),
+            ),
+            const Padding(
+              padding: EdgeInsets.symmetric(horizontal: 20),
+              child: Text(
+                'Video Options',
+                style: TextStyle(
+                  color: Colors.white,
+                  fontSize: 18,
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
+            ),
+            const SizedBox(height: 20),
+            ListTile(
+              leading: const Icon(Icons.speed, color: Colors.white),
+              title: const Text(
+                'Playback Speed',
+                style: TextStyle(color: Colors.white),
+              ),
+              onTap: () {
+                Navigator.pop(context);
+                _showPlaybackSpeedDialog(context);
+              },
+            ),
+            ListTile(
+              leading: const Icon(Icons.report, color: Colors.white),
+              title: const Text(
+                'Report Video',
+                style: TextStyle(color: Colors.white),
+              ),
+              onTap: () {
+                Navigator.pop(context);
+                _showReportDialog(context);
+              },
+            ),
+            ListTile(
+              leading: const Icon(Icons.share, color: Colors.white),
+              title: const Text(
+                'Share Video',
+                style: TextStyle(color: Colors.white),
+              ),
+              onTap: () {
+                Navigator.pop(context);
+                widget.onShare?.call();
+              },
+            ),
+            const SizedBox(height: 20),
+          ],
+        ),
+      ),
+    );
+  }
+
+  void _showPlaybackSpeedDialog(BuildContext context) {
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Playback Speed'),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [0.5, 0.75, 1.0, 1.25, 1.5, 2.0].map((speed) {
+            return RadioListTile<double>(
+              title: Text('${speed}x'),
+              value: speed,
+              groupValue: _videoController?.value.playbackSpeed ?? 1.0,
+              onChanged: (value) {
+                if (value != null && _videoController != null) {
+                  _videoController!.setPlaybackSpeed(value);
+                  Navigator.pop(context);
+                }
+              },
+            );
+          }).toList(),
+        ),
+      ),
+    );
+  }
+
+  void _showReportDialog(BuildContext context) {
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Report Video'),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const Text('Why are you reporting this video?'),
+            const SizedBox(height: 16),
+            ...['Inappropriate content', 'Spam', 'Copyright violation', 'Other'].map((reason) {
+              return ListTile(
+                title: Text(reason),
+                onTap: () {
+                  Navigator.pop(context);
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(content: Text('Video reported successfully')),
+                  );
+                },
+              );
+            }).toList(),
+          ],
+        ),
+      ),
+    );
   }
 }

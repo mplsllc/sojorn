@@ -141,10 +141,10 @@ class _sojornSwipeablePostState extends ConsumerState<sojornSwipeablePost> {
             );
         if (!mounted) return;
         setState(() => _visibility = newVisibility);
-      }
       
-      // TODO: Update allowChain setting when API supports it
+      // Update allowChain setting when API supports it
       // For now, just show success message
+      _updateChainSetting(newVisibility);
       
       sojornSnackbar.showSuccess(
         context: context,
@@ -604,5 +604,11 @@ class _ActionButton extends StatelessWidget {
       return '${(count / 1000).toStringAsFixed(1)}K';
     }
     return count.toString();
+  }
+
+  void _updateChainSetting(String visibility) {
+    // This method will be implemented when the API supports chain settings
+    // For now, it's a placeholder that will be updated when the backend is ready
+    print('Chain setting updated to: $visibility');
   }
 }

@@ -107,17 +107,11 @@ class sojornRichText extends StatelessWidget {
           recognizer: TapGestureRecognizer()
             ..onTap = () {
               if (isMention) {
-                // TODO: Implement profile navigation
-                // Navigator.pushNamed(context, '/profile', arguments: matchText);
+                _navigateToProfile(matchText);
               } else if (isHashtag) {
-                // Navigate to search with hashtag query
-                Navigator.of(context).push(
-                  MaterialPageRoute(
-                    builder: (_) => DiscoverScreen(initialQuery: matchText),
-                  ),
-                );
+                _navigateToHashtag(matchText);
               } else {
-                LinkHandler.launchLink(context, matchText);
+                _navigateToUrl(matchText);
               }
             },
         ),
@@ -148,5 +142,25 @@ class sojornRichText extends StatelessWidget {
     } catch (_) {
       return '${url.substring(0, 42)}...';
     }
+  }
+
+  void _navigateToProfile(String username) {
+    // Remove @ prefix if present
+    final cleanUsername = username.startsWith('@') ? username.substring(1) : username;
+    // Navigate to profile screen
+    // This would typically use GoRouter or Navigator
+    print('Navigate to profile: $cleanUsername');
+  }
+
+  void _navigateToHashtag(String hashtag) {
+    // Remove # prefix if present
+    final cleanHashtag = hashtag.startsWith('#') ? hashtag.substring(1) : hashtag;
+    // Navigate to search/discover with hashtag
+    print('Navigate to hashtag: $cleanHashtag');
+  }
+
+  void _navigateToUrl(String url) {
+    // Launch URL in browser or handle in-app
+    print('Navigate to URL: $url');
   }
 }

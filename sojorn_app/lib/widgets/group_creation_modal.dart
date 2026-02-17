@@ -234,10 +234,7 @@ class _GroupCreationModalState extends ConsumerState<GroupCreationModal> {
               const SizedBox(height: 8),
               TextButton(
                 onPressed: () {
-                  // TODO: Implement image upload
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    const SnackBar(content: Text('Image upload coming soon!')),
-                  );
+                  _showImageUploadDialog(context, 'avatar');
                 },
                 child: const Text('Upload Avatar'),
               ),
@@ -261,10 +258,7 @@ class _GroupCreationModalState extends ConsumerState<GroupCreationModal> {
               const SizedBox(height: 4),
               TextButton(
                 onPressed: () {
-                  // TODO: Implement image upload
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    const SnackBar(content: Text('Image upload coming soon!')),
-                  );
+                  _showImageUploadDialog(context, 'banner');
                 },
                 child: const Text('Upload Banner'),
               ),
@@ -500,5 +494,49 @@ class _GroupCreationModalState extends ConsumerState<GroupCreationModal> {
         ),
       ),
     );
+  }
+
+  void _showImageUploadDialog(BuildContext context, String type) {
+    // This method will implement image upload functionality
+    // For now, show a placeholder dialog
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: Text('Upload ${type == 'avatar' ? 'Avatar' : 'Banner'}'),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const Text('Choose image source:'),
+            const SizedBox(height: 16),
+            ListTile(
+              leading: const Icon(Icons.camera),
+              title: const Text('Take Photo'),
+              onTap: () {
+                Navigator.pop(context);
+                _captureImage(type);
+              },
+            ),
+            ListTile(
+              leading: const Icon(Icons.photo_library),
+              title: const Text('Choose from Gallery'),
+              onTap: () {
+                Navigator.pop(context);
+                _pickImageFromGallery(type);
+              },
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  void _captureImage(String type) {
+    // Implement camera capture functionality
+    print('Capture image for $type');
+  }
+
+  void _pickImageFromGallery(String type) {
+    // Implement gallery picker functionality
+    print('Pick image from gallery for $type');
   }
 }

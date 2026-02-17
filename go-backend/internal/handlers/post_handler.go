@@ -9,11 +9,11 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"github.com/google/uuid"
+	"github.com/rs/zerolog/log"
 	"gitlab.com/patrickbritton3/sojorn/go-backend/internal/models"
 	"gitlab.com/patrickbritton3/sojorn/go-backend/internal/repository"
 	"gitlab.com/patrickbritton3/sojorn/go-backend/internal/services"
 	"gitlab.com/patrickbritton3/sojorn/go-backend/pkg/utils"
-	"github.com/rs/zerolog/log"
 )
 
 type PostHandler struct {
@@ -27,6 +27,7 @@ type PostHandler struct {
 	openRouterService   *services.OpenRouterService
 	linkPreviewService  *services.LinkPreviewService
 	localAIService      *services.LocalAIService
+	videoProcessor      *services.VideoProcessor
 }
 
 func NewPostHandler(postRepo *repository.PostRepository, userRepo *repository.UserRepository, feedService *services.FeedService, assetService *services.AssetService, notificationService *services.NotificationService, moderationService *services.ModerationService, contentFilter *services.ContentFilter, openRouterService *services.OpenRouterService, linkPreviewService *services.LinkPreviewService, localAIService *services.LocalAIService) *PostHandler {
@@ -41,6 +42,7 @@ func NewPostHandler(postRepo *repository.PostRepository, userRepo *repository.Us
 		openRouterService:   openRouterService,
 		linkPreviewService:  linkPreviewService,
 		localAIService:      localAIService,
+		videoProcessor:      services.NewVideoProcessor(),
 	}
 }
 
@@ -752,20 +754,47 @@ func (h *PostHandler) CreatePost(c *gin.Context) {
 						}
 					}
 				}
-				// Video thumbnail moderation
-				if post.Status != "removed" && req.VideoURL != nil && *req.VideoURL != "" && req.Thumbnail != nil && *req.Thumbnail != "" {
-					vidResult, vidErr := h.openRouterService.ModerateImage(ctx, *req.Thumbnail)
-					if vidErr == nil && vidResult != nil {
-						log.Info().Str("action", vidResult.Action).Msg("OpenRouter video thumbnail moderation")
-						if vidResult.Action == "flag" {
-							orDecision = "flag"
-							post.Status = "removed"
-						} else if vidResult.Action == "nsfw" && orDecision != "flag" {
-							orDecision = "nsfw"
-							post.IsNSFW = true
-							if vidResult.NSFWReason != "" {
-								post.NSFWReason = vidResult.NSFWReason
+				// Enhanced video moderation with frame extraction
+				if post.Status != "removed" && req.VideoURL != nil && *req.VideoURL != "" {
+					// First check thumbnail moderation
+					if req.Thumbnail != nil && *req.Thumbnail != "" {
+						vidResult, vidErr := h.openRouterService.ModerateImage(ctx, *req.Thumbnail)
+						if vidErr == nil && vidResult != nil {
+							log.Info().Str("action", vidResult.Action).Msg("OpenRouter video thumbnail moderation")
+							if vidResult.Action == "flag" {
+								orDecision = "flag"
+								post.Status = "removed"
+							} else if vidResult.Action == "nsfw" && orDecision != "flag" {
+								orDecision = "nsfw"
+								post.IsNSFW = true
+								if vidResult.NSFWReason != "" {
+									post.NSFWReason = vidResult.NSFWReason
+								}
 							}
+						}
+					}
+
+					// Extract and analyze video frames for deeper moderation
+					if post.Status != "removed" && h.videoProcessor != nil {
+						frameURLs, err := h.videoProcessor.ExtractFrames(ctx, *req.VideoURL, 3)
+						if err == nil && len(frameURLs) > 0 {
+							// Analyze extracted frames with Azure OpenAI Vision
+							if h.moderationService != nil {
+								_, frameReason, frameErr := h.moderationService.AnalyzeContent(ctx, "Video frame analysis", frameURLs)
+								if frameErr == nil && frameReason != "" {
+									log.Info().Str("reason", frameReason).Msg("Video frame analysis completed")
+									if strings.Contains(strings.ToLower(frameReason), "flag") || strings.Contains(strings.ToLower(frameReason), "remove") {
+										orDecision = "flag"
+										post.Status = "removed"
+									} else if strings.Contains(strings.ToLower(frameReason), "nsfw") && orDecision != "flag" {
+										orDecision = "nsfw"
+										post.IsNSFW = true
+										post.NSFWReason = "Video content flagged by frame analysis"
+									}
+								}
+							}
+						} else {
+							log.Debug().Err(err).Msg("Failed to extract video frames for moderation")
 						}
 					}
 				}
