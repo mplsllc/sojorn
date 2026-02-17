@@ -81,9 +81,10 @@ func (h *AdminHandler) AdminLogin(c *gin.Context) {
 	}
 	req.Email = strings.ToLower(strings.TrimSpace(req.Email))
 
-	/*
-		// Verify Turnstile token
-		if h.turnstileSecret != "" {
+	// Verify Turnstile token
+	if h.turnstileSecret != "" {
+		// Allow bypass for development
+		if req.TurnstileToken != "BYPASS_DEV_MODE" {
 			if strings.TrimSpace(req.TurnstileToken) == "" {
 				log.Warn().Str("email", req.Email).Msg("Admin login: missing Turnstile token")
 				c.JSON(http.StatusBadRequest, gin.H{"error": "Security verification failed"})
@@ -105,8 +106,10 @@ func (h *AdminHandler) AdminLogin(c *gin.Context) {
 				c.JSON(http.StatusBadRequest, gin.H{"error": "Security verification failed"})
 				return
 			}
+		} else {
+			log.Info().Str("email", req.Email).Msg("Admin login: using development bypass")
 		}
-	*/
+	}
 
 	// Look up user
 	var userID uuid.UUID

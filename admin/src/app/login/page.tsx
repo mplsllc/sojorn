@@ -17,7 +17,9 @@ export default function LoginPage() {
   const performLogin = useCallback(async () => {
     setLoading(true);
     try {
-      await login(emailRef.current, passwordRef.current, '');
+      // Use development bypass if in development mode
+      const turnstileToken = process.env.NODE_ENV === 'development' ? 'BYPASS_DEV_MODE' : '';
+      await login(emailRef.current, passwordRef.current, turnstileToken);
       router.push('/');
     } catch (err: any) {
       setError(err.message || 'Login failed. Check your credentials.');

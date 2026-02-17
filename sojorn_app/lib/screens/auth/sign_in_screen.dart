@@ -101,7 +101,7 @@ class _SignInScreenState extends ConsumerState<SignInScreen> {
       _supportsBiometric &&
       _hasStoredCredentials &&
       !_isBiometricAuthenticating &&
-      _turnstileToken != null; // Require Turnstile for biometric too
+      (_turnstileToken != null || kDebugMode); // Allow bypass for development
 
   Future<void> _signIn() async {
     final email = _emailController.text.trim();
@@ -123,10 +123,15 @@ class _SignInScreenState extends ConsumerState<SignInScreen> {
 
     // Validate Turnstile token
     if (_turnstileToken == null || _turnstileToken!.isEmpty) {
-      setState(() {
-        _errorMessage = 'Please complete the security verification';
-      });
-      return;
+      if (kDebugMode) {
+        // Allow bypass for development
+        _turnstileToken = "BYPASS_DEV_MODE";
+      } else {
+        setState(() {
+          _errorMessage = 'Please complete the security verification';
+        });
+        return;
+      }
     }
 
     setState(() {
