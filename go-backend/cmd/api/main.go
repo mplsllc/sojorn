@@ -250,7 +250,6 @@ func main() {
 		}
 
 		auth := v1.Group("/auth")
-		auth.Use(middleware.RateLimit(0.5, 3))
 		{
 			auth.POST("/register", authHandler.Register)
 			auth.POST("/signup", authHandler.Register)
@@ -260,8 +259,10 @@ func main() {
 			auth.GET("/verify", authHandler.VerifyEmail)
 			auth.POST("/forgot-password", authHandler.ForgotPassword)
 			auth.POST("/reset-password", authHandler.ResetPassword)
-			auth.GET("/altcha-challenge", authHandler.GetAltchaChallenge)
 		}
+
+		// ALTCHA challenge endpoint (no rate limiting)
+		v1.GET("/auth/altcha-challenge", authHandler.GetAltchaChallenge)
 
 		authorized := v1.Group("")
 		authorized.Use(middleware.AuthMiddleware(cfg.JWTSecret, dbPool))
