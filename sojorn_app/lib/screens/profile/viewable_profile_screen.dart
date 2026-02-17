@@ -477,13 +477,13 @@ class _UnifiedProfileScreenState extends ConsumerState<UnifiedProfileScreen>
           }
         });
       } else {
-        final status = await apiService.followUser(_profile!.id);
+        await apiService.followUser(_profile!.id);
         if (!mounted) return;
         setState(() {
-          _followStatus = status;
-          _isFollowing = status == 'accepted';
+          _followStatus = 'accepted';
+          _isFollowing = true;
           _isFriend = _isFollowing && _isFollowedBy;
-          if (_stats != null && _isFollowing) {
+          if (_stats != null) {
             _stats = ProfileStats(
               posts: _stats!.posts,
               followers: _stats!.followers + 1,
