@@ -3,9 +3,6 @@ package handlers
 import (
 	"bytes"
 	"context"
-	"crypto/hmac"
-	"crypto/sha256"
-	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -4133,23 +4130,13 @@ func (h *AdminHandler) SendTestEmail(c *gin.Context) {
 }
 
 func (h *AdminHandler) GetAltchaChallenge(c *gin.Context) {
-	// Generate a proper ALTCHA challenge
-	salt := fmt.Sprintf("%d", time.Now().UnixNano())
+	altchaService := services.NewAltchaService(h.jwtSecret)
 
-	// Create a simple number challenge (find a number that when hashed with salt produces a hash starting with certain digits)
-	challenge := fmt.Sprintf("%x", sha256.Sum256([]byte(salt)))[:10]
-
-	// Create HMAC signature using JWT secret as the key
-	mac := hmac.New(sha256.New, []byte(h.jwtSecret))
-	mac.Write([]byte(challenge + salt))
-	signature := hex.EncodeToString(mac.Sum(nil))
-
-	response := map[string]interface{}{
-		"algorithm": "SHA-256",
-		"challenge": challenge,
-		"salt":      salt,
-		"signature": signature,
+	challenge, err := altchaService.GenerateChallenge()
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to generate challenge"})
+		return
 	}
 
-	c.JSON(http.StatusOK, response)
+	c.JSON(http.StatusOK, challenge)
 }

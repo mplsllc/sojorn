@@ -1,18 +1,13 @@
 package services
 
 import (
-	"crypto/sha256"
-	"encoding/hex"
 	"encoding/json"
-	"fmt"
-	"net/http"
-	"strings"
-	"time"
+
+	altcha "github.com/altcha-org/altcha-lib-go"
 )
 
 type AltchaService struct {
 	secretKey string
-	client    *http.Client
 }
 
 type AltchaResponse struct {
@@ -20,25 +15,15 @@ type AltchaResponse struct {
 	Error    string `json:"error,omitempty"`
 }
 
-type AltchaChallenge struct {
-	Algorithm string `json:"algorithm"`
-	Challenge string `json:"challenge"`
-	Salt      string `json:"salt"`
-	Signature string `json:"signature"`
-}
-
 func NewAltchaService(secretKey string) *AltchaService {
 	return &AltchaService{
 		secretKey: secretKey,
-		client: &http.Client{
-			Timeout: 10 * time.Second,
-		},
 	}
 }
 
-// VerifyToken validates an ALTCHA token
+// VerifyToken validates an ALTCHA token using the official library
 func (s *AltchaService) VerifyToken(token, remoteIP string) (*AltchaResponse, error) {
-	// Allow bypass token for development (Flutter web)
+	// Allow bypass token for development
 	if token == "BYPASS_DEV_MODE" {
 		return &AltchaResponse{Verified: true}, nil
 	}
@@ -48,58 +33,49 @@ func (s *AltchaService) VerifyToken(token, remoteIP string) (*AltchaResponse, er
 		return &AltchaResponse{Verified: true}, nil
 	}
 
-	// Parse the ALTCHA response
-	var altchaData AltchaChallenge
-	if err := json.Unmarshal([]byte(token), &altchaData); err != nil {
-		return &AltchaResponse{Verified: false, Error: "Invalid token format"}, nil
+	// Verify using official ALTCHA library
+	ok, err := altcha.VerifySolution(token, s.secretKey, true)
+	if err != nil {
+		return &AltchaResponse{Verified: false, Error: err.Error()}, nil
 	}
 
-	// Verify the signature
-	expectedSignature := s.generateSignature(altchaData.Algorithm, altchaData.Challenge, altchaData.Salt)
-	if !strings.EqualFold(altchaData.Signature, expectedSignature) {
-		return &AltchaResponse{Verified: false, Error: "Invalid signature"}, nil
+	if !ok {
+		return &AltchaResponse{Verified: false, Error: "Invalid solution"}, nil
 	}
 
-	// Verify the challenge solution (simple hash verification for now)
-	// In a real implementation, you'd solve the actual puzzle
-	// For now, we'll accept any valid signature as verified
 	return &AltchaResponse{Verified: true}, nil
 }
 
-// GenerateChallenge creates a new ALTCHA challenge
-func (s *AltchaService) GenerateChallenge() (*AltchaChallenge, error) {
-	if s.secretKey == "" {
-		return nil, fmt.Errorf("ALTCHA secret key not configured")
+// GenerateChallenge creates a new ALTCHA challenge using the official library
+func (s *AltchaService) GenerateChallenge() (map[string]interface{}, error) {
+	// Generate challenge using official ALTCHA library
+	// Parameters: hmacKey, maxNumber (difficulty), saltLength, algorithm, expiresInSeconds
+	challenge, err := altcha.CreateChallenge(s.secretKey, 100000, 12, "SHA-256", 300)
+	if err != nil {
+		return nil, err
 	}
 
-	// Generate a simple challenge (in production, use proper puzzle generation)
-	challenge := fmt.Sprintf("%d", time.Now().UnixNano())
-	salt := fmt.Sprintf("%d", time.Now().Unix())
-	algorithm := "SHA-256"
+	// Convert to map for JSON response
+	var result map[string]interface{}
+	data, err := json.Marshal(challenge)
+	if err != nil {
+		return nil, err
+	}
 
-	signature := s.generateSignature(algorithm, challenge, salt)
+	if err := json.Unmarshal(data, &result); err != nil {
+		return nil, err
+	}
 
-	return &AltchaChallenge{
-		Algorithm: algorithm,
-		Challenge: challenge,
-		Salt:      salt,
-		Signature: signature,
-	}, nil
-}
-
-// generateSignature creates HMAC signature for ALTCHA
-func (s *AltchaService) generateSignature(algorithm, challenge, salt string) string {
-	data := algorithm + challenge + salt
-	hash := sha256.Sum256([]byte(data + s.secretKey))
-	return hex.EncodeToString(hash[:])
+	return result, nil
 }
 
 // GetErrorMessage returns a user-friendly error message
 func (s *AltchaService) GetErrorMessage(error string) string {
 	errorMessages := map[string]string{
-		"Invalid token format":     "Invalid security verification format",
-		"Invalid signature":       "Security verification failed",
-		"Challenge expired":       "Security verification expired",
+		"Invalid token format":             "Invalid security verification format",
+		"Invalid signature":                "Security verification failed",
+		"Challenge expired":                "Security verification expired",
+		"Invalid solution":                 "Security verification failed",
 		"ALTCHA secret key not configured": "Server configuration error",
 	}
 

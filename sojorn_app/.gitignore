@@ -1,4 +1,23 @@
-# Miscellaneous
+# ###########################################################
+# MP.LS LLC - Unified Sojorn Monorepo .gitignore
+# Combined with User Workflow Preferences
+# ###########################################################
+
+# --- CRITICAL: SENSITIVE DATA (NEVER COMMIT) ---
+.env
+*.env
+auth.mp.ls.key
+google-services.json
+GoogleService-Info.plist
+firebase_options.dart
+*.keystore
+*.jks
+key.properties
+# Tax/Business docs (Safety precaution)
+*_tax_*.pdf
+W-2_*.pdf
+
+# --- MISCELLANEOUS & MEDIA ---
 *.sql
 *.psd
 *.ai
@@ -15,34 +34,39 @@
 .swiftpm/
 migrate_working_dir/
 
-# IntelliJ related
+# --- IDE SPECIFIC (IntelliJ & VS Code) ---
 *.iml
 *.ipr
 *.iws
 .idea/
+.vscode/
 
-# The .vscode folder contains launch configuration and tasks you configure in
-# VS Code which you may wish to be included in version control, so this line
-# is commented out by default.
-#.vscode/
+# --- GO BACKEND (go-backend/) ---
+go-backend/bin/
+go-backend/out/
+go-backend/*.exe
+go-backend/*.test
+go-backend/*.prof
+go-backend/vendor/
+go-backend/config.yaml
 
-# Flutter/Dart/Pub related
+# --- FLUTTER APP (sojorn_app/) ---
 **/doc/api/
 **/ios/Flutter/.last_build_id
-.dart_tool/
-.flutter-plugins-dependencies
-.pub-cache/
-.pub/
-/build/
-/coverage/
+sojorn_app/.dart_tool/
+sojorn_app/.flutter-plugins
+sojorn_app/.flutter-plugins-dependencies
+sojorn_app/.packages
+sojorn_app/.pub-cache/
+sojorn_app/.pub/
+sojorn_app/build/
+sojorn_app/coverage/
 
-# Symbolication related
-app.*.symbols
-
-# Obfuscation related
-app.*.map.json
-
-# Android Studio will place build artifacts here
+# Android Studio / Android Specific
 /android/app/debug
 /android/app/profile
 /android/app/release
+
+# Symbolication & Obfuscation
+app.*.symbols
+app.*.map.json

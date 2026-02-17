@@ -1,12 +1,10 @@
 package handlers
 
 import (
-	"crypto/hmac"
 	"crypto/rand"
 	"crypto/sha256"
 	"encoding/base64"
 	"encoding/hex"
-	"fmt"
 	"net/http"
 	"time"
 
@@ -599,30 +597,13 @@ func (h *AuthHandler) ResetPassword(c *gin.Context) {
 }
 
 func (h *AuthHandler) GetAltchaChallenge(c *gin.Context) {
-	// Generate a proper ALTCHA challenge compatible with the widget
-	// The widget expects: algorithm, challenge, salt, signature
+	altchaService := services.NewAltchaService(h.config.JWTSecret)
 
-	// Generate random salt
-	salt := fmt.Sprintf("%x", time.Now().UnixNano())
-
-	// Generate a random number that needs to be found (the challenge)
-	// The widget will try to find a number that when combined with salt produces a hash with specific properties
-	randomBytes := make([]byte, 16)
-	rand.Read(randomBytes)
-	challenge := fmt.Sprintf("%x", randomBytes)
-
-	// Create HMAC signature: HMAC(secret, challenge + salt)
-	mac := hmac.New(sha256.New, []byte(h.config.JWTSecret))
-	mac.Write([]byte(challenge))
-	mac.Write([]byte(salt))
-	signature := hex.EncodeToString(mac.Sum(nil))
-
-	response := map[string]interface{}{
-		"algorithm": "SHA-256",
-		"challenge": challenge,
-		"salt":      salt,
-		"signature": signature,
+	challenge, err := altchaService.GenerateChallenge()
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to generate challenge"})
+		return
 	}
 
-	c.JSON(http.StatusOK, response)
+	c.JSON(http.StatusOK, challenge)
 }
