@@ -754,7 +754,7 @@ class _CreateGroupFormState extends State<_CreateGroupForm> {
       await ApiService.instance.createGroup(
         name: _nameCtrl.text.trim(),
         description: _descCtrl.text.trim(),
-        privacy: _privacy,
+        is_private: _privacy,
       );
       widget.onCreated();
     } catch (e) {

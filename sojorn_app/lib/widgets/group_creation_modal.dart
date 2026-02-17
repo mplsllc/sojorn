@@ -47,7 +47,7 @@ class _GroupCreationModalState extends ConsumerState<GroupCreationModal> {
         name: _nameController.text.trim(),
         description: _descriptionController.text.trim(),
         category: _selectedCategory,
-        is_private: _isPrivate,
+        isPrivate: _isPrivate,
         avatarUrl: _avatarUrl,
         bannerUrl: _bannerUrl,
       );
@@ -485,11 +485,13 @@ class _GroupCreationModalState extends ConsumerState<GroupCreationModal> {
             const SizedBox(height: 24),
             Flexible(
               child: SingleChildScrollView(
-                child: [
-                  if (_currentStep == 0) _buildStep1(),
-                  if (_currentStep == 1) _buildStep2(),
-                  if (_currentStep == 2) _buildStep3(),
-                ],
+                child: Column(
+                  children: [
+                    if (_currentStep == 0) _buildStep1(),
+                    if (_currentStep == 1) _buildStep2(),
+                    if (_currentStep == 2) _buildStep3(),
+                  ],
+                ),
               ),
             ),
             const SizedBox(height: 24),

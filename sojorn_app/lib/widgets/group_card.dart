@@ -123,7 +123,7 @@ class _GroupCardState extends ConsumerState<GroupCard> {
             style: TextStyle(
               fontSize: 12,
               fontWeight: FontWeight.w600,
-              color: Colors.orange[800],
+              color: Colors.deepOrange,
             ),
           ),
         ),
@@ -268,7 +268,7 @@ class _GroupCardState extends ConsumerState<GroupCard> {
                     fontWeight: FontWeight.w500,
                   ),
                 ),
-                const Text(' • ', style: TextStyle(fontSize: 12, color: Colors.grey[500])),
+                Text(' • ', style: TextStyle(fontSize: 12, color: Colors.grey[500])),
                 Text(
                   widget.group.postCountText,
                   style: TextStyle(
@@ -280,7 +280,7 @@ class _GroupCardState extends ConsumerState<GroupCard> {
               ],
             ),
             
-            if (widget.showReason && widget.reason != null) ...[
+            if (showReason && reason != null) ...[
               const SizedBox(height: 8),
               Container(
                 padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
@@ -395,7 +395,7 @@ class CompactGroupCard extends StatelessWidget {
                 ),
               ],
             ),
-            if (widget.showReason && widget.reason != null) ...[
+            if (showReason && reason != null) ...[
               const SizedBox(height: 6),
               Container(
                 padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
@@ -404,7 +404,7 @@ class CompactGroupCard extends StatelessWidget {
                   borderRadius: BorderRadius.circular(6),
                 ),
                 child: Text(
-                  widget.reason!,
+                  reason!,
                   style: TextStyle(
                     fontSize: 9,
                     color: Colors.blue[700],

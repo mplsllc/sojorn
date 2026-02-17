@@ -2432,7 +2432,7 @@ class _CreateGroupInlineState extends State<_CreateGroupInline> {
       await ApiService.instance.createGroup(
         name: _nameCtrl.text.trim(),
         description: _descCtrl.text.trim(),
-        privacy: _privacy,
+        is_private: _privacy,
         category: _category.value,
       );
       widget.onCreated();
