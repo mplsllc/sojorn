@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../providers/api_provider.dart';
 import '../../providers/feed_refresh_provider.dart';
 import '../../models/post.dart';
+import '../../models/feed_filter.dart';
 import '../../theme/app_theme.dart';
 import '../../widgets/sojorn_post_card.dart';
 import '../../widgets/app_scaffold.dart';
@@ -23,6 +24,7 @@ class _FeedPersonalScreenState extends ConsumerState<FeedPersonalScreen> {
   bool _isLoading = false;
   bool _hasMore = true;
   String? _error;
+  FeedFilter _currentFilter = FeedFilter.all;
 
   @override
   void initState() {
