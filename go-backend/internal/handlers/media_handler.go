@@ -208,6 +208,32 @@ func (h *MediaHandler) putObjectS3(c *gin.Context, body io.ReadSeeker, contentLe
 	return key, nil
 }
 
+// GetSignedMediaURL resolves a relative R2 path to a fully-qualified URL.
+// Flutter calls GET /media/sign?path=<key> for any path that was stored as a relative key.
+func (h *MediaHandler) GetSignedMediaURL(c *gin.Context) {
+	path := c.Query("path")
+	if path == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "path query parameter is required"})
+		return
+	}
+	if strings.HasPrefix(path, "http") {
+		c.JSON(http.StatusOK, gin.H{"url": path})
+		return
+	}
+	domain := h.publicDomain
+	if strings.Contains(path, "videos/") {
+		domain = h.videoDomain
+	}
+	if domain == "" {
+		c.JSON(http.StatusOK, gin.H{"url": path})
+		return
+	}
+	if !strings.HasPrefix(domain, "http") {
+		domain = "https://" + domain
+	}
+	c.JSON(http.StatusOK, gin.H{"url": fmt.Sprintf("%s/%s", domain, path)})
+}
+
 func (h *MediaHandler) putObjectR2API(c *gin.Context, fileBytes []byte, contentType string, bucket string, key string, publicDomain string) (string, error) {
 	if h.accountID == "" || h.apiToken == "" {
 		return "", fmt.Errorf("R2 API credentials missing")

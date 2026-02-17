@@ -663,6 +663,22 @@ func (h *UserHandler) BulkBlockUsers(c *gin.Context) {
 	})
 }
 
+// GetUserByHandle resolves a public profile by @handle.
+// Used by the capsule invite flow so the client can look up a user's public key before encrypting.
+func (h *UserHandler) GetUserByHandle(c *gin.Context) {
+	handle := strings.TrimPrefix(strings.TrimSpace(c.Param("handle")), "@")
+	if handle == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "handle is required"})
+		return
+	}
+	profile, err := h.repo.GetProfileByHandle(c.Request.Context(), handle)
+	if err != nil || profile == nil {
+		c.JSON(http.StatusNotFound, gin.H{"error": "user not found"})
+		return
+	}
+	c.JSON(http.StatusOK, profile)
+}
+
 // ExportData streams user data as JSON for portability/GDPR compliance
 func (h *UserHandler) ExportData(c *gin.Context) {
 	userID, _ := c.Get("user_id")

@@ -398,6 +398,7 @@ func main() {
 
 			// Media routes
 			authorized.POST("/upload", mediaHandler.Upload)
+			authorized.GET("/media/sign", mediaHandler.GetSignedMediaURL)
 
 			// Search & Discover routes
 			discoverHandler := handlers.NewDiscoverHandler(userRepo, postRepo, tagRepo, categoryRepo, assetService)
@@ -408,6 +409,9 @@ func main() {
 			authorized.GET("/hashtags/:name", discoverHandler.GetHashtagPage)
 			authorized.POST("/hashtags/:name/follow", discoverHandler.FollowHashtag)
 			authorized.DELETE("/hashtags/:name/follow", discoverHandler.UnfollowHashtag)
+
+			// User by-handle lookup (used by capsule invite to resolve public keys)
+			authorized.GET("/users/by-handle/:handle", userHandler.GetUserByHandle)
 
 			// Follow System (unique routes only — followers/following covered by users group above)
 			followHandler := handlers.NewFollowHandler(dbPool)
