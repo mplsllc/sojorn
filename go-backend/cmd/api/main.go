@@ -259,6 +259,7 @@ func main() {
 			auth.GET("/verify", authHandler.VerifyEmail)
 			auth.POST("/forgot-password", authHandler.ForgotPassword)
 			auth.POST("/reset-password", authHandler.ResetPassword)
+			auth.GET("/altcha-challenge", authHandler.GetAltchaChallenge)
 		}
 
 		// Test endpoint to verify routing
@@ -266,8 +267,7 @@ func main() {
 			c.JSON(200, gin.H{"message": "Route test successful"})
 		})
 
-		// ALTCHA challenge endpoints (no rate limiting)
-		v1.GET("/auth/altcha-challenge", authHandler.GetAltchaChallenge)
+		// Admin ALTCHA challenge endpoint (no auth required)
 		v1.GET("/admin/altcha-challenge", adminHandler.GetAltchaChallenge)
 
 		authorized := v1.Group("")
