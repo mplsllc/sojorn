@@ -4443,12 +4443,13 @@ func (h *AdminHandler) AdminListWaitlist(c *gin.Context) {
 
 	var entries []gin.H
 	for rows.Next() {
-		var id, email string
+		var id any // int or uuid depending on schema
+		var email string
 		var name, referralCode, invitedBy, wlStatus, notes *string
 		var createdAt, updatedAt time.Time
 		if err := rows.Scan(&id, &email, &name, &referralCode, &invitedBy, &wlStatus, &notes, &createdAt, &updatedAt); err == nil {
 			entries = append(entries, gin.H{
-				"id": id, "email": email, "name": name,
+				"id": fmt.Sprintf("%v", id), "email": email, "name": name,
 				"referral_code": referralCode, "invited_by": invitedBy,
 				"status": wlStatus, "notes": notes,
 				"created_at": createdAt, "updated_at": updatedAt,
