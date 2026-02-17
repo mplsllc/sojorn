@@ -260,6 +260,7 @@ func main() {
 			auth.GET("/verify", authHandler.VerifyEmail)
 			auth.POST("/forgot-password", authHandler.ForgotPassword)
 			auth.POST("/reset-password", authHandler.ResetPassword)
+			auth.GET("/altcha-challenge", authHandler.GetAltchaChallenge)
 		}
 
 		authorized := v1.Group("")
@@ -510,8 +511,7 @@ func main() {
 		}
 	}
 
-	// ALTCHA challenge endpoints (no auth required)
-	r.GET("/api/v1/auth/altcha-challenge", authHandler.GetAltchaChallenge)
+	// Admin ALTCHA challenge endpoint (no auth required)
 	r.GET("/api/v1/admin/altcha-challenge", adminHandler.GetAltchaChallenge)
 
 	// Admin login (no auth middleware - this IS the auth step)
