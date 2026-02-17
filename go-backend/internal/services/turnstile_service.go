@@ -35,10 +35,6 @@ func NewTurnstileService(secretKey string) *TurnstileService {
 
 // VerifyToken validates a Turnstile token with Cloudflare
 func (s *TurnstileService) VerifyToken(token, remoteIP string) (*TurnstileResponse, error) {
-	// Allow bypass token for development (Flutter web)
-	if token == "BYPASS_DEV_MODE" {
-		return &TurnstileResponse{Success: true}, nil
-	}
 
 	if s.secretKey == "" {
 		// If no secret key is configured, skip verification (for development)

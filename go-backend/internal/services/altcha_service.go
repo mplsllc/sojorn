@@ -23,10 +23,6 @@ func NewAltchaService(secretKey string) *AltchaService {
 
 // VerifyToken validates an ALTCHA token using the official library
 func (s *AltchaService) VerifyToken(token, remoteIP string) (*AltchaResponse, error) {
-	// Allow bypass token for development
-	if token == "BYPASS_DEV_MODE" {
-		return &AltchaResponse{Verified: true}, nil
-	}
 
 	if s.secretKey == "" {
 		// If no secret key is configured, skip verification (for development)
