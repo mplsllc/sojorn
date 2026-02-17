@@ -1746,6 +1746,10 @@ func (h *AdminHandler) GetAlgorithmConfig(c *gin.Context) {
 				{"key": "feed_engagement_weight", "value": "0.3", "description": "Weight for engagement metrics"},
 				{"key": "feed_harmony_weight", "value": "0.2", "description": "Weight for author harmony score"},
 				{"key": "feed_diversity_weight", "value": "0.1", "description": "Weight for content diversity"},
+				{"key": "feed_cooling_multiplier", "value": "0.2", "description": "Score multiplier for previously-seen posts (0–1, lower = stronger penalty)"},
+				{"key": "feed_diversity_personal_pct", "value": "60", "description": "% of feed from top personal scores"},
+				{"key": "feed_diversity_category_pct", "value": "20", "description": "% of feed from under-represented categories"},
+				{"key": "feed_diversity_discovery_pct", "value": "20", "description": "% of feed from authors viewer doesn't follow"},
 				{"key": "moderation_auto_flag_threshold", "value": "0.7", "description": "AI score threshold for auto-flagging"},
 				{"key": "moderation_auto_remove_threshold", "value": "0.95", "description": "AI score threshold for auto-removal"},
 			},
@@ -4405,6 +4409,131 @@ func (h *AdminHandler) RepairQuip(c *gin.Context) {
 }
 
 // ──────────────────────────────────────────────────────────────────────────────
+// ──────────────────────────────────────────────
+// Waitlist Management
+// ──────────────────────────────────────────────
+
+// AdminListWaitlist GET /admin/waitlist?status=&limit=&offset=
+func (h *AdminHandler) AdminListWaitlist(c *gin.Context) {
+	ctx := c.Request.Context()
+	limit, _ := strconv.Atoi(c.DefaultQuery("limit", "50"))
+	offset, _ := strconv.Atoi(c.DefaultQuery("offset", "0"))
+	status := c.DefaultQuery("status", "")
+	if limit <= 0 || limit > 200 {
+		limit = 50
+	}
+
+	query := `SELECT id, email, name, referral_code, invited_by, status, notes, created_at, updated_at
+	           FROM waitlist`
+	args := []interface{}{}
+	if status != "" {
+		query += " WHERE status = $1"
+		args = append(args, status)
+	}
+	query += fmt.Sprintf(" ORDER BY created_at DESC LIMIT $%d OFFSET $%d", len(args)+1, len(args)+2)
+	args = append(args, limit, offset)
+
+	rows, err := h.pool.Query(ctx, query, args...)
+	if err != nil {
+		// Table may not exist yet
+		c.JSON(http.StatusOK, gin.H{"entries": []gin.H{}, "total": 0})
+		return
+	}
+	defer rows.Close()
+
+	var entries []gin.H
+	for rows.Next() {
+		var id, email string
+		var name, referralCode, invitedBy, wlStatus, notes *string
+		var createdAt, updatedAt time.Time
+		if err := rows.Scan(&id, &email, &name, &referralCode, &invitedBy, &wlStatus, &notes, &createdAt, &updatedAt); err == nil {
+			entries = append(entries, gin.H{
+				"id": id, "email": email, "name": name,
+				"referral_code": referralCode, "invited_by": invitedBy,
+				"status": wlStatus, "notes": notes,
+				"created_at": createdAt, "updated_at": updatedAt,
+			})
+		}
+	}
+	if entries == nil {
+		entries = []gin.H{}
+	}
+
+	var total int
+	countQuery := "SELECT COUNT(*) FROM waitlist"
+	if status != "" {
+		_ = h.pool.QueryRow(ctx, countQuery+" WHERE status = $1", status).Scan(&total)
+	} else {
+		_ = h.pool.QueryRow(ctx, countQuery).Scan(&total)
+	}
+
+	c.JSON(http.StatusOK, gin.H{"entries": entries, "total": total, "limit": limit, "offset": offset})
+}
+
+// AdminUpdateWaitlist PATCH /admin/waitlist/:id
+func (h *AdminHandler) AdminUpdateWaitlist(c *gin.Context) {
+	ctx := c.Request.Context()
+	id := c.Param("id")
+
+	var req struct {
+		Status string `json:"status"`
+		Notes  string `json:"notes"`
+	}
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+
+	_, err := h.pool.Exec(ctx,
+		`UPDATE waitlist SET status = COALESCE(NULLIF($1,''), status), notes = COALESCE(NULLIF($2,''), notes), updated_at = NOW() WHERE id = $3`,
+		req.Status, req.Notes, id)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to update waitlist entry"})
+		return
+	}
+
+	adminID, _ := c.Get("user_id")
+	h.pool.Exec(ctx, `INSERT INTO audit_log (actor_id, action, target_type, target_id, details) VALUES ($1, 'waitlist_update', 'waitlist', $2, $3)`,
+		adminID, id, fmt.Sprintf("status=%s", req.Status))
+
+	c.JSON(http.StatusOK, gin.H{"message": "Updated"})
+}
+
+// AdminDeleteWaitlist DELETE /admin/waitlist/:id
+func (h *AdminHandler) AdminDeleteWaitlist(c *gin.Context) {
+	ctx := c.Request.Context()
+	id := c.Param("id")
+
+	_, err := h.pool.Exec(ctx, `DELETE FROM waitlist WHERE id = $1`, id)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to delete waitlist entry"})
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"message": "Deleted"})
+}
+
+// ──────────────────────────────────────────────
+// Feed Impression Reset
+// ──────────────────────────────────────────────
+
+// AdminResetFeedImpressions DELETE /admin/users/:id/feed-impressions
+func (h *AdminHandler) AdminResetFeedImpressions(c *gin.Context) {
+	ctx := c.Request.Context()
+	userID := c.Param("id")
+
+	result, err := h.pool.Exec(ctx, `DELETE FROM user_feed_impressions WHERE user_id = $1`, userID)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to reset feed impressions"})
+		return
+	}
+
+	adminID, _ := c.Get("user_id")
+	h.pool.Exec(ctx, `INSERT INTO audit_log (actor_id, action, target_type, target_id, details) VALUES ($1, 'reset_feed_impressions', 'user', $2, $3)`,
+		adminID, userID, "Admin reset feed impression history")
+
+	c.JSON(http.StatusOK, gin.H{"message": "Feed impressions reset", "deleted": result.RowsAffected()})
+}
+
 // Feed scores viewer
 // ──────────────────────────────────────────────────────────────────────────────
 

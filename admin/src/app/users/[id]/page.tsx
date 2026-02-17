@@ -5,7 +5,7 @@ import { api } from '@/lib/api';
 import { statusColor, formatDateTime } from '@/lib/utils';
 import { useEffect, useState } from 'react';
 import { useParams, useRouter } from 'next/navigation';
-import { ArrowLeft, Shield, Ban, CheckCircle, XCircle, Star, RotateCcw, Pencil, UserPlus, UserMinus, Users, Save, X } from 'lucide-react';
+import { ArrowLeft, Shield, Ban, CheckCircle, XCircle, Star, RotateCcw, Pencil, UserPlus, UserMinus, Users, Save, X, RefreshCcw } from 'lucide-react';
 import Link from 'next/link';
 
 export default function UserDetailPage() {
@@ -96,6 +96,18 @@ export default function UserDetailPage() {
       fetchUser();
     } catch (e: any) {
       alert(`Reset strikes failed: ${e.message}`);
+    }
+    setActionLoading(false);
+  };
+
+  const handleResetFeedImpressions = async () => {
+    if (!confirm('Reset this user\'s feed impression history? They will see previously-seen posts again.')) return;
+    setActionLoading(true);
+    try {
+      const result = await api.resetFeedImpressions(params.id as string);
+      alert(`Feed impressions reset. ${result.deleted ?? 0} records cleared.`);
+    } catch (e: any) {
+      alert(`Reset failed: ${e.message}`);
     }
     setActionLoading(false);
   };
@@ -246,6 +258,14 @@ export default function UserDetailPage() {
                   </div>
                 )}
 
+                {/* Feed Impressions */}
+                <div>
+                  <p className="text-xs font-medium text-gray-500 mb-2">Feed History</p>
+                  <button onClick={handleResetFeedImpressions} className="btn-secondary text-xs py-1.5 flex items-center gap-1" disabled={actionLoading}>
+                    <RefreshCcw className="w-3.5 h-3.5" /> Reset Feed Impressions
+                  </button>
+                </div>
+
                 {/* View Posts */}
                 <div className="pt-2 border-t border-warm-300">
                   <Link href={`/posts?author_id=${user.id}`} className="text-brand-500 hover:text-brand-700 text-sm font-medium">
@@ -256,15 +276,11 @@ export default function UserDetailPage() {
             </div>
           </div>
 
-          {/* Official Account: Editable Profile */}
-          {user.is_official && (
-            <OfficialProfileEditor user={user} onSaved={fetchUser} />
-          )}
+          {/* Editable Profile */}
+          <OfficialProfileEditor user={user} onSaved={fetchUser} />
 
-          {/* Official Account: Follower/Following Management */}
-          {user.is_official && (
-            <FollowManager userId={user.id} />
-          )}
+          {/* Follower/Following Management */}
+          <FollowManager userId={user.id} />
         </div>
       ) : (
         <div className="card p-8 text-center text-gray-500">User not found</div>
@@ -391,7 +407,7 @@ function OfficialProfileEditor({ user, onSaved }: { user: any; onSaved: () => vo
     <div className="card p-5">
       <div className="flex items-center justify-between mb-3">
         <h3 className="text-sm font-semibold text-gray-700 flex items-center gap-2">
-          <Pencil className="w-4 h-4" /> Official Account Profile
+          <Pencil className="w-4 h-4" /> Edit Profile
         </h3>
         {!editing ? (
           <button onClick={() => setEditing(true)} className="btn-secondary text-xs py-1 px-3">Edit</button>

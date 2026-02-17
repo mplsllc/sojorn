@@ -740,6 +740,14 @@ func main() {
 
 		// Feed scores viewer
 		admin.GET("/feed-scores", adminHandler.AdminGetFeedScores)
+
+		// Waitlist management
+		admin.GET("/waitlist", adminHandler.AdminListWaitlist)
+		admin.PATCH("/waitlist/:id", adminHandler.AdminUpdateWaitlist)
+		admin.DELETE("/waitlist/:id", adminHandler.AdminDeleteWaitlist)
+
+		// Feed impression reset
+		admin.DELETE("/users/:id/feed-impressions", adminHandler.AdminResetFeedImpressions)
 	}
 
 	// Public claim request endpoint (no auth)

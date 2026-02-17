@@ -679,6 +679,31 @@ class ApiClient {
   async getFeedScores(limit = 50) {
     return this.request<any>(`/api/v1/admin/feed-scores?limit=${limit}`);
   }
+
+  // Waitlist
+  async listWaitlist(params: { status?: string; limit?: number; offset?: number } = {}) {
+    const qs = new URLSearchParams();
+    if (params.status) qs.set('status', params.status);
+    if (params.limit) qs.set('limit', String(params.limit));
+    if (params.offset) qs.set('offset', String(params.offset));
+    return this.request<any>(`/api/v1/admin/waitlist?${qs}`);
+  }
+
+  async updateWaitlist(id: string, data: { status?: string; notes?: string }) {
+    return this.request<any>(`/api/v1/admin/waitlist/${id}`, {
+      method: 'PATCH',
+      body: JSON.stringify(data),
+    });
+  }
+
+  async deleteWaitlist(id: string) {
+    return this.request<any>(`/api/v1/admin/waitlist/${id}`, { method: 'DELETE' });
+  }
+
+  // Feed impression reset
+  async resetFeedImpressions(userId: string) {
+    return this.request<any>(`/api/v1/admin/users/${userId}/feed-impressions`, { method: 'DELETE' });
+  }
 }
 
 export const api = new ApiClient();
