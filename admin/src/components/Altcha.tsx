@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useRef, useCallback } from 'react';
+import { useEffect, useRef } from 'react';
 
 interface AltchaProps {
   challengeurl: string;
@@ -9,63 +9,46 @@ interface AltchaProps {
 }
 
 export default function Altcha({ challengeurl, onVerified, onError }: AltchaProps) {
-  const widgetRef = useRef<HTMLDivElement>(null);
-  const scriptLoaded = useRef(false);
+  const containerRef = useRef<HTMLDivElement>(null);
+  const callbacksRef = useRef({ onVerified, onError });
+  callbacksRef.current = { onVerified, onError };
 
-  const handleStateChange = useCallback((e: Event) => {
-    const detail = (e as CustomEvent).detail;
-    if (detail?.state === 'verified' && detail?.payload) {
-      onVerified?.(detail.payload);
-    } else if (detail?.state === 'error') {
-      onError?.();
+  useEffect(() => {
+    // Load script if not already loaded
+    if (!document.querySelector('script[data-altcha]')) {
+      const script = document.createElement('script');
+      script.src = 'https://cdn.jsdelivr.net/npm/altcha@2.3.0/dist/altcha.min.js';
+      script.type = 'module';
+      script.async = true;
+      script.setAttribute('data-altcha', 'true');
+      document.head.appendChild(script);
     }
-  }, [onVerified, onError]);
 
-  useEffect(() => {
-    if (scriptLoaded.current) return;
-    scriptLoaded.current = true;
-
-    const script = document.createElement('script');
-    script.src = 'https://cdn.jsdelivr.net/npm/altcha@2.3.0/dist/altcha.min.js';
-    script.type = 'module';
-    script.async = true;
-    document.head.appendChild(script);
-  }, []);
-
-  useEffect(() => {
-    const container = widgetRef.current;
+    const container = containerRef.current;
     if (!container) return;
 
-    const observer = new MutationObserver(() => {
-      const widget = container.querySelector('altcha-widget');
-      if (widget) {
-        widget.addEventListener('statechange', handleStateChange);
-        observer.disconnect();
-      }
-    });
-
-    observer.observe(container, { childList: true, subtree: true });
-
-    // Also try immediately in case widget already exists
+    // Create the widget element
+    container.innerHTML = `<altcha-widget challengeurl="${challengeurl}"></altcha-widget>`;
     const widget = container.querySelector('altcha-widget');
-    if (widget) {
-      widget.addEventListener('statechange', handleStateChange);
-      observer.disconnect();
-    }
+    if (!widget) return;
 
-    return () => {
-      observer.disconnect();
-      const w = container.querySelector('altcha-widget');
-      if (w) {
-        w.removeEventListener('statechange', handleStateChange);
+    const handler = (e: Event) => {
+      const detail = (e as CustomEvent).detail;
+      console.log('[ALTCHA] statechange:', detail);
+      if (detail?.state === 'verified' && detail?.payload) {
+        callbacksRef.current.onVerified?.(detail.payload);
+      } else if (detail?.state === 'error') {
+        callbacksRef.current.onError?.();
       }
     };
-  }, [handleStateChange]);
 
-  return (
-    <div ref={widgetRef} dangerouslySetInnerHTML={{
-      __html: `<altcha-widget challengeurl="${challengeurl}" debug></altcha-widget>`
-    }} />
-  );
+    widget.addEventListener('statechange', handler);
+
+    return () => {
+      widget.removeEventListener('statechange', handler);
+    };
+  }, [challengeurl]);
+
+  return <div ref={containerRef} />;
 }
 

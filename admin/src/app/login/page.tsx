@@ -28,24 +28,21 @@ export default function LoginPage() {
   }, []);
 
   const performLogin = useCallback(async () => {
-    // Use development bypass for now
-    const token = process.env.NODE_ENV === 'development' ? 'BYPASS_DEV_MODE' : altchaToken;
-    
-    if (!token && !altchaVerified) {
+    if (!altchaToken) {
       setError('Please complete the security verification');
       return;
     }
 
     setLoading(true);
     try {
-      await login(emailRef.current, passwordRef.current, token);
+      await login(emailRef.current, passwordRef.current, altchaToken);
       router.push('/');
     } catch (err: any) {
       setError(err.message || 'Login failed. Check your credentials.');
     } finally {
       setLoading(false);
     }
-  }, [login, router, altchaToken, altchaVerified]);
+  }, [login, router, altchaToken]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -114,7 +111,7 @@ export default function LoginPage() {
             <button
               type="submit"
               className="btn-primary w-full"
-              disabled={loading || (process.env.NODE_ENV !== 'development' && !altchaVerified)}
+              disabled={loading || !altchaVerified}
             >
               {loading ? 'Signing in...' : 'Sign In'}
             </button>
