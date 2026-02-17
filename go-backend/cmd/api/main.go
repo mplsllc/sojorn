@@ -394,6 +394,16 @@ func main() {
 			authorized.POST("/hashtags/:name/follow", discoverHandler.FollowHashtag)
 			authorized.DELETE("/hashtags/:name/follow", discoverHandler.UnfollowHashtag)
 
+			// Follow System
+			followHandler := handlers.NewFollowHandler(dbPool)
+			authorized.POST("/users/:userId/follow", followHandler.FollowUser)
+			authorized.POST("/users/:userId/unfollow", followHandler.UnfollowUser)
+			authorized.GET("/users/:userId/is-following", followHandler.IsFollowing)
+			authorized.GET("/users/:userId/mutual-followers", followHandler.GetMutualFollowers)
+			authorized.GET("/users/suggested", followHandler.GetSuggestedUsers)
+			authorized.GET("/users/:userId/followers", followHandler.GetFollowers)
+			authorized.GET("/users/:userId/following", followHandler.GetFollowing)
+
 			// Notifications
 			notificationHandler := handlers.NewNotificationHandler(notifRepo, notificationService)
 			authorized.GET("/notifications", notificationHandler.GetNotifications)
