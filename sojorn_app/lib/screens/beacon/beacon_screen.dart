@@ -12,6 +12,7 @@ import '../../models/beacon.dart';
 import '../../models/cluster.dart';
 import '../../models/board_entry.dart';
 import '../../models/local_intel.dart';
+import '../../models/group.dart';
 import '../../services/api_service.dart';
 import '../../services/auth_service.dart';
 import '../../services/local_intel_service.dart';
@@ -2418,7 +2419,7 @@ class _CreateGroupInline extends StatefulWidget {
 class _CreateGroupInlineState extends State<_CreateGroupInline> {
   final _nameCtrl = TextEditingController();
   final _descCtrl = TextEditingController();
-  String _privacy = 'public';
+  bool _privacy = false;
   GroupCategory _category = GroupCategory.general;
   bool _submitting = false;
 
@@ -2429,11 +2430,12 @@ class _CreateGroupInlineState extends State<_CreateGroupInline> {
     if (_nameCtrl.text.trim().isEmpty) return;
     setState(() => _submitting = true);
     try {
-      await ApiService.instance.createGroup(
+      final api = ref.read(apiServiceProvider);
+      await api.createGroup(
         name: _nameCtrl.text.trim(),
         description: _descCtrl.text.trim(),
-        is_private: _privacy,
-        category: _category.value,
+        category: GroupCategory.fromString(_category.value),
+        isPrivate: _privacy,
       );
       widget.onCreated();
     } catch (e) {

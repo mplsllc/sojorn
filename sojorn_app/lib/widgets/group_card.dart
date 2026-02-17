@@ -280,7 +280,7 @@ class _GroupCardState extends ConsumerState<GroupCard> {
               ],
             ),
             
-            if (showReason && reason != null) ...[
+            if (widget.showReason && widget.reason != null) ...[
               const SizedBox(height: 8),
               Container(
                 padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
@@ -395,7 +395,7 @@ class CompactGroupCard extends StatelessWidget {
                 ),
               ],
             ),
-            if (showReason && reason != null) ...[
+            if (widget.showReason && widget.reason != null) ...[
               const SizedBox(height: 6),
               Container(
                 padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
@@ -404,7 +404,7 @@ class CompactGroupCard extends StatelessWidget {
                   borderRadius: BorderRadius.circular(6),
                 ),
                 child: Text(
-                  reason!,
+                  widget.reason!,
                   style: TextStyle(
                     fontSize: 9,
                     color: Colors.blue[700],

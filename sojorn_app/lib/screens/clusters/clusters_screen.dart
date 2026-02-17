@@ -741,7 +741,7 @@ class _CreateGroupForm extends StatefulWidget {
 class _CreateGroupFormState extends State<_CreateGroupForm> {
   final _nameCtrl = TextEditingController();
   final _descCtrl = TextEditingController();
-  String _privacy = 'public';
+  bool _privacy = false;
   bool _submitting = false;
 
   @override
@@ -751,10 +751,12 @@ class _CreateGroupFormState extends State<_CreateGroupForm> {
     if (_nameCtrl.text.trim().isEmpty) return;
     setState(() => _submitting = true);
     try {
-      await ApiService.instance.createGroup(
+      final api = ref.read(apiServiceProvider);
+      await api.createGroup(
         name: _nameCtrl.text.trim(),
         description: _descCtrl.text.trim(),
-        is_private: _privacy,
+        category: group_models.GroupCategory.general,
+        isPrivate: _privacy,
       );
       widget.onCreated();
     } catch (e) {
