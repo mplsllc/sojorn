@@ -11,6 +11,7 @@ import '../../theme/app_theme.dart';
 import 'group_screen.dart';
 import '../../widgets/skeleton_loader.dart';
 import '../../widgets/group_card.dart';
+import '../../widgets/group_creation_modal.dart';
 
 /// ClustersScreen — Discovery-first groups page.
 /// Shows "Your Groups" at top, then "Discover Communities" with category filtering.
@@ -208,13 +209,24 @@ class _ClustersScreenState extends ConsumerState<ClustersScreen>
         padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
         children: [
           // ── Your Groups ──
-          if (_myGroups.isNotEmpty) ...[
-            _SectionHeader(title: 'Your Groups', count: _myGroups.length),
+          if (_myUserGroups.isNotEmpty) ...[
+            _SectionHeader(title: 'Your Groups', count: _myUserGroups.length),
             const SizedBox(height: 8),
-            ..._myGroups.map((c) => _GroupCard(
-              cluster: c,
-              onTap: () => _navigateToCluster(c),
-            )),
+            SizedBox(
+              height: 180,
+              child: ListView.separated(
+                scrollDirection: Axis.horizontal,
+                itemCount: _myUserGroups.length,
+                separatorBuilder: (_, __) => const SizedBox(width: 12),
+                itemBuilder: (_, i) {
+                  final group = _myUserGroups[i];
+                  return CompactGroupCard(
+                    group: group,
+                    onTap: () => _navigateToGroup(group),
+                  );
+                },
+              ),
+            ),
             const SizedBox(height: 20),
           ],
 
@@ -247,7 +259,7 @@ class _ClustersScreenState extends ConsumerState<ClustersScreen>
                   selected: selected,
                   onSelected: (_) {
                     setState(() => _selectedCategory = value);
-                    _loadDiscover();
+                    _loadSuggestedGroups();
                   },
                   selectedColor: AppTheme.navyBlue,
                   backgroundColor: AppTheme.navyBlue.withValues(alpha: 0.06),
@@ -264,29 +276,28 @@ class _ClustersScreenState extends ConsumerState<ClustersScreen>
           const SizedBox(height: 12),
 
           // Discover results
-          if (_isDiscoverLoading)
+          if (_isSuggestedLoading)
             const SkeletonGroupList(count: 4)
-          else if (_discoverGroups.isEmpty)
+          else if (_suggestedGroups.isEmpty)
             _EmptyDiscoverState(
               onCreateGroup: () => _showCreateSheet(context),
             )
           else
-            ..._discoverGroups.map((g) {
-              final isMember = g['is_member'] as bool? ?? false;
-              final groupId = g['id']?.toString() ?? '';
-              return _DiscoverGroupCard(
-                name: g['name'] as String? ?? '',
-                description: g['description'] as String? ?? '',
-                memberCount: g['member_count'] as int? ?? 0,
-                category: GroupCategory.fromString(g['category'] as String? ?? 'general'),
-                isMember: isMember,
-                onJoin: isMember ? null : () => _joinGroup(groupId),
-                onTap: isMember ? () {
-                  final cluster = Cluster.fromJson(g);
-                  _navigateToCluster(cluster);
-                } : null,
-              );
-            }),
+            Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const SizedBox(height: 8),
+                ..._suggestedGroups.map((suggested) {
+                  return GroupCard(
+                    group: suggested.group,
+                    onTap: () => _navigateToGroup(suggested.group),
+                    showReason: true,
+                    reason: suggested.reason,
+                  );
+                }),
+                const SizedBox(height: 20),
+              ],
+            ),
 
           // Create group CTA at bottom
           const SizedBox(height: 16),
@@ -329,14 +340,24 @@ class _ClustersScreenState extends ConsumerState<ClustersScreen>
   }
 
   void _showCreateSheet(BuildContext context, {bool capsule = false}) {
-    showModalBottomSheet(
-      context: context,
-      backgroundColor: AppTheme.cardSurface,
-      isScrollControlled: true,
-      builder: (ctx) => capsule
-          ? _CreateCapsuleForm(onCreated: () { Navigator.pop(ctx); _loadAll(); })
-          : _CreateGroupForm(onCreated: () { Navigator.pop(ctx); _loadAll(); }),
-    );
+    if (capsule) {
+      // Keep existing capsule creation
+      showModalBottomSheet(
+        context: context,
+        backgroundColor: AppTheme.cardSurface,
+        isScrollControlled: true,
+        builder: (ctx) => _CreateCapsuleForm(onCreated: () { Navigator.pop(ctx); _loadAll(); }),
+      );
+    } else {
+      // Use new GroupCreationModal
+      showDialog(
+        context: context,
+        builder: (ctx) => GroupCreationModal(),
+      ).then((_) {
+        // Refresh data after modal is closed
+        _loadAll();
+      });
+    }
   }
 }
 
