@@ -599,15 +599,22 @@ func (h *AuthHandler) ResetPassword(c *gin.Context) {
 }
 
 func (h *AuthHandler) GetAltchaChallenge(c *gin.Context) {
-	// Generate a proper ALTCHA challenge
-	salt := fmt.Sprintf("%d", time.Now().UnixNano())
+	// Generate a proper ALTCHA challenge compatible with the widget
+	// The widget expects: algorithm, challenge, salt, signature
 
-	// Create a simple number challenge (find a number that when hashed with salt produces a hash starting with certain digits)
-	challenge := fmt.Sprintf("%x", sha256.Sum256([]byte(salt)))[:10]
+	// Generate random salt
+	salt := fmt.Sprintf("%x", time.Now().UnixNano())
 
-	// Create HMAC signature using JWT secret as the key
+	// Generate a random number that needs to be found (the challenge)
+	// The widget will try to find a number that when combined with salt produces a hash with specific properties
+	randomBytes := make([]byte, 16)
+	rand.Read(randomBytes)
+	challenge := fmt.Sprintf("%x", randomBytes)
+
+	// Create HMAC signature: HMAC(secret, challenge + salt)
 	mac := hmac.New(sha256.New, []byte(h.config.JWTSecret))
-	mac.Write([]byte(challenge + salt))
+	mac.Write([]byte(challenge))
+	mac.Write([]byte(salt))
 	signature := hex.EncodeToString(mac.Sum(nil))
 
 	response := map[string]interface{}{

@@ -1,5 +1,7 @@
 # Miscellaneous
 *.sql
+*.psd
+*.ai
 *.class
 *.log
 *.pyc
