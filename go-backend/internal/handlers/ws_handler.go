@@ -6,8 +6,8 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"github.com/gorilla/websocket"
-	"github.com/patbritton/sojorn-backend/internal/middleware"
-	"github.com/patbritton/sojorn-backend/internal/realtime"
+	"gitlab.com/patrickbritton3/sojorn/go-backend/internal/middleware"
+	"gitlab.com/patrickbritton3/sojorn/go-backend/internal/realtime"
 	"github.com/rs/zerolog/log"
 )
 

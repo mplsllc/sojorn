@@ -4,7 +4,7 @@ import (
 	"net/http"
 
 	"github.com/gin-gonic/gin"
-	"github.com/patbritton/sojorn-backend/internal/services"
+	"gitlab.com/patrickbritton3/sojorn/go-backend/internal/services"
 	"github.com/rs/zerolog/log"
 )
 

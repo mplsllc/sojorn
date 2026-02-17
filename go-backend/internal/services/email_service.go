@@ -14,7 +14,7 @@ import (
 
 	"github.com/jackc/pgx/v5/pgxpool"
 	sender "github.com/koddr/go-email-sender"
-	"github.com/patbritton/sojorn-backend/internal/config"
+	"gitlab.com/patrickbritton3/sojorn/go-backend/internal/config"
 	"github.com/rs/zerolog/log"
 )
 

@@ -12,7 +12,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
-	"github.com/patbritton/sojorn-backend/internal/models"
+	"gitlab.com/patrickbritton3/sojorn/go-backend/internal/models"
 )
 
 type UserRepository struct {

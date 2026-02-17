@@ -8,9 +8,9 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"github.com/google/uuid"
-	"github.com/patbritton/sojorn-backend/internal/realtime"
-	"github.com/patbritton/sojorn-backend/internal/repository"
-	"github.com/patbritton/sojorn-backend/internal/services"
+	"gitlab.com/patrickbritton3/sojorn/go-backend/internal/realtime"
+	"gitlab.com/patrickbritton3/sojorn/go-backend/internal/repository"
+	"gitlab.com/patrickbritton3/sojorn/go-backend/internal/services"
 	"github.com/rs/zerolog/log"
 )
 

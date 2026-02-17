@@ -10,8 +10,8 @@ import (
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/joho/godotenv"
-	"github.com/patbritton/sojorn-backend/internal/models"
-	"github.com/patbritton/sojorn-backend/internal/repository"
+	"gitlab.com/patrickbritton3/sojorn/go-backend/internal/models"
+	"gitlab.com/patrickbritton3/sojorn/go-backend/internal/repository"
 )
 
 func main() {

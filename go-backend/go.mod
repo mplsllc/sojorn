@@ -1,4 +1,4 @@
-module github.com/patbritton/sojorn-backend
+module gitlab.com/patrickbritton3/sojorn/go-backend
 
 go 1.25.4
 

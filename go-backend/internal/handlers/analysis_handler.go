@@ -5,7 +5,7 @@ import (
 	"strings"
 
 	"github.com/gin-gonic/gin"
-	"github.com/patbritton/sojorn-backend/internal/models"
+	"gitlab.com/patrickbritton3/sojorn/go-backend/internal/models"
 )
 
 type AnalysisHandler struct{}

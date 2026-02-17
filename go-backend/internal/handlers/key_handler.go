@@ -10,7 +10,7 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"github.com/google/uuid"
-	"github.com/patbritton/sojorn-backend/internal/repository"
+	"gitlab.com/patrickbritton3/sojorn/go-backend/internal/repository"
 )
 
 type KeyHandler struct {

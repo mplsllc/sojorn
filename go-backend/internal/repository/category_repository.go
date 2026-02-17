@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/patbritton/sojorn-backend/internal/database"
+	"gitlab.com/patrickbritton3/sojorn/go-backend/internal/database"
 )
 
 type CategoryRepository interface {

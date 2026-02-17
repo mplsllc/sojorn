@@ -5,8 +5,8 @@ import (
 	"os"
 	"time"
 
-	"github.com/patbritton/sojorn-backend/internal/config"
-	"github.com/patbritton/sojorn-backend/internal/database"
+	"gitlab.com/patrickbritton3/sojorn/go-backend/internal/config"
+	"gitlab.com/patrickbritton3/sojorn/go-backend/internal/database"
 	"github.com/rs/zerolog"
 	"github.com/rs/zerolog/log"
 )

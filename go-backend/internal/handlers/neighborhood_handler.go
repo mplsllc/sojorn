@@ -13,7 +13,7 @@ import (
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 
-	"github.com/patbritton/sojorn-backend/internal/services"
+	"gitlab.com/patrickbritton3/sojorn/go-backend/internal/services"
 )
 
 // NeighborhoodHandler manages neighborhood detection, on-demand creation,

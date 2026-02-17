@@ -3,8 +3,8 @@ package services
 import (
 	"context"
 
-	"github.com/patbritton/sojorn-backend/internal/models"
-	"github.com/patbritton/sojorn-backend/internal/repository"
+	"gitlab.com/patrickbritton3/sojorn/go-backend/internal/models"
+	"gitlab.com/patrickbritton3/sojorn/go-backend/internal/repository"
 )
 
 type FeedService struct {

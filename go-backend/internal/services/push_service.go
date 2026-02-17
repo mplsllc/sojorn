@@ -7,7 +7,7 @@ import (
 
 	firebase "firebase.google.com/go/v4"
 	"firebase.google.com/go/v4/messaging"
-	"github.com/patbritton/sojorn-backend/internal/repository"
+	"gitlab.com/patrickbritton3/sojorn/go-backend/internal/repository"
 	"github.com/rs/zerolog/log"
 	"google.golang.org/api/option"
 )

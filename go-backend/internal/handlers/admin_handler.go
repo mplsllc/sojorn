@@ -18,7 +18,7 @@ import (
 	"github.com/golang-jwt/jwt/v5"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgxpool"
-	"github.com/patbritton/sojorn-backend/internal/services"
+	"gitlab.com/patrickbritton3/sojorn/go-backend/internal/services"
 	"github.com/rs/zerolog/log"
 	"golang.org/x/crypto/bcrypt"
 )
