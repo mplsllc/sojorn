@@ -222,6 +222,13 @@ func main() {
 		c.Status(200)
 	})
 
+	// ALTCHA challenge endpoints (direct to main router for testing)
+	r.GET("/api/v1/auth/altcha-challenge", authHandler.GetAltchaChallenge)
+	r.GET("/api/v1/admin/altcha-challenge", adminHandler.GetAltchaChallenge)
+	r.GET("/api/v1/test", func(c *gin.Context) {
+		c.JSON(200, gin.H{"message": "Route test successful"})
+	})
+
 	v1 := r.Group("/api/v1")
 	{
 		// Public waitlist signup (no auth required)
