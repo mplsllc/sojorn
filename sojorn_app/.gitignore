@@ -1,4 +1,5 @@
 # Miscellaneous
+*.sql
 *.class
 *.log
 *.pyc

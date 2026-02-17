@@ -606,9 +606,9 @@ func (h *AuthHandler) GetAltchaChallenge(c *gin.Context) {
 	challenge := fmt.Sprintf("%x", sha256.Sum256([]byte(salt)))[:10]
 
 	// Create HMAC signature using JWT secret as the key
-	h := hmac.New(sha256.New, []byte(h.config.JWTSecret))
-	h.Write([]byte(challenge + salt))
-	signature := hex.EncodeToString(h.Sum(nil))
+	mac := hmac.New(sha256.New, []byte(h.config.JWTSecret))
+	mac.Write([]byte(challenge + salt))
+	signature := hex.EncodeToString(mac.Sum(nil))
 
 	response := map[string]interface{}{
 		"algorithm": "SHA-256",
