@@ -445,8 +445,6 @@ func (s *FeedAlgorithmService) updatePostScore(ctx context.Context, score FeedSc
 
 // Get feed with algorithmic ranking
 func (s *FeedAlgorithmService) GetAlgorithmicFeed(ctx context.Context, viewerID string, limit int, offset int, category string) ([]string, error) {
-	weights := s.GetDefaultWeights()
-	
 	// Update scores for recent posts first
 	err := s.UpdateFeedScores(ctx, []string{}, viewerID) // This would normally get recent posts
 	if err != nil {
