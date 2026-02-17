@@ -3,22 +3,38 @@
 import { useState, useRef, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
 import { useAuth } from '@/lib/auth';
+import Altcha from '@/components/Altcha';
 
 export default function LoginPage() {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
+  const [altchaToken, setAltchaToken] = useState('');
+  const [altchaVerified, setAltchaVerified] = useState(false);
   const emailRef = useRef('');
   const passwordRef = useRef('');
   const { login } = useAuth();
   const router = useRouter();
 
+  const handleAltchaStateChange = useCallback((state: any) => {
+    if (state.state === 'verified' && state.payload) {
+      setAltchaToken(state.payload);
+      setAltchaVerified(true);
+    } else {
+      setAltchaToken('');
+      setAltchaVerified(false);
+    }
+  }, []);
+
   const performLogin = useCallback(async () => {
+    if (!altchaVerified) {
+      setError('Please complete the security verification');
+      return;
+    }
+
     setLoading(true);
     try {
-      // Use development bypass if in development mode
-      const altchaToken = process.env.NODE_ENV === 'development' ? 'BYPASS_DEV_MODE' : '';
       await login(emailRef.current, passwordRef.current, altchaToken);
       router.push('/');
     } catch (err: any) {
@@ -26,7 +42,7 @@ export default function LoginPage() {
     } finally {
       setLoading(false);
     }
-  }, [login, router]);
+  }, [login, router, altchaToken, altchaVerified]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -85,10 +101,16 @@ export default function LoginPage() {
                 required
               />
             </div>
+            <div>
+              <Altcha 
+                challengeurl="https://api.sojorn.net/api/v1/admin/altcha-challenge"
+                onStateChange={handleAltchaStateChange}
+              />
+            </div>
             <button
               type="submit"
               className="btn-primary w-full"
-              disabled={loading}
+              disabled={loading || !altchaVerified}
             >
               {loading ? 'Signing in...' : 'Sign In'}
             </button>
