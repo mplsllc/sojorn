@@ -470,6 +470,23 @@ func main() {
 				neighborhoods.GET("/mine", neighborhoodHandler.GetMyNeighborhood)
 			}
 
+			// Groups system (community groups with discovery and membership)
+			groupsHandler := handlers.NewGroupsHandler(dbPool)
+			groups := authorized.Group("/groups")
+			{
+				groups.GET("", groupsHandler.ListGroups)                                          // List all groups with optional category filter
+				groups.GET("/mine", groupsHandler.GetMyGroups)                                    // Get user's joined groups
+				groups.GET("/suggested", groupsHandler.GetSuggestedGroups)                        // Get suggested groups
+				groups.POST("", groupsHandler.CreateGroup)                                        // Create new group
+				groups.GET("/:id", groupsHandler.GetGroup)                                        // Get group details
+				groups.POST("/:id/join", groupsHandler.JoinGroup)                                 // Join group or request to join
+				groups.POST("/:id/leave", groupsHandler.LeaveGroup)                               // Leave group
+				groups.GET("/:id/members", groupsHandler.GetGroupMembers)                         // Get group members
+				groups.GET("/:id/requests", groupsHandler.GetPendingRequests)                     // Get pending join requests (admin)
+				groups.POST("/:id/requests/:requestId/approve", groupsHandler.ApproveJoinRequest) // Approve join request
+				groups.POST("/:id/requests/:requestId/reject", groupsHandler.RejectJoinRequest)   // Reject join request
+			}
+
 			// Capsule system (E2EE groups + clusters)
 			capsules := authorized.Group("/capsules")
 			{
