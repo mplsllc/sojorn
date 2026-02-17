@@ -17,14 +17,14 @@ export default function LoginPage() {
   const { login } = useAuth();
   const router = useRouter();
 
-  const handleAltchaStateChange = useCallback((state: any) => {
-    if (state.state === 'verified' && state.payload) {
-      setAltchaToken(state.payload);
-      setAltchaVerified(true);
-    } else {
-      setAltchaToken('');
-      setAltchaVerified(false);
-    }
+  const handleAltchaVerified = useCallback((payload: string) => {
+    setAltchaToken(payload);
+    setAltchaVerified(true);
+  }, []);
+
+  const handleAltchaError = useCallback(() => {
+    setAltchaToken('');
+    setAltchaVerified(false);
   }, []);
 
   const performLogin = useCallback(async () => {
@@ -107,7 +107,8 @@ export default function LoginPage() {
             <div>
               <Altcha 
                 challengeurl="https://api.sojorn.net/api/v1/admin/altcha-challenge"
-                onStateChange={handleAltchaStateChange}
+                onVerified={handleAltchaVerified}
+                onError={handleAltchaError}
               />
             </div>
             <button

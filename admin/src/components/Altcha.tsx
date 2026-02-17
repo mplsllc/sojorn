@@ -1,58 +1,71 @@
 'use client';
 
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useRef, useCallback } from 'react';
 
 interface AltchaProps {
   challengeurl: string;
-  onStateChange?: (state: any) => void;
+  onVerified?: (payload: string) => void;
+  onError?: () => void;
 }
 
-export default function Altcha({ challengeurl, onStateChange }: AltchaProps) {
+export default function Altcha({ challengeurl, onVerified, onError }: AltchaProps) {
   const widgetRef = useRef<HTMLDivElement>(null);
-  const [loaded, setLoaded] = useState(false);
+  const scriptLoaded = useRef(false);
+
+  const handleStateChange = useCallback((e: Event) => {
+    const detail = (e as CustomEvent).detail;
+    if (detail?.state === 'verified' && detail?.payload) {
+      onVerified?.(detail.payload);
+    } else if (detail?.state === 'error') {
+      onError?.();
+    }
+  }, [onVerified, onError]);
 
   useEffect(() => {
-    // Load ALTCHA widget script
+    if (scriptLoaded.current) return;
+    scriptLoaded.current = true;
+
     const script = document.createElement('script');
-    script.src = 'https://cdn.jsdelivr.net/npm/altcha@0.5.0/dist/altcha.min.js';
+    script.src = 'https://cdn.jsdelivr.net/npm/altcha@2.3.0/dist/altcha.min.js';
     script.type = 'module';
     script.async = true;
-    script.onload = () => setLoaded(true);
     document.head.appendChild(script);
-
-    return () => {
-      if (script.parentNode) {
-        script.parentNode.removeChild(script);
-      }
-    };
   }, []);
 
   useEffect(() => {
-    if (!loaded || !widgetRef.current) return;
+    const container = widgetRef.current;
+    if (!container) return;
 
-    const widget = widgetRef.current.querySelector('altcha-widget');
-    if (!widget) return;
-
-    const handleStateChange = (event: any) => {
-      if (onStateChange) {
-        onStateChange(event.detail);
+    const observer = new MutationObserver(() => {
+      const widget = container.querySelector('altcha-widget');
+      if (widget) {
+        widget.addEventListener('statechange', handleStateChange);
+        observer.disconnect();
       }
-    };
+    });
 
-    widget.addEventListener('statechange', handleStateChange);
+    observer.observe(container, { childList: true, subtree: true });
+
+    // Also try immediately in case widget already exists
+    const widget = container.querySelector('altcha-widget');
+    if (widget) {
+      widget.addEventListener('statechange', handleStateChange);
+      observer.disconnect();
+    }
 
     return () => {
-      widget.removeEventListener('statechange', handleStateChange);
+      observer.disconnect();
+      const w = container.querySelector('altcha-widget');
+      if (w) {
+        w.removeEventListener('statechange', handleStateChange);
+      }
     };
-  }, [loaded, onStateChange]);
+  }, [handleStateChange]);
 
   return (
-    <div ref={widgetRef}>
-      <altcha-widget
-        challengeurl={challengeurl}
-        hidefooter="true"
-        hidelogo="true"
-      />
-    </div>
+    <div ref={widgetRef} dangerouslySetInnerHTML={{
+      __html: `<altcha-widget challengeurl="${challengeurl}" debug></altcha-widget>`
+    }} />
   );
 }
+
