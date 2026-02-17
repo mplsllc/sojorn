@@ -2,12 +2,15 @@ import 'package:flutter/material.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../models/cluster.dart';
+import '../../models/group.dart';
+import '../../providers/api_provider.dart';
 import '../../services/api_service.dart';
 import '../../services/capsule_security_service.dart';
 import '../../theme/tokens.dart';
 import '../../theme/app_theme.dart';
 import 'group_screen.dart';
 import '../../widgets/skeleton_loader.dart';
+import '../../widgets/group_card.dart';
 
 /// ClustersScreen — Discovery-first groups page.
 /// Shows "Your Groups" at top, then "Discover Communities" with category filtering.
@@ -28,6 +31,12 @@ class _ClustersScreenState extends ConsumerState<ClustersScreen>
   List<Map<String, dynamic>> _discoverGroups = [];
   Map<String, String> _encryptedKeys = {};
   String _selectedCategory = 'all';
+  
+  // Groups system state
+  List<Group> _myUserGroups = [];
+  List<SuggestedGroup> _suggestedGroups = [];
+  bool _isGroupsLoading = false;
+  bool _isSuggestedLoading = false;
 
   static const _categories = [
     ('all', 'All', Icons.grid_view),
@@ -55,7 +64,12 @@ class _ClustersScreenState extends ConsumerState<ClustersScreen>
 
   Future<void> _loadAll() async {
     setState(() => _isLoading = true);
-    await Future.wait([_loadMyGroups(), _loadDiscover()]);
+    await Future.wait([
+      _loadMyGroups(), 
+      _loadDiscover(),
+      _loadUserGroups(),
+      _loadSuggestedGroups(),
+    ]);
     if (mounted) setState(() => _isLoading = false);
   }
 
@@ -117,6 +131,36 @@ class _ClustersScreenState extends ConsumerState<ClustersScreen>
         encryptedGroupKey: _encryptedKeys[cluster.id],
       ),
     ));
+  }
+
+  // Groups system methods
+  Future<void> _loadUserGroups() async {
+    setState(() => _isGroupsLoading = true);
+    try {
+      final api = ref.read(apiServiceProvider);
+      final groups = await api.getMyGroups();
+      if (mounted) setState(() => _myUserGroups = groups);
+    } catch (e) {
+      if (kDebugMode) print('[Groups] Load user groups error: $e');
+    }
+    if (mounted) setState(() => _isGroupsLoading = false);
+  }
+
+  Future<void> _loadSuggestedGroups() async {
+    setState(() => _isSuggestedLoading = true);
+    try {
+      final api = ref.read(apiServiceProvider);
+      final suggestions = await api.getSuggestedGroups();
+      if (mounted) setState(() => _suggestedGroups = suggestions);
+    } catch (e) {
+      if (kDebugMode) print('[Groups] Load suggestions error: $e');
+    }
+    if (mounted) setState(() => _isSuggestedLoading = false);
+  }
+
+  void _navigateToGroup(Group group) {
+    // TODO: Navigate to group detail screen
+    if (kDebugMode) print('Navigate to group: ${group.name}');
   }
 
   @override
