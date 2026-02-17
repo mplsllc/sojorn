@@ -418,9 +418,9 @@ func main() {
 
 			// Follow System (unique routes only — followers/following covered by users group above)
 			followHandler := handlers.NewFollowHandler(dbPool)
-			authorized.POST("/users/:userId/unfollow", followHandler.UnfollowUser)
-			authorized.GET("/users/:userId/is-following", followHandler.IsFollowing)
-			authorized.GET("/users/:userId/mutual-followers", followHandler.GetMutualFollowers)
+			authorized.POST("/users/:id/unfollow", followHandler.UnfollowUser)
+			authorized.GET("/users/:id/is-following", followHandler.IsFollowing)
+			authorized.GET("/users/:id/mutual-followers", followHandler.GetMutualFollowers)
 			authorized.GET("/users/suggested", followHandler.GetSuggestedUsers)
 
 			// Notifications

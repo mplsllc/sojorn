@@ -19,7 +19,7 @@ func NewFollowHandler(db *pgxpool.Pool) *FollowHandler {
 // FollowUser — POST /users/:userId/follow
 func (h *FollowHandler) FollowUser(c *gin.Context) {
 	userID := c.GetString("user_id")
-	targetUserID := c.Param("userId")
+	targetUserID := c.Param("id")
 
 	if userID == "" {
 		c.JSON(http.StatusUnauthorized, gin.H{"error": "unauthorized"})
@@ -46,7 +46,7 @@ func (h *FollowHandler) FollowUser(c *gin.Context) {
 // UnfollowUser — POST /users/:userId/unfollow
 func (h *FollowHandler) UnfollowUser(c *gin.Context) {
 	userID := c.GetString("user_id")
-	targetUserID := c.Param("userId")
+	targetUserID := c.Param("id")
 
 	if userID == "" {
 		c.JSON(http.StatusUnauthorized, gin.H{"error": "unauthorized"})
@@ -67,7 +67,7 @@ func (h *FollowHandler) UnfollowUser(c *gin.Context) {
 // IsFollowing — GET /users/:userId/is-following
 func (h *FollowHandler) IsFollowing(c *gin.Context) {
 	userID := c.GetString("user_id")
-	targetUserID := c.Param("userId")
+	targetUserID := c.Param("id")
 
 	if userID == "" {
 		c.JSON(http.StatusUnauthorized, gin.H{"error": "unauthorized"})
@@ -91,7 +91,7 @@ func (h *FollowHandler) IsFollowing(c *gin.Context) {
 // GetMutualFollowers — GET /users/:userId/mutual-followers
 func (h *FollowHandler) GetMutualFollowers(c *gin.Context) {
 	userID := c.GetString("user_id")
-	targetUserID := c.Param("userId")
+	targetUserID := c.Param("id")
 
 	if userID == "" {
 		c.JSON(http.StatusUnauthorized, gin.H{"error": "unauthorized"})
@@ -182,7 +182,7 @@ func (h *FollowHandler) GetSuggestedUsers(c *gin.Context) {
 
 // GetFollowers — GET /users/:userId/followers
 func (h *FollowHandler) GetFollowers(c *gin.Context) {
-	targetUserID := c.Param("userId")
+	targetUserID := c.Param("id")
 
 	rows, err := h.db.Query(context.Background(), `
 		SELECT p.id, p.handle, p.display_name, p.avatar_url, f.created_at
@@ -219,7 +219,7 @@ func (h *FollowHandler) GetFollowers(c *gin.Context) {
 
 // GetFollowing — GET /users/:userId/following
 func (h *FollowHandler) GetFollowing(c *gin.Context) {
-	targetUserID := c.Param("userId")
+	targetUserID := c.Param("id")
 
 	rows, err := h.db.Query(context.Background(), `
 		SELECT p.id, p.handle, p.display_name, p.avatar_url, f.created_at
