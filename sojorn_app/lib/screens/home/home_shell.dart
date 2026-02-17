@@ -14,6 +14,7 @@ import '../beacon/beacon_screen.dart';
 import '../quips/create/quip_creation_flow.dart';
 import '../secure_chat/secure_chat_full_screen.dart';
 import '../../widgets/radial_menu_overlay.dart';
+import '../../widgets/onboarding_modal.dart';
 import '../../providers/quip_upload_provider.dart';
 import '../../providers/notification_provider.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -40,6 +41,9 @@ class _HomeShellState extends ConsumerState<HomeShell> with WidgetsBindingObserv
     WidgetsBinding.instance.addObserver(this);
     _chatService.startBackgroundSync();
     _initNotificationListener();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) OnboardingModal.showIfNeeded(context);
+    });
   }
 
   void _initNotificationListener() {
