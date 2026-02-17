@@ -13,6 +13,7 @@ import '../../services/image_upload_service.dart';
 import '../../services/notification_service.dart';
 import '../../theme/app_theme.dart';
 import '../../theme/tokens.dart';
+import 'privacy_dashboard_screen.dart';
 import '../../widgets/app_scaffold.dart';
 import '../../widgets/media/signed_media_image.dart';
 import '../../widgets/sojorn_input.dart';
@@ -171,6 +172,13 @@ class _ProfileSettingsScreenState extends ConsumerState<ProfileSettingsScreen> {
                          icon: Icons.visibility_outlined,
                          title: 'Privacy Gates',
                          onTap: () => _showPrivacyEditor(),
+                       ),
+                       _buildEditTile(
+                         icon: Icons.dashboard_outlined,
+                         title: 'Privacy Dashboard',
+                         onTap: () => Navigator.of(context).push(
+                           MaterialPageRoute(builder: (_) => const PrivacyDashboardScreen()),
+                         ),
                        ),
                      ],
                    ),
