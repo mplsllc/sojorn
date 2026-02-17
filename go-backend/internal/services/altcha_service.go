@@ -49,8 +49,14 @@ func (s *AltchaService) VerifyToken(token, remoteIP string) (*AltchaResponse, er
 // GenerateChallenge creates a new ALTCHA challenge using the official library
 func (s *AltchaService) GenerateChallenge() (map[string]interface{}, error) {
 	// Generate challenge using official ALTCHA library
-	// Parameters: hmacKey, maxNumber (difficulty), saltLength, algorithm, expiresInSeconds
-	challenge, err := altcha.CreateChallenge(s.secretKey, 100000, 12, "SHA-256", 300)
+	options := altcha.ChallengeOptions{
+		Algorithm:  altcha.AlgorithmSHA256,
+		MaxNumber:  100000,
+		SaltLength: 12,
+		HMACKey:    s.secretKey,
+	}
+
+	challenge, err := altcha.CreateChallenge(options)
 	if err != nil {
 		return nil, err
 	}
