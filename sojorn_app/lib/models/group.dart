@@ -1,25 +1,6 @@
 import 'package:equatable/equatable.dart';
-
-enum GroupCategory {
-  general('General', 'general'),
-  hobby('Hobby', 'hobby'),
-  sports('Sports', 'sports'),
-  professional('Professional', 'professional'),
-  localBusiness('Local Business', 'local_business'),
-  support('Support', 'support'),
-  education('Education', 'education');
-
-  const GroupCategory(this.displayName, this.value);
-  final String displayName;
-  final String value;
-
-  static GroupCategory fromString(String value) {
-    return GroupCategory.values.firstWhere(
-      (cat) => cat.value == value,
-      orElse: () => GroupCategory.general,
-    );
-  }
-}
+import 'cluster.dart' show GroupCategory;
+export 'cluster.dart' show GroupCategory;
 
 enum GroupRole {
   owner('Owner'),

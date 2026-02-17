@@ -41,7 +41,7 @@ class _EnhancedBeaconDetailScreenState extends State<EnhancedBeaconDetailScreen>
                     options: MapOptions(
                       initialCenter: LatLng(widget.beacon.lat, widget.beacon.lng),
                       initialZoom: 15.0,
-                      interactiveFlags: InteractiveFlag.none,
+                      interactionOptions: const InteractionOptions(flags: InteractiveFlag.none),
                     ),
                     children: [
                       TileLayer(
@@ -483,7 +483,7 @@ class _EnhancedBeaconDetailScreenState extends State<EnhancedBeaconDetailScreen>
                       color: AppTheme.navyBlue,
                       shape: BoxShape.circle,
                     ),
-                    child: const Center(
+                    child: Center(
                       child: Text(
                         '${index + 1}',
                         style: TextStyle(
@@ -759,7 +759,7 @@ class _EnhancedBeaconDetailScreenState extends State<EnhancedBeaconDetailScreen>
                 ],
               ),
             ),
-            const Icon(
+            Icon(
               Icons.arrow_forward_ios,
               color: Colors.grey[400],
               size: 16,
@@ -778,7 +778,7 @@ class _EnhancedBeaconDetailScreenState extends State<EnhancedBeaconDetailScreen>
   }
 
   void _callEmergency() async {
-    const url = 'tel:911';
+    final url = Uri.parse('tel:911');
     if (await canLaunchUrl(url)) {
       await launchUrl(url);
     }

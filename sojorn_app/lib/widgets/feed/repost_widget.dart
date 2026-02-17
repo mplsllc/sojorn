@@ -4,6 +4,7 @@ import 'package:sojorn/models/repost.dart';
 import 'package:sojorn/models/post.dart';
 import 'package:sojorn/services/repost_service.dart';
 import 'package:sojorn/providers/api_provider.dart';
+import 'package:timeago/timeago.dart' as timeago;
 import '../../theme/app_theme.dart';
 
 class RepostWidget extends ConsumerWidget {
@@ -41,13 +42,13 @@ class RepostWidget extends ConsumerWidget {
         children: [
           // Repost header
           if (repost != null)
-            _buildRepostHeader(repost),
+            _buildRepostHeader(repost!),
           
           // Original post content
           _buildOriginalPost(),
           
           // Engagement actions
-          _buildEngagementActions(repostController),
+          _buildEngagementActions(context, repostController),
           
           // Analytics section
           if (showAnalytics)
@@ -164,10 +165,10 @@ class RepostWidget extends ConsumerWidget {
             children: [
               CircleAvatar(
                 radius: 20,
-                backgroundImage: originalPost.authorAvatar != null
-                    ? NetworkImage(originalPost.authorAvatar!)
+                backgroundImage: originalPost.author?.avatarUrl != null
+                    ? NetworkImage(originalPost.author!.avatarUrl!)
                     : null,
-                child: originalPost.authorAvatar == null
+                child: originalPost.author?.avatarUrl == null
                     ? const Icon(Icons.person, color: Colors.white)
                     : null,
               ),
@@ -177,7 +178,7 @@ class RepostWidget extends ConsumerWidget {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Text(
-                      originalPost.authorHandle,
+                      originalPost.author?.handle ?? 'unknown',
                       style: const TextStyle(
                         color: Colors.white,
                         fontSize: 14,
@@ -185,7 +186,7 @@ class RepostWidget extends ConsumerWidget {
                       ),
                     ),
                     Text(
-                      originalPost.timeAgo,
+                      timeago.format(originalPost.createdAt),
                       style: TextStyle(
                         color: Colors.grey[400],
                         fontSize: 12,
@@ -251,7 +252,7 @@ class RepostWidget extends ConsumerWidget {
     );
   }
 
-  Widget _buildEngagementActions(RepostController repostController) {
+  Widget _buildEngagementActions(BuildContext context, RepostState repostState) {
     return Container(
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
@@ -269,14 +270,14 @@ class RepostWidget extends ConsumerWidget {
             children: [
               _buildEngagementStat(
                 icon: Icons.repeat,
-                count: originalPost.repostCount ?? 0,
+                count: 0,
                 label: 'Reposts',
                 onTap: onRepost,
               ),
               const SizedBox(width: 16),
               _buildEngagementStat(
                 icon: Icons.rocket_launch,
-                count: originalPost.boostCount ?? 0,
+                count: 0,
                 label: 'Boosts',
                 onTap: onBoost,
               ),
@@ -329,17 +330,17 @@ class RepostWidget extends ConsumerWidget {
             ],
           ),
           
-          if (repostController.isLoading)
+          if (repostState.isLoading)
             const Padding(
               padding: EdgeInsets.only(top: 12),
               child: LinearProgressIndicator(color: Colors.blue),
             ),
-          
-          if (repostController.error != null)
+
+          if (repostState.error != null)
             Padding(
               padding: const EdgeInsets.only(top: 8),
               child: Text(
-                repostController.error!,
+                repostState.error!,
                 style: const TextStyle(color: Colors.red, fontSize: 12),
               ),
             ),

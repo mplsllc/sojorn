@@ -1,8 +1,11 @@
 import 'dart:convert';
 import 'dart:io';
+import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:file_picker/file_picker.dart';
+import 'package:path_provider/path_provider.dart';
 import 'package:permission_handler/permission_handler.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import 'package:share_plus/share_plus.dart';
 
 class BlockingService {
@@ -30,8 +33,8 @@ class BlockingService {
       await file.writeAsString(const JsonEncoder.withIndent('  ').convert(exportData));
       
       // Share the file
-      final result = await Share.shareXFiles([file.path]);
-      return result.status == ShareResultStatus.done;
+      final result = await Share.shareXFiles([XFile(file.path)]);
+      return result.status == ShareResultStatus.success;
     } catch (e) {
       print('Error exporting blocked users to JSON: $e');
       return false;
@@ -54,8 +57,8 @@ class BlockingService {
       await file.writeAsString(csvContent.toString());
       
       // Share the file
-      final result = await Share.shareXFiles([file.path]);
-      return result.status == ShareResultStatus.done;
+      final result = await Share.shareXFiles([XFile(file.path)]);
+      return result.status == ShareResultStatus.success;
     } catch (e) {
       print('Error exporting blocked users to CSV: $e');
       return false;
@@ -279,7 +282,7 @@ class _BlockManagementScreenState extends State<BlockManagementScreen> {
       // This would typically come from your API service
       // For now, we'll use a placeholder
       final prefs = await SharedPreferences.getInstance();
-      final blockedUsersJson = prefs.getString(_blockedUsersJsonKey);
+      final blockedUsersJson = prefs.getString(BlockingService._blockedUsersJsonKey);
       
       if (blockedUsersJson != null) {
         final blockedUsersList = jsonDecode(blockedUsersJson) as List<dynamic>;
@@ -299,10 +302,10 @@ class _BlockManagementScreenState extends State<BlockManagementScreen> {
   Future<void> _saveBlockedUsers() async {
     try {
       final prefs = await SharedPreferences.getInstance();
-      await prefs.setString(_blockedUsersJsonKey, jsonEncode(_blockedUsers));
+      await prefs.setString(BlockingService._blockedUsersJsonKey, jsonEncode(_blockedUsers));
     } catch (e) {
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: 'Failed to save blocked users'),
+        const SnackBar(content: Text('Failed to save blocked users')),
       );
     }
   }
@@ -353,21 +356,21 @@ class _BlockManagementScreenState extends State<BlockManagementScreen> {
       final validatedUsers = await BlockingService.validateBlockedUsers(importedUsers);
       
       setState(() {
-        _blockedUsers = {..._blockedUsers, ...validatedUsers}.toSet().toList()};
+        _blockedUsers = {..._blockedUsers, ...validatedUsers}.toList();
       });
       
       await _saveBlockedUsers();
       
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: 'Successfully imported ${validatedUsers.length} users',
+          content: Text('Successfully imported ${validatedUsers.length} users'),
           backgroundColor: Colors.green,
         ),
       );
     } catch (e) {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: 'Failed to import: $e',
+          content: Text('Failed to import: $e'),
           backgroundColor: Colors.red,
         ),
       );
@@ -397,7 +400,7 @@ class _BlockManagementScreenState extends State<BlockManagementScreen> {
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(context),
-            user: const Text('Cancel'),
+            child: const Text('Cancel'),
           ),
         ],
       ),
@@ -412,17 +415,17 @@ class _BlockManagementScreenState extends State<BlockManagementScreen> {
     try {
       final success = await format.exportFunction!(_blockedUsers);
       
-      if (success) {
+      if (success == true) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: 'Successfully exported ${_blockedUsers.length} users',
+            content: Text('Successfully exported ${_blockedUsers.length} users'),
             backgroundColor: Colors.green,
           ),
         );
       } else {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: 'Export cancelled or failed',
+            content: const Text('Export cancelled or failed'),
             backgroundColor: Colors.orange,
           ),
         );
@@ -430,7 +433,7 @@ class _BlockManagementScreenState extends State<BlockManagementScreen> {
     } catch (e) {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: 'Export failed: $e',
+          content: Text('Export failed: $e'),
           backgroundColor: Colors.red,
         ),
       );

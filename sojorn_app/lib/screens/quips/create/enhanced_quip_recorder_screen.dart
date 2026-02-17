@@ -42,7 +42,6 @@ class _EnhancedQuipRecorderScreenState extends State<EnhancedQuipRecorderScreen>
   DateTime? _segmentStartTime;
   Timer? _progressTicker;
   Duration _currentSegmentDuration = Duration.zero;
-  Duration _totalRecordedDuration = Duration.zero;
 
   // Speed Control
   double _playbackSpeed = 1.0;
@@ -166,7 +165,7 @@ class _EnhancedQuipRecorderScreenState extends State<EnhancedQuipRecorderScreen>
 
       // Auto-stop at max duration
       Timer(const Duration(milliseconds: 100), () {
-        if (get _totalRecordedDuration >= _maxDuration) {
+        if (_totalRecordedDuration >= _maxDuration) {
           _stopRecording();
         }
       });
@@ -187,7 +186,6 @@ class _EnhancedQuipRecorderScreenState extends State<EnhancedQuipRecorderScreen>
       
       // Save current segment
       _segmentDurations.add(_currentSegmentDuration);
-      _totalRecordedDuration = get _totalRecordedDuration;
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Failed to pause recording')));
@@ -200,7 +198,7 @@ class _EnhancedQuipRecorderScreenState extends State<EnhancedQuipRecorderScreen>
     
     try {
       await _cameraController!.resumeVideoRecording();
-      setState(() => {
+      setState(() {
         _isPaused = false;
         _segmentStartTime = DateTime.now();
         _currentSegmentDuration = Duration.zero;
@@ -231,14 +229,12 @@ class _EnhancedQuipRecorderScreenState extends State<EnhancedQuipRecorderScreen>
       if (videoFile != null) {
         setState(() => _isRecording = false);
         _isPaused = false;
-        
+
         // Add segment if it has content
         if (_currentSegmentDuration.inMilliseconds > 500) { // Minimum 0.5 seconds
-          _recordedSegments.add(videoFile);
+          _recordedSegments.add(File(videoFile.path));
           _segmentDurations.add(_currentSegmentDuration);
         }
-        
-        _totalRecordedDuration = get _totalRecordedDuration;
         
         // Auto-process if we have segments
         if (_recordedSegments.isNotEmpty) {
@@ -258,8 +254,7 @@ class _EnhancedQuipRecorderScreenState extends State<EnhancedQuipRecorderScreen>
     setState(() => _isProcessing = true);
     
     try {
-      final videoStitchingService = VideoStitchingService();
-      final finalFile = await videoStitchingService.stitchVideos(
+      final finalFile = await VideoStitchingService.stitchVideos(
         _recordedSegments,
         _segmentDurations,
         _selectedFilter,
@@ -267,7 +262,7 @@ class _EnhancedQuipRecorderScreenState extends State<EnhancedQuipRecorderScreen>
         _showTextOverlay ? {
           'text': _overlayText,
           'size': _textSize,
-          'color': _textColor.value.toHex(),
+          'color': '#${_textColor.value.toRadixString(16).padLeft(8, '0')}',
           'position': _textPositionY,
         } : null,
         audioOverlayPath: _selectedAudio?.path,
@@ -318,7 +313,7 @@ class _EnhancedQuipRecorderScreenState extends State<EnhancedQuipRecorderScreen>
 
     try {
       final camera = _cameras.firstWhere(
-        (c) => c.lensDirection == (_isRearCamera ? CameraLensDirection.back : CameraDirection.front),
+        (c) => c.lensDirection == (_isRearCamera ? CameraLensDirection.back : CameraLensDirection.front),
         orElse: () => _cameras.first
       );
 
@@ -357,7 +352,6 @@ class _EnhancedQuipRecorderScreenState extends State<EnhancedQuipRecorderScreen>
       _recordedSegments.clear();
       _segmentDurations.clear();
       _currentSegmentDuration = Duration.zero;
-      _totalRecordedDuration = Duration.zero;
     });
   }
 
@@ -481,7 +475,7 @@ class _EnhancedQuipRecorderScreenState extends State<EnhancedQuipRecorderScreen>
                         Container(
                           margin: const EdgeInsets.only(bottom: 16),
                           child: LinearProgressIndicator(
-                            value: get _totalRecordedDuration.inMilliseconds / _maxDuration.inMilliseconds,
+                            value: _totalRecordedDuration.inMilliseconds / _maxDuration.inMilliseconds,
                             backgroundColor: Colors.white24,
                             valueColor: AlwaysStoppedAnimation<Color>(
                               _isPaused ? Colors.orange : Colors.red,
@@ -495,7 +489,7 @@ class _EnhancedQuipRecorderScreenState extends State<EnhancedQuipRecorderScreen>
                         children: [
                           // Duration
                           Text(
-                            _formatDuration(get _totalRecordedDuration),
+                            _formatDuration(_totalRecordedDuration),
                             style: const TextStyle(
                               color: Colors.white,
                               fontSize: 16,
@@ -732,29 +726,28 @@ class _EnhancedQuipRecorderScreenState extends State<EnhancedQuipRecorderScreen>
                         // Size selector
                         Expanded(
                           child: Slider(
-                          value: _textSize,
-                          min: 12,
-                          max: 48,
-                          divisions: 4,
-                          label: '${_textSize.toInt()}',
-                          labelStyle: const TextStyle(color: Colors.white70),
-                          activeColor: AppTheme.navyBlue,
-                          inactiveColor: Colors.white24,
-                          onChanged: (value) => setState(() => _textSize = value),
+                            value: _textSize,
+                            min: 12,
+                            max: 48,
+                            divisions: 4,
+                            label: '${_textSize.toInt()}',
+                            activeColor: AppTheme.navyBlue,
+                            inactiveColor: Colors.white24,
+                            onChanged: (value) => setState(() => _textSize = value),
+                          ),
                         ),
-                      ),
                         const SizedBox(width: 16),
                         // Position selector
                         Expanded(
                           child: Slider(
-                          value: _textPositionY,
-                          min: 0.0,
-                          max: 1.0,
-                          label: _textPositionY == 0.0 ? 'Top' : 'Bottom',
-                          labelStyle: const TextStyle(color: Colors.white70),
-                          activeColor: AppTheme.navyBlue,
-                          inactiveColor: Colors.white24,
-                          onChanged: (value) => setState(() => _textPositionY = value),
+                            value: _textPositionY,
+                            min: 0.0,
+                            max: 1.0,
+                            label: _textPositionY == 0.0 ? 'Top' : 'Bottom',
+                            activeColor: AppTheme.navyBlue,
+                            inactiveColor: Colors.white24,
+                            onChanged: (value) => setState(() => _textPositionY = value),
+                          ),
                         ),
                       ],
                     ),

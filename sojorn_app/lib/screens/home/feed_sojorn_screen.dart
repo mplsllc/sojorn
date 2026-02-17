@@ -166,7 +166,7 @@ class _FeedsojornScreenState extends ConsumerState<FeedsojornScreen> {
   }
 
   void _sharePost(Post post) {
-    final text = post.content.isNotEmpty ? post.content : 'Check this out on Sojorn';
+    final text = post.body.isNotEmpty ? post.body : 'Check this out on Sojorn';
     Share.share(text, subject: 'Shared from Sojorn');
   }
 
@@ -311,7 +311,7 @@ class _FeedsojornScreenState extends ConsumerState<FeedsojornScreen> {
             const SizedBox(height: 4),
             Text(
               'items: ${_feedItems.length} | ads: ${adIndices.length}',
-              style: const TextStyle(
+              style: TextStyle(
                 color: SojornColors.basicWhite.withValues(alpha: 0.7),
                 fontSize: 11,
               ),
@@ -321,7 +321,7 @@ class _FeedsojornScreenState extends ConsumerState<FeedsojornScreen> {
               adIndices.isEmpty
                   ? 'ad positions: none'
                   : 'ad positions: ${adIndices.join(', ')}',
-              style: const TextStyle(
+              style: TextStyle(
                 color: SojornColors.basicWhite.withValues(alpha: 0.7),
                 fontSize: 11,
               ),

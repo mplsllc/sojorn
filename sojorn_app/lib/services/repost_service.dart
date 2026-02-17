@@ -11,7 +11,7 @@ class RepostService {
   static const Duration _cacheExpiry = Duration(minutes: 5);
 
   /// Create a new repost
-  static Future<Repost?> createRepost({
+  Future<Repost?> createRepost({
     required String originalPostId,
     required RepostType type,
     String? comment,
@@ -35,7 +35,7 @@ class RepostService {
   }
 
   /// Boost a post (amplify its reach)
-  static Future<bool> boostPost({
+  Future<bool> boostPost({
     required String postId,
     required RepostType boostType,
     int? boostAmount,
@@ -55,7 +55,7 @@ class RepostService {
   }
 
   /// Get all reposts for a post
-  static Future<List<Repost>> getRepostsForPost(String postId) async {
+  Future<List<Repost>> getRepostsForPost(String postId) async {
     try {
       final response = await ApiService.instance.get('/posts/$postId/reposts');
       
@@ -70,7 +70,7 @@ class RepostService {
   }
 
   /// Get user's repost history
-  static Future<List<Repost>> getUserReposts(String userId, {int limit = 20}) async {
+  Future<List<Repost>> getUserReposts(String userId, {int limit = 20}) async {
     try {
       final response = await ApiService.instance.get('/users/$userId/reposts?limit=$limit');
       
@@ -85,7 +85,7 @@ class RepostService {
   }
 
   /// Delete a repost
-  static Future<bool> deleteRepost(String repostId) async {
+  Future<bool> deleteRepost(String repostId) async {
     try {
       final response = await ApiService.instance.delete('/reposts/$repostId');
       return response['success'] == true;
@@ -96,7 +96,7 @@ class RepostService {
   }
 
   /// Get amplification analytics for a post
-  static Future<AmplificationAnalytics?> getAmplificationAnalytics(String postId) async {
+  Future<AmplificationAnalytics?> getAmplificationAnalytics(String postId) async {
     try {
       final response = await ApiService.instance.get('/posts/$postId/amplification');
       
@@ -110,7 +110,7 @@ class RepostService {
   }
 
   /// Get trending posts based on amplification
-  static Future<List<Post>> getTrendingPosts({int limit = 10, String? category}) async {
+  Future<List<Post>> getTrendingPosts({int limit = 10, String? category}) async {
     try {
       String url = '/posts/trending?limit=$limit';
       if (category != null) {
@@ -130,7 +130,7 @@ class RepostService {
   }
 
   /// Get amplification rules
-  static Future<List<FeedAmplificationRule>> getAmplificationRules() async {
+  Future<List<FeedAmplificationRule>> getAmplificationRules() async {
     try {
       final response = await ApiService.instance.get('/amplification/rules');
       
@@ -145,7 +145,7 @@ class RepostService {
   }
 
   /// Calculate amplification score for a post
-  static Future<int> calculateAmplificationScore(String postId) async {
+  Future<int> calculateAmplificationScore(String postId) async {
     try {
       final response = await ApiService.instance.post('/posts/$postId/calculate-score', {});
       
@@ -159,7 +159,7 @@ class RepostService {
   }
 
   /// Check if user can boost a post
-  static Future<bool> canBoostPost(String userId, String postId, RepostType boostType) async {
+  Future<bool> canBoostPost(String userId, String postId, RepostType boostType) async {
     try {
       final response = await ApiService.instance.get('/users/$userId/can-boost/$postId?type=${boostType.name}');
       
@@ -171,7 +171,7 @@ class RepostService {
   }
 
   /// Get user's daily boost count
-  static Future<Map<RepostType, int>> getDailyBoostCount(String userId) async {
+  Future<Map<RepostType, int>> getDailyBoostCount(String userId) async {
     try {
       final response = await ApiService.instance.get('/users/$userId/daily-boosts');
       
@@ -193,7 +193,7 @@ class RepostService {
   }
 
   /// Report inappropriate repost
-  static Future<bool> reportRepost(String repostId, String reason) async {
+  Future<bool> reportRepost(String repostId, String reason) async {
     try {
       final response = await ApiService.instance.post('/reposts/$repostId/report', {
         'reason': reason,
@@ -229,10 +229,11 @@ final trendingPostsProvider = FutureProvider.family<List<Post>, Map<String, dyna
   return service.getTrendingPosts(limit: limit, category: category);
 });
 
-class RepostController extends StateNotifier<RepostState> {
-  final RepostService _service;
+class RepostController extends Notifier<RepostState> {
+  @override
+  RepostState build() => const RepostState();
 
-  RepostController(this._service) : super(const RepostState());
+  RepostService get _service => ref.read(repostServiceProvider);
 
   Future<void> createRepost({
     required String originalPostId,
@@ -357,7 +358,4 @@ class RepostState {
   }
 }
 
-final repostControllerProvider = StateNotifierProvider<RepostController, RepostState>((ref) {
-  final service = ref.watch(repostServiceProvider);
-  return RepostController(service);
-});
+final repostControllerProvider = NotifierProvider<RepostController, RepostState>(RepostController.new);

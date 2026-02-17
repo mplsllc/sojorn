@@ -1,6 +1,7 @@
 import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:file_picker/file_picker.dart';
+import 'package:path_provider/path_provider.dart';
 import 'package:permission_handler/permission_handler.dart';
 import 'media/ffmpeg.dart';
 
@@ -92,10 +93,10 @@ class AudioOverlayService {
     try {
       final command = "-i '${audioFile.path}' -f null -";
       final session = await FFmpegKit.execute(command);
-      final logs = await session.getAllLogs();
-      
-      for (final log in logs) {
-        final message = log.getMessage();
+      final output = await session.getOutput() ?? '';
+      final logs = output.split('\n');
+
+      for (final message in logs) {
         if (message.contains('Duration:')) {
           // Parse duration from FFmpeg output
           final durationMatch = RegExp(r'Duration: (\d{2}):(\d{2}):(\d{2}\.\d{2})').firstMatch(message);
@@ -442,7 +443,7 @@ class _AudioOverlayControlsState extends State<AudioOverlayControls> {
                       mainAxisAlignment: MainAxisAlignment.center,
                       children: [
                         Icon(
-                          Icons.fade_in,
+                          Icons.volume_up,
                           color: Colors.white,
                           size: 16,
                         ),
@@ -475,7 +476,7 @@ class _AudioOverlayControlsState extends State<AudioOverlayControls> {
                       mainAxisAlignment: MainAxisAlignment.center,
                       children: [
                         Icon(
-                          Icons.fade_out,
+                          Icons.volume_down,
                           color: Colors.white,
                           size: 16,
                         ),

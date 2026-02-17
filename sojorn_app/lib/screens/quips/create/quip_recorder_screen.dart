@@ -196,7 +196,7 @@ class _QuipRecorderScreenState extends State<QuipRecorderScreen>
       if (_recordedSegments.length == 1) {
         finalFile = _recordedSegments.first;
       } else {
-        finalFile = await VideoStitchingService.stitchVideos(_recordedSegments);
+        finalFile = await VideoStitchingService.stitchVideosLegacy(_recordedSegments);
       }
 
       if (finalFile != null && mounted) {

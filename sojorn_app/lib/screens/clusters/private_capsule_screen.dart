@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:cryptography/cryptography.dart';
 import '../../models/cluster.dart';
+import '../../providers/api_provider.dart';
 import '../../services/api_service.dart';
 import '../../services/auth_service.dart';
 import '../../services/capsule_security_service.dart';

@@ -176,6 +176,16 @@ class ApiService {
     return _callGoApi(path, method: 'GET', queryParams: queryParams);
   }
 
+  /// Simple POST request helper
+  Future<Map<String, dynamic>> post(String path, Map<String, dynamic> body) async {
+    return _callGoApi(path, method: 'POST', body: body);
+  }
+
+  /// Simple DELETE request helper
+  Future<Map<String, dynamic>> delete(String path) async {
+    return _callGoApi(path, method: 'DELETE');
+  }
+
 
   Future<void> resendVerificationEmail(String email) async {
     await _callGoApi('/auth/resend-verification',

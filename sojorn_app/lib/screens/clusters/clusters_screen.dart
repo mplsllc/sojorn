@@ -768,7 +768,7 @@ class _CreateGroupFormState extends ConsumerState<_CreateGroupForm> {
       await api.createGroup(
         name: _nameCtrl.text.trim(),
         description: _descCtrl.text.trim(),
-        category: group_models.GroupCategory.general,
+        category: GroupCategory.general,
         isPrivate: _privacy,
       );
       widget.onCreated();

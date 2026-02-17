@@ -68,7 +68,7 @@ class _DraggableWidgetGridState extends State<DraggableWidgetGrid> {
   }
 
   void _onWidgetTapped(ProfileWidget widget, int index) {
-    if (!widget.isEditable) return;
+    if (!this.widget.isEditable) return;
 
     showModalBottomSheet(
       context: context,
@@ -78,10 +78,11 @@ class _DraggableWidgetGridState extends State<DraggableWidgetGrid> {
   }
 
   Widget _buildWidgetOptions(ProfileWidget widget, int index) {
+    final theme = this.widget.theme;
     return Container(
       margin: const EdgeInsets.all(16),
       decoration: BoxDecoration(
-        color: widget.theme.backgroundColor,
+        color: theme.backgroundColor,
         borderRadius: BorderRadius.circular(16),
       ),
       child: Column(
@@ -91,7 +92,7 @@ class _DraggableWidgetGridState extends State<DraggableWidgetGrid> {
           Container(
             padding: const EdgeInsets.all(16),
             decoration: BoxDecoration(
-              color: widget.theme.primaryColor.withOpacity(0.1),
+              color: theme.primaryColor.withOpacity(0.1),
               borderRadius: const BorderRadius.only(
                 topLeft: Radius.circular(16),
                 topRight: Radius.circular(16),
@@ -101,7 +102,7 @@ class _DraggableWidgetGridState extends State<DraggableWidgetGrid> {
               children: [
                 Icon(
                   widget.type.icon,
-                  color: widget.theme.primaryColor,
+                  color: theme.primaryColor,
                   size: 24,
                 ),
                 const SizedBox(width: 12),
@@ -109,7 +110,7 @@ class _DraggableWidgetGridState extends State<DraggableWidgetGrid> {
                   child: Text(
                     widget.type.displayName,
                   style: TextStyle(
-                    color: widget.theme.textColor,
+                    color: theme.textColor,
                     fontSize: 18,
                     fontWeight: FontWeight.bold,
                   ),
@@ -119,13 +120,13 @@ class _DraggableWidgetGridState extends State<DraggableWidgetGrid> {
                   onPressed: () => Navigator.pop(context),
                   icon: Icon(
                     Icons.close,
-                    color: widget.theme.textColor,
+                    color: theme.textColor,
                   ),
                 ),
               ],
             ),
           ),
-          
+
           // Options
           Padding(
             padding: const EdgeInsets.all(16),
@@ -133,14 +134,14 @@ class _DraggableWidgetGridState extends State<DraggableWidgetGrid> {
               children: [
                 // Remove widget
                 ListTile(
-                  leading: Icon(
+                  leading: const Icon(
                     Icons.delete_outline,
                     color: Colors.red,
                   ),
                   title: Text(
                     'Remove Widget',
                     style: TextStyle(
-                      color: widget.theme.textColor,
+                      color: theme.textColor,
                     ),
                   ),
                   onTap: () {
@@ -148,18 +149,18 @@ class _DraggableWidgetGridState extends State<DraggableWidgetGrid> {
                     _removeWidget(widget, index);
                   },
                 ),
-                
+
                 // Edit widget (if supported)
                 if (_canEditWidget(widget)) ...[
                   ListTile(
                     leading: Icon(
                       Icons.edit,
-                      color: widget.theme.primaryColor,
+                      color: theme.primaryColor,
                     ),
                     title: Text(
                       'Edit Widget',
                       style: TextStyle(
-                        color: widget.theme.textColor,
+                        color: theme.textColor,
                       ),
                     ),
                     onTap: () {
@@ -168,17 +169,17 @@ class _DraggableWidgetGridState extends State<DraggableWidgetGrid> {
                     },
                   ),
                 ],
-                
+
                 // Move to top
                 ListTile(
                   leading: Icon(
                     Icons.keyboard_arrow_up,
-                    color: widget.theme.primaryColor,
+                    color: theme.primaryColor,
                   ),
                   title: Text(
                     'Move to Top',
                     style: TextStyle(
-                      color: widget.theme.textColor,
+                      color: theme.textColor,
                     ),
                   ),
                   onTap: () {
@@ -186,17 +187,17 @@ class _DraggableWidgetGridState extends State<DraggableWidgetGrid> {
                     _moveWidgetToTop(index);
                   },
                 ),
-                
+
                 // Move to bottom
                 ListTile(
                   leading: Icon(
                     Icons.keyboard_arrow_down,
-                    color: widget.theme.primaryColor,
+                    color: theme.primaryColor,
                   ),
                   title: Text(
                     'Move to Bottom',
                     style: TextStyle(
-                      color: widget.theme.textColor,
+                      color: theme.textColor,
                     ),
                   ),
                   onTap: () {
@@ -229,7 +230,7 @@ class _DraggableWidgetGridState extends State<DraggableWidgetGrid> {
       _widgets.removeAt(index);
       _updateOrderValues();
     });
-    widget.onWidgetRemoved?.call(widget);
+    this.widget.onWidgetRemoved?.call(widget);
   }
 
   void _editWidget(ProfileWidget widget, int index) {
@@ -256,7 +257,7 @@ class _DraggableWidgetGridState extends State<DraggableWidgetGrid> {
           setState(() {
             _widgets[index] = updatedWidget;
           });
-          widget.onWidgetAdded?.call(updatedWidget);
+          this.widget.onWidgetAdded?.call(updatedWidget);
         },
       ),
     );
@@ -271,7 +272,7 @@ class _DraggableWidgetGridState extends State<DraggableWidgetGrid> {
           setState(() {
             _widgets[index] = updatedWidget;
           });
-          widget.onWidgetAdded?.call(updatedWidget);
+          this.widget.onWidgetAdded?.call(updatedWidget);
         },
       ),
     );
@@ -286,7 +287,7 @@ class _DraggableWidgetGridState extends State<DraggableWidgetGrid> {
           setState(() {
             _widgets[index] = updatedWidget;
           });
-          widget.onWidgetAdded?.call(updatedWidget);
+          this.widget.onWidgetAdded?.call(updatedWidget);
         },
       ),
     );
@@ -528,15 +529,15 @@ class _DraggableWidgetGridState extends State<DraggableWidgetGrid> {
             onReorder: widget.isEditable ? _onWidgetReordered : null,
             itemCount: _widgets.length,
             itemBuilder: (context, index) {
-              final widget = _widgets[index];
-              final size = ProfileWidgetConstraints.getWidgetSize(widget.type);
-              
+              final pw = _widgets[index];
+              final size = ProfileWidgetConstraints.getWidgetSize(pw.type);
+
               return ReorderableDelayedDragStartListener(
-                key: ValueKey(widget.id),
+                key: ValueKey(pw.id),
                 index: index,
                 child: widget.isEditable
                     ? Draggable<ProfileWidget>(
-                        data: widget,
+                        data: pw,
                         feedback: Container(
                           width: size.width,
                           height: size.height,
@@ -553,7 +554,7 @@ class _DraggableWidgetGridState extends State<DraggableWidgetGrid> {
                           ),
                           child: Center(
                             child: Icon(
-                              widget.type.icon,
+                              pw.type.icon,
                               color: Colors.white,
                               size: 24,
                             ),
@@ -572,15 +573,15 @@ class _DraggableWidgetGridState extends State<DraggableWidgetGrid> {
                           ),
                         ),
                         child: ProfileWidgetRenderer(
-                          widget: widget,
+                          widget: pw,
                           theme: widget.theme,
-                          onTap: () => _onWidgetTapped(widget, index),
+                          onTap: () => _onWidgetTapped(pw, index),
                         ),
                       )
                     : ProfileWidgetRenderer(
-                      widget: widget,
+                      widget: pw,
                       theme: widget.theme,
-                      onTap: () => _onWidgetTapped(widget, index),
+                      onTap: () => _onWidgetTapped(pw, index),
                     ),
               );
             },
