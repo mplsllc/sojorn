@@ -6,7 +6,7 @@ import 'package:local_auth/local_auth.dart';
 import '../../providers/auth_provider.dart';
 import '../../providers/api_provider.dart';
 import '../../theme/app_theme.dart';
-import '../widgets/altcha_widget.dart';
+import '../../widgets/altcha_widget.dart';
 import '../../widgets/sojorn_button.dart';
 import '../../widgets/sojorn_input.dart';
 import 'sign_up_screen.dart';
@@ -398,7 +398,7 @@ class _SignInScreenState extends ConsumerState<SignInScreen> {
                                 obscureText: true,
                                 textInputAction: TextInputAction.done,
                                 prefixIcon: Icons.lock_outline,
-                                onEditingComplete: _turnstileToken != null ? _signIn : null,
+                                onEditingComplete: _altchaToken != null ? _signIn : null,
                                 autofillHints: const [AutofillHints.password],
                                 onChanged: (_) {
                                   if (_errorMessage != null) {
@@ -507,7 +507,7 @@ class _SignInScreenState extends ConsumerState<SignInScreen> {
                               ],
                               sojornButton(
                                 label: 'Sign In',
-                                onPressed: (isSubmitting || _turnstileToken == null) ? null : _signIn,
+                                onPressed: (isSubmitting || _altchaToken == null) ? null : _signIn,
                                 isLoading: isSubmitting,
                                 isFullWidth: true,
                                 variant: sojornButtonVariant.primary,

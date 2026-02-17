@@ -6,7 +6,7 @@ import 'package:url_launcher/url_launcher.dart';
 import '../../providers/auth_provider.dart';
 import '../../theme/app_theme.dart';
 import '../../theme/tokens.dart';
-import '../../widgets/auth/turnstile_widget.dart';
+import '../../widgets/altcha_widget.dart';
 
 class SignUpScreen extends ConsumerStatefulWidget {
   const SignUpScreen({super.key});
@@ -25,8 +25,8 @@ class _SignUpScreenState extends ConsumerState<SignUpScreen> {
   bool _isLoading = false;
   String? _errorMessage;
   
-  // Turnstile token
-  String? _turnstileToken;
+  // ALTCHA token
+  String? _altchaToken;
   
   // Legal consent
   bool _acceptTerms = false;
@@ -58,8 +58,8 @@ class _SignUpScreenState extends ConsumerState<SignUpScreen> {
   Future<void> _signUp() async {
     if (!_formKey.currentState!.validate()) return;
     
-    // Validate Turnstile token
-    if (_turnstileToken == null || _turnstileToken!.isEmpty) {
+    // Validate ALTCHA token
+    if (_altchaToken == null || _altchaToken!.isEmpty) {
       setState(() {
         _errorMessage = 'Please complete the security verification';
       });
@@ -101,7 +101,7 @@ class _SignUpScreenState extends ConsumerState<SignUpScreen> {
         password: _passwordController.text,
         handle: _handleController.text.trim(),
         displayName: _displayNameController.text.trim(),
-        turnstileToken: _turnstileToken!,
+        altchaToken: _altchaToken!,
         acceptTerms: _acceptTerms,
         acceptPrivacy: _acceptPrivacy,
         emailNewsletter: _emailUpdates,
@@ -133,7 +133,7 @@ class _SignUpScreenState extends ConsumerState<SignUpScreen> {
       if (mounted) {
         setState(() {
           _errorMessage = e.toString().replaceAll('Exception: ', '');
-          _turnstileToken = null; // Reset Turnstile on error
+          _altchaToken = null; // Reset ALTCHA on error
         });
       }
     } finally {
@@ -437,7 +437,7 @@ class _SignUpScreenState extends ConsumerState<SignUpScreen> {
                     Container(
                       decoration: BoxDecoration(
                         border: Border.all(
-                          color: _turnstileToken != null 
+                          color: _altchaToken != null 
                               ? AppTheme.success 
                               : AppTheme.egyptianBlue.withValues(alpha: 0.3),
                           width: 1,
@@ -447,12 +447,16 @@ class _SignUpScreenState extends ConsumerState<SignUpScreen> {
                       padding: const EdgeInsets.all(AppTheme.spacingMd),
                       child: Column(
                         children: [
-                          if (_turnstileToken == null) ...[
-                            TurnstileWidget(
-                              siteKey: _turnstileSiteKey,
-                              onToken: (token) {
+                          if (_altchaToken == null) ...[
+                            AltchaWidget(
+                              onVerified: (token) {
                                 setState(() {
-                                  _turnstileToken = token;
+                                  _altchaToken = token;
+                                });
+                              },
+                              onError: (error) {
+                                setState(() {
+                                  _errorMessage = error;
                                 });
                               },
                             ),

@@ -88,7 +88,7 @@ class _AltchaWidgetState extends State<AltchaWidget> {
       hash = ((hash << 5) - hash) + challenge.codeUnitAt(i);
       hash = hash & 0xFFFFFFFF;
     }
-    return hash.toRadix(16).padLeft(8, '0');
+    return hash.toRadixString(16).padLeft(8, '0');
   }
 
   @override
@@ -106,7 +106,7 @@ class _AltchaWidgetState extends State<AltchaWidget> {
             Icon(Icons.error, color: Colors.red),
             const SizedBox(height: 8),
             Text('Security verification failed',
-                style: widget.style?['textStyle'] ?? 
+                style: widget.style?['textStyle'] as TextStyle? ?? 
                     const TextStyle(color: Colors.red)),
             const SizedBox(height: 8),
             ElevatedButton(
@@ -150,7 +150,7 @@ class _AltchaWidgetState extends State<AltchaWidget> {
             Icon(Icons.check_circle, color: Colors.green),
             const SizedBox(height: 8),
             Text('Security verified',
-                style: widget.style?['textStyle'] ?? 
+                style: widget.style?['textStyle'] as TextStyle? ?? 
                     TextStyle(color: Colors.green)),
           ],
         ),
@@ -169,7 +169,7 @@ class _AltchaWidgetState extends State<AltchaWidget> {
           Icon(Icons.security, color: Colors.blue),
           const SizedBox(height: 8),
           Text('Please complete security verification',
-              style: widget.style?['textStyle'] ?? 
+              style: widget.style?['textStyle'] as TextStyle? ?? 
                   TextStyle(color: Colors.blue)),
           const SizedBox(height: 8),
           ElevatedButton(
