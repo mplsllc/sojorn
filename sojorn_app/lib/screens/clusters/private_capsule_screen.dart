@@ -58,8 +58,68 @@ class _PrivateCapsuleScreenState extends ConsumerState<PrivateCapsuleScreen>
         await CapsuleSecurityService.cacheCapsuleKey(widget.capsule.id, key);
       }
       if (mounted) setState(() { _capsuleKey = key; _isUnlocking = false; });
+
+      // Silent self-healing: rotate keys if the server flagged it
+      if (key != null) _checkAndRotateKeysIfNeeded();
     } catch (e) {
       if (mounted) setState(() { _unlockError = 'Failed to unlock capsule'; _isUnlocking = false; });
+    }
+  }
+
+  /// Silently check if key rotation is needed and perform it automatically.
+  Future<void> _checkAndRotateKeysIfNeeded() async {
+    try {
+      final api = ref.read(apiServiceProvider);
+      final status = await api.callGoApi('/groups/${widget.capsule.id}/key-status', method: 'GET');
+      final rotationNeeded = status['key_rotation_needed'] as bool? ?? false;
+      if (!rotationNeeded || !mounted) return;
+      // Perform rotation silently — user sees nothing
+      await _performKeyRotation(api, silent: true);
+    } catch (_) {
+      // Non-fatal: rotation will be retried on next open
+    }
+  }
+
+  /// Full key rotation: fetch member public keys, generate new AES key,
+  /// encrypt for each member, push to server.
+  Future<void> _performKeyRotation(ApiService api, {bool silent = false}) async {
+    // Fetch member public keys
+    final keysData = await api.callGoApi(
+      '/groups/${widget.capsule.id}/members/public-keys',
+      method: 'GET',
+    );
+    final memberKeys = (keysData['keys'] as List?)?.cast<Map<String, dynamic>>() ?? [];
+    if (memberKeys.isEmpty) return;
+
+    final pubKeys = memberKeys.map((m) => m['public_key'] as String).toList();
+    final userIds = memberKeys.map((m) => m['user_id'] as String).toList();
+
+    final result = await CapsuleSecurityService.rotateKeys(
+      memberPublicKeysB64: pubKeys,
+      memberUserIds: userIds,
+    );
+
+    // Determine next key version
+    final status = await api.callGoApi('/groups/${widget.capsule.id}/key-status', method: 'GET');
+    final currentVersion = status['key_version'] as int? ?? 1;
+    final nextVersion = currentVersion + 1;
+
+    final payload = result.memberKeys.entries.map((e) => {
+      'user_id': e.key,
+      'encrypted_key': e.value,
+      'key_version': nextVersion,
+    }).toList();
+
+    await api.callGoApi('/groups/${widget.capsule.id}/keys', method: 'POST', body: {'keys': payload});
+
+    // Update local cache with new key
+    await CapsuleSecurityService.cacheCapsuleKey(widget.capsule.id, result.newCapsuleKey);
+    if (mounted) setState(() => _capsuleKey = result.newCapsuleKey);
+
+    if (!silent && mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Keys rotated successfully')),
+      );
     }
   }
 
@@ -230,7 +290,11 @@ class _PrivateCapsuleScreenState extends ConsumerState<PrivateCapsuleScreen>
       context: context,
       backgroundColor: AppTheme.cardSurface,
       isScrollControlled: true,
-      builder: (ctx) => _CapsuleAdminPanel(capsule: widget.capsule),
+      builder: (ctx) => _CapsuleAdminPanel(
+        capsule: widget.capsule,
+        capsuleKey: _capsuleKey,
+        onRotateKeys: () => _performKeyRotation(ref.read(apiServiceProvider)),
+      ),
     );
   }
 }
@@ -1009,9 +1073,141 @@ class _NewVaultNoteSheetState extends State<_NewVaultNoteSheet> {
 }
 
 // ── Admin Panel ───────────────────────────────────────────────────────────
-class _CapsuleAdminPanel extends StatelessWidget {
+class _CapsuleAdminPanel extends ConsumerStatefulWidget {
   final Cluster capsule;
-  const _CapsuleAdminPanel({required this.capsule});
+  final SecretKey? capsuleKey;
+  final Future<void> Function() onRotateKeys;
+
+  const _CapsuleAdminPanel({
+    required this.capsule,
+    required this.capsuleKey,
+    required this.onRotateKeys,
+  });
+
+  @override
+  ConsumerState<_CapsuleAdminPanel> createState() => _CapsuleAdminPanelState();
+}
+
+class _CapsuleAdminPanelState extends ConsumerState<_CapsuleAdminPanel> {
+  bool _busy = false;
+
+  Future<void> _rotateKeys() async {
+    setState(() => _busy = true);
+    try {
+      await widget.onRotateKeys();
+      if (mounted) Navigator.pop(context);
+    } catch (e) {
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Rotation failed: $e')));
+    } finally {
+      if (mounted) setState(() => _busy = false);
+    }
+  }
+
+  Future<void> _inviteMember() async {
+    final handle = await showDialog<String>(
+      context: context,
+      builder: (ctx) => _TextInputDialog(
+        title: 'Invite Member',
+        label: 'Username or @handle',
+        action: 'Invite',
+      ),
+    );
+    if (handle == null || handle.isEmpty) return;
+
+    setState(() => _busy = true);
+    try {
+      final api = ref.read(apiServiceProvider);
+
+      // Look up user by handle
+      final userData = await api.callGoApi(
+        '/users/by-handle/${handle.replaceFirst('@', '')}',
+        method: 'GET',
+      );
+      final userId = userData['id'] as String?;
+      final recipientPubKey = userData['public_key'] as String?;
+
+      if (userId == null) throw 'User not found';
+      if (recipientPubKey == null || recipientPubKey.isEmpty) throw 'User has no public key registered';
+      if (widget.capsuleKey == null) throw 'Capsule not unlocked';
+
+      // Encrypt the current group key for the new member
+      final encryptedKey = await CapsuleSecurityService.encryptCapsuleKeyForUser(
+        capsuleKey: widget.capsuleKey!,
+        recipientPublicKeyB64: recipientPubKey,
+      );
+
+      await api.callGoApi('/groups/${widget.capsule.id}/invite-member', method: 'POST', body: {
+        'user_id': userId,
+        'encrypted_key': encryptedKey,
+      });
+
+      if (mounted) {
+        Navigator.pop(context);
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('${handle.replaceFirst('@', '')} invited')),
+        );
+      }
+    } catch (e) {
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Invite failed: $e')));
+    } finally {
+      if (mounted) setState(() => _busy = false);
+    }
+  }
+
+  Future<void> _removeMember() async {
+    final api = ref.read(apiServiceProvider);
+
+    // Load member list
+    final data = await api.callGoApi('/groups/${widget.capsule.id}/members', method: 'GET');
+    final members = (data['members'] as List?)?.cast<Map<String, dynamic>>() ?? [];
+    if (!mounted) return;
+
+    final selected = await showDialog<Map<String, dynamic>>(
+      context: context,
+      builder: (ctx) => _MemberPickerDialog(members: members),
+    );
+    if (selected == null || !mounted) return;
+
+    final confirm = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Remove Member'),
+        content: Text('Remove ${selected['username']}? This will trigger key rotation.'),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Cancel')),
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, true),
+            style: TextButton.styleFrom(foregroundColor: SojornColors.destructive),
+            child: const Text('Remove'),
+          ),
+        ],
+      ),
+    );
+    if (confirm != true) return;
+
+    setState(() => _busy = true);
+    try {
+      await api.callGoApi(
+        '/groups/${widget.capsule.id}/members/${selected['user_id']}',
+        method: 'DELETE',
+      );
+      // Rotate keys after removal — server already flagged it; do it now
+      await widget.onRotateKeys();
+      if (mounted) Navigator.pop(context);
+    } catch (e) {
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Remove failed: $e')));
+    } finally {
+      if (mounted) setState(() => _busy = false);
+    }
+  }
+
+  Future<void> _openSettings() async {
+    Navigator.pop(context);
+    await showDialog<void>(
+      context: context,
+      builder: (ctx) => _CapsuleSettingsDialog(capsule: widget.capsule),
+    );
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -1021,7 +1217,6 @@ class _CapsuleAdminPanel extends StatelessWidget {
         mainAxisSize: MainAxisSize.min,
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          // Handle
           Center(
             child: Container(
               width: 40, height: 4,
@@ -1032,45 +1227,175 @@ class _CapsuleAdminPanel extends StatelessWidget {
             ),
           ),
           const SizedBox(height: 16),
-          Text(
-            'Capsule Admin',
-            style: TextStyle(color: AppTheme.navyBlue, fontSize: 18, fontWeight: FontWeight.w700),
-          ),
+          Text('Capsule Admin',
+              style: TextStyle(color: AppTheme.navyBlue, fontSize: 18, fontWeight: FontWeight.w700)),
           const SizedBox(height: 20),
-
-          _AdminAction(
-            icon: Icons.vpn_key,
-            label: 'Rotate Encryption Keys',
-            subtitle: 'Generate new keys and re-encrypt for all members',
-            color: const Color(0xFFFFA726),
-            onTap: () { Navigator.pop(context); /* TODO: key rotation flow */ },
-          ),
-          const SizedBox(height: 8),
-          _AdminAction(
-            icon: Icons.person_add,
-            label: 'Invite Member',
-            subtitle: 'Encrypt the capsule key for a new member',
-            color: const Color(0xFF4CAF50),
-            onTap: () { Navigator.pop(context); /* TODO: invite flow */ },
-          ),
-          const SizedBox(height: 8),
-          _AdminAction(
-            icon: Icons.person_remove,
-            label: 'Remove Member',
-            subtitle: 'Revoke access (triggers automatic key rotation)',
-            color: SojornColors.destructive,
-            onTap: () { Navigator.pop(context); /* TODO: remove + rotate */ },
-          ),
-          const SizedBox(height: 8),
-          _AdminAction(
-            icon: Icons.settings,
-            label: 'Capsule Settings',
-            subtitle: 'Toggle chat, forum, and vault features',
-            color: SojornColors.basicBrightNavy,
-            onTap: () { Navigator.pop(context); /* TODO: settings */ },
-          ),
+          if (_busy)
+            const Center(child: Padding(
+              padding: EdgeInsets.symmetric(vertical: 24),
+              child: CircularProgressIndicator(),
+            ))
+          else ...[
+            _AdminAction(
+              icon: Icons.vpn_key,
+              label: 'Rotate Encryption Keys',
+              subtitle: 'Generate new keys and re-encrypt for all members',
+              color: const Color(0xFFFFA726),
+              onTap: _rotateKeys,
+            ),
+            const SizedBox(height: 8),
+            _AdminAction(
+              icon: Icons.person_add,
+              label: 'Invite Member',
+              subtitle: 'Encrypt the capsule key for a new member',
+              color: const Color(0xFF4CAF50),
+              onTap: _inviteMember,
+            ),
+            const SizedBox(height: 8),
+            _AdminAction(
+              icon: Icons.person_remove,
+              label: 'Remove Member',
+              subtitle: 'Revoke access and rotate keys automatically',
+              color: SojornColors.destructive,
+              onTap: _removeMember,
+            ),
+            const SizedBox(height: 8),
+            _AdminAction(
+              icon: Icons.settings,
+              label: 'Capsule Settings',
+              subtitle: 'Toggle chat, forum, and vault features',
+              color: SojornColors.basicBrightNavy,
+              onTap: _openSettings,
+            ),
+          ],
         ],
       ),
+    );
+  }
+}
+
+// ── Helper dialogs ─────────────────────────────────────────────────────────
+
+class _TextInputDialog extends StatefulWidget {
+  final String title;
+  final String label;
+  final String action;
+  const _TextInputDialog({required this.title, required this.label, required this.action});
+  @override
+  State<_TextInputDialog> createState() => _TextInputDialogState();
+}
+
+class _TextInputDialogState extends State<_TextInputDialog> {
+  final _ctrl = TextEditingController();
+  @override
+  void dispose() { _ctrl.dispose(); super.dispose(); }
+  @override
+  Widget build(BuildContext context) {
+    return AlertDialog(
+      title: Text(widget.title),
+      content: TextField(
+        controller: _ctrl,
+        decoration: InputDecoration(labelText: widget.label),
+        autofocus: true,
+        onSubmitted: (v) => Navigator.pop(context, v.trim()),
+      ),
+      actions: [
+        TextButton(onPressed: () => Navigator.pop(context), child: const Text('Cancel')),
+        TextButton(
+          onPressed: () => Navigator.pop(context, _ctrl.text.trim()),
+          child: Text(widget.action),
+        ),
+      ],
+    );
+  }
+}
+
+class _MemberPickerDialog extends StatelessWidget {
+  final List<Map<String, dynamic>> members;
+  const _MemberPickerDialog({required this.members});
+  @override
+  Widget build(BuildContext context) {
+    return AlertDialog(
+      title: const Text('Select Member to Remove'),
+      content: SizedBox(
+        width: double.maxFinite,
+        child: ListView.builder(
+          shrinkWrap: true,
+          itemCount: members.length,
+          itemBuilder: (ctx, i) {
+            final m = members[i];
+            return ListTile(
+              title: Text(m['username'] as String? ?? m['user_id'] as String? ?? ''),
+              subtitle: Text(m['role'] as String? ?? ''),
+              onTap: () => Navigator.pop(context, m),
+            );
+          },
+        ),
+      ),
+      actions: [
+        TextButton(onPressed: () => Navigator.pop(context), child: const Text('Cancel')),
+      ],
+    );
+  }
+}
+
+class _CapsuleSettingsDialog extends ConsumerStatefulWidget {
+  final Cluster capsule;
+  const _CapsuleSettingsDialog({required this.capsule});
+  @override
+  ConsumerState<_CapsuleSettingsDialog> createState() => _CapsuleSettingsDialogState();
+}
+
+class _CapsuleSettingsDialogState extends ConsumerState<_CapsuleSettingsDialog> {
+  bool _chat = true;
+  bool _forum = true;
+  bool _vault = true;
+  bool _saving = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _chat = widget.capsule.settings.chat;
+    _forum = widget.capsule.settings.forum;
+    _vault = widget.capsule.settings.files;
+  }
+
+  Future<void> _save() async {
+    setState(() => _saving = true);
+    try {
+      final api = ref.read(apiServiceProvider);
+      await api.callGoApi('/groups/${widget.capsule.id}/settings', method: 'PATCH', body: {
+        'chat_enabled': _chat,
+        'forum_enabled': _forum,
+        'vault_enabled': _vault,
+      });
+      if (mounted) Navigator.pop(context);
+    } catch (e) {
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Save failed: $e')));
+    } finally {
+      if (mounted) setState(() => _saving = false);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return AlertDialog(
+      title: const Text('Capsule Settings'),
+      content: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          SwitchListTile(title: const Text('Chat'), value: _chat, onChanged: (v) => setState(() => _chat = v)),
+          SwitchListTile(title: const Text('Forum'), value: _forum, onChanged: (v) => setState(() => _forum = v)),
+          SwitchListTile(title: const Text('Vault'), value: _vault, onChanged: (v) => setState(() => _vault = v)),
+        ],
+      ),
+      actions: [
+        TextButton(onPressed: () => Navigator.pop(context), child: const Text('Cancel')),
+        ElevatedButton(
+          onPressed: _saving ? null : _save,
+          child: _saving ? const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2)) : const Text('Save'),
+        ),
+      ],
     );
   }
 }

@@ -2,6 +2,7 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:share_plus/share_plus.dart';
 import '../../providers/api_provider.dart';
 import '../../providers/feed_refresh_provider.dart';
 import '../../models/post.dart';
@@ -165,7 +166,8 @@ class _FeedsojornScreenState extends ConsumerState<FeedsojornScreen> {
   }
 
   void _sharePost(Post post) {
-    // TODO: Implement share functionality
+    final text = post.content.isNotEmpty ? post.content : 'Check this out on Sojorn';
+    Share.share(text, subject: 'Shared from Sojorn');
   }
 
   @override

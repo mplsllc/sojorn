@@ -8,7 +8,7 @@ import {
   LayoutDashboard, Users, FileText, Shield, ShieldCheck, Scale, Flag,
   Settings, Activity, LogOut, ChevronLeft, ChevronRight, ChevronDown,
   Sliders, FolderTree, HardDrive, AtSign, Brain, ScrollText, Wrench, Bot,
-  UserCog, ShieldAlert, Cog, Mail, MapPinned,
+  UserCog, ShieldAlert, Cog, Mail, MapPinned, Users2, Video,
 } from 'lucide-react';
 import { useState } from 'react';
 
@@ -31,6 +31,7 @@ const navigation: NavEntry[] = [
       { href: '/categories', label: 'Categories', icon: FolderTree },
       { href: '/neighborhoods', label: 'Neighborhoods', icon: MapPinned },
       { href: '/official-accounts', label: 'Official Accounts', icon: Bot },
+      { href: '/groups', label: 'Groups & Capsules', icon: Users2 },
     ],
   },
   {
@@ -55,6 +56,7 @@ const navigation: NavEntry[] = [
       { href: '/usernames', label: 'Usernames', icon: AtSign },
       { href: '/storage', label: 'Storage', icon: HardDrive },
       { href: '/system', label: 'System Health', icon: Activity },
+      { href: '/quips', label: 'Quip Repair', icon: Video },
       { href: '/settings/emails', label: 'Email Templates', icon: Mail },
       { href: '/settings', label: 'Settings', icon: Settings },
     ],

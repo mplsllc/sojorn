@@ -3,13 +3,16 @@
 import AdminShell from '@/components/AdminShell';
 import { api } from '@/lib/api';
 import { useEffect, useState } from 'react';
-import { Sliders, Save, RefreshCw } from 'lucide-react';
+import { Sliders, Save, RefreshCw, BarChart2 } from 'lucide-react';
 
 export default function AlgorithmPage() {
   const [configs, setConfigs] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [editValues, setEditValues] = useState<Record<string, string>>({});
   const [saving, setSaving] = useState<string | null>(null);
+  const [scores, setScores] = useState<any[]>([]);
+  const [scoresLoading, setScoresLoading] = useState(false);
+  const [showScores, setShowScores] = useState(false);
 
   const fetchConfig = () => {
     setLoading(true);
@@ -33,6 +36,15 @@ export default function AlgorithmPage() {
       fetchConfig();
     } catch {}
     setSaving(null);
+  };
+
+  const loadScores = () => {
+    setScoresLoading(true);
+    setShowScores(true);
+    api.getFeedScores()
+      .then((data) => setScores(data.scores ?? []))
+      .catch(() => {})
+      .finally(() => setScoresLoading(false));
   };
 
   const groupedConfigs = {
@@ -168,6 +180,68 @@ export default function AlgorithmPage() {
           )}
         </div>
       )}
+
+      {/* Feed Scores Viewer */}
+      <div className="mt-8">
+        <div className="flex items-center justify-between mb-4">
+          <div className="flex items-center gap-2">
+            <BarChart2 className="w-5 h-5 text-gray-600" />
+            <h2 className="text-lg font-semibold text-gray-800">Live Feed Scores</h2>
+          </div>
+          <button
+            onClick={loadScores}
+            className="flex items-center gap-1.5 px-3 py-1.5 border rounded-lg text-sm hover:bg-gray-50"
+          >
+            <RefreshCw className={`w-4 h-4 ${scoresLoading ? 'animate-spin' : ''}`} />
+            {showScores ? 'Refresh' : 'Load Scores'}
+          </button>
+        </div>
+        {showScores && (
+          <div className="bg-white rounded-xl border overflow-hidden">
+            {scoresLoading ? (
+              <div className="p-6 text-center text-gray-400">Loading scores…</div>
+            ) : scores.length === 0 ? (
+              <div className="p-6 text-center text-gray-400">No scored posts yet</div>
+            ) : (
+              <div className="overflow-x-auto">
+                <table className="w-full text-sm">
+                  <thead className="bg-gray-50 border-b">
+                    <tr>
+                      <th className="px-4 py-3 text-left font-medium text-gray-600">Post</th>
+                      <th className="px-4 py-3 text-right font-medium text-gray-600">Total</th>
+                      <th className="px-4 py-3 text-right font-medium text-gray-600">Engage</th>
+                      <th className="px-4 py-3 text-right font-medium text-gray-600">Quality</th>
+                      <th className="px-4 py-3 text-right font-medium text-gray-600">Recency</th>
+                      <th className="px-4 py-3 text-right font-medium text-gray-600">Network</th>
+                      <th className="px-4 py-3 text-right font-medium text-gray-600">Personal</th>
+                      <th className="px-4 py-3 text-left font-medium text-gray-600">Updated</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-gray-100">
+                    {scores.map((s) => (
+                      <tr key={s.post_id} className="hover:bg-gray-50">
+                        <td className="px-4 py-2.5 max-w-xs">
+                          <p className="truncate text-gray-800" title={s.excerpt}>{s.excerpt || '—'}</p>
+                          <p className="text-xs text-gray-400 font-mono">{s.post_id.slice(0, 8)}…</p>
+                        </td>
+                        <td className="px-4 py-2.5 text-right font-semibold text-blue-700">
+                          {Number(s.total_score).toFixed(2)}
+                        </td>
+                        <td className="px-4 py-2.5 text-right text-gray-600">{Number(s.engagement_score).toFixed(2)}</td>
+                        <td className="px-4 py-2.5 text-right text-gray-600">{Number(s.quality_score).toFixed(2)}</td>
+                        <td className="px-4 py-2.5 text-right text-gray-600">{Number(s.recency_score).toFixed(2)}</td>
+                        <td className="px-4 py-2.5 text-right text-gray-600">{Number(s.network_score).toFixed(2)}</td>
+                        <td className="px-4 py-2.5 text-right text-gray-600">{Number(s.personalization).toFixed(2)}</td>
+                        <td className="px-4 py-2.5 text-gray-400 text-xs">{new Date(s.updated_at).toLocaleString()}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </div>
+        )}
+      </div>
     </AdminShell>
   );
 }

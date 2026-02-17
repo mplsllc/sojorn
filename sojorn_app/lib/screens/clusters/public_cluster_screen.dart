@@ -31,14 +31,11 @@ class _PublicClusterScreenState extends ConsumerState<PublicClusterScreen> {
   Future<void> _loadPosts() async {
     setState(() => _isLoading = true);
     try {
-      // TODO: Call group-specific feed endpoint when wired
       final api = ref.read(apiServiceProvider);
-      final beacons = await api.fetchNearbyBeacons(
-        lat: widget.cluster.lat ?? 0,
-        long: widget.cluster.lng ?? 0,
-        radius: widget.cluster.radiusMeters,
-      );
-      if (mounted) setState(() { _posts = beacons; _isLoading = false; });
+      final raw = await api.callGoApi('/groups/${widget.cluster.id}/feed', method: 'GET');
+      final items = (raw['posts'] as List?)?.cast<Map<String, dynamic>>() ?? [];
+      final posts = items.map((j) => Post.fromJson(j)).toList();
+      if (mounted) setState(() { _posts = posts; _isLoading = false; });
     } catch (_) {
       if (mounted) setState(() => _isLoading = false);
     }

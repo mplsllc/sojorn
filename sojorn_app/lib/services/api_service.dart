@@ -1226,15 +1226,13 @@ class ApiService {
   // =========================================================================
 
   Future<String> getSignedMediaUrl(String path) async {
-    // For web platform, return the original URL since signing isn't needed
-    // for public CDN domains
-    if (path.startsWith('http')) {
+    if (path.startsWith('http')) return path;
+    try {
+      final data = await callGoApi('/media/sign', method: 'GET', queryParams: {'path': path});
+      return data['url'] as String? ?? path;
+    } catch (_) {
       return path;
     }
-    
-    // Migrate to Go API / Nginx Signed URLs
-    // TODO: Implement proper signed URL generation
-    return '${ApiConfig.baseUrl}/media/signed?path=$path';
   }
 
   Future<Map<String, dynamic>> toggleReaction(String postId, String emoji) async {

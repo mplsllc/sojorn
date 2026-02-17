@@ -633,6 +633,52 @@ class ApiClient {
       body: JSON.stringify({ template_id: templateId, to_email: toEmail }),
     });
   }
+
+  // Groups admin
+  async listGroups(params: { search?: string; limit?: number; offset?: number } = {}) {
+    const qs = new URLSearchParams();
+    if (params.search) qs.set('search', params.search);
+    if (params.limit) qs.set('limit', String(params.limit));
+    if (params.offset) qs.set('offset', String(params.offset));
+    return this.request<any>(`/api/v1/admin/groups?${qs}`);
+  }
+
+  async getGroup(id: string) {
+    return this.request<any>(`/api/v1/admin/groups/${id}`);
+  }
+
+  async deleteGroup(id: string) {
+    return this.request<any>(`/api/v1/admin/groups/${id}`, { method: 'DELETE' });
+  }
+
+  async listGroupMembers(groupId: string) {
+    return this.request<any>(`/api/v1/admin/groups/${groupId}/members`);
+  }
+
+  async removeGroupMember(groupId: string, userId: string) {
+    return this.request<any>(`/api/v1/admin/groups/${groupId}/members/${userId}`, { method: 'DELETE' });
+  }
+
+  // Quip repair
+  async getBrokenQuips(limit = 50) {
+    return this.request<any>(`/api/v1/admin/quips/broken?limit=${limit}`);
+  }
+
+  async repairQuip(postId: string) {
+    return this.request<any>(`/api/v1/admin/quips/${postId}/repair`, { method: 'POST' });
+  }
+
+  async setPostThumbnail(postId: string, thumbnailUrl: string) {
+    return this.request<any>(`/api/v1/admin/posts/${postId}/thumbnail`, {
+      method: 'PATCH',
+      body: JSON.stringify({ thumbnail_url: thumbnailUrl }),
+    });
+  }
+
+  // Feed scores
+  async getFeedScores(limit = 50) {
+    return this.request<any>(`/api/v1/admin/feed-scores?limit=${limit}`);
+  }
 }
 
 export const api = new ApiClient();

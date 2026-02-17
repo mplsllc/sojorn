@@ -160,8 +160,21 @@ class _ClustersScreenState extends ConsumerState<ClustersScreen>
   }
 
   void _navigateToGroup(group_models.Group group) {
-    // TODO: Navigate to group detail screen
-    if (kDebugMode) print('Navigate to group: ${group.name}');
+    final cluster = Cluster(
+      id: group.id,
+      name: group.name,
+      description: group.description,
+      type: group.isPrivate ? 'private_capsule' : 'geo',
+      privacy: group.isPrivate ? 'private' : 'public',
+      avatarUrl: group.avatarUrl,
+      memberCount: group.memberCount,
+      isEncrypted: false,
+      category: group.category,
+      createdAt: group.createdAt,
+    );
+    Navigator.of(context).push(
+      MaterialPageRoute(builder: (_) => GroupScreen(group: cluster)),
+    );
   }
 
   @override
