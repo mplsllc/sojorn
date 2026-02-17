@@ -1,112 +1,39 @@
 'use client';
 
-import { useState, useRef, useEffect, useCallback } from 'react';
+import { useState, useRef, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
 import { useAuth } from '@/lib/auth';
-import Script from 'next/script';
-
-const TURNSTILE_SITE_KEY = process.env.NEXT_PUBLIC_TURNSTILE_SITE_KEY || '';
 
 export default function LoginPage() {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
-  const [turnstileToken, setTurnstileToken] = useState('');
-  const [turnstileReady, setTurnstileReady] = useState(false);
-  const [turnstileWidgetRendered, setTurnstileWidgetRendered] = useState(false);
-  const turnstileRef = useRef<HTMLDivElement>(null);
-  const widgetIdRef = useRef<string | null>(null);
-  const tokenRef = useRef('');
   const emailRef = useRef('');
   const passwordRef = useRef('');
   const { login } = useAuth();
   const router = useRouter();
 
-  // Keep ref in sync with state so the submit handler always has the latest value
-  useEffect(() => { tokenRef.current = turnstileToken; }, [turnstileToken]);
-
   const performLogin = useCallback(async () => {
     setLoading(true);
     try {
-      await login(emailRef.current, passwordRef.current, tokenRef.current);
+      await login(emailRef.current, passwordRef.current, '');
       router.push('/');
     } catch (err: any) {
       setError(err.message || 'Login failed. Check your credentials.');
-      refreshTurnstile();
     } finally {
       setLoading(false);
     }
   }, [login, router]);
 
-  const renderTurnstile = useCallback(() => {
-    if (!TURNSTILE_SITE_KEY || !turnstileRef.current || !(window as any).turnstile) return;
-    if (widgetIdRef.current) {
-      try { (window as any).turnstile.remove(widgetIdRef.current); } catch {}
-    }
-    widgetIdRef.current = (window as any).turnstile.render(turnstileRef.current, {
-      sitekey: TURNSTILE_SITE_KEY,
-      size: 'normal',
-      theme: 'light',
-      callback: (token: string) => { 
-      setTurnstileToken(token); 
-      tokenRef.current = token; 
-      setTurnstileReady(true);
-    },
-      'error-callback': () => { setTurnstileToken(''); tokenRef.current = ''; setTurnstileReady(false); },
-      'expired-callback': () => { setTurnstileToken(''); tokenRef.current = ''; setTurnstileReady(false); },
-    });
-    setTurnstileWidgetRendered(true);
-  }, [performLogin]);
-
-  useEffect(() => {
-    if ((window as any).turnstile && TURNSTILE_SITE_KEY) {
-      renderTurnstile();
-    }
-  }, [renderTurnstile]);
-
-  const refreshTurnstile = () => {
-    setTurnstileToken('');
-    tokenRef.current = '';
-    setTurnstileReady(false);
-    setTurnstileWidgetRendered(false);
-    setError('');
-    if (widgetIdRef.current && (window as any).turnstile) {
-      (window as any).turnstile.reset(widgetIdRef.current);
-    }
-  };
-
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError('');
-
-    /*
-    // Invisible Turnstile flow:
-    // - If we don't have a token yet, execute Turnstile first.
-    // - If we already have a token, proceed with login.
-    if (TURNSTILE_SITE_KEY && !widgetIdRef.current) {
-      setError('Security check is still loading. Please wait a moment and try again.');
-      return;
-    }
-
-    // Managed widget flow: require token before submitting.
-    if (TURNSTILE_SITE_KEY && !tokenRef.current) {
-      setError('Please complete the security check first.');
-      return;
-    }
-    */
-
     await performLogin();
   };
 
   return (
     <div className="min-h-screen flex items-center justify-center bg-warm-100">
-      {TURNSTILE_SITE_KEY && (
-        <Script
-          src="https://challenges.cloudflare.com/turnstile/v0/api.js?render=explicit"
-          onReady={renderTurnstile}
-        />
-      )}
       <div className="w-full max-w-md">
         <div className="card p-8">
           <div className="text-center mb-8">
@@ -156,19 +83,6 @@ export default function LoginPage() {
                 required
               />
             </div>
-            {/* Visible Turnstile widget */}
-            {TURNSTILE_SITE_KEY && (
-              <div className="flex flex-col items-center gap-2">
-                <div ref={turnstileRef} />
-                <button
-                  type="button"
-                  onClick={refreshTurnstile}
-                  className="text-xs text-gray-400 hover:text-gray-600 underline"
-                >
-                  Refresh verification
-                </button>
-              </div>
-            )}
             <button
               type="submit"
               className="btn-primary w-full"
