@@ -16,6 +16,7 @@ import '../secure_chat/secure_chat_full_screen.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../../widgets/radial_menu_overlay.dart';
 import '../../widgets/onboarding_modal.dart';
+import '../../widgets/offline_indicator.dart';
 import '../../providers/quip_upload_provider.dart';
 import '../../providers/notification_provider.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -116,14 +117,19 @@ class _HomeShellState extends ConsumerState<HomeShell> with WidgetsBindingObserv
     final currentIndex = widget.navigationShell.currentIndex;
 
     return Scaffold(
+      backgroundColor: AppTheme.scaffoldBg,
       appBar: _buildAppBar(),
-      body: Stack(
+      body: Column(
         children: [
-          NavigationShellScope(
-            currentIndex: currentIndex,
-            child: widget.navigationShell,
-          ),
-          RadialMenuOverlay(
+          const OfflineIndicator(),
+          Expanded(
+            child: Stack(
+              children: [
+                NavigationShellScope(
+                  currentIndex: currentIndex,
+                  child: widget.navigationShell,
+                ),
+                RadialMenuOverlay(
             isVisible: _isRadialMenuVisible,
             onDismiss: () => setState(() => _isRadialMenuVisible = false),
             onPostTap: () {
@@ -147,6 +153,9 @@ class _HomeShellState extends ConsumerState<HomeShell> with WidgetsBindingObserv
                 ),
               );
             },
+                ),
+              ],
+            ),
           ),
         ],
       ),

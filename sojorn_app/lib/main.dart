@@ -16,6 +16,7 @@ import 'services/secure_chat_service.dart';
 import 'services/simple_e2ee_service.dart';
 import 'services/key_vault_service.dart';
 import 'services/sync_manager.dart';
+import 'services/network_service.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'theme/app_theme.dart';
 import 'providers/theme_provider.dart' as theme_provider;
@@ -129,6 +130,9 @@ class _sojornAppState extends ConsumerState<sojornApp> with WidgetsBindingObserv
     if (kDebugMode) debugPrint('[APP] initState start ${DateTime.now().toIso8601String()}');
     _initDeepLinks();
     _listenForAuth();
+    // Initialize network monitoring
+    NetworkService().initialize();
+    
     if (kDebugMode) debugPrint('[APP] initState sync complete — deferring heavy init');
     // Defer heavy work with real delays to avoid jank on first paint
     WidgetsBinding.instance.addPostFrameCallback((_) {
