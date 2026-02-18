@@ -40,6 +40,8 @@ class ApiConfig {
     return url.startsWith('https://i.redd.it/') ||
         url.startsWith('https://preview.redd.it/') ||
         url.startsWith('https://external-preview.redd.it/') ||
-        url.startsWith('https://blob.gifcities.org/gifcities/');
+        url.startsWith('https://blob.gifcities.org/gifcities/') ||
+        url.startsWith('https://i.imgur.com/') ||
+        url.startsWith('https://media.giphy.com/');
   }
 }

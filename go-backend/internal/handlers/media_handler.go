@@ -288,6 +288,8 @@ func (h *MediaHandler) ImageProxy(c *gin.Context) {
 		"https://preview.redd.it/",
 		"https://external-preview.redd.it/",
 		"https://blob.gifcities.org/gifcities/",
+		"https://i.imgur.com/",
+		"https://media.giphy.com/",
 	} {
 		if strings.HasPrefix(rawURL, prefix) {
 			allowed = true

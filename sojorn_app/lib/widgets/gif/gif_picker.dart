@@ -239,7 +239,15 @@ class _MemeTabState extends State<_MemeTab>
         .cast<Map<String, dynamic>>()
         .where((m) {
           final url = m['url'] as String? ?? '';
-          return url.endsWith('.gif') && m['nsfw'] != true;
+          // Accept GIF-capable image URLs; reject video-only hosts and .mp4
+          final isImage = !url.startsWith('https://v.redd.it/') &&
+              !url.endsWith('.mp4') &&
+              (url.endsWith('.gif') ||
+                  url.startsWith('https://i.redd.it/') ||
+                  url.startsWith('https://preview.redd.it/') ||
+                  url.startsWith('https://i.imgur.com/') ||
+                  url.startsWith('https://media.giphy.com/'));
+          return isImage && m['nsfw'] != true;
         })
         .map((m) => _GifItem(
               url: m['url'] as String,
@@ -255,7 +263,7 @@ class _MemeTabState extends State<_MemeTab>
       children: [
         _SearchBar(
           ctrl: widget.searchCtrl,
-          hint: 'Search by subreddit (e.g. dogs, gaming)…',
+          hint: 'Search GIFs…',
         ),
         Expanded(child: _GifGrid(
           gifs: _gifs,

@@ -7,7 +7,7 @@ import '../../services/capsule_security_service.dart';
 import '../../services/content_guard_service.dart';
 import '../../theme/tokens.dart';
 import '../../theme/app_theme.dart';
-import '../../widgets/gif/gif_picker.dart';
+import '../../widgets/composer/composer_bar.dart';
 
 class GroupChatTab extends StatefulWidget {
   final String groupId;
@@ -28,12 +28,9 @@ class GroupChatTab extends StatefulWidget {
 }
 
 class _GroupChatTabState extends State<GroupChatTab> {
-  final TextEditingController _msgCtrl = TextEditingController();
   final ScrollController _scrollCtrl = ScrollController();
   List<Map<String, dynamic>> _messages = [];
   bool _loading = true;
-  bool _sending = false;
-  String? _pendingGif; // GIF URL staged before send
 
   @override
   void initState() {
@@ -43,7 +40,6 @@ class _GroupChatTabState extends State<GroupChatTab> {
 
   @override
   void dispose() {
-    _msgCtrl.dispose();
     _scrollCtrl.dispose();
     super.dispose();
   }
@@ -103,12 +99,7 @@ class _GroupChatTabState extends State<GroupChatTab> {
     _messages = decrypted.reversed.toList();
   }
 
-  Future<void> _sendMessage() async {
-    final text = _msgCtrl.text.trim();
-    final gif = _pendingGif;
-    if (text.isEmpty && gif == null) return;
-    if (_sending) return;
-
+  Future<void> _onChatSend(String text, String? gifUrl) async {
     if (text.isNotEmpty) {
       // Local content guard — block before encryption
       final guardReason = ContentGuardService.instance.check(text);
@@ -118,7 +109,7 @@ class _GroupChatTabState extends State<GroupChatTab> {
             SnackBar(content: Text(guardReason), backgroundColor: Colors.red),
           );
         }
-        return;
+        throw Exception('blocked'); // prevents ComposerBar from clearing
       }
 
       // Server-side AI moderation — stateless, nothing stored
@@ -129,46 +120,36 @@ class _GroupChatTabState extends State<GroupChatTab> {
             SnackBar(content: Text(aiReason), backgroundColor: Colors.red),
           );
         }
-        return;
+        throw Exception('blocked');
       }
     }
 
-    setState(() => _sending = true);
-    try {
-      final payload = {
-        'text': text,
-        'ts': DateTime.now().toIso8601String(),
-        if (gif != null) 'gif_url': gif,
-      };
+    final payload = {
+      'text': text,
+      'ts': DateTime.now().toIso8601String(),
+      if (gifUrl != null) 'gif_url': gifUrl,
+    };
 
-      if (widget.isEncrypted && widget.capsuleKey != null) {
-        final encrypted = await CapsuleSecurityService.encryptPayload(
-          payload: payload,
-          capsuleKey: widget.capsuleKey!,
-        );
-        await ApiService.instance.callGoApi(
-          '/capsules/${widget.groupId}/entries',
-          method: 'POST',
-          body: {
-            'iv': encrypted.iv,
-            'encrypted_payload': encrypted.encryptedPayload,
-            'data_type': 'chat',
-            'key_version': 1,
-          },
-        );
-      } else {
-        await ApiService.instance.sendGroupMessage(widget.groupId,
-            body: text.isNotEmpty ? text : gif ?? '');
-      }
-      _msgCtrl.clear();
-      setState(() => _pendingGif = null);
-      await _loadMessages();
-    } catch (e) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Failed: $e')));
-      }
+    if (widget.isEncrypted && widget.capsuleKey != null) {
+      final encrypted = await CapsuleSecurityService.encryptPayload(
+        payload: payload,
+        capsuleKey: widget.capsuleKey!,
+      );
+      await ApiService.instance.callGoApi(
+        '/capsules/${widget.groupId}/entries',
+        method: 'POST',
+        body: {
+          'iv': encrypted.iv,
+          'encrypted_payload': encrypted.encryptedPayload,
+          'data_type': 'chat',
+          'key_version': 1,
+        },
+      );
+    } else {
+      await ApiService.instance.sendGroupMessage(
+          widget.groupId, body: text.isNotEmpty ? text : gifUrl ?? '');
     }
-    if (mounted) setState(() => _sending = false);
+    if (mounted) await _loadMessages();
   }
 
   void _reportMessage(Map<String, dynamic> msg) {
@@ -341,92 +322,11 @@ class _GroupChatTabState extends State<GroupChatTab> {
           ),
           child: SafeArea(
             top: false,
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                // GIF preview
-                if (_pendingGif != null)
-                  Padding(
-                    padding: const EdgeInsets.only(bottom: 6),
-                    child: Stack(
-                      children: [
-                        ClipRRect(
-                          borderRadius: BorderRadius.circular(10),
-                          child: Image.network(
-                            ApiConfig.needsProxy(_pendingGif!)
-                                ? ApiConfig.proxyImageUrl(_pendingGif!)
-                                : _pendingGif!,
-                            height: 100, fit: BoxFit.cover),
-                        ),
-                        Positioned(
-                          top: 4, right: 4,
-                          child: GestureDetector(
-                            onTap: () => setState(() => _pendingGif = null),
-                            child: Container(
-                              decoration: BoxDecoration(
-                                shape: BoxShape.circle,
-                                color: Colors.black54,
-                              ),
-                              padding: const EdgeInsets.all(2),
-                              child: const Icon(Icons.close, color: Colors.white, size: 14),
-                            ),
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                Row(
-                  children: [
-                    // GIF button
-                    GestureDetector(
-                      onTap: () => showGifPicker(
-                        context,
-                        onSelected: (url) => setState(() => _pendingGif = url),
-                      ),
-                      child: Container(
-                        width: 36, height: 36,
-                        decoration: BoxDecoration(
-                          shape: BoxShape.circle,
-                          color: AppTheme.navyBlue.withValues(alpha: 0.07),
-                        ),
-                        child: Icon(Icons.gif_outlined, color: AppTheme.textSecondary, size: 22),
-                      ),
-                    ),
-                    const SizedBox(width: 8),
-                    Expanded(
-                      child: TextField(
-                        controller: _msgCtrl,
-                        style: TextStyle(color: SojornColors.postContent, fontSize: 14),
-                        decoration: InputDecoration(
-                          hintText: widget.isEncrypted ? 'Encrypted message…' : 'Type a message…',
-                          hintStyle: TextStyle(color: SojornColors.textDisabled),
-                          filled: true,
-                          fillColor: AppTheme.scaffoldBg,
-                          contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
-                          border: OutlineInputBorder(borderRadius: BorderRadius.circular(20), borderSide: BorderSide.none),
-                        ),
-                        textInputAction: TextInputAction.send,
-                        onSubmitted: (_) => _sendMessage(),
-                      ),
-                    ),
-                    const SizedBox(width: 8),
-                    GestureDetector(
-                      onTap: _sendMessage,
-                      child: Container(
-                        width: 40, height: 40,
-                        decoration: BoxDecoration(
-                          shape: BoxShape.circle,
-                          color: _sending ? AppTheme.brightNavy.withValues(alpha: 0.5) : AppTheme.brightNavy,
-                        ),
-                        child: _sending
-                            ? const Padding(padding: EdgeInsets.all(10), child: CircularProgressIndicator(strokeWidth: 2, color: SojornColors.basicWhite))
-                            : const Icon(Icons.send, color: SojornColors.basicWhite, size: 18),
-                      ),
-                    ),
-                  ],
-                ),
-              ],
+            child: ComposerBar(
+              config: widget.isEncrypted
+                  ? const ComposerConfig(hintText: 'Encrypted message…')
+                  : ComposerConfig.chat,
+              onSend: _onChatSend,
             ),
           ),
         ),

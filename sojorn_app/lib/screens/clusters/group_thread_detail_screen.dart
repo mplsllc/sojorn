@@ -3,6 +3,7 @@ import 'package:cryptography/cryptography.dart';
 import '../../services/api_service.dart';
 import '../../theme/tokens.dart';
 import '../../theme/app_theme.dart';
+import '../../widgets/composer/composer_bar.dart';
 
 /// Thread detail screen with replies — works for both public and encrypted groups.
 /// For encrypted groups, thread detail isn't supported via the standard API yet,
@@ -28,22 +29,14 @@ class GroupThreadDetailScreen extends StatefulWidget {
 }
 
 class _GroupThreadDetailScreenState extends State<GroupThreadDetailScreen> {
-  final _replyCtrl = TextEditingController();
   Map<String, dynamic>? _thread;
   List<Map<String, dynamic>> _replies = [];
   bool _loading = true;
-  bool _sending = false;
 
   @override
   void initState() {
     super.initState();
     _loadThread();
-  }
-
-  @override
-  void dispose() {
-    _replyCtrl.dispose();
-    super.dispose();
   }
 
   Future<void> _loadThread() async {
@@ -65,20 +58,9 @@ class _GroupThreadDetailScreenState extends State<GroupThreadDetailScreen> {
     if (mounted) setState(() => _loading = false);
   }
 
-  Future<void> _sendReply() async {
-    final text = _replyCtrl.text.trim();
-    if (text.isEmpty || _sending || widget.isEncrypted) return;
-    setState(() => _sending = true);
-    try {
-      await ApiService.instance.createGroupThreadReply(widget.groupId, widget.threadId, body: text);
-      _replyCtrl.clear();
-      await _loadThread();
-    } catch (e) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Failed: $e')));
-      }
-    }
-    if (mounted) setState(() => _sending = false);
+  Future<void> _sendReply(String text, String? _) async {
+    await ApiService.instance.createGroupThreadReply(widget.groupId, widget.threadId, body: text);
+    await _loadThread();
   }
 
   int _uniqueParticipants() {
@@ -217,34 +199,9 @@ class _GroupThreadDetailScreenState extends State<GroupThreadDetailScreen> {
                       color: AppTheme.cardSurface,
                       border: Border(top: BorderSide(color: AppTheme.navyBlue.withValues(alpha: 0.08))),
                     ),
-                    child: Row(
-                      children: [
-                        Expanded(
-                          child: TextField(
-                            controller: _replyCtrl,
-                            style: TextStyle(color: SojornColors.postContent, fontSize: 14),
-                            decoration: InputDecoration(
-                              hintText: 'Add to this chain…',
-                              hintStyle: TextStyle(color: SojornColors.textDisabled),
-                              filled: true, fillColor: AppTheme.scaffoldBg,
-                              contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
-                              border: OutlineInputBorder(borderRadius: BorderRadius.circular(20), borderSide: BorderSide.none),
-                            ),
-                            onSubmitted: (_) => _sendReply(),
-                          ),
-                        ),
-                        const SizedBox(width: 8),
-                        GestureDetector(
-                          onTap: _sendReply,
-                          child: Container(
-                            width: 38, height: 38,
-                            decoration: BoxDecoration(shape: BoxShape.circle, color: AppTheme.brightNavy),
-                            child: _sending
-                                ? const Padding(padding: EdgeInsets.all(9), child: CircularProgressIndicator(strokeWidth: 2, color: SojornColors.basicWhite))
-                                : const Icon(Icons.send, color: SojornColors.basicWhite, size: 16),
-                          ),
-                        ),
-                      ],
+                    child: ComposerBar(
+                      config: ComposerConfig.threadReply,
+                      onSend: _sendReply,
                     ),
                   ),
               ],

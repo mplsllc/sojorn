@@ -1,14 +1,11 @@
-import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:cryptography/cryptography.dart';
-import 'package:image_picker/image_picker.dart';
 import '../../config/api_config.dart';
 import '../../services/api_service.dart';
 import '../../services/capsule_security_service.dart';
-import '../../services/image_upload_service.dart';
 import '../../theme/tokens.dart';
 import '../../theme/app_theme.dart';
-import '../../widgets/gif/gif_picker.dart';
+import '../../widgets/composer/composer_bar.dart';
 
 class GroupFeedTab extends StatefulWidget {
   final String groupId;
@@ -29,15 +26,8 @@ class GroupFeedTab extends StatefulWidget {
 }
 
 class _GroupFeedTabState extends State<GroupFeedTab> {
-  final TextEditingController _postCtrl = TextEditingController();
   List<Map<String, dynamic>> _posts = [];
   bool _loading = true;
-  bool _posting = false;
-
-  // Image / GIF attachment (public groups only)
-  File? _pickedImage;
-  String? _pendingImageUrl; // already-uploaded URL (from GIF or uploaded file)
-  bool _uploading = false;
 
   @override
   void initState() {
@@ -47,37 +37,7 @@ class _GroupFeedTabState extends State<GroupFeedTab> {
 
   @override
   void dispose() {
-    _postCtrl.dispose();
     super.dispose();
-  }
-
-  Future<void> _pickImage() async {
-    final picker = ImagePicker();
-    final xf = await picker.pickImage(source: ImageSource.gallery);
-    if (xf == null) return;
-    setState(() { _pickedImage = File(xf.path); _pendingImageUrl = null; });
-  }
-
-  void _attachGif(String gifUrl) {
-    setState(() { _pickedImage = null; _pendingImageUrl = gifUrl; });
-  }
-
-  void _clearAttachment() {
-    setState(() { _pickedImage = null; _pendingImageUrl = null; });
-  }
-
-  Future<String?> _resolveImageUrl() async {
-    if (_pendingImageUrl != null) return _pendingImageUrl;
-    if (_pickedImage != null) {
-      setState(() => _uploading = true);
-      try {
-        final url = await ImageUploadService().uploadImage(_pickedImage!);
-        return url;
-      } finally {
-        if (mounted) setState(() => _uploading = false);
-      }
-    }
-    return null;
   }
 
   Future<void> _loadPosts() async {
@@ -136,44 +96,30 @@ class _GroupFeedTabState extends State<GroupFeedTab> {
     _posts = decrypted;
   }
 
-  Future<void> _createPost() async {
-    final text = _postCtrl.text.trim();
-    final hasAttachment = _pickedImage != null || _pendingImageUrl != null;
-    if ((text.isEmpty && !hasAttachment) || _posting) return;
-    setState(() => _posting = true);
-    try {
-      if (widget.isEncrypted && widget.capsuleKey != null) {
-        final encrypted = await CapsuleSecurityService.encryptPayload(
-          payload: {'text': text, 'ts': DateTime.now().toIso8601String()},
-          capsuleKey: widget.capsuleKey!,
-        );
-        await ApiService.instance.callGoApi(
-          '/capsules/${widget.groupId}/entries',
-          method: 'POST',
-          body: {
-            'iv': encrypted.iv,
-            'encrypted_payload': encrypted.encryptedPayload,
-            'data_type': 'post',
-            'key_version': 1,
-          },
-        );
-      } else {
-        final imageUrl = await _resolveImageUrl();
-        await ApiService.instance.createGroupPost(
-          widget.groupId,
-          body: text,
-          imageUrl: imageUrl,
-        );
-      }
-      _postCtrl.clear();
-      _clearAttachment();
-      await _loadPosts();
-    } catch (e) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Failed to post: $e')));
-      }
+  Future<void> _onComposerSend(String text, String? mediaUrl) async {
+    if (widget.isEncrypted && widget.capsuleKey != null) {
+      final encrypted = await CapsuleSecurityService.encryptPayload(
+        payload: {'text': text, 'ts': DateTime.now().toIso8601String()},
+        capsuleKey: widget.capsuleKey!,
+      );
+      await ApiService.instance.callGoApi(
+        '/capsules/${widget.groupId}/entries',
+        method: 'POST',
+        body: {
+          'iv': encrypted.iv,
+          'encrypted_payload': encrypted.encryptedPayload,
+          'data_type': 'post',
+          'key_version': 1,
+        },
+      );
+    } else {
+      await ApiService.instance.createGroupPost(
+        widget.groupId,
+        body: text,
+        imageUrl: mediaUrl,
+      );
     }
-    if (mounted) setState(() => _posting = false);
+    if (mounted) await _loadPosts();
   }
 
   Future<void> _toggleLike(String postId, int index) async {
@@ -214,99 +160,11 @@ class _GroupFeedTabState extends State<GroupFeedTab> {
             color: AppTheme.cardSurface,
             border: Border(bottom: BorderSide(color: AppTheme.navyBlue.withValues(alpha: 0.06))),
           ),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Row(
-                children: [
-                  CircleAvatar(
-                    radius: 18,
-                    backgroundColor: AppTheme.brightNavy.withValues(alpha: 0.1),
-                    child: Icon(Icons.person, size: 18, color: AppTheme.brightNavy),
-                  ),
-                  const SizedBox(width: 10),
-                  Expanded(
-                    child: TextField(
-                      controller: _postCtrl,
-                      style: TextStyle(color: SojornColors.postContent, fontSize: 14),
-                      decoration: InputDecoration(
-                        hintText: widget.isEncrypted ? 'Write an encrypted post…' : 'Write something…',
-                        hintStyle: TextStyle(color: SojornColors.textDisabled),
-                        filled: true,
-                        fillColor: AppTheme.scaffoldBg,
-                        contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
-                        border: OutlineInputBorder(borderRadius: BorderRadius.circular(20), borderSide: BorderSide.none),
-                      ),
-                      textInputAction: TextInputAction.newline,
-                      maxLines: null,
-                    ),
-                  ),
-                  const SizedBox(width: 8),
-                  GestureDetector(
-                    onTap: (_posting || _uploading) ? null : _createPost,
-                    child: Container(
-                      width: 36, height: 36,
-                      decoration: BoxDecoration(
-                        shape: BoxShape.circle,
-                        color: (_posting || _uploading)
-                            ? AppTheme.brightNavy.withValues(alpha: 0.5)
-                            : AppTheme.brightNavy,
-                      ),
-                      child: (_posting || _uploading)
-                          ? const Padding(padding: EdgeInsets.all(9), child: CircularProgressIndicator(strokeWidth: 2, color: SojornColors.basicWhite))
-                          : const Icon(Icons.send, color: SojornColors.basicWhite, size: 16),
-                    ),
-                  ),
-                ],
-              ),
-              // Attachment buttons (public groups only) + preview
-              if (!widget.isEncrypted) ...[
-                const SizedBox(height: 8),
-                Row(
-                  children: [
-                    _MediaBtn(
-                      icon: Icons.image_outlined,
-                      label: 'Photo',
-                      onTap: _pickImage,
-                    ),
-                    const SizedBox(width: 8),
-                    _MediaBtn(
-                      icon: Icons.gif_outlined,
-                      label: 'GIF',
-                      onTap: () => showGifPicker(context, onSelected: _attachGif),
-                    ),
-                    if (_pickedImage != null || _pendingImageUrl != null) ...[
-                      const Spacer(),
-                      GestureDetector(
-                        onTap: _clearAttachment,
-                        child: Icon(Icons.cancel, size: 18, color: AppTheme.textSecondary),
-                      ),
-                    ],
-                  ],
-                ),
-                // Attachment preview
-                if (_pickedImage != null)
-                  Padding(
-                    padding: const EdgeInsets.only(top: 8),
-                    child: ClipRRect(
-                      borderRadius: BorderRadius.circular(10),
-                      child: Image.file(_pickedImage!, height: 120, fit: BoxFit.cover),
-                    ),
-                  ),
-                if (_pendingImageUrl != null)
-                  Padding(
-                    padding: const EdgeInsets.only(top: 8),
-                    child: ClipRRect(
-                      borderRadius: BorderRadius.circular(10),
-                      child: Image.network(
-                        ApiConfig.needsProxy(_pendingImageUrl!)
-                            ? ApiConfig.proxyImageUrl(_pendingImageUrl!)
-                            : _pendingImageUrl!,
-                        height: 120, fit: BoxFit.cover),
-                    ),
-                  ),
-              ],
-            ],
+          child: ComposerBar(
+            config: widget.isEncrypted
+                ? ComposerConfig.privatePost
+                : ComposerConfig.publicPost,
+            onSend: _onComposerSend,
           ),
         ),
         // Posts list
@@ -485,19 +343,14 @@ class _CommentsSheet extends StatefulWidget {
 }
 
 class _CommentsSheetState extends State<_CommentsSheet> {
-  final _commentCtrl = TextEditingController();
   List<Map<String, dynamic>> _comments = [];
   bool _loading = true;
-  bool _sending = false;
 
   @override
   void initState() {
     super.initState();
     _loadComments();
   }
-
-  @override
-  void dispose() { _commentCtrl.dispose(); super.dispose(); }
 
   Future<void> _loadComments() async {
     setState(() => _loading = true);
@@ -507,16 +360,9 @@ class _CommentsSheetState extends State<_CommentsSheet> {
     if (mounted) setState(() => _loading = false);
   }
 
-  Future<void> _sendComment() async {
-    final text = _commentCtrl.text.trim();
-    if (text.isEmpty || _sending) return;
-    setState(() => _sending = true);
-    try {
-      await ApiService.instance.createGroupPostComment(widget.groupId, widget.postId, body: text);
-      _commentCtrl.clear();
-      await _loadComments();
-    } catch (_) {}
-    if (mounted) setState(() => _sending = false);
+  Future<void> _sendComment(String text, String? _) async {
+    await ApiService.instance.createGroupPostComment(widget.groupId, widget.postId, body: text);
+    await _loadComments();
   }
 
   @override
@@ -567,34 +413,9 @@ class _CommentsSheetState extends State<_CommentsSheet> {
                       ),
           ),
           const SizedBox(height: 8),
-          Row(
-            children: [
-              Expanded(
-                child: TextField(
-                  controller: _commentCtrl,
-                  style: TextStyle(color: SojornColors.postContent, fontSize: 13),
-                  decoration: InputDecoration(
-                    hintText: 'Write a comment…',
-                    hintStyle: TextStyle(color: SojornColors.textDisabled),
-                    filled: true, fillColor: AppTheme.scaffoldBg,
-                    contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
-                    border: OutlineInputBorder(borderRadius: BorderRadius.circular(20), borderSide: BorderSide.none),
-                  ),
-                  onSubmitted: (_) => _sendComment(),
-                ),
-              ),
-              const SizedBox(width: 8),
-              GestureDetector(
-                onTap: _sendComment,
-                child: Container(
-                  width: 34, height: 34,
-                  decoration: BoxDecoration(shape: BoxShape.circle, color: AppTheme.brightNavy),
-                  child: _sending
-                      ? const Padding(padding: EdgeInsets.all(8), child: CircularProgressIndicator(strokeWidth: 2, color: SojornColors.basicWhite))
-                      : const Icon(Icons.send, color: SojornColors.basicWhite, size: 14),
-                ),
-              ),
-            ],
+          ComposerBar(
+            config: ComposerConfig.comment,
+            onSend: _sendComment,
           ),
         ],
       ),
@@ -602,35 +423,3 @@ class _CommentsSheetState extends State<_CommentsSheet> {
   }
 }
 
-class _MediaBtn extends StatelessWidget {
-  final IconData icon;
-  final String label;
-  final VoidCallback onTap;
-  const _MediaBtn({required this.icon, required this.label, required this.onTap});
-
-  @override
-  Widget build(BuildContext context) {
-    return GestureDetector(
-      onTap: onTap,
-      child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
-        decoration: BoxDecoration(
-          color: AppTheme.navyBlue.withValues(alpha: 0.06),
-          borderRadius: BorderRadius.circular(20),
-        ),
-        child: Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Icon(icon, size: 16, color: AppTheme.textSecondary),
-            const SizedBox(width: 4),
-            Text(label,
-                style: TextStyle(
-                    color: AppTheme.textSecondary,
-                    fontSize: 12,
-                    fontWeight: FontWeight.w500)),
-          ],
-        ),
-      ),
-    );
-  }
-}

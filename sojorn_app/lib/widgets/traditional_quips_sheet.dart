@@ -16,6 +16,7 @@ import '../theme/tokens.dart';
 import '../widgets/media/signed_media_image.dart';
 import '../widgets/reactions/reactions_display.dart';
 import '../widgets/reactions/reaction_picker.dart';
+import '../widgets/composer/composer_bar.dart';
 import '../widgets/modals/sanctuary_sheet.dart';
 import '../widgets/sojorn_snackbar.dart';
 import '../providers/notification_provider.dart';
@@ -51,7 +52,6 @@ class _TraditionalQuipsSheetState extends ConsumerState<TraditionalQuipsSheet> {
   
   final TextEditingController _commentController = TextEditingController();
   final FocusNode _commentFocus = FocusNode();
-  bool _isPosting = false;
   
   // Replying state
   ThreadNode? _replyingToNode;
@@ -120,36 +120,18 @@ class _TraditionalQuipsSheetState extends ConsumerState<TraditionalQuipsSheet> {
     }
   }
 
-  Future<void> _postComment() async {
-    final body = _commentController.text.trim();
-    if (body.isEmpty) return;
-
-    setState(() => _isPosting = true);
-    try {
-      final api = ref.read(apiServiceProvider);
-      await api.publishPost(
-        body: body,
-        chainParentId: _replyingToNode?.post.id ?? widget.postId,
-        allowChain: true,
-      );
-      
-      _commentController.clear();
-      _commentFocus.unfocus();
-      setState(() => _replyingToNode = null);
-      
-      await _loadData();
-      widget.onQuipPosted?.call();
-      
-      if (mounted) {
-        sojornSnackbar.showSuccess(context: context, message: 'Comment posted!');
-      }
-    } catch (e) {
-      if (mounted) {
-        sojornSnackbar.showError(context: context, message: 'Failed to post: $e');
-      }
-    } finally {
-      if (mounted) setState(() => _isPosting = false);
-    }
+  Future<void> _postComment(String body, String? _) async {
+    final api = ref.read(apiServiceProvider);
+    await api.publishPost(
+      body: body,
+      chainParentId: _replyingToNode?.post.id ?? widget.postId,
+      allowChain: true,
+    );
+    _commentFocus.unfocus();
+    if (mounted) setState(() => _replyingToNode = null);
+    await _loadData();
+    widget.onQuipPosted?.call();
+    if (mounted) sojornSnackbar.showSuccess(context: context, message: 'Comment posted!');
   }
 
   void _startReply(ThreadNode node) {
@@ -529,50 +511,11 @@ class _TraditionalQuipsSheetState extends ConsumerState<TraditionalQuipsSheet> {
             color: AppTheme.cardSurface,
             border: Border(top: BorderSide(color: AppTheme.egyptianBlue.withValues(alpha: 0.1))),
           ),
-          child: Row(
-            children: [
-              Expanded(
-                child: Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 16),
-                  decoration: BoxDecoration(
-                    color: AppTheme.scaffoldBg,
-                    borderRadius: BorderRadius.circular(16),
-                    border: Border.all(color: AppTheme.egyptianBlue.withValues(alpha: 0.2)),
-                  ),
-                  child: TextField(
-                    controller: _commentController,
-                    focusNode: _commentFocus,
-                    style: TextStyle(color: AppTheme.textPrimary),
-                    decoration: InputDecoration(
-                      hintText: _replyingToNode != null ? 'Type your reply...' : 'Add a comment...',
-                      hintStyle: TextStyle(color: AppTheme.textSecondary.withValues(alpha: 0.5)),
-                      border: InputBorder.none,
-                    ),
-                  ),
-                ),
-              ),
-              const SizedBox(width: 12),
-              GestureDetector(
-                onTap: _isPosting ? null : () => _postComment(),
-                child: Container(
-                  padding: const EdgeInsets.all(12),
-                  decoration: BoxDecoration(
-                    color: AppTheme.brightNavy,
-                    borderRadius: BorderRadius.circular(12),
-                    boxShadow: [
-                      BoxShadow(
-                        color: AppTheme.brightNavy.withValues(alpha: 0.2),
-                        blurRadius: 8,
-                        offset: const Offset(0, 4),
-                      ),
-                    ],
-                  ),
-                  child: _isPosting 
-                    ? const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2, color: SojornColors.basicWhite))
-                    : const Icon(Icons.send, color: SojornColors.basicWhite, size: 20),
-                ),
-              ),
-            ],
+          child: ComposerBar(
+            config: ComposerConfig.comment,
+            onSend: _postComment,
+            externalController: _commentController,
+            focusNode: _commentFocus,
           ),
         ),
       ],

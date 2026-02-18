@@ -285,6 +285,9 @@ func main() {
 			auth.POST("/reset-password", authHandler.ResetPassword)
 		}
 
+		// Image proxy — public (no auth needed so CachedNetworkImage can fetch without Bearer token)
+		v1.GET("/image-proxy", mediaHandler.ImageProxy)
+
 		authorized := v1.Group("")
 		authorized.Use(middleware.AuthMiddleware(cfg.JWTSecret, dbPool))
 		{
@@ -404,8 +407,6 @@ func main() {
 			// Media routes
 			authorized.POST("/upload", mediaHandler.Upload)
 			authorized.GET("/media/sign", mediaHandler.GetSignedMediaURL)
-			authorized.GET("/image-proxy", mediaHandler.ImageProxy)
-
 			// Search & Discover routes
 			discoverHandler := handlers.NewDiscoverHandler(userRepo, postRepo, tagRepo, categoryRepo, assetService)
 			authorized.GET("/search", discoverHandler.Search)
