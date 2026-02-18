@@ -350,6 +350,7 @@ func main() {
 			authorized.POST("/posts/:id/reactions/toggle", postHandler.ToggleReaction)
 			authorized.POST("/posts/:id/comments", postHandler.CreateComment)
 			authorized.GET("/feed", postHandler.GetFeed)
+			authorized.GET("/feed/personal", postHandler.GetFeed)
 			authorized.POST("/beacons", postHandler.CreateBeacon)
 			authorized.GET("/beacons/nearby", postHandler.GetNearbyBeacons)
 			authorized.POST("/beacons/:id/vouch", postHandler.VouchBeacon)

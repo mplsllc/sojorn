@@ -617,6 +617,27 @@ func (h *NeighborhoodHandler) GetMyNeighborhood(c *gin.Context) {
 		},
 	}
 
+	// If the seed has no group yet, create one now (lazy creation)
+	if groupID == nil {
+		seed := &seedRow{
+			ID:           seedID,
+			Name:         name,
+			City:         city,
+			State:        state,
+			ZipCode:      zipCode,
+			Country:      country,
+			Lat:          lat,
+			Lng:          lng,
+			RadiusMeters: radiusMeters,
+		}
+		newGroupID, createErr := h.createNeighborhoodGroup(ctx, seed)
+		if createErr != nil {
+			log.Printf("[Neighborhood] GetMyNeighborhood lazy group creation error: %v", createErr)
+		} else {
+			groupID = &newGroupID
+		}
+	}
+
 	if groupID != nil {
 		var groupName string
 		var memberCount int
