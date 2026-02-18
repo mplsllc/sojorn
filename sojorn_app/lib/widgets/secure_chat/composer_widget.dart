@@ -7,8 +7,8 @@ import 'package:google_fonts/google_fonts.dart';
 import 'package:image_picker/image_picker.dart';
 import '../../theme/app_theme.dart';
 import '../../theme/tokens.dart';
-import '../../services/auth_service.dart';
 import '../../services/image_upload_service.dart';
+import '../gif/gif_picker.dart';
 
 class ComposerWidget extends StatefulWidget {
   const ComposerWidget({
@@ -39,6 +39,7 @@ class _ComposerWidgetState extends State<ComposerWidget>
   int _lineCount = 1;
   final ImagePicker _picker = ImagePicker();
   bool _isUploadingAttachment = false;
+  bool _drawerOpen = false;
 
   bool get _isDesktop {
     final platform = Theme.of(context).platform;
@@ -73,9 +74,7 @@ class _ComposerWidgetState extends State<ComposerWidget>
     final lines = widget.controller.text.split('\n').length;
     final clamped = lines.clamp(1, 6).toInt();
     if (clamped != _lineCount) {
-      setState(() {
-        _lineCount = clamped;
-      });
+      setState(() => _lineCount = clamped);
     }
   }
 
@@ -86,45 +85,37 @@ class _ComposerWidgetState extends State<ComposerWidget>
     widget.onSend();
   }
 
-  Future<void> _handleAddAttachment() async {
+  void _toggleDrawer() {
+    setState(() => _drawerOpen = !_drawerOpen);
+    if (_drawerOpen) widget.focusNode.unfocus();
+  }
+
+  Future<void> _pickFromGallery() async {
+    setState(() => _drawerOpen = false);
+    await _pickAndUpload('photo_gallery');
+  }
+
+  Future<void> _takePhoto() async {
+    setState(() => _drawerOpen = false);
+    await _pickAndUpload('photo_camera');
+  }
+
+  Future<void> _pickGif() async {
+    setState(() => _drawerOpen = false);
+    showGifPicker(context, onSelected: (url) {
+      final existing = widget.controller.text.trim();
+      final tag = '[img]$url';
+      final nextText = existing.isEmpty ? tag : '$existing\n$tag';
+      widget.controller.text = nextText;
+      widget.controller.selection = TextSelection.fromPosition(
+        TextPosition(offset: widget.controller.text.length),
+      );
+      widget.focusNode.requestFocus();
+    });
+  }
+
+  Future<void> _pickAndUpload(String choice) async {
     if (widget.isSending || _isUploadingAttachment) return;
-    final choice = await showModalBottomSheet<String>(
-      context: context,
-      backgroundColor: AppTheme.cardSurface,
-      shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
-      ),
-      builder: (context) => SafeArea(
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            ListTile(
-              leading: Icon(Icons.photo_outlined, color: AppTheme.navyBlue),
-              title: const Text('Photo from gallery'),
-              onTap: () => Navigator.pop(context, 'photo_gallery'),
-            ),
-            ListTile(
-              leading: Icon(Icons.videocam_outlined, color: AppTheme.navyBlue),
-              title: const Text('Video from gallery'),
-              onTap: () => Navigator.pop(context, 'video_gallery'),
-            ),
-            ListTile(
-              leading: Icon(Icons.photo_camera_outlined, color: AppTheme.navyBlue),
-              title: const Text('Take a photo'),
-              onTap: () => Navigator.pop(context, 'photo_camera'),
-            ),
-            ListTile(
-              leading: Icon(Icons.videocam, color: AppTheme.navyBlue),
-              title: const Text('Record a video'),
-              onTap: () => Navigator.pop(context, 'video_camera'),
-            ),
-          ],
-        ),
-      ),
-    );
-
-    if (!mounted || choice == null) return;
-
     try {
       XFile? file;
       if (choice == 'photo_gallery') {
@@ -134,14 +125,17 @@ class _ComposerWidgetState extends State<ComposerWidget>
       } else if (choice == 'photo_camera') {
         file = await _picker.pickImage(source: ImageSource.camera);
       } else if (choice == 'video_camera') {
-        file = await _picker.pickVideo(source: ImageSource.camera, maxDuration: const Duration(seconds: 30));
+        file = await _picker.pickVideo(
+            source: ImageSource.camera,
+            maxDuration: const Duration(seconds: 30));
       }
       if (file != null) {
         setState(() => _isUploadingAttachment = true);
-        final url = await _uploadAttachment(File(file.path), isVideo: choice?.contains('video') ?? false);
+        final isVideo = choice.contains('video');
+        final url = await _uploadAttachment(File(file.path), isVideo: isVideo);
         if (url != null && mounted) {
           final existing = widget.controller.text.trim();
-          final tag = (choice?.contains('video') ?? false) ? '[video]$url' : '[img]$url';
+          final tag = isVideo ? '[video]$url' : '[img]$url';
           final nextText = existing.isEmpty ? tag : '$existing\n$tag';
           widget.controller.text = nextText;
           widget.controller.selection = TextSelection.fromPosition(
@@ -153,28 +147,22 @@ class _ComposerWidgetState extends State<ComposerWidget>
     } catch (_) {
       // Ignore picker errors; UI remains usable.
     } finally {
-      if (mounted) {
-        setState(() => _isUploadingAttachment = false);
-      }
+      if (mounted) setState(() => _isUploadingAttachment = false);
     }
   }
 
   Future<String?> _uploadAttachment(File file, {required bool isVideo}) async {
     try {
       final service = ImageUploadService();
-      if (isVideo) {
-        return await service.uploadVideo(file);
-      } else {
-        return await service.uploadImage(file);
-      }
+      return isVideo
+          ? await service.uploadVideo(file)
+          : await service.uploadImage(file);
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('Attachment upload failed: $e'),
-            backgroundColor: AppTheme.error,
-          ),
-        );
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+          content: Text('Attachment upload failed: $e'),
+          backgroundColor: AppTheme.error,
+        ));
       }
       return null;
     }
@@ -186,8 +174,7 @@ class _ComposerWidgetState extends State<ComposerWidget>
     final maxHeight = (52 + (_lineCount - 1) * 22).clamp(52, 140).toDouble();
     final shortcuts = _isDesktop
         ? <ShortcutActivator, Intent>{
-            const SingleActivator(LogicalKeyboardKey.enter):
-                const _SendIntent(),
+            const SingleActivator(LogicalKeyboardKey.enter): const _SendIntent(),
           }
         : const <ShortcutActivator, Intent>{};
 
@@ -196,13 +183,10 @@ class _ComposerWidgetState extends State<ComposerWidget>
       curve: Curves.easeOut,
       padding: EdgeInsets.only(bottom: viewInsets.bottom),
       child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
         decoration: BoxDecoration(
           color: AppTheme.cardSurface,
           border: Border(
-            top: BorderSide(
-              color: AppTheme.navyBlue.withValues(alpha: 0.1),
-            ),
+            top: BorderSide(color: AppTheme.navyBlue.withValues(alpha: 0.1)),
           ),
         ),
         child: SafeArea(
@@ -210,119 +194,187 @@ class _ComposerWidgetState extends State<ComposerWidget>
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
-              if (widget.replyingLabel != null &&
-                  widget.replyingSnippet != null)
-                _ReplyPreviewBar(
-                  label: widget.replyingLabel!,
-                  snippet: widget.replyingSnippet!,
-                  onCancel: widget.onCancelReply,
-                ),
-              Row(
-                crossAxisAlignment: CrossAxisAlignment.end,
-                children: [
-                  IconButton(
-                    onPressed: _handleAddAttachment,
-                    icon: Icon(Icons.add, color: AppTheme.brightNavy),
+              // ── Reply preview ──────────────────────────────────────────
+              if (widget.replyingLabel != null && widget.replyingSnippet != null)
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(12, 8, 12, 0),
+                  child: _ReplyPreviewBar(
+                    label: widget.replyingLabel!,
+                    snippet: widget.replyingSnippet!,
+                    onCancel: widget.onCancelReply,
                   ),
-                  Expanded(
-                    child: AnimatedSize(
-                      duration: const Duration(milliseconds: 160),
-                      curve: Curves.easeOut,
-                      alignment: Alignment.bottomCenter,
-                      child: ConstrainedBox(
-                        constraints: BoxConstraints(
-                          minHeight: 44,
-                          maxHeight: maxHeight,
+                ),
+
+              // ── Horizontal tool drawer ─────────────────────────────────
+              AnimatedContainer(
+                duration: const Duration(milliseconds: 200),
+                curve: Curves.easeOut,
+                height: _drawerOpen ? 52 : 0,
+                child: OverflowBox(
+                  alignment: Alignment.topLeft,
+                  maxHeight: 52,
+                  child: SingleChildScrollView(
+                    scrollDirection: Axis.horizontal,
+                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                    child: Row(
+                      children: [
+                        _DrawerPill(
+                          icon: Icons.photo_library_outlined,
+                          label: 'Gallery',
+                          onTap: _pickFromGallery,
                         ),
-                        child: Container(
-                          padding: const EdgeInsets.symmetric(
-                              horizontal: 16, vertical: 6),
-                          decoration: BoxDecoration(
-                            color: SojornColors.basicWhite.withValues(alpha: 0.04),
-                            borderRadius: BorderRadius.circular(18),
-                            border: Border.all(
-                              color: AppTheme.navyBlue.withValues(alpha: 0.08),
-                            ),
+                        const SizedBox(width: 8),
+                        _DrawerPill(
+                          icon: Icons.camera_alt_outlined,
+                          label: 'Camera',
+                          onTap: _takePhoto,
+                        ),
+                        const SizedBox(width: 8),
+                        _DrawerPill(
+                          icon: Icons.gif_outlined,
+                          label: 'GIF',
+                          onTap: _pickGif,
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+              ),
+
+              // ── Input row ──────────────────────────────────────────────
+              Padding(
+                padding: const EdgeInsets.fromLTRB(8, 6, 8, 8),
+                child: Row(
+                  crossAxisAlignment: CrossAxisAlignment.end,
+                  children: [
+                    // + toggle button
+                    AnimatedRotation(
+                      turns: _drawerOpen ? 0.125 : 0, // 45° when open → X
+                      duration: const Duration(milliseconds: 200),
+                      child: IconButton(
+                        onPressed: _toggleDrawer,
+                        icon: Icon(
+                          Icons.add_circle_outline,
+                          color: _drawerOpen
+                              ? AppTheme.brightNavy
+                              : AppTheme.navyText.withValues(alpha: 0.6),
+                        ),
+                        padding: EdgeInsets.zero,
+                        constraints: const BoxConstraints(minWidth: 36, minHeight: 36),
+                      ),
+                    ),
+                    const SizedBox(width: 4),
+
+                    // Text field
+                    Expanded(
+                      child: AnimatedSize(
+                        duration: const Duration(milliseconds: 160),
+                        curve: Curves.easeOut,
+                        alignment: Alignment.bottomCenter,
+                        child: ConstrainedBox(
+                          constraints: BoxConstraints(
+                            minHeight: 40,
+                            maxHeight: maxHeight,
                           ),
-                          child: Shortcuts(
-                            shortcuts: shortcuts,
-                            child: Actions(
-                              actions: {
-                                _SendIntent: CallbackAction<_SendIntent>(
-                                  onInvoke: (_) {
-                                    _handleSend();
-                                    return null;
-                                  },
-                                ),
-                              },
-                              child: TextField(
-                                controller: widget.controller,
-                                focusNode: widget.focusNode,
-                                keyboardType: TextInputType.multiline,
-                                textInputAction: TextInputAction.send,
-                                maxLines: 6,
-                                minLines: 1,
-                                textCapitalization:
-                                    TextCapitalization.sentences,
-                                style: GoogleFonts.inter(
-                                  color: AppTheme.navyText,
-                                ),
-                                decoration: InputDecoration(
-                                  isCollapsed: true,
-                                  hintText: 'Message',
-                                  hintStyle: GoogleFonts.inter(
-                                    color: AppTheme.textDisabled,
+                          child: Container(
+                            padding: const EdgeInsets.symmetric(
+                                horizontal: 14, vertical: 8),
+                            decoration: BoxDecoration(
+                              color: AppTheme.scaffoldBg,
+                              borderRadius: BorderRadius.circular(20),
+                              border: Border.all(
+                                color: AppTheme.navyBlue.withValues(alpha: 0.08),
+                              ),
+                            ),
+                            child: Shortcuts(
+                              shortcuts: shortcuts,
+                              child: Actions(
+                                actions: {
+                                  _SendIntent: CallbackAction<_SendIntent>(
+                                    onInvoke: (_) {
+                                      _handleSend();
+                                      return null;
+                                    },
                                   ),
-                                  border: InputBorder.none,
-                                  enabledBorder: InputBorder.none,
-                                  focusedBorder: InputBorder.none,
-                                  disabledBorder: InputBorder.none,
-                                  contentPadding: EdgeInsets.zero,
+                                },
+                                child: TextField(
+                                  controller: widget.controller,
+                                  focusNode: widget.focusNode,
+                                  keyboardType: TextInputType.multiline,
+                                  textInputAction: TextInputAction.send,
+                                  maxLines: 6,
+                                  minLines: 1,
+                                  textCapitalization: TextCapitalization.sentences,
+                                  style: GoogleFonts.inter(
+                                      color: AppTheme.navyText, fontSize: 14),
+                                  decoration: InputDecoration(
+                                    isCollapsed: true,
+                                    hintText: 'Message',
+                                    hintStyle: GoogleFonts.inter(
+                                        color: AppTheme.textDisabled,
+                                        fontSize: 14),
+                                    border: InputBorder.none,
+                                    enabledBorder: InputBorder.none,
+                                    focusedBorder: InputBorder.none,
+                                    disabledBorder: InputBorder.none,
+                                    contentPadding: EdgeInsets.zero,
+                                  ),
+                                  onSubmitted: _isDesktop ? null : (_) => _handleSend(),
                                 ),
-                                onSubmitted:
-                                    _isDesktop ? null : (_) => _handleSend(),
                               ),
                             ),
                           ),
                         ),
                       ),
                     ),
-                  ),
-                  const SizedBox(width: 8),
-                  ValueListenableBuilder<TextEditingValue>(
-                    valueListenable: widget.controller,
-                    builder: (context, value, _) {
-                      final canSend = _canSend(value.text);
-                      return AnimatedContainer(
-                        duration: const Duration(milliseconds: 150),
-                        curve: Curves.easeOut,
-                        decoration: BoxDecoration(
-                          color: canSend
-                              ? AppTheme.brightNavy
-                              : AppTheme.queenPink,
-                          shape: BoxShape.circle,
-                        ),
-                        child: IconButton(
-                          onPressed:
-                              canSend && !widget.isSending && !_isUploadingAttachment
-                                  ? _handleSend
-                                  : null,
-                          icon: (widget.isSending || _isUploadingAttachment)
-                              ? const SizedBox(
-                                  width: 18,
-                                  height: 18,
+                    const SizedBox(width: 6),
+
+                    // Voice / Send toggle
+                    ValueListenableBuilder<TextEditingValue>(
+                      valueListenable: widget.controller,
+                      builder: (context, value, _) {
+                        final canSend = _canSend(value.text);
+                        final busy = widget.isSending || _isUploadingAttachment;
+                        return AnimatedContainer(
+                          duration: const Duration(milliseconds: 150),
+                          curve: Curves.easeOut,
+                          width: 38,
+                          height: 38,
+                          decoration: BoxDecoration(
+                            color: canSend
+                                ? AppTheme.brightNavy
+                                : AppTheme.navyBlue.withValues(alpha: 0.12),
+                            shape: BoxShape.circle,
+                          ),
+                          child: busy
+                              ? const Padding(
+                                  padding: EdgeInsets.all(10),
                                   child: CircularProgressIndicator(
                                     strokeWidth: 2,
                                     color: SojornColors.basicWhite,
                                   ),
                                 )
-                              : const Icon(Icons.send,
-                                  color: SojornColors.basicWhite, size: 18),
-                        ),
-                      );
-                    },
-                  ),
-                ],
+                              : GestureDetector(
+                                  onTap: canSend ? _handleSend : null,
+                                  child: AnimatedSwitcher(
+                                    duration: const Duration(milliseconds: 150),
+                                    child: canSend
+                                        ? const Icon(Icons.send,
+                                            key: ValueKey('send'),
+                                            color: SojornColors.basicWhite,
+                                            size: 17)
+                                        : Icon(Icons.mic_none_outlined,
+                                            key: const ValueKey('mic'),
+                                            color: AppTheme.navyBlue
+                                                .withValues(alpha: 0.5),
+                                            size: 19),
+                                  ),
+                                ),
+                        );
+                      },
+                    ),
+                  ],
+                ),
               ),
             ],
           ),
@@ -331,6 +383,56 @@ class _ComposerWidgetState extends State<ComposerWidget>
     );
   }
 }
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Horizontal drawer pill button
+// ─────────────────────────────────────────────────────────────────────────────
+
+class _DrawerPill extends StatelessWidget {
+  final IconData icon;
+  final String label;
+  final VoidCallback onTap;
+
+  const _DrawerPill({
+    required this.icon,
+    required this.label,
+    required this.onTap,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return GestureDetector(
+      onTap: onTap,
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 6),
+        decoration: BoxDecoration(
+          color: AppTheme.navyBlue.withValues(alpha: 0.07),
+          borderRadius: BorderRadius.circular(20),
+          border: Border.all(color: AppTheme.navyBlue.withValues(alpha: 0.1)),
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(icon, size: 16, color: AppTheme.brightNavy),
+            const SizedBox(width: 6),
+            Text(
+              label,
+              style: TextStyle(
+                color: AppTheme.navyBlue,
+                fontSize: 13,
+                fontWeight: FontWeight.w500,
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Reply preview bar
+// ─────────────────────────────────────────────────────────────────────────────
 
 class _ReplyPreviewBar extends StatelessWidget {
   const _ReplyPreviewBar({
@@ -367,9 +469,7 @@ class _ReplyPreviewBar extends StatelessWidget {
                   snippet,
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
-                  style: GoogleFonts.inter(
-                    color: AppTheme.textDisabled,
-                  ),
+                  style: GoogleFonts.inter(color: AppTheme.textDisabled),
                 ),
               ],
             ),

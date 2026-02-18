@@ -99,7 +99,8 @@ class _GroupFeedTabState extends State<GroupFeedTab> {
   Future<void> _onComposerSend(String text, String? mediaUrl) async {
     if (widget.isEncrypted && widget.capsuleKey != null) {
       final encrypted = await CapsuleSecurityService.encryptPayload(
-        payload: {'text': text, 'ts': DateTime.now().toIso8601String()},
+        payload: {'text': text, 'ts': DateTime.now().toIso8601String(),
+                 if (mediaUrl != null) 'image_url': mediaUrl},
         capsuleKey: widget.capsuleKey!,
       );
       await ApiService.instance.callGoApi(
@@ -162,7 +163,7 @@ class _GroupFeedTabState extends State<GroupFeedTab> {
           ),
           child: ComposerBar(
             config: widget.isEncrypted
-                ? ComposerConfig.privatePost
+                ? const ComposerConfig(allowGifs: true, hintText: 'Write an encrypted post…')
                 : ComposerConfig.publicPost,
             onSend: _onComposerSend,
           ),

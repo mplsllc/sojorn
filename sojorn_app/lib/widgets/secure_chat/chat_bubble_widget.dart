@@ -165,22 +165,17 @@ class _ChatBubbleWidgetState extends State<ChatBubbleWidget>
 
                 if (!widget.showAvatar) return bubble;
 
+                // Only show avatar for incoming messages — not for own messages
+                if (widget.isMe) return bubble;
+
                 final avatar = _buildAvatar();
                 return Row(
-                  mainAxisAlignment: widget.isMe
-                      ? MainAxisAlignment.end
-                      : MainAxisAlignment.start,
+                  mainAxisAlignment: MainAxisAlignment.start,
                   crossAxisAlignment: CrossAxisAlignment.end,
                   children: [
-                    if (!widget.isMe) ...[
-                      avatar,
-                      const SizedBox(width: 10),
-                    ],
+                    avatar,
+                    const SizedBox(width: 10),
                     Flexible(child: bubble),
-                    if (widget.isMe) ...[
-                      const SizedBox(width: 10),
-                      avatar,
-                    ],
                   ],
                 );
               },
@@ -233,6 +228,24 @@ class _ChatBubbleWidgetState extends State<ChatBubbleWidget>
         style: GoogleFonts.inter(
           fontWeight: FontWeight.w700,
           color: textColor,
+        ),
+      ),
+    );
+  }
+
+  void _showImageFullscreen(BuildContext context, String url) {
+    showDialog<void>(
+      context: context,
+      barrierColor: Colors.black87,
+      builder: (_) => GestureDetector(
+        onTap: () => Navigator.of(context).pop(),
+        child: Center(
+          child: InteractiveViewer(
+            child: SignedMediaImage(
+              url: url,
+              fit: BoxFit.contain,
+            ),
+          ),
         ),
       ),
     );
@@ -374,13 +387,18 @@ class _ChatBubbleWidgetState extends State<ChatBubbleWidget>
                   ...attachments.images.map(
                     (url) => Padding(
                       padding: const EdgeInsets.only(bottom: 8),
-                      child: ClipRRect(
-                        borderRadius: BorderRadius.circular(12),
-                        child: SignedMediaImage(
-                          url: url,
-                          width: double.infinity,
-                          height: 220,
-                          fit: BoxFit.cover,
+                      child: GestureDetector(
+                        onTap: () => _showImageFullscreen(context, url),
+                        child: ClipRRect(
+                          borderRadius: BorderRadius.circular(12),
+                          child: ConstrainedBox(
+                            constraints: const BoxConstraints(maxHeight: 200),
+                            child: SignedMediaImage(
+                              url: url,
+                              width: double.infinity,
+                              fit: BoxFit.cover,
+                            ),
+                          ),
                         ),
                       ),
                     ),

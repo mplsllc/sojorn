@@ -5,6 +5,7 @@ import '../../theme/tokens.dart';
 /// Keyboard-attached toolbar for the composer with attachments, formatting, topic, and counter.
 class ComposerToolbar extends StatelessWidget {
   final VoidCallback onAddMedia;
+  final VoidCallback? onAddGif;
   final VoidCallback onToggleBold;
   final VoidCallback onToggleItalic;
   final VoidCallback onToggleChain;
@@ -24,6 +25,7 @@ class ComposerToolbar extends StatelessWidget {
   const ComposerToolbar({
     super.key,
     required this.onAddMedia,
+    this.onAddGif,
     required this.onToggleBold,
     required this.onToggleItalic,
     required this.onToggleChain,
@@ -71,6 +73,13 @@ class ComposerToolbar extends StatelessWidget {
                 ),
           tooltip: 'Add media',
         ),
+        if (onAddGif != null)
+          IconButton(
+            onPressed: onAddGif,
+            icon: Icon(Icons.gif_outlined,
+                color: AppTheme.navyText.withValues(alpha: 0.75)),
+            tooltip: 'Add GIF',
+          ),
         Row(
           mainAxisSize: MainAxisSize.min,
           children: [

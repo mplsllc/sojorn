@@ -51,7 +51,16 @@ class _GroupChatTabState extends State<GroupChatTab> {
         await _loadEncryptedMessages();
       } else {
         final msgs = await ApiService.instance.fetchGroupMessages(widget.groupId);
-        _messages = msgs.reversed.toList(); // API returns newest first, we want oldest first
+        // Detect GIF URLs stored as body text (from sendGroupMessage fallback)
+        _messages = msgs.reversed.map((msg) {
+          final body = msg['body'] as String? ?? '';
+          if (msg['gif_url'] == null && body.isNotEmpty && ApiConfig.needsProxy(body)) {
+            return Map<String, dynamic>.from(msg)
+              ..['gif_url'] = body
+              ..['body'] = '';
+          }
+          return msg;
+        }).toList();
       }
     } catch (e) {
       debugPrint('[GroupChat] Error: $e');
@@ -324,7 +333,7 @@ class _GroupChatTabState extends State<GroupChatTab> {
             top: false,
             child: ComposerBar(
               config: widget.isEncrypted
-                  ? const ComposerConfig(hintText: 'Encrypted message…')
+                  ? const ComposerConfig(allowGifs: true, hintText: 'Encrypted message…')
                   : ComposerConfig.chat,
               onSend: _onChatSend,
             ),

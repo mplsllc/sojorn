@@ -5,6 +5,7 @@ import '../../models/board_entry.dart';
 import '../../services/api_service.dart';
 import '../../theme/tokens.dart';
 import '../../theme/app_theme.dart';
+import '../../widgets/composer/composer_bar.dart';
 
 class BoardEntryDetailScreen extends ConsumerStatefulWidget {
   final BoardEntry entry;
@@ -20,8 +21,6 @@ class _BoardEntryDetailScreenState extends ConsumerState<BoardEntryDetailScreen>
   List<BoardReply> _replies = [];
   bool _isLoading = true;
   bool _isNeighborhoodAdmin = false;
-  bool _isSendingReply = false;
-  final _replyController = TextEditingController();
   final _scrollController = ScrollController();
 
   @override
@@ -33,7 +32,6 @@ class _BoardEntryDetailScreenState extends ConsumerState<BoardEntryDetailScreen>
 
   @override
   void dispose() {
-    _replyController.dispose();
     _scrollController.dispose();
     super.dispose();
   }
@@ -57,46 +55,32 @@ class _BoardEntryDetailScreenState extends ConsumerState<BoardEntryDetailScreen>
     }
   }
 
-  Future<void> _sendReply() async {
-    final body = _replyController.text.trim();
-    if (body.isEmpty) return;
-
-    setState(() => _isSendingReply = true);
-    try {
-      final data = await ApiService.instance.createBoardReply(
-        entryId: _entry.id,
-        body: body,
-      );
-      if (mounted) {
-        final reply = BoardReply.fromJson(data['reply'] as Map<String, dynamic>);
-        setState(() {
-          _replies.add(reply);
-          _entry = BoardEntry(
-            id: _entry.id, body: _entry.body, imageUrl: _entry.imageUrl, topic: _entry.topic,
-            lat: _entry.lat, long: _entry.long, upvotes: _entry.upvotes,
-            replyCount: _entry.replyCount + 1, isPinned: _entry.isPinned, createdAt: _entry.createdAt,
-            authorHandle: _entry.authorHandle, authorDisplayName: _entry.authorDisplayName,
-            authorAvatarUrl: _entry.authorAvatarUrl, hasVoted: _entry.hasVoted,
+  Future<void> _sendReply(String text, String? _) async {
+    final data = await ApiService.instance.createBoardReply(
+      entryId: _entry.id,
+      body: text,
+    );
+    if (mounted) {
+      final reply = BoardReply.fromJson(data['reply'] as Map<String, dynamic>);
+      setState(() {
+        _replies.add(reply);
+        _entry = BoardEntry(
+          id: _entry.id, body: _entry.body, imageUrl: _entry.imageUrl, topic: _entry.topic,
+          lat: _entry.lat, long: _entry.long, upvotes: _entry.upvotes,
+          replyCount: _entry.replyCount + 1, isPinned: _entry.isPinned, createdAt: _entry.createdAt,
+          authorHandle: _entry.authorHandle, authorDisplayName: _entry.authorDisplayName,
+          authorAvatarUrl: _entry.authorAvatarUrl, hasVoted: _entry.hasVoted,
+        );
+      });
+      Future.delayed(const Duration(milliseconds: 100), () {
+        if (_scrollController.hasClients) {
+          _scrollController.animateTo(
+            _scrollController.position.maxScrollExtent,
+            duration: const Duration(milliseconds: 300),
+            curve: Curves.easeOut,
           );
-          _isSendingReply = false;
-        });
-        _replyController.clear();
-        // Scroll to bottom
-        Future.delayed(const Duration(milliseconds: 100), () {
-          if (_scrollController.hasClients) {
-            _scrollController.animateTo(
-              _scrollController.position.maxScrollExtent,
-              duration: const Duration(milliseconds: 300),
-              curve: Curves.easeOut,
-            );
-          }
-        });
-      }
-    } catch (e) {
-      if (mounted) {
-        setState(() => _isSendingReply = false);
-        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Could not post reply: $e')));
-      }
+        }
+      });
     }
   }
 
@@ -412,45 +396,9 @@ class _BoardEntryDetailScreenState extends ConsumerState<BoardEntryDetailScreen>
         color: AppTheme.cardSurface,
         border: Border(top: BorderSide(color: AppTheme.navyBlue.withValues(alpha: 0.08))),
       ),
-      child: Row(
-        children: [
-          Expanded(
-            child: TextField(
-              controller: _replyController,
-              style: TextStyle(color: SojornColors.postContent, fontSize: 14),
-              decoration: InputDecoration(
-                hintText: 'Write a reply…',
-                hintStyle: TextStyle(color: SojornColors.textDisabled, fontSize: 14),
-                filled: true,
-                fillColor: AppTheme.scaffoldBg,
-                border: OutlineInputBorder(borderRadius: BorderRadius.circular(20), borderSide: BorderSide.none),
-                contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
-                isDense: true,
-              ),
-              maxLines: 3,
-              minLines: 1,
-              textInputAction: TextInputAction.send,
-              onSubmitted: (_) => _sendReply(),
-            ),
-          ),
-          const SizedBox(width: 6),
-          GestureDetector(
-            onTap: _isSendingReply ? null : _sendReply,
-            child: Container(
-              width: 38, height: 38,
-              decoration: BoxDecoration(
-                color: AppTheme.brightNavy,
-                shape: BoxShape.circle,
-              ),
-              child: _isSendingReply
-                  ? const Padding(
-                      padding: EdgeInsets.all(10),
-                      child: CircularProgressIndicator(strokeWidth: 2, color: SojornColors.basicWhite),
-                    )
-                  : const Icon(Icons.send, size: 16, color: SojornColors.basicWhite),
-            ),
-          ),
-        ],
+      child: ComposerBar(
+        config: const ComposerConfig(hintText: 'Write a reply…'),
+        onSend: _sendReply,
       ),
     );
   }

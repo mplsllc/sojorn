@@ -151,96 +151,89 @@ class _SecureChatFullScreenState extends State<SecureChatFullScreen> {
       showSearch: false,
       showMessages: false,
       leadingActions: [
-        IconButton(
-          onPressed: _loadConversations,
-          icon: Icon(Icons.refresh, color: AppTheme.navyBlue),
-          tooltip: 'Refresh conversations',
-        ),
-        IconButton(
-          onPressed: () async {
-            try {
-              await _chatService.uploadKeysManually();
-              if (mounted) {
-                ScaffoldMessenger.of(context).showSnackBar(
-                  SnackBar(
-                    content: Text('Keys uploaded successfully'),
-                    backgroundColor: const Color(0xFF4CAF50),
+        PopupMenuButton<_ChatMenuAction>(
+          icon: Icon(Icons.more_vert, color: AppTheme.navyBlue),
+          tooltip: 'More options',
+          onSelected: (action) async {
+            switch (action) {
+              case _ChatMenuAction.refresh:
+                await _loadConversations();
+              case _ChatMenuAction.uploadKeys:
+                try {
+                  await _chatService.uploadKeysManually();
+                  if (mounted) {
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      const SnackBar(
+                        content: Text('Keys uploaded successfully'),
+                        backgroundColor: Color(0xFF4CAF50),
+                      ),
+                    );
+                  }
+                } catch (e) {
+                  if (mounted) {
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      SnackBar(
+                        content: Text('Failed to upload keys: $e'),
+                        backgroundColor: SojornColors.destructive,
+                      ),
+                    );
+                  }
+                }
+              case _ChatMenuAction.backup:
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                    builder: (context) => const EncryptionHubScreen(),
                   ),
                 );
-              }
-            } catch (e) {
-              if (mounted) {
+              case _ChatMenuAction.devices:
                 ScaffoldMessenger.of(context).showSnackBar(
-                  SnackBar(
-                    content: Text('Failed to upload keys: $e'),
-                    backgroundColor: SojornColors.destructive,
-                  ),
+                  const SnackBar(content: Text('Device management coming soon')),
                 );
-              }
             }
           },
-          icon: Icon(Icons.key, color: AppTheme.navyBlue),
-          tooltip: 'Upload encryption keys',
+          itemBuilder: (_) => [
+            PopupMenuItem(
+              value: _ChatMenuAction.refresh,
+              child: Row(children: [
+                Icon(Icons.refresh, size: 18, color: AppTheme.navyBlue),
+                const SizedBox(width: 12),
+                const Text('Refresh'),
+              ]),
+            ),
+            PopupMenuItem(
+              value: _ChatMenuAction.uploadKeys,
+              child: Row(children: [
+                Icon(Icons.key, size: 18, color: AppTheme.navyBlue),
+                const SizedBox(width: 12),
+                const Text('Upload keys'),
+              ]),
+            ),
+            PopupMenuItem(
+              value: _ChatMenuAction.backup,
+              child: Row(children: [
+                Icon(Icons.backup, size: 18, color: AppTheme.navyBlue),
+                const SizedBox(width: 12),
+                const Text('Backup & Recovery'),
+              ]),
+            ),
+            PopupMenuItem(
+              value: _ChatMenuAction.devices,
+              child: Row(children: [
+                Icon(Icons.devices, size: 18, color: AppTheme.navyBlue),
+                const SizedBox(width: 12),
+                const Text('Device Management'),
+              ]),
+            ),
+          ],
         ),
       ],
       body: _buildBody(),
-      bottomNavigationBar: Container(
-        decoration: BoxDecoration(
-          color: AppTheme.scaffoldBg,
-          border: Border(
-            top: BorderSide(
-              color: AppTheme.navyBlue.withValues(alpha: 0.1),
-              width: 1,
-            ),
-          ),
-        ),
-        child: SafeArea(
-          child: Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-            child: Row(
-              children: [
-                Expanded(
-                  child: ElevatedButton.icon(
-                    onPressed: _showNewConversationSheet,
-                    icon: Icon(Icons.add, size: 18),
-                    label: Text('New Conversation'),
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: AppTheme.brightNavy,
-                      foregroundColor: SojornColors.basicWhite,
-                      padding: const EdgeInsets.symmetric(vertical: 12),
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(8),
-                      ),
-                    ),
-                  ),
-                ),
-                const SizedBox(width: 12),
-                IconButton(
-                  onPressed: () {
-                    Navigator.push(
-                      context,
-                      MaterialPageRoute(
-                        builder: (context) => const EncryptionHubScreen(),
-                      ),
-                    );
-                  },
-                  icon: Icon(Icons.backup, color: AppTheme.navyBlue),
-                  tooltip: 'Backup & Recovery',
-                ),
-                IconButton(
-                  onPressed: () {
-                    // TODO: Show device management
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      SnackBar(content: Text('Device management coming soon')),
-                    );
-                  },
-                  icon: Icon(Icons.devices, color: AppTheme.navyBlue),
-                  tooltip: 'Device Management',
-                ),
-              ],
-            ),
-          ),
-        ),
+      floatingActionButton: FloatingActionButton(
+        onPressed: _showNewConversationSheet,
+        backgroundColor: AppTheme.brightNavy,
+        tooltip: 'New conversation',
+        child: const Icon(Icons.edit_outlined, color: Colors.white),
       ),
     );
   }
@@ -489,6 +482,8 @@ class _SecureChatFullScreenState extends State<SecureChatFullScreen> {
     }
   }
 }
+
+enum _ChatMenuAction { refresh, uploadKeys, backup, devices }
 
 class _ConversationTile extends StatefulWidget {
   final SecureConversation conversation;

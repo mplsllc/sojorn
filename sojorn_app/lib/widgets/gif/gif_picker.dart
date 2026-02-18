@@ -302,7 +302,8 @@ class _RetroTabState extends State<_RetroTab>
 
   static const _defaultQuery = 'space';
   static final _gifUrlRegex = RegExp(
-      r'https://blob\.gifcities\.org/gifcities/[A-Z0-9]+\.gif');
+      r'https://blob\.gifcities\.org/gifcities/[A-Za-z0-9_\-]+\.gif',
+      caseSensitive: false);
 
   @override
   bool get wantKeepAlive => true;

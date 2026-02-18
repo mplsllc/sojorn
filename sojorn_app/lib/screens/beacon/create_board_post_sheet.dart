@@ -1,12 +1,10 @@
-import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:image_picker/image_picker.dart';
 import '../../models/board_entry.dart';
 import '../../providers/api_provider.dart';
-import '../../services/image_upload_service.dart';
 import '../../theme/tokens.dart';
 import '../../theme/app_theme.dart';
+import '../../widgets/composer/composer_bar.dart';
 
 /// Compose sheet for the standalone neighborhood board.
 /// Creates board_entries — completely separate from posts/beacons.
@@ -27,80 +25,23 @@ class CreateBoardPostSheet extends ConsumerStatefulWidget {
 }
 
 class _CreateBoardPostSheetState extends ConsumerState<CreateBoardPostSheet> {
-  final ImageUploadService _imageUploadService = ImageUploadService();
-  final _bodyController = TextEditingController();
-
   BoardTopic _selectedTopic = BoardTopic.community;
-  bool _isSubmitting = false;
-  bool _isUploadingImage = false;
-  File? _selectedImage;
-  String? _uploadedImageUrl;
 
   static const _topics = BoardTopic.values;
 
-  @override
-  void dispose() {
-    _bodyController.dispose();
-    super.dispose();
-  }
-
-  Future<void> _pickImage() async {
-    setState(() => _isUploadingImage = true);
-    try {
-      final image = await ImagePicker().pickImage(
-        source: ImageSource.gallery,
-        maxWidth: 1920,
-        maxHeight: 1920,
-        imageQuality: 85,
-      );
-      if (image == null) {
-        setState(() => _isUploadingImage = false);
-        return;
-      }
-      final file = File(image.path);
-      setState(() => _selectedImage = file);
-      final imageUrl = await _imageUploadService.uploadImage(file);
-      if (mounted) setState(() { _uploadedImageUrl = imageUrl; _isUploadingImage = false; });
-    } catch (e) {
-      if (mounted) {
-        setState(() => _isUploadingImage = false);
-        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Could not upload photo: $e')));
-      }
-    }
-  }
-
-  void _removeImage() {
-    setState(() { _selectedImage = null; _uploadedImageUrl = null; });
-  }
-
-  Future<void> _submit() async {
-    final body = _bodyController.text.trim();
-    if (body.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Write something to share with your neighbors.')));
-      return;
-    }
-
-    setState(() => _isSubmitting = true);
-    try {
-      final apiService = ref.read(apiServiceProvider);
-      final data = await apiService.createBoardEntry(
-        body: body,
-        imageUrl: _uploadedImageUrl,
-        topic: _selectedTopic.value,
-        lat: widget.centerLat,
-        long: widget.centerLong,
-      );
-      if (mounted) {
-        final entry = BoardEntry.fromJson(data['entry'] as Map<String, dynamic>);
-        widget.onEntryCreated(entry);
-        Navigator.of(context).pop();
-      }
-    } catch (e) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Could not create post: $e')));
-      }
-    } finally {
-      if (mounted) setState(() => _isSubmitting = false);
+  Future<void> _onComposerSend(String text, String? imageUrl) async {
+    final apiService = ref.read(apiServiceProvider);
+    final data = await apiService.createBoardEntry(
+      body: text,
+      imageUrl: imageUrl,
+      topic: _selectedTopic.value,
+      lat: widget.centerLat,
+      long: widget.centerLong,
+    );
+    if (mounted) {
+      final entry = BoardEntry.fromJson(data['entry'] as Map<String, dynamic>);
+      widget.onEntryCreated(entry);
+      Navigator.of(context).pop();
     }
   }
 
@@ -136,7 +77,7 @@ class _CreateBoardPostSheetState extends ConsumerState<CreateBoardPostSheet> {
                   child: Text('Post to Board', style: TextStyle(color: AppTheme.navyBlue, fontSize: 18, fontWeight: FontWeight.bold)),
                 ),
                 IconButton(
-                  onPressed: _isSubmitting ? null : () => Navigator.of(context).pop(),
+                  onPressed: () => Navigator.of(context).pop(),
                   icon: Icon(Icons.close, color: SojornColors.textDisabled),
                 ),
               ],
@@ -185,93 +126,13 @@ class _CreateBoardPostSheetState extends ConsumerState<CreateBoardPostSheet> {
             ),
             const SizedBox(height: 16),
 
-            // Body
-            TextFormField(
-              controller: _bodyController,
-              style: TextStyle(color: SojornColors.postContent, fontSize: 14),
-              decoration: InputDecoration(
+            // Composer (text + photo + send)
+            ComposerBar(
+              config: const ComposerConfig(
+                allowImages: true,
                 hintText: 'Share with your neighborhood…',
-                hintStyle: TextStyle(color: SojornColors.textDisabled),
-                filled: true,
-                fillColor: AppTheme.scaffoldBg,
-                border: OutlineInputBorder(borderRadius: BorderRadius.circular(10), borderSide: BorderSide(color: AppTheme.navyBlue.withValues(alpha: 0.1))),
-                enabledBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(10), borderSide: BorderSide(color: AppTheme.navyBlue.withValues(alpha: 0.1))),
-                focusedBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(10), borderSide: BorderSide(color: AppTheme.brightNavy, width: 1)),
-                counterStyle: TextStyle(color: SojornColors.textDisabled),
               ),
-              maxLines: 4,
-              maxLength: 500,
-            ),
-            const SizedBox(height: 10),
-
-            // Photo
-            if (_selectedImage != null) ...[
-              Stack(
-                children: [
-                  ClipRRect(
-                    borderRadius: BorderRadius.circular(12),
-                    child: Image.file(_selectedImage!, height: 120, width: double.infinity, fit: BoxFit.cover),
-                  ),
-                  Positioned(
-                    top: 6, right: 6,
-                    child: IconButton(
-                      onPressed: _removeImage,
-                      icon: const Icon(Icons.close, color: SojornColors.basicWhite, size: 18),
-                      style: IconButton.styleFrom(backgroundColor: SojornColors.overlayDark, padding: const EdgeInsets.all(4)),
-                    ),
-                  ),
-                ],
-              ),
-              const SizedBox(height: 12),
-            ] else ...[
-              GestureDetector(
-                onTap: _isUploadingImage ? null : _pickImage,
-                child: Container(
-                  padding: const EdgeInsets.symmetric(vertical: 10),
-                  decoration: BoxDecoration(
-                    color: AppTheme.scaffoldBg,
-                    borderRadius: BorderRadius.circular(10),
-                    border: Border.all(color: AppTheme.navyBlue.withValues(alpha: 0.1)),
-                  ),
-                  child: Row(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-                      if (_isUploadingImage)
-                        SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2, color: AppTheme.brightNavy))
-                      else
-                        Icon(Icons.add_photo_alternate, size: 18, color: SojornColors.textDisabled),
-                      const SizedBox(width: 8),
-                      Text(_isUploadingImage ? 'Uploading…' : 'Add photo',
-                        style: TextStyle(color: SojornColors.textDisabled, fontSize: 13)),
-                    ],
-                  ),
-                ),
-              ),
-              const SizedBox(height: 14),
-            ],
-
-            // Submit
-            SizedBox(
-              width: double.infinity, height: 48,
-              child: ElevatedButton(
-                onPressed: _isSubmitting ? null : _submit,
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: AppTheme.brightNavy,
-                  foregroundColor: SojornColors.basicWhite,
-                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-                  disabledBackgroundColor: AppTheme.brightNavy.withValues(alpha: 0.3),
-                ),
-                child: _isSubmitting
-                    ? const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2, color: SojornColors.basicWhite))
-                    : const Row(
-                        mainAxisAlignment: MainAxisAlignment.center,
-                        children: [
-                          Icon(Icons.send, size: 16),
-                          SizedBox(width: 8),
-                          Text('Post', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 15)),
-                        ],
-                      ),
-              ),
+              onSend: _onComposerSend,
             ),
             const SizedBox(height: 8),
           ],

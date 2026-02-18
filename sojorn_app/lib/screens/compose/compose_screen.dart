@@ -16,7 +16,9 @@ import '../../services/api_service.dart';
 import '../../services/image_upload_service.dart';
 import '../../theme/app_theme.dart';
 import '../../theme/tokens.dart';
+import '../../config/api_config.dart';
 import '../../widgets/composer/composer_toolbar.dart';
+import '../../widgets/gif/gif_picker.dart';
 import '../../services/content_filter.dart';
 import '../../widgets/sojorn_snackbar.dart';
 import 'image_editor_screen.dart';
@@ -61,6 +63,7 @@ class _ComposeScreenState extends ConsumerState<ComposeScreen> {
   Uint8List? _selectedImageBytes;
   String? _selectedImageName;
   ImageFilter? _selectedFilter;
+  String? _selectedGifUrl;
   final ImagePicker _imagePicker = ImagePicker();
   static const double _editorFontSize = 18;
   List<String> _tagSuggestions = [];
@@ -275,6 +278,19 @@ class _ComposeScreenState extends ConsumerState<ComposeScreen> {
       _selectedImageBytes = null;
       _selectedImageName = null;
       _selectedFilter = null;
+      _selectedGifUrl = null;
+    });
+  }
+
+  void _openGifPicker() {
+    showGifPicker(context, onSelected: (url) {
+      setState(() {
+        _selectedGifUrl = url;
+        _selectedImageFile = null;
+        _selectedImageBytes = null;
+        _selectedImageName = null;
+        _selectedFilter = null;
+      });
     });
   }
 
@@ -401,7 +417,7 @@ class _ComposeScreenState extends ConsumerState<ComposeScreen> {
     });
 
     try {
-      String? imageUrl;
+      String? imageUrl = _selectedGifUrl;
 
       if (_selectedImageFile != null || _selectedImageBytes != null) {
         setState(() {
@@ -650,6 +666,9 @@ class _ComposeScreenState extends ConsumerState<ComposeScreen> {
                         !isKeyboardOpen
                     ? _buildImagePreview()
                     : null,
+                gifPreviewWidget: _selectedGifUrl != null && !isKeyboardOpen
+                    ? _buildGifPreview()
+                    : null,
                 linkPreviewWidget: !_isTyping && _linkPreview != null && !isKeyboardOpen
                     ? _buildComposeLinkPreview()
                     : null,
@@ -668,6 +687,7 @@ class _ComposeScreenState extends ConsumerState<ComposeScreen> {
                 bottom: MediaQuery.of(context).viewInsets.bottom),
             child: ComposeBottomBar(
               onAddMedia: _pickMedia,
+              onAddGif: _openGifPicker,
               onToggleBold: _toggleBold,
               onToggleItalic: _toggleItalic,
               onToggleChain: _toggleChain,
@@ -715,6 +735,44 @@ class _ComposeScreenState extends ConsumerState<ComposeScreen> {
             Positioned(
               top: 8,
               right: 8,
+              child: Material(
+                color: SojornColors.overlayDark,
+                shape: const CircleBorder(),
+                child: InkWell(
+                  onTap: _removeImage,
+                  customBorder: const CircleBorder(),
+                  child: const Padding(
+                    padding: EdgeInsets.all(6),
+                    child: Icon(Icons.close, color: SojornColors.basicWhite, size: 18),
+                  ),
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildGifPreview() {
+    return Padding(
+      padding: const EdgeInsets.symmetric(
+          horizontal: AppTheme.spacingLg, vertical: AppTheme.spacingSm),
+      child: ClipRRect(
+        borderRadius: BorderRadius.circular(12),
+        child: Stack(
+          children: [
+            Image.network(
+              ApiConfig.needsProxy(_selectedGifUrl!)
+                  ? ApiConfig.proxyImageUrl(_selectedGifUrl!)
+                  : _selectedGifUrl!,
+              height: 150,
+              width: double.infinity,
+              fit: BoxFit.cover,
+              errorBuilder: (_, __, ___) => const SizedBox.shrink(),
+            ),
+            Positioned(
+              top: 8, right: 8,
               child: Material(
                 color: SojornColors.overlayDark,
                 shape: const CircleBorder(),
@@ -895,6 +953,7 @@ class ComposeBody extends StatelessWidget {
   final bool isBold;
   final bool isItalic;
   final Widget? imageWidget;
+  final Widget? gifPreviewWidget;
   final Widget? linkPreviewWidget;
   final List<String> suggestions;
   final ValueChanged<String> onSelectSuggestion;
@@ -908,6 +967,7 @@ class ComposeBody extends StatelessWidget {
     required this.suggestions,
     required this.onSelectSuggestion,
     this.imageWidget,
+    this.gifPreviewWidget,
     this.linkPreviewWidget,
   });
 
@@ -982,6 +1042,7 @@ class ComposeBody extends StatelessWidget {
         ),
         if (linkPreviewWidget != null) linkPreviewWidget!,
         if (imageWidget != null) imageWidget!,
+        if (gifPreviewWidget != null) gifPreviewWidget!,
       ],
     );
   }
@@ -990,6 +1051,7 @@ class ComposeBody extends StatelessWidget {
 /// Bottom bar pinned above the keyboard with formatting + counter
 class ComposeBottomBar extends StatelessWidget {
   final VoidCallback onAddMedia;
+  final VoidCallback? onAddGif;
   final VoidCallback onToggleBold;
   final VoidCallback onToggleItalic;
   final VoidCallback onToggleChain;
@@ -1009,6 +1071,7 @@ class ComposeBottomBar extends StatelessWidget {
   const ComposeBottomBar({
     super.key,
     required this.onAddMedia,
+    this.onAddGif,
     required this.onToggleBold,
     required this.onToggleItalic,
     required this.onToggleChain,
@@ -1045,6 +1108,7 @@ class ComposeBottomBar extends StatelessWidget {
         top: false,
         child: ComposerToolbar(
           onAddMedia: onAddMedia,
+          onAddGif: onAddGif,
           onToggleBold: onToggleBold,
           onToggleItalic: onToggleItalic,
           onToggleChain: onToggleChain,
