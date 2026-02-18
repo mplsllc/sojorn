@@ -26,6 +26,7 @@ import 'profile_settings_screen.dart';
 import 'followers_following_screen.dart';
 import '../../widgets/harmony_explainer_modal.dart';
 import '../../widgets/follow_button.dart';
+import '../../widgets/media/sojorn_avatar.dart';
 
 /// Unified profile screen - handles both own profile and viewing others.
 ///
@@ -79,6 +80,7 @@ class _UnifiedProfileScreenState extends ConsumerState<UnifiedProfileScreen>
 
   late TabController _tabController;
   int _activeTab = 0;
+  bool _isGridView = false;
 
   List<Post> _posts = [];
   bool _isPostsLoading = false;
@@ -807,30 +809,11 @@ class _UnifiedProfileScreenState extends ConsumerState<UnifiedProfileScreen>
                   style: AppTheme.headlineSmall,
                 ),
                 const SizedBox(height: AppTheme.spacingLg),
-                CircleAvatar(
-                  radius: 72,
-                  backgroundColor: AppTheme.queenPink,
-                  child: avatarUrl.isNotEmpty
-                      ? ClipOval(
-                          child: SizedBox(
-                            width: 144,
-                            height: 144,
-                            child: SignedMediaImage(
-                              url: avatarUrl,
-                              width: 144,
-                              height: 144,
-                              fit: BoxFit.cover,
-                            ),
-                          ),
-                        )
-                      : Text(
-                          profile.displayName.isNotEmpty
-                              ? profile.displayName[0].toUpperCase()
-                              : '?',
-                          style: AppTheme.headlineMedium.copyWith(
-                            color: AppTheme.royalPurple,
-                          ),
-                        ),
+                SojornAvatar(
+                  displayName: profile.displayName,
+                  avatarUrl: avatarUrl.isNotEmpty ? avatarUrl : null,
+                  size: 144,
+                  borderRadius: 36,
                 ),
                 const SizedBox(height: AppTheme.spacingLg),
                 TextButton(
@@ -941,7 +924,7 @@ class _UnifiedProfileScreenState extends ConsumerState<UnifiedProfileScreen>
 
   Widget _buildSliverAppBar(Profile profile) {
     return SliverAppBar(
-      expandedHeight: _isOwnProfile ? 263 : 303,
+      expandedHeight: _isOwnProfile ? 172 : 200,
       pinned: true,
       toolbarHeight: 0,
       collapsedHeight: 0,
@@ -1028,6 +1011,7 @@ class _UnifiedProfileScreenState extends ConsumerState<UnifiedProfileScreen>
       _postsError,
       () => _loadPosts(refresh: true),
       () => _loadPosts(refresh: false),
+      showToggle: true,
     );
   }
 
@@ -1038,12 +1022,47 @@ class _UnifiedProfileScreenState extends ConsumerState<UnifiedProfileScreen>
     bool hasMore,
     String? error,
     VoidCallback onRefresh,
-    VoidCallback onLoadMore,
-  ) {
+    VoidCallback onLoadMore, {
+    bool showToggle = false,
+  }) {
     return RefreshIndicator(
       onRefresh: () async => onRefresh(),
       child: CustomScrollView(
         slivers: [
+          // Grid/List toggle header (Posts tab only)
+          if (showToggle && (posts.isNotEmpty || isLoading))
+            SliverToBoxAdapter(
+              child: Padding(
+                padding: const EdgeInsets.fromLTRB(16, 8, 8, 0),
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.end,
+                  children: [
+                    IconButton(
+                      onPressed: () => setState(() => _isGridView = false),
+                      icon: Icon(
+                        Icons.view_list_outlined,
+                        color: _isGridView
+                            ? AppTheme.navyText.withValues(alpha: 0.35)
+                            : AppTheme.royalPurple,
+                      ),
+                      visualDensity: VisualDensity.compact,
+                      tooltip: 'List view',
+                    ),
+                    IconButton(
+                      onPressed: () => setState(() => _isGridView = true),
+                      icon: Icon(
+                        Icons.grid_on_outlined,
+                        color: _isGridView
+                            ? AppTheme.royalPurple
+                            : AppTheme.navyText.withValues(alpha: 0.35),
+                      ),
+                      visualDensity: VisualDensity.compact,
+                      tooltip: 'Grid view',
+                    ),
+                  ],
+                ),
+              ),
+            ),
           if (error != null)
             SliverToBoxAdapter(
               child: Padding(
@@ -1073,7 +1092,40 @@ class _UnifiedProfileScreenState extends ConsumerState<UnifiedProfileScreen>
                 ),
               ),
             ),
-          if (posts.isNotEmpty)
+          if (posts.isNotEmpty && showToggle && _isGridView)
+            SliverPadding(
+              padding: const EdgeInsets.all(AppTheme.spacingXs),
+              sliver: SliverGrid(
+                gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+                  crossAxisCount: 3,
+                  crossAxisSpacing: 2,
+                  mainAxisSpacing: 2,
+                ),
+                delegate: SliverChildBuilderDelegate(
+                  (context, index) {
+                    final post = posts[index];
+                    final imageUrl = post.imageUrl ?? post.thumbnailUrl;
+                    return GestureDetector(
+                      onTap: () => _openPostDetail(post),
+                      child: Container(
+                        color: AppTheme.navyBlue.withValues(alpha: 0.05),
+                        child: imageUrl != null && imageUrl.isNotEmpty
+                            ? SignedMediaImage(url: imageUrl, fit: BoxFit.cover)
+                            : Center(
+                                child: Icon(
+                                  post.videoUrl != null ? Icons.play_circle_outline : Icons.article_outlined,
+                                  color: AppTheme.navyText.withValues(alpha: 0.4),
+                                  size: 32,
+                                ),
+                              ),
+                      ),
+                    );
+                  },
+                  childCount: posts.length,
+                ),
+              ),
+            )
+          else if (posts.isNotEmpty)
             SliverPadding(
               padding: const EdgeInsets.symmetric(
                 horizontal: AppTheme.spacingMd,
@@ -1410,119 +1462,143 @@ class _ProfileHeader extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    const avatarRadius = 40.0;
+    final flag = getCountryFlag(profile.originCountry ?? 'US');
     return Container(
-      decoration: BoxDecoration(
-        gradient: _generateGradient(profile.handle),
-      ),
+      decoration: BoxDecoration(gradient: _generateGradient(profile.handle)),
       child: SafeArea(
         bottom: false,
-        child: LayoutBuilder(
-          builder: (context, constraints) {
-            final isCompact = constraints.maxHeight < 240;
-            final avatarRadius = isCompact ? 38.0 : 44.0;
-            return Padding(
-              padding: EdgeInsets.only(
-                top: 0,
-                bottom: isCompact ? 4 : 6,
-              ),
-              child: Column(
-                mainAxisAlignment: MainAxisAlignment.end,
-                mainAxisSize: MainAxisSize.min,
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(16, 4, 8, 12),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              // ── Top row: avatar | info | icons ───────────────────────────
+              Row(
+                crossAxisAlignment: CrossAxisAlignment.center,
                 children: [
-                  if (isOwnProfile)
-                    Align(
-                      alignment: Alignment.topRight,
-                      child: Padding(
-                        padding: EdgeInsets.only(top: 0),
-                        child: Row(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            IconButton(
-                              onPressed: onPrivacyTap,
-                              icon: Icon(Icons.lock_outline, color: AppTheme.white),
-                              tooltip: 'Privacy',
-                            ),
-                            const SizedBox(width: 4),
-                            IconButton(
-                              onPressed: onSettingsTap,
-                              icon: Icon(Icons.settings_outlined, color: AppTheme.white),
-                              tooltip: 'Settings',
-                            ),
-                          ],
-                        ),
-                      ),
-                    ),
-                  if (onAvatarTap != null)
-                    InkResponse(
-                      onTap: onAvatarTap,
-                      radius: 40,
-                      child: _HarmonyAvatar(
-                        profile: profile,
-                        radius: avatarRadius,
-                      ),
-                    )
-                  else
-                    _HarmonyAvatar(
-                      profile: profile,
-                      radius: avatarRadius,
-                    ),
-                  SizedBox(height: isCompact ? 4 : 6),
-                  Text(
-                    profile.displayName,
-                    style: AppTheme.headlineMedium.copyWith(
-                      color: AppTheme.white.withValues(alpha: 0.95),
-                      fontSize: isCompact ? 16 : 18,
-                      shadows: [
-                        Shadow(
-                          color: const Color(0x33000000),
-                          blurRadius: 6,
-                        ),
-                      ],
-                    ),
-                    textAlign: TextAlign.center,
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
+                  // Avatar (tappable on own profile)
+                  GestureDetector(
+                    onTap: onAvatarTap,
+                    child: _HarmonyAvatar(profile: profile, radius: avatarRadius),
                   ),
-                  const SizedBox(height: 2),
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-                      Text(
-                        '@${profile.handle}',
-                        style: AppTheme.bodyMedium.copyWith(
-                          fontSize: 12,
-                          color: AppTheme.white.withValues(alpha: 0.85),
-                          shadows: [
-                            Shadow(
-                              color: const Color(0x33000000),
-                              blurRadius: 4,
-                            ),
-                          ],
-                        ),
-                      ),
-                      if (getCountryFlag(profile.originCountry ?? 'US') != null) ...[
-                        const SizedBox(width: 4),
+                  const SizedBox(width: 16),
+                  // Name + handle + stats
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
                         Text(
-                          getCountryFlag(profile.originCountry ?? 'US')!,
-                          style: const TextStyle(fontSize: 13),
+                          profile.displayName,
+                          style: AppTheme.headlineMedium.copyWith(
+                            color: AppTheme.white,
+                            fontSize: 17,
+                            fontWeight: FontWeight.w700,
+                          ),
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                        const SizedBox(height: 2),
+                        Row(
+                          children: [
+                            Text(
+                              '@${profile.handle}',
+                              style: AppTheme.bodyMedium.copyWith(
+                                fontSize: 12,
+                                color: AppTheme.white.withValues(alpha: 0.8),
+                              ),
+                            ),
+                            if (flag != null) ...[
+                              const SizedBox(width: 4),
+                              Text(flag, style: const TextStyle(fontSize: 12)),
+                            ],
+                          ],
+                        ),
+                        if (stats != null) ...[
+                          const SizedBox(height: 10),
+                          _buildInlineStats(stats!),
+                        ],
+                      ],
+                    ),
+                  ),
+                  // Settings icons (own profile only)
+                  if (isOwnProfile)
+                    Column(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        IconButton(
+                          onPressed: onPrivacyTap,
+                          icon: const Icon(Icons.lock_outline, color: Colors.white, size: 20),
+                          tooltip: 'Privacy',
+                          visualDensity: VisualDensity.compact,
+                          padding: EdgeInsets.zero,
+                        ),
+                        IconButton(
+                          onPressed: onSettingsTap,
+                          icon: const Icon(Icons.settings_outlined, color: Colors.white, size: 20),
+                          tooltip: 'Settings',
+                          visualDensity: VisualDensity.compact,
+                          padding: EdgeInsets.zero,
                         ),
                       ],
-                    ],
-                  ),
-                  if (!isOwnProfile) ...[
-                    SizedBox(height: isCompact ? 8 : 12),
-                    _buildRelationshipActions(),
-                  ],
-                  if (stats != null && !isCompact) ...[
-                    const SizedBox(height: 8),
-                    _buildStats(stats!),
-                  ],
+                    ),
                 ],
               ),
-            );
-          },
+              const SizedBox(height: 12),
+              // ── Action buttons ───────────────────────────────────────────
+              if (isOwnProfile)
+                Row(
+                  children: [
+                    Expanded(
+                      child: _GradientOutlinedButton(
+                        label: 'Edit Profile',
+                        icon: Icons.edit_outlined,
+                        onPressed: onSettingsTap,
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: _GradientOutlinedButton(
+                        label: 'Share',
+                        icon: Icons.ios_share_outlined,
+                        onPressed: () {
+                          // Share profile URL via native share sheet
+                        },
+                      ),
+                    ),
+                  ],
+                )
+              else
+                _buildRelationshipActions(),
+            ],
+          ),
         ),
       ),
+    );
+  }
+
+  Widget _buildInlineStats(ProfileStats stats) {
+    return Row(
+      children: [
+        _InlineStat(
+          value: stats.posts.toString(),
+          label: 'Posts',
+        ),
+        const SizedBox(width: 16),
+        _InlineStat(
+          value: stats.followers.toString(),
+          label: 'Followers',
+          onTap: onConnectionsTap != null ? () => onConnectionsTap!(0) : null,
+        ),
+        const SizedBox(width: 16),
+        _InlineStat(
+          value: stats.following.toString(),
+          label: 'Following',
+          onTap: onConnectionsTap != null ? () => onConnectionsTap!(1) : null,
+        ),
+      ],
     );
   }
 
@@ -1685,7 +1761,82 @@ class _ProfileHeader extends StatelessWidget {
 }
 
 // ==============================================================================
-// STAT ITEM
+// INLINE STAT — compact left-aligned version for new header row
+// ==============================================================================
+
+class _InlineStat extends StatelessWidget {
+  final String value;
+  final String label;
+  final VoidCallback? onTap;
+
+  const _InlineStat({required this.value, required this.label, this.onTap});
+
+  @override
+  Widget build(BuildContext context) {
+    final content = Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Text(
+          value,
+          style: const TextStyle(
+            color: Colors.white,
+            fontSize: 15,
+            fontWeight: FontWeight.w700,
+          ),
+        ),
+        Text(
+          label,
+          style: TextStyle(
+            color: Colors.white.withValues(alpha: 0.75),
+            fontSize: 10,
+          ),
+        ),
+      ],
+    );
+    if (onTap != null) return GestureDetector(onTap: onTap, child: content);
+    return content;
+  }
+}
+
+// ==============================================================================
+// GRADIENT OUTLINED BUTTON — for Edit Profile / Share on own profile header
+// ==============================================================================
+
+class _GradientOutlinedButton extends StatelessWidget {
+  final String label;
+  final IconData icon;
+  final VoidCallback onPressed;
+
+  const _GradientOutlinedButton({
+    required this.label,
+    required this.icon,
+    required this.onPressed,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return OutlinedButton.icon(
+      onPressed: onPressed,
+      icon: Icon(icon, size: 14, color: Colors.white),
+      label: Text(
+        label,
+        style: const TextStyle(color: Colors.white, fontSize: 13, fontWeight: FontWeight.w600),
+      ),
+      style: OutlinedButton.styleFrom(
+        foregroundColor: Colors.white,
+        side: BorderSide(color: Colors.white.withValues(alpha: 0.6), width: 1),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+        padding: const EdgeInsets.symmetric(vertical: 8),
+        tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+        visualDensity: VisualDensity.compact,
+      ),
+    );
+  }
+}
+
+// ==============================================================================
+// STAT ITEM — legacy centered version (kept for compatibility)
 // ==============================================================================
 
 class _StatItem extends StatelessWidget {
@@ -1760,64 +1911,67 @@ class _HarmonyAvatar extends StatelessWidget {
         profile.handle.isNotEmpty ? profile.handle[0].toUpperCase() : '?';
 
     Color ringColor = AppTheme.egyptianBlue;
-    double ringWidth = 3;
+    double harmonyScore = 0.0;
 
     if (trustState != null) {
-      final harmonyScore = trustState.harmonyScore / 100.0;
-
+      harmonyScore = (trustState.harmonyScore / 100.0).clamp(0.0, 1.0);
       if (harmonyScore >= 0.8) {
         ringColor = const Color(0xFFFFD700);
-        ringWidth = 5;
       } else if (harmonyScore >= 0.5) {
         ringColor = AppTheme.royalPurple;
-        ringWidth = 4;
       } else if (harmonyScore >= 0.3) {
         ringColor = AppTheme.egyptianBlue;
-        ringWidth = 3;
       } else {
         ringColor = AppTheme.textDisabled;
-        ringWidth = 2;
       }
     }
 
-    return Container(
-      decoration: BoxDecoration(
-        borderRadius: BorderRadius.circular(radius * 0.45),
-        border: Border.all(
-          color: ringWidth >= 4 ? ringColor : ringColor.withValues(alpha: 0.8),
-          width: ringWidth,
-        ),
-        boxShadow: [
-          if (ringWidth >= 4)
-            BoxShadow(
-              color: ringColor.withValues(alpha: 0.5),
-              blurRadius: 12,
-              spreadRadius: 2,
+    const strokeWidth = 3.5;
+    final totalSize = radius * 2 + strokeWidth * 2 + 4;
+
+    return SizedBox(
+      width: totalSize,
+      height: totalSize,
+      child: Stack(
+        alignment: Alignment.center,
+        children: [
+          // Progress arc ring
+          SizedBox(
+            width: totalSize,
+            height: totalSize,
+            child: CircularProgressIndicator(
+              value: harmonyScore > 0 ? harmonyScore : null,
+              strokeWidth: strokeWidth,
+              backgroundColor: Colors.white.withValues(alpha: 0.2),
+              valueColor: AlwaysStoppedAnimation<Color>(ringColor),
+              strokeCap: StrokeCap.round,
             ),
-        ],
-      ),
-      child: ClipRRect(
-        borderRadius: BorderRadius.circular(radius * 0.4),
-        child: SizedBox(
-          width: radius * 2,
-          height: radius * 2,
-          child: profile.avatarUrl != null && profile.avatarUrl!.isNotEmpty
-              ? SignedMediaImage(
-                  url: profile.avatarUrl!,
-                  fit: BoxFit.cover,
-                )
-              : Container(
-                  color: AppTheme.queenPink,
-                  alignment: Alignment.center,
-                  child: Text(
-                    avatarLetter,
-                    style: AppTheme.headlineMedium.copyWith(
-                      fontSize: radius * 0.6,
-                      color: AppTheme.royalPurple,
+          ),
+          // Avatar image
+          ClipRRect(
+            borderRadius: BorderRadius.circular(radius * 0.4),
+            child: SizedBox(
+              width: radius * 2,
+              height: radius * 2,
+              child: profile.avatarUrl != null && profile.avatarUrl!.isNotEmpty
+                  ? SignedMediaImage(
+                      url: profile.avatarUrl!,
+                      fit: BoxFit.cover,
+                    )
+                  : Container(
+                      color: AppTheme.queenPink,
+                      alignment: Alignment.center,
+                      child: Text(
+                        avatarLetter,
+                        style: AppTheme.headlineMedium.copyWith(
+                          fontSize: radius * 0.6,
+                          color: AppTheme.royalPurple,
+                        ),
+                      ),
                     ),
-                  ),
-                ),
-        ),
+            ),
+          ),
+        ],
       ),
     );
   }

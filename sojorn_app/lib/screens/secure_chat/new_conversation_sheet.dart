@@ -4,6 +4,7 @@ import '../../services/secure_chat_service.dart';
 import '../../theme/app_theme.dart';
 import '../../theme/tokens.dart';
 import '../../widgets/media/signed_media_image.dart';
+import '../../widgets/media/sojorn_avatar.dart';
 
 /// Bottom sheet for starting a new secure conversation
 class NewConversationSheet extends StatefulWidget {
@@ -316,29 +317,10 @@ class _NewConversationSheetState extends State<NewConversationSheet> {
   Widget _buildUserTile(MutualFollow user) {
     return ListTile(
       contentPadding: const EdgeInsets.symmetric(horizontal: 20, vertical: 8),
-      leading: CircleAvatar(
-        radius: 24,
-        backgroundColor: AppTheme.egyptianBlue.withValues(alpha: 0.1),
-        child: user.avatarUrl != null
-            ? ClipOval(
-                child: SizedBox(
-                  width: 48,
-                  height: 48,
-                  child: SignedMediaImage(
-                    url: user.avatarUrl!,
-                    width: 48,
-                    height: 48,
-                    fit: BoxFit.cover,
-                  ),
-                ),
-              )
-            : Text(
-                user.handle.isNotEmpty ? user.handle[0].toUpperCase() : '?',
-                style: TextStyle(
-                  color: AppTheme.egyptianBlue,
-                  fontWeight: FontWeight.bold,
-                ),
-              ),
+      leading: SojornAvatar(
+        displayName: user.displayName ?? user.handle,
+        avatarUrl: user.avatarUrl,
+        size: 48,
       ),
       title: Text(
         user.displayName ?? '@${user.handle}',

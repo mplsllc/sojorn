@@ -8,6 +8,7 @@ import '../../providers/api_provider.dart';
 import '../../theme/app_theme.dart';
 import '../../theme/tokens.dart';
 import '../../widgets/media/signed_media_image.dart';
+import '../../widgets/media/sojorn_avatar.dart';
 import '../profile/viewable_profile_screen.dart';
 import '../post/post_detail_screen.dart';
 import 'package:go_router/go_router.dart';
@@ -28,7 +29,8 @@ class _NotificationsScreenState extends ConsumerState<NotificationsScreen> {
   bool _isLoading = false;
   bool _hasMore = true;
   String? _error;
-  int _activeTabIndex = 0; // 0 for Active, 1 for Archived
+  int _activeTabIndex = 0; // 0 = Active, 1 = Archived
+  String _filter = 'all'; // 'all','unread','likes','comments','follows','archived'
   final Set<String> _locallyArchivedIds = {};
   StreamSubscription<AuthState>? _authSub;
   TabController? _tabController;
@@ -83,6 +85,37 @@ class _NotificationsScreenState extends ConsumerState<NotificationsScreen> {
       }
     } catch (e) {
       // Silently fail - we'll get it on next refresh
+    }
+  }
+
+  List<AppNotification> get _filteredNotifications {
+    switch (_filter) {
+      case 'unread':
+        return _notifications.where((n) => !n.isRead).toList();
+      case 'likes':
+        return _notifications.where((n) => n.type == NotificationType.like || n.type == NotificationType.quip_reaction).toList();
+      case 'comments':
+        return _notifications.where((n) => n.type == NotificationType.comment || n.type == NotificationType.reply || n.type == NotificationType.mention).toList();
+      case 'follows':
+        return _notifications.where((n) => n.type == NotificationType.follow || n.type == NotificationType.follow_accepted || n.type == NotificationType.follow_request).toList();
+      default:
+        return _notifications;
+    }
+  }
+
+  void _setFilter(String filter) {
+    final wasArchived = _filter == 'archived';
+    final isArchived = filter == 'archived';
+    setState(() {
+      _filter = filter;
+      if (isArchived != wasArchived) {
+        _activeTabIndex = isArchived ? 1 : 0;
+        _notifications = [];
+        _hasMore = true;
+      }
+    });
+    if (isArchived != wasArchived) {
+      _loadNotifications(refresh: true);
     }
   }
 
@@ -353,124 +386,146 @@ class _NotificationsScreenState extends ConsumerState<NotificationsScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final canArchiveAll = _activeTabIndex == 0 && _notifications.isNotEmpty;
+    final canArchiveAll = _filter != 'archived' && _notifications.isNotEmpty;
+    final displayed = _filteredNotifications;
 
-    return DefaultTabController(
-      length: 2,
-      child: FullScreenShell(
-        titleText: 'Activity',
-        bottom: TabBar(
-          onTap: (index) {
-            if (index != _activeTabIndex) {
-              setState(() {
-                _activeTabIndex = index;
-              });
-              _loadNotifications(refresh: true);
-            }
-          },
-          indicatorColor: AppTheme.egyptianBlue,
-          labelColor: AppTheme.egyptianBlue,
-          unselectedLabelColor: AppTheme.egyptianBlue.withValues(alpha: 0.5),
-          tabs: const [
-            Tab(text: 'Active'),
-            Tab(text: 'Archived'),
-          ],
-        ),
-        body: _error != null
-            ? _ErrorState(
-                message: _error!,
-                onRetry: () => _loadNotifications(refresh: true),
-              )
-            : _notifications.isEmpty && !_isLoading
-                ? const _EmptyState()
-                : Column(
-                    children: [
-                      if (canArchiveAll)
-                        Align(
-                          alignment: Alignment.centerRight,
-                          child: Padding(
-                            padding: const EdgeInsets.only(right: 8, top: 4),
-                            child: TextButton(
-                              onPressed: _archiveAllNotifications,
-                              child: Text(
-                                'Archive All',
-                                style: AppTheme.textTheme.labelMedium?.copyWith(
-                                  color: AppTheme.egyptianBlue,
-                                  fontWeight: FontWeight.w600,
-                                ),
-                              ),
-                            ),
-                          ),
-                        ),
-                      Expanded(child: RefreshIndicator(
-                    onRefresh: () => _loadNotifications(refresh: true),
-                    child: ListView.builder(
-                      itemCount: _notifications.length + (_hasMore ? 1 : 0),
-                      padding: const EdgeInsets.symmetric(vertical: 8),
-                      itemBuilder: (context, index) {
-                        if (index == _notifications.length) {
-                          if (!_isLoading) {
-                            _loadNotifications();
-                          }
-                          return const Padding(
-                            padding: EdgeInsets.all(16.0),
-                            child: Center(
-                              child: CircularProgressIndicator(),
-                            ),
-                          );
-                        }
-
-                        final notification = _notifications[index];
-                        if (_activeTabIndex == 0) {
-                          return Dismissible(
-                            key: Key('notif_${notification.id}'),
-                            direction: DismissDirection.endToStart,
-                            onDismissed: (_) => _archiveNotification(notification),
-                            background: Container(
-                              alignment: Alignment.centerRight,
-                              padding: const EdgeInsets.only(right: 20),
-                              color: AppTheme.royalPurple.withValues(alpha: 0.8),
-                              child: const Row(
-                                mainAxisAlignment: MainAxisAlignment.end,
-                                children: [
-                                  Text(
-                                    'Archive',
-                                    style: TextStyle(
-                                      color: SojornColors.basicWhite,
-                                      fontWeight: FontWeight.bold,
-                                    ),
+    return FullScreenShell(
+      titleText: 'Activity',
+      body: Column(
+        children: [
+          _buildFilterRow(canArchiveAll),
+          Expanded(
+            child: _error != null
+                ? _ErrorState(
+                    message: _error!,
+                    onRetry: () => _loadNotifications(refresh: true),
+                  )
+                : displayed.isEmpty && !_isLoading
+                    ? const _EmptyState()
+                    : RefreshIndicator(
+                        onRefresh: () => _loadNotifications(refresh: true),
+                        child: ListView.builder(
+                          itemCount: displayed.length + (_hasMore ? 1 : 0),
+                          padding: const EdgeInsets.symmetric(vertical: 4),
+                          itemBuilder: (context, index) {
+                            if (index == displayed.length) {
+                              if (!_isLoading) _loadNotifications();
+                              return const Padding(
+                                padding: EdgeInsets.all(16),
+                                child: Center(child: CircularProgressIndicator()),
+                              );
+                            }
+                            final notification = displayed[index];
+                            if (_filter != 'archived') {
+                              return Dismissible(
+                                key: Key('notif_${notification.id}'),
+                                direction: DismissDirection.endToStart,
+                                onDismissed: (_) => _archiveNotification(notification),
+                                background: Container(
+                                  alignment: Alignment.centerRight,
+                                  padding: const EdgeInsets.only(right: 20),
+                                  color: AppTheme.royalPurple.withValues(alpha: 0.8),
+                                  child: const Row(
+                                    mainAxisAlignment: MainAxisAlignment.end,
+                                    children: [
+                                      Text('Archive',
+                                          style: TextStyle(color: SojornColors.basicWhite, fontWeight: FontWeight.bold)),
+                                      SizedBox(width: 8),
+                                      Icon(Icons.archive, color: SojornColors.basicWhite),
+                                    ],
                                   ),
-                                  SizedBox(width: 8),
-                                  Icon(Icons.archive, color: SojornColors.basicWhite),
-                                ],
-                              ),
-                            ),
-                            child: _NotificationItem(
-                              notification: notification,
-                              onTap: notification.type == NotificationType.follow_request
-                                  ? null
-                                  : () => _handleNotificationTap(notification),
-                              onApprove: notification.type == NotificationType.follow_request
-                                  ? () => _approveFollowRequest(notification)
-                                  : null,
-                              onReject: notification.type == NotificationType.follow_request
-                                  ? () => _rejectFollowRequest(notification)
-                                  : null,
-                            ),
-                          );
-                        } else {
-                          return _NotificationItem(
-                            notification: notification,
-                            onTap: notification.type == NotificationType.follow_request
-                                ? null
-                                : () => _handleNotificationTap(notification),
-                          );
-                        }
-                      },
-                    ),
-                  )),
-                    ],
+                                ),
+                                child: _NotificationItem(
+                                  notification: notification,
+                                  onTap: notification.type == NotificationType.follow_request
+                                      ? null
+                                      : () => _handleNotificationTap(notification),
+                                  onApprove: notification.type == NotificationType.follow_request
+                                      ? () => _approveFollowRequest(notification)
+                                      : null,
+                                  onReject: notification.type == NotificationType.follow_request
+                                      ? () => _rejectFollowRequest(notification)
+                                      : null,
+                                ),
+                              );
+                            } else {
+                              return _NotificationItem(
+                                notification: notification,
+                                onTap: notification.type == NotificationType.follow_request
+                                    ? null
+                                    : () => _handleNotificationTap(notification),
+                              );
+                            }
+                          },
+                        ),
+                      ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildFilterRow(bool canArchiveAll) {
+    const filters = [
+      ('all', 'All'),
+      ('unread', 'Unread'),
+      ('likes', 'Likes'),
+      ('comments', 'Comments'),
+      ('follows', 'Follows'),
+      ('archived', 'Archived'),
+    ];
+    return Container(
+      color: AppTheme.scaffoldBg,
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          SingleChildScrollView(
+            scrollDirection: Axis.horizontal,
+            padding: const EdgeInsets.fromLTRB(12, 8, 12, 4),
+            child: Row(
+              children: filters.map((f) {
+                final (value, label) = f;
+                final isSelected = _filter == value;
+                return Padding(
+                  padding: const EdgeInsets.only(right: 8),
+                  child: FilterChip(
+                    label: Text(label,
+                        style: TextStyle(
+                            fontSize: 13,
+                            fontWeight: isSelected ? FontWeight.w600 : FontWeight.w400,
+                            color: isSelected ? Colors.white : AppTheme.navyText)),
+                    selected: isSelected,
+                    onSelected: (_) => _setFilter(value),
+                    backgroundColor: AppTheme.cardSurface,
+                    selectedColor: AppTheme.brightNavy,
+                    checkmarkColor: Colors.white,
+                    showCheckmark: false,
+                    side: BorderSide(
+                        color: isSelected
+                            ? AppTheme.brightNavy
+                            : AppTheme.navyText.withValues(alpha: 0.15)),
+                    shape: const StadiumBorder(),
+                    padding: const EdgeInsets.symmetric(horizontal: 4),
                   ),
+                );
+              }).toList(),
+            ),
+          ),
+          if (canArchiveAll)
+            Align(
+              alignment: Alignment.centerRight,
+              child: Padding(
+                padding: const EdgeInsets.only(right: 8, bottom: 2),
+                child: TextButton(
+                  onPressed: _archiveAllNotifications,
+                  child: Text('Archive All',
+                      style: AppTheme.textTheme.labelMedium?.copyWith(
+                          color: AppTheme.egyptianBlue, fontWeight: FontWeight.w600)),
+                ),
+              ),
+            ),
+        ],
       ),
     );
   }
@@ -503,139 +558,135 @@ class _NotificationItem extends StatelessWidget {
     return InkWell(
       onTap: onTap,
       child: Container(
-        padding: const EdgeInsets.all(AppTheme.spacingMd),
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
         decoration: BoxDecoration(
           color: notification.isRead
             ? SojornColors.transparent
-            : AppTheme.royalPurple.withValues(alpha: 0.05),
+            : AppTheme.royalPurple.withValues(alpha: 0.04),
           border: Border(
             bottom: BorderSide(
-              color: AppTheme.egyptianBlue.withValues(alpha: 0.15),
+              color: AppTheme.egyptianBlue.withValues(alpha: 0.12),
               width: 1,
             ),
           ),
         ),
         child: Row(
-          crossAxisAlignment: CrossAxisAlignment.start,
+          crossAxisAlignment: CrossAxisAlignment.center,
           children: [
-            _buildAvatar(),
-            const SizedBox(width: AppTheme.spacingMd),
+            _buildActorAvatar(),
+            const SizedBox(width: 12),
             Expanded(
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Row(
-                    children: [
-                      Expanded(
-                        child: Text(
-                          notification.message,
-                          style: AppTheme.textTheme.bodyMedium?.copyWith(
-                            fontWeight: notification.isRead
-                              ? FontWeight.w400
-                              : FontWeight.w600,
-                          ),
-                        ),
-                      ),
-                      if (!notification.isRead)
-                        Container(
-                          width: 8,
-                          height: 8,
-                          decoration: BoxDecoration(
-                            color: AppTheme.royalPurple,
-                            shape: BoxShape.circle,
-                          ),
-                        ),
-                    ],
+                  Text(
+                    notification.message,
+                    style: AppTheme.textTheme.bodyMedium?.copyWith(
+                      fontWeight: notification.isRead ? FontWeight.w400 : FontWeight.w600,
+                      fontSize: 14,
+                      height: 1.3,
+                    ),
                   ),
-                  const SizedBox(height: AppTheme.spacingXs),
-                  if (notification.postBody != null) ...[
+                  if (notification.postBody != null && notification.postImageUrl == null) ...[
+                    const SizedBox(height: 2),
                     Text(
                       notification.postBody!,
                       style: AppTheme.textTheme.labelSmall?.copyWith(
-                        color: AppTheme.navyText.withValues(alpha: 0.6),
+                        color: AppTheme.navyText.withValues(alpha: 0.55),
                       ),
-                      maxLines: 2,
+                      maxLines: 1,
                       overflow: TextOverflow.ellipsis,
                     ),
-                    const SizedBox(height: AppTheme.spacingXs),
                   ],
+                  const SizedBox(height: 3),
                   Text(
                     timeago.format(notification.createdAt, locale: 'en_short'),
                     style: AppTheme.textTheme.labelSmall?.copyWith(
-                      color: AppTheme.egyptianBlue.withValues(alpha: 0.7),
+                      color: AppTheme.egyptianBlue.withValues(alpha: 0.6),
+                      fontSize: 11,
                     ),
                   ),
                 ],
               ),
             ),
+            if (notification.postImageUrl != null) ...[
+              const SizedBox(width: 10),
+              ClipRRect(
+                borderRadius: BorderRadius.circular(6),
+                child: SizedBox(
+                  width: 48,
+                  height: 48,
+                  child: SignedMediaImage(
+                    url: notification.postImageUrl!,
+                    fit: BoxFit.cover,
+                  ),
+                ),
+              ),
+            ] else if (!notification.isRead) ...[
+              const SizedBox(width: 10),
+              Container(
+                width: 8,
+                height: 8,
+                decoration: BoxDecoration(
+                  color: AppTheme.royalPurple,
+                  shape: BoxShape.circle,
+                ),
+              ),
+            ],
           ],
         ),
       ),
     );
   }
 
-  Widget _buildAvatar() {
-    IconData iconData;
-    Color iconColor;
+  Widget _buildActorAvatar() {
+    final actor = notification.actor;
+    final avatarUrl = actor?.avatarUrl;
+    final displayName = actor?.displayName ?? '?';
 
-    switch (notification.type) {
-      case NotificationType.like:
-        iconData = Icons.favorite;
-        iconColor = AppTheme.brightNavy;
-        break;
-      case NotificationType.reply:
-        iconData = Icons.subdirectory_arrow_right;
-        iconColor = AppTheme.royalPurple;
-        break;
-      case NotificationType.follow:
-        iconData = Icons.person_add;
-        iconColor = AppTheme.ksuPurple;
-        break;
-      case NotificationType.follow_accepted:
-        iconData = Icons.check_circle;
-        iconColor = AppTheme.brightNavy;
-        break;
-      case NotificationType.comment:
-        iconData = Icons.comment;
-        iconColor = AppTheme.egyptianBlue;
-        break;
-      case NotificationType.mention:
-        iconData = Icons.alternate_email;
-        iconColor = AppTheme.brightNavy;
-        break;
-      case NotificationType.follow_request:
-        iconData = Icons.person_add;
-        iconColor = AppTheme.ksuPurple;
-        break;
-      case NotificationType.message:
-        iconData = Icons.message;
-        iconColor = AppTheme.egyptianBlue;
-        break;
-      case NotificationType.save:
-        iconData = Icons.bookmark;
-        iconColor = AppTheme.ksuPurple;
-        break;
-      default:
-        iconData = Icons.notifications;
-        iconColor = AppTheme.egyptianBlue;
-        break;
-    }
+    // Type badge config
+    final (IconData badgeIcon, Color badgeColor) = switch (notification.type) {
+      NotificationType.like => (Icons.favorite, const Color(0xFFE53935)),
+      NotificationType.quip_reaction => (Icons.favorite, const Color(0xFFE53935)),
+      NotificationType.comment => (Icons.chat_bubble, AppTheme.egyptianBlue),
+      NotificationType.reply => (Icons.reply, AppTheme.royalPurple),
+      NotificationType.mention => (Icons.alternate_email, AppTheme.brightNavy),
+      NotificationType.follow => (Icons.person_add, AppTheme.ksuPurple),
+      NotificationType.follow_request => (Icons.person_add, AppTheme.ksuPurple),
+      NotificationType.follow_accepted => (Icons.check_circle, AppTheme.brightNavy),
+      NotificationType.save => (Icons.bookmark, AppTheme.ksuPurple),
+      NotificationType.message => (Icons.message, AppTheme.egyptianBlue),
+      NotificationType.share => (Icons.share, AppTheme.brightNavy),
+      _ => (Icons.notifications, AppTheme.egyptianBlue),
+    };
 
-    return Container(
-      width: 40,
-      height: 40,
-      decoration: BoxDecoration(
-        color: iconColor.withValues(alpha: 0.1),
-        shape: BoxShape.circle,
-        border: Border.all(
-          color: iconColor.withValues(alpha: 0.3),
-          width: 1,
-        ),
-      ),
-      child: Icon(
-        iconData,
-        color: iconColor,
-        size: 20,
+    return SizedBox(
+      width: 44,
+      height: 44,
+      child: Stack(
+        clipBehavior: Clip.none,
+        children: [
+          SojornAvatar(
+            displayName: displayName,
+            avatarUrl: avatarUrl,
+            size: 44,
+          ),
+          // Type badge in bottom-right corner
+          Positioned(
+            right: -2,
+            bottom: -2,
+            child: Container(
+              width: 18,
+              height: 18,
+              decoration: BoxDecoration(
+                color: badgeColor,
+                shape: BoxShape.circle,
+                border: Border.all(color: AppTheme.scaffoldBg, width: 1.5),
+              ),
+              child: Icon(badgeIcon, size: 10, color: Colors.white),
+            ),
+          ),
+        ],
       ),
     );
   }
@@ -675,27 +726,10 @@ class _FollowRequestItem extends StatelessWidget {
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          CircleAvatar(
-            radius: 20,
-            child: avatarUrl != null && avatarUrl.isNotEmpty
-                ? ClipOval(
-                    child: SizedBox(
-                      width: 40,
-                      height: 40,
-                      child: SignedMediaImage(
-                        url: avatarUrl,
-                        width: 40,
-                        height: 40,
-                        fit: BoxFit.cover,
-                      ),
-                    ),
-                  )
-                : Text(
-                    displayName.isNotEmpty
-                        ? displayName.substring(0, 1).toUpperCase()
-                        : '?',
-                    style: AppTheme.textTheme.labelMedium,
-                  ),
+          SojornAvatar(
+            displayName: displayName,
+            avatarUrl: avatarUrl,
+            size: 40,
           ),
           const SizedBox(width: AppTheme.spacingMd),
           Expanded(

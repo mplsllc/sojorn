@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../theme/app_theme.dart';
 import '../../widgets/app_scaffold.dart';
 import '../../widgets/media/signed_media_image.dart';
+import '../../widgets/media/sojorn_avatar.dart';
 import '../../providers/api_provider.dart';
 import 'viewable_profile_screen.dart';
 
@@ -353,22 +354,10 @@ class _UserListTile extends StatelessWidget {
     return ListTile(
       onTap: onTap,
       contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
-      leading: CircleAvatar(
-        radius: 24,
-        backgroundColor: AppTheme.cardSurface,
-        child: user.avatarUrl != null
-            ? ClipOval(
-                child: SignedMediaImage(
-                  url: user.avatarUrl!,
-                  width: 48,
-                  height: 48,
-                  fit: BoxFit.cover,
-                ),
-              )
-            : Text(
-                (user.displayName ?? user.handle).substring(0, 1).toUpperCase(),
-                style: AppTheme.headlineSmall,
-              ),
+      leading: SojornAvatar(
+        displayName: user.displayName ?? user.handle,
+        avatarUrl: user.avatarUrl,
+        size: 48,
       ),
       title: Row(
         children: [

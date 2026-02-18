@@ -467,8 +467,10 @@ class _QuipsFeedScreenState extends ConsumerState<QuipsFeedScreen>
   }
 
   void _openReactionPicker(Quip quip) {
-    showDialog(
+    showModalBottomSheet(
       context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
       builder: (_) => ReactionPicker(
         onReactionSelected: (emoji) => _toggleReaction(quip, emoji),
         reactionCounts: _reactionCounts[quip.id] ?? quip.reactions,

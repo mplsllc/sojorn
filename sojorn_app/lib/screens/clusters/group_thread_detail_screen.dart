@@ -3,6 +3,7 @@ import 'package:cryptography/cryptography.dart';
 import '../../services/api_service.dart';
 import '../../theme/tokens.dart';
 import '../../theme/app_theme.dart';
+import '../../widgets/media/sojorn_avatar.dart';
 import '../../widgets/composer/composer_bar.dart';
 
 /// Thread detail screen with replies — works for both public and encrypted groups.
@@ -269,11 +270,10 @@ class _ReplyCard extends StatelessWidget {
                 children: [
                   Row(
                     children: [
-                      CircleAvatar(
-                        radius: 14,
-                        backgroundColor: AppTheme.brightNavy.withValues(alpha: 0.1),
-                        backgroundImage: avatarUrl.isNotEmpty ? NetworkImage(avatarUrl) : null,
-                        child: avatarUrl.isEmpty ? Icon(Icons.person, size: 14, color: AppTheme.brightNavy) : null,
+                      SojornAvatar(
+                        displayName: displayName.isNotEmpty ? displayName : handle,
+                        avatarUrl: avatarUrl.isNotEmpty ? avatarUrl : null,
+                        size: 28,
                       ),
                       const SizedBox(width: 8),
                       Text(displayName.isNotEmpty ? displayName : handle,

@@ -4,6 +4,7 @@ import '../theme/app_theme.dart';
 import '../theme/tokens.dart';
 import 'follow_button.dart';
 import '../screens/profile/viewable_profile_screen.dart';
+import 'media/sojorn_avatar.dart';
 
 /// Horizontal scrolling section showing suggested users to follow
 class SuggestedUsersSection extends StatefulWidget {
@@ -191,13 +192,10 @@ class __SuggestedUserCardState extends State<_SuggestedUserCard> {
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            CircleAvatar(
-              radius: 36,
-              backgroundColor: AppTheme.navyBlue.withValues(alpha: 0.1),
-              backgroundImage: avatarUrl != null ? NetworkImage(avatarUrl) : null,
-              child: avatarUrl == null
-                  ? Icon(Icons.person, size: 36, color: AppTheme.navyBlue.withValues(alpha: 0.3))
-                  : null,
+            SojornAvatar(
+              displayName: displayName,
+              avatarUrl: avatarUrl,
+              size: 72,
             ),
             const SizedBox(height: 12),
             Text(

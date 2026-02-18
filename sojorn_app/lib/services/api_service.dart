@@ -571,6 +571,7 @@ class ApiService {
     String? nsfwReason,
     String? visibility,
     String? overlayJson,
+    String? audioOverlayUrl,
   }) async {
     // Validate and sanitize inputs
     if (body.isEmpty) {
@@ -627,6 +628,7 @@ class ApiService {
         if (nsfwReason != null) 'nsfw_reason': nsfwReason,
         if (visibility != null) 'visibility': visibility,
         if (overlayJson != null) 'overlay_json': overlayJson,
+        if (audioOverlayUrl != null) 'audio_overlay_url': audioOverlayUrl,
       },
       requireSignature: true,
     );

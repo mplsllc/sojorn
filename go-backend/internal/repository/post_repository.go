@@ -59,7 +59,7 @@ func (r *PostRepository) CreatePost(ctx context.Context, post *models.Post) erro
 			is_beacon, beacon_type, location, confidence_score,
 			is_active_beacon, allow_chain, chain_parent_id, visibility, expires_at,
 			is_nsfw, nsfw_reason,
-			severity, incident_status, radius, overlay_json
+			severity, incident_status, radius, overlay_json, audio_overlay_url
 		) VALUES (
 			$1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13,
 			$14, $15,
@@ -68,7 +68,7 @@ func (r *PostRepository) CreatePost(ctx context.Context, post *models.Post) erro
 				 ELSE NULL END,
 			$18, $19, $20, $21, $22, $23,
 			$24, $25,
-			$26, $27, $28, $29
+			$26, $27, $28, $29, $30
 		) RETURNING id, created_at
 	`
 
@@ -84,7 +84,7 @@ func (r *PostRepository) CreatePost(ctx context.Context, post *models.Post) erro
 		post.IsBeacon, post.BeaconType, post.Lat, post.Long, post.Confidence,
 		post.IsActiveBeacon, post.AllowChain, post.ChainParentID, post.Visibility, post.ExpiresAt,
 		post.IsNSFW, post.NSFWReason,
-		post.Severity, post.IncidentStatus, post.Radius, post.OverlayJSON,
+		post.Severity, post.IncidentStatus, post.Radius, post.OverlayJSON, post.AudioOverlayURL,
 	).Scan(&post.ID, &post.CreatedAt)
 
 	if err != nil {

@@ -6,6 +6,7 @@ import '../../theme/tokens.dart';
 class ComposerToolbar extends StatelessWidget {
   final VoidCallback onAddMedia;
   final VoidCallback? onAddGif;
+  final VoidCallback? onAddMusic;
   final VoidCallback onToggleBold;
   final VoidCallback onToggleItalic;
   final VoidCallback onToggleChain;
@@ -26,6 +27,7 @@ class ComposerToolbar extends StatelessWidget {
     super.key,
     required this.onAddMedia,
     this.onAddGif,
+    this.onAddMusic,
     required this.onToggleBold,
     required this.onToggleItalic,
     required this.onToggleChain,
@@ -79,6 +81,13 @@ class ComposerToolbar extends StatelessWidget {
             icon: Icon(Icons.gif_outlined,
                 color: AppTheme.navyText.withValues(alpha: 0.75)),
             tooltip: 'Add GIF',
+          ),
+        if (onAddMusic != null)
+          IconButton(
+            onPressed: onAddMusic,
+            icon: Icon(Icons.music_note_outlined,
+                color: AppTheme.navyText.withValues(alpha: 0.75)),
+            tooltip: 'Add music',
           ),
         Row(
           mainAxisSize: MainAxisSize.min,

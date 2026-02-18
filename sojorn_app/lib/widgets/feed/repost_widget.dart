@@ -6,6 +6,7 @@ import 'package:sojorn/services/repost_service.dart';
 import 'package:sojorn/providers/api_provider.dart';
 import 'package:timeago/timeago.dart' as timeago;
 import '../../theme/app_theme.dart';
+import '../media/sojorn_avatar.dart';
 
 class RepostWidget extends ConsumerWidget {
   final Post originalPost;
@@ -163,14 +164,10 @@ class RepostWidget extends ConsumerWidget {
           // Original post author
           Row(
             children: [
-              CircleAvatar(
-                radius: 20,
-                backgroundImage: originalPost.author?.avatarUrl != null
-                    ? NetworkImage(originalPost.author!.avatarUrl!)
-                    : null,
-                child: originalPost.author?.avatarUrl == null
-                    ? const Icon(Icons.person, color: Colors.white)
-                    : null,
+              SojornAvatar(
+                displayName: originalPost.author?.displayName ?? originalPost.author?.handle ?? '',
+                avatarUrl: originalPost.author?.avatarUrl,
+                size: 40,
               ),
               const SizedBox(width: 12),
               Expanded(

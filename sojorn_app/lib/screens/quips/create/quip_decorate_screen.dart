@@ -1,6 +1,8 @@
 import 'dart:convert';
 import 'dart:io';
 
+import 'package:camera/camera.dart' show XFile;
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:video_player/video_player.dart';
@@ -37,12 +39,12 @@ const _kTextColors = [
 /// - Pre-recorded or newly-selected background audio
 /// - A "Post Quip" FAB that fires a background upload and returns to the feed
 class QuipDecorateScreen extends ConsumerStatefulWidget {
-  final File videoFile;
+  final XFile videoXFile;
   final AudioTrack? preloadedAudio;
 
   const QuipDecorateScreen({
     super.key,
-    required this.videoFile,
+    required this.videoXFile,
     this.preloadedAudio,
   });
 
@@ -82,7 +84,9 @@ class _QuipDecorateScreenState extends ConsumerState<QuipDecorateScreen> {
   }
 
   Future<void> _initVideo() async {
-    _controller = VideoPlayerController.file(widget.videoFile);
+    _controller = kIsWeb
+        ? VideoPlayerController.networkUrl(Uri.parse(widget.videoXFile.path))
+        : VideoPlayerController.file(File(widget.videoXFile.path));
     await _controller.initialize();
     _controller.setLooping(true);
     _controller.play();
@@ -285,7 +289,7 @@ class _QuipDecorateScreenState extends ConsumerState<QuipDecorateScreen> {
     final overlayJson = jsonEncode(payload);
 
     ref.read(quipUploadProvider.notifier).startUpload(
-      widget.videoFile,
+      widget.videoXFile,
       '',
       overlayJson: overlayJson,
     );

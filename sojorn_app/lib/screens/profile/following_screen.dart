@@ -4,6 +4,7 @@ import '../../theme/app_theme.dart';
 import '../../theme/tokens.dart';
 import '../../widgets/app_scaffold.dart';
 import '../../widgets/media/signed_media_image.dart';
+import '../../widgets/media/sojorn_avatar.dart';
 import 'viewable_profile_screen.dart';
 import 'package:timeago/timeago.dart' as timeago;
 
@@ -416,29 +417,10 @@ class _UserListItem extends StatelessWidget {
         child: Row(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            CircleAvatar(
-              radius: 24,
-              backgroundColor: tierColor,
-              child: user.avatarUrl != null
-                  ? ClipRRect(
-                      borderRadius: BorderRadius.circular(24),
-                      child: SignedMediaImage(
-                        url: user.avatarUrl!,
-                        width: 48,
-                        height: 48,
-                        fit: BoxFit.cover,
-                      ),
-                    )
-                  : Text(
-                      user.displayName.isNotEmpty
-                          ? user.displayName[0].toUpperCase()
-                          : '?',
-                      style: const TextStyle(
-                        color: SojornColors.basicWhite,
-                        fontWeight: FontWeight.bold,
-                        fontSize: 18,
-                      ),
-                    ),
+            SojornAvatar(
+              displayName: user.displayName,
+              avatarUrl: user.avatarUrl,
+              size: 48,
             ),
             const SizedBox(width: 12),
             Expanded(

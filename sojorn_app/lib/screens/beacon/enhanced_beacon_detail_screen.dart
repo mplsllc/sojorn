@@ -5,6 +5,7 @@ import 'package:url_launcher/url_launcher.dart';
 import 'package:share_plus/share_plus.dart';
 import '../../models/enhanced_beacon.dart';
 import '../../theme/app_theme.dart';
+import '../../widgets/media/sojorn_avatar.dart';
 
 class EnhancedBeaconDetailScreen extends StatefulWidget {
   final EnhancedBeacon beacon;
@@ -205,14 +206,10 @@ class _EnhancedBeaconDetailScreenState extends State<EnhancedBeaconDetailScreen>
                   // Author info
                   Row(
                     children: [
-                      CircleAvatar(
-                        radius: 20,
-                        backgroundImage: widget.beacon.authorAvatar != null
-                            ? NetworkImage(widget.beacon.authorAvatar!)
-                            : null,
-                        child: widget.beacon.authorAvatar == null
-                            ? const Icon(Icons.person, color: Colors.white)
-                            : null,
+                      SojornAvatar(
+                        displayName: widget.beacon.authorHandle,
+                        avatarUrl: widget.beacon.authorAvatar,
+                        size: 40,
                       ),
                       const SizedBox(width: 12),
                       Expanded(

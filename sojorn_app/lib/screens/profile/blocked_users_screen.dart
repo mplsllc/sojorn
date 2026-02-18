@@ -9,6 +9,7 @@ import '../../models/profile.dart';
 import '../../providers/api_provider.dart';
 import '../../theme/app_theme.dart';
 import '../../widgets/app_scaffold.dart';
+import '../../widgets/media/sojorn_avatar.dart';
 
 class BlockedUsersScreen extends ConsumerStatefulWidget {
   const BlockedUsersScreen({super.key});
@@ -192,14 +193,10 @@ class _BlockedUsersScreenState extends ConsumerState<BlockedUsersScreen> {
                       itemBuilder: (context, index) {
                         final user = _blockedUsers[index];
                         return ListTile(
-                          leading: CircleAvatar(
-                            backgroundColor: AppTheme.queenPink,
-                            backgroundImage: user.avatarUrl != null
-                                ? NetworkImage(user.avatarUrl!)
-                                : null,
-                            child: user.avatarUrl == null
-                                ? Text(user.displayName?[0].toUpperCase() ?? '?')
-                                : null,
+                          leading: SojornAvatar(
+                            displayName: user.displayName ?? user.handle ?? '',
+                            avatarUrl: user.avatarUrl,
+                            size: 40,
                           ),
                           title: Text(user.displayName ?? user.handle ?? 'User'),
                           subtitle: Text('@${user.handle}'),

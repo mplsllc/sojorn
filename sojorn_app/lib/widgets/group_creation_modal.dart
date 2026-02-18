@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../models/group.dart';
 import '../providers/api_provider.dart';
 import '../theme/app_theme.dart';
+import 'media/sojorn_avatar.dart';
 import '../utils/error_handler.dart';
 
 /// Multi-step modal for creating a new group
@@ -223,13 +224,10 @@ class _GroupCreationModalState extends ConsumerState<GroupCreationModal> {
           child: Column(
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
-              CircleAvatar(
-                radius: 32,
-                backgroundColor: AppTheme.navyBlue.withValues(alpha: 0.1),
-                backgroundImage: _avatarUrl != null ? NetworkImage(_avatarUrl!) : null,
-                child: _avatarUrl == null
-                    ? Icon(Icons.group, size: 32, color: AppTheme.navyBlue.withValues(alpha: 0.3))
-                    : null,
+              SojornAvatar(
+                displayName: _nameController.text.trim(),
+                avatarUrl: _avatarUrl,
+                size: 64,
               ),
               const SizedBox(height: 8),
               TextButton(

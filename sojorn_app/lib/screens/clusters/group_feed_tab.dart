@@ -5,6 +5,7 @@ import '../../services/api_service.dart';
 import '../../services/capsule_security_service.dart';
 import '../../theme/tokens.dart';
 import '../../theme/app_theme.dart';
+import '../../widgets/media/sojorn_avatar.dart';
 import '../../widgets/composer/composer_bar.dart';
 
 class GroupFeedTab extends StatefulWidget {
@@ -259,11 +260,10 @@ class _PostCard extends StatelessWidget {
           // Author row
           Row(
             children: [
-              CircleAvatar(
-                radius: 16,
-                backgroundColor: AppTheme.brightNavy.withValues(alpha: 0.1),
-                backgroundImage: avatarUrl.isNotEmpty ? NetworkImage(avatarUrl) : null,
-                child: avatarUrl.isEmpty ? Icon(Icons.person, size: 16, color: AppTheme.brightNavy) : null,
+              SojornAvatar(
+                displayName: displayName,
+                avatarUrl: avatarUrl.isNotEmpty ? avatarUrl : null,
+                size: 32,
               ),
               const SizedBox(width: 10),
               Expanded(

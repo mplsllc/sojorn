@@ -24,10 +24,13 @@ class AppNotification {
   final Profile? actor; // User who performed the action
   final String? postId;
   final String? postBody;
+  final String? postImageUrl; // Thumbnail for the related post
   final Map<String, dynamic>? metadata;
   final DateTime createdAt;
   final bool isRead;
   final DateTime? archivedAt;
+  /// How many additional people performed the same action (for aggregation).
+  final int otherCount;
 
   const AppNotification({
     required this.id,
@@ -35,10 +38,12 @@ class AppNotification {
     this.actor,
     this.postId,
     this.postBody,
+    this.postImageUrl,
     this.metadata,
     required this.createdAt,
     this.isRead = false,
     this.archivedAt,
+    this.otherCount = 0,
   });
 
   factory AppNotification.fromJson(Map<String, dynamic> json) {
@@ -48,10 +53,13 @@ class AppNotification {
       metadata = Map<String, dynamic>.from(metadataValue);
     }
 
-    // Extract post body from nested post object or direct field
+    // Extract post body and image from nested post object or direct fields
     String? postBody = json['post_body'] as String?;
-    if (postBody == null && json['post'] is Map) {
-      postBody = (json['post'] as Map)['body'] as String?;
+    String? postImageUrl = json['post_image_url'] as String?;
+    if (json['post'] is Map) {
+      final postMap = json['post'] as Map;
+      postBody ??= postMap['body'] as String?;
+      postImageUrl ??= postMap['image_url'] as String?;
     }
 
     return AppNotification(
@@ -65,12 +73,14 @@ class AppNotification {
         : null,
       postId: json['post_id'] as String?,
       postBody: postBody,
+      postImageUrl: postImageUrl,
       metadata: metadata,
       createdAt: DateTime.parse(json['created_at'] as String),
       isRead: json['is_read'] as bool? ?? false,
       archivedAt: json['archived_at'] != null
           ? DateTime.parse(json['archived_at'] as String)
           : null,
+      otherCount: json['other_count'] as int? ?? 0,
     );
   }
 
@@ -81,10 +91,12 @@ class AppNotification {
       'actor': actor?.toJson(),
       'post_id': postId,
       'post_body': postBody,
+      'post_image_url': postImageUrl,
       'metadata': metadata,
       'created_at': createdAt.toIso8601String(),
       'is_read': isRead,
       'archived_at': archivedAt?.toIso8601String(),
+      'other_count': otherCount,
     };
   }
 
@@ -94,10 +106,12 @@ class AppNotification {
     Profile? actor,
     String? postId,
     String? postBody,
+    String? postImageUrl,
     Map<String, dynamic>? metadata,
     DateTime? createdAt,
     bool? isRead,
     DateTime? archivedAt,
+    int? otherCount,
   }) {
     return AppNotification(
       id: id ?? this.id,
@@ -105,10 +119,12 @@ class AppNotification {
       actor: actor ?? this.actor,
       postId: postId ?? this.postId,
       postBody: postBody ?? this.postBody,
+      postImageUrl: postImageUrl ?? this.postImageUrl,
       metadata: metadata ?? this.metadata,
       createdAt: createdAt ?? this.createdAt,
       isRead: isRead ?? this.isRead,
       archivedAt: archivedAt ?? this.archivedAt,
+      otherCount: otherCount ?? this.otherCount,
     );
   }
 
@@ -119,11 +135,12 @@ class AppNotification {
 
   String get message {
     final actorName = actor?.displayName ?? 'Someone';
+    final others = otherCount > 0 ? ' and $otherCount other${otherCount == 1 ? '' : 's'}' : '';
     switch (type) {
       case NotificationType.like:
-        return '$actorName liked your post';
+        return '$actorName$others liked your post';
       case NotificationType.reply:
-        return '$actorName replied to your post';
+        return '$actorName$others replied to your post';
       case NotificationType.follow:
         return '$actorName started following you';
       case NotificationType.follow_request:
@@ -131,21 +148,21 @@ class AppNotification {
       case NotificationType.follow_accepted:
         return '$actorName accepted your follow request';
       case NotificationType.comment:
-        return '$actorName commented on your post';
+        return '$actorName$others commented on your post';
       case NotificationType.mention:
         return '$actorName mentioned you';
       case NotificationType.message:
         return '$actorName sent you a message';
       case NotificationType.save:
-        return '$actorName saved your post';
+        return '$actorName$others saved your post';
       case NotificationType.beacon_vouch:
-        return '$actorName vouched for your beacon';
+        return '$actorName$others vouched for your beacon';
       case NotificationType.beacon_report:
         return '$actorName reported your beacon';
       case NotificationType.share:
-        return '$actorName shared your post';
+        return '$actorName$others shared your post';
       case NotificationType.quip_reaction:
-        return '$actorName reacted to your quip';
+        return '$actorName$others reacted to your quip';
     }
   }
 }

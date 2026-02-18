@@ -239,7 +239,7 @@ class _NeighborhoodPickerSheetState extends State<NeighborhoodPickerSheet> {
                   const SizedBox(height: 6),
                   Text(
                     widget.isChangeMode
-                        ? 'You can change your neighborhood once per month.'
+                        ? 'You can change your neighborhood once every 30 days.'
                         : 'We\'ll show you local news, neighbors, and community boards.',
                     style: AppTheme.textTheme.bodySmall?.copyWith(
                       color: AppTheme.navyText.withValues(alpha: 0.6),

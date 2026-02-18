@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../models/group.dart';
 import '../providers/api_provider.dart';
 import '../theme/app_theme.dart';
+import 'media/sojorn_avatar.dart';
 import '../theme/tokens.dart';
 import '../utils/error_handler.dart';
 import 'follow_button.dart';
@@ -186,15 +187,10 @@ class _GroupCardState extends ConsumerState<GroupCard> {
             // Header with avatar and privacy indicator
             Row(
               children: [
-                CircleAvatar(
-                  radius: 24,
-                  backgroundColor: AppTheme.navyBlue.withValues(alpha: 0.1),
-                  backgroundImage: widget.group.avatarUrl != null
-                      ? NetworkImage(widget.group.avatarUrl!)
-                      : null,
-                  child: widget.group.avatarUrl == null
-                      ? Icon(Icons.group, size: 24, color: AppTheme.navyBlue.withValues(alpha: 0.3))
-                      : null,
+                SojornAvatar(
+                  displayName: widget.group.name,
+                  avatarUrl: widget.group.avatarUrl,
+                  size: 48,
                 ),
                 const SizedBox(width: 12),
                 Expanded(
@@ -359,15 +355,10 @@ class CompactGroupCard extends StatelessWidget {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.center,
           children: [
-            CircleAvatar(
-              radius: 28,
-              backgroundColor: AppTheme.navyBlue.withValues(alpha: 0.1),
-              backgroundImage: group.avatarUrl != null
-                  ? NetworkImage(group.avatarUrl!)
-                  : null,
-              child: group.avatarUrl == null
-                  ? Icon(Icons.group, size: 28, color: AppTheme.navyBlue.withValues(alpha: 0.3))
-                  : null,
+            SojornAvatar(
+              displayName: group.name,
+              avatarUrl: group.avatarUrl,
+              size: 56,
             ),
             const SizedBox(height: 8),
             Text(

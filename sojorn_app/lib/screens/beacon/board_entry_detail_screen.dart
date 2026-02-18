@@ -5,6 +5,7 @@ import '../../models/board_entry.dart';
 import '../../services/api_service.dart';
 import '../../theme/tokens.dart';
 import '../../theme/app_theme.dart';
+import '../../widgets/media/sojorn_avatar.dart';
 import '../../widgets/composer/composer_bar.dart';
 
 class BoardEntryDetailScreen extends ConsumerStatefulWidget {
@@ -253,13 +254,10 @@ class _BoardEntryDetailScreenState extends ConsumerState<BoardEntryDetailScreen>
           // Author
           Row(
             children: [
-              CircleAvatar(
-                radius: 14,
-                backgroundColor: AppTheme.brightNavy.withValues(alpha: 0.1),
-                backgroundImage: _entry.authorAvatarUrl.isNotEmpty ? NetworkImage(_entry.authorAvatarUrl) : null,
-                child: _entry.authorAvatarUrl.isEmpty
-                    ? Icon(Icons.person, size: 14, color: AppTheme.brightNavy)
-                    : null,
+              SojornAvatar(
+                displayName: _entry.authorDisplayName.isNotEmpty ? _entry.authorDisplayName : _entry.authorHandle,
+                avatarUrl: _entry.authorAvatarUrl.isNotEmpty ? _entry.authorAvatarUrl : null,
+                size: 28,
               ),
               const SizedBox(width: 8),
               Text(
@@ -344,13 +342,10 @@ class _BoardEntryDetailScreenState extends ConsumerState<BoardEntryDetailScreen>
             // Author + time
             Row(
               children: [
-                CircleAvatar(
-                  radius: 11,
-                  backgroundColor: AppTheme.brightNavy.withValues(alpha: 0.1),
-                  backgroundImage: reply.authorAvatarUrl.isNotEmpty ? NetworkImage(reply.authorAvatarUrl) : null,
-                  child: reply.authorAvatarUrl.isEmpty
-                      ? Icon(Icons.person, size: 11, color: AppTheme.brightNavy)
-                      : null,
+                SojornAvatar(
+                  displayName: reply.authorDisplayName.isNotEmpty ? reply.authorDisplayName : reply.authorHandle,
+                  avatarUrl: reply.authorAvatarUrl.isNotEmpty ? reply.authorAvatarUrl : null,
+                  size: 22,
                 ),
                 const SizedBox(width: 6),
                 Expanded(

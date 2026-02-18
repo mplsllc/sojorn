@@ -514,8 +514,9 @@ func (h *PostHandler) CreatePost(c *gin.Context) {
 		TTLHours      *int     `json:"ttl_hours"`
 		IsNSFW        bool     `json:"is_nsfw"`
 		NSFWReason    string   `json:"nsfw_reason"`
-		Visibility    string   `json:"visibility"`
-		OverlayJSON   *string  `json:"overlay_json"`
+		Visibility      string   `json:"visibility"`
+		OverlayJSON     *string  `json:"overlay_json"`
+		AudioOverlayURL *string  `json:"audio_overlay_url"`
 	}
 
 	if err := c.ShouldBindJSON(&req); err != nil {
@@ -607,17 +608,20 @@ func (h *PostHandler) CreatePost(c *gin.Context) {
 		IsActiveBeacon: req.IsBeacon,
 		AllowChain:     allowChain,
 		Visibility: func() string {
-			if req.Visibility == "neighborhood" {
-				return "neighborhood"
+			switch req.Visibility {
+			case "neighborhood", "followers", "only_me":
+				return req.Visibility
+			default:
+				return "public"
 			}
-			return "public"
 		}(),
-		ExpiresAt:   expiresAt,
-		IsNSFW:      req.IsNSFW,
-		NSFWReason:  req.NSFWReason,
-		Lat:         req.BeaconLat,
-		Long:        req.BeaconLong,
-		OverlayJSON: req.OverlayJSON,
+		ExpiresAt:       expiresAt,
+		IsNSFW:          req.IsNSFW,
+		NSFWReason:      req.NSFWReason,
+		Lat:             req.BeaconLat,
+		Long:            req.BeaconLong,
+		OverlayJSON:     req.OverlayJSON,
+		AudioOverlayURL: req.AudioOverlayURL,
 	}
 
 	if req.CategoryID != nil {

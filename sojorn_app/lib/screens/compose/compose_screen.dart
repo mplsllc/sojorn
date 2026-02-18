@@ -22,8 +22,9 @@ import '../../widgets/gif/gif_picker.dart';
 import '../../services/content_filter.dart';
 import '../../widgets/sojorn_snackbar.dart';
 import 'image_editor_screen.dart';
-import '../quips/create/quip_studio_screen.dart'; // Added import
-import '../quips/create/quip_editor_screen.dart'; // Added import
+import '../quips/create/quip_studio_screen.dart';
+import '../quips/create/quip_editor_screen.dart';
+import '../audio/audio_library_screen.dart';
 
 class ComposeScreen extends ConsumerStatefulWidget {
   final Post? chainParentPost;
@@ -64,8 +65,10 @@ class _ComposeScreenState extends ConsumerState<ComposeScreen> {
   String? _selectedImageName;
   ImageFilter? _selectedFilter;
   String? _selectedGifUrl;
+  AudioTrack? _selectedAudioTrack;
+  String _visibility = 'public';
   final ImagePicker _imagePicker = ImagePicker();
-  static const double _editorFontSize = 18;
+  static const double _editorFontSize = 22;
   List<String> _tagSuggestions = [];
   Timer? _hashtagDebounce;
   static const Map<int?, String> _ttlOptions = {
@@ -282,6 +285,66 @@ class _ComposeScreenState extends ConsumerState<ComposeScreen> {
     });
   }
 
+  static const _visibilityOptions = [
+    ('public', Icons.public, 'Public', 'Visible to everyone'),
+    ('followers', Icons.people_outline, 'Followers', 'Only your followers'),
+    ('neighborhood', Icons.location_city_outlined, 'Neighborhood', 'Your home neighborhood'),
+    ('only_me', Icons.lock_outline, 'Only Me', 'Private, just for you'),
+  ];
+
+  Future<void> _openVisibilitySelector() async {
+    await showModalBottomSheet(
+      context: context,
+      backgroundColor: AppTheme.cardSurface,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      builder: (ctx) => SafeArea(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Padding(
+              padding: const EdgeInsets.fromLTRB(20, 16, 20, 8),
+              child: Text('Who can see this?',
+                  style: AppTheme.textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w700)),
+            ),
+            ..._visibilityOptions.map((opt) {
+              final (value, icon, label, description) = opt;
+              final isSelected = _visibility == value;
+              return ListTile(
+                leading: Icon(icon,
+                    color: isSelected ? AppTheme.brightNavy : AppTheme.navyText.withValues(alpha: 0.6)),
+                title: Text(label,
+                    style: TextStyle(
+                        fontWeight: isSelected ? FontWeight.w600 : FontWeight.w400,
+                        color: isSelected ? AppTheme.brightNavy : AppTheme.navyText)),
+                subtitle: Text(description,
+                    style: TextStyle(fontSize: 12, color: AppTheme.textSecondary)),
+                trailing: isSelected
+                    ? Icon(Icons.check_circle, color: AppTheme.brightNavy, size: 20)
+                    : null,
+                onTap: () {
+                  setState(() => _visibility = value);
+                  Navigator.pop(ctx);
+                },
+              );
+            }),
+            const SizedBox(height: 8),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Future<void> _openMusicPicker() async {
+    final track = await Navigator.of(context, rootNavigator: true).push<AudioTrack>(
+      MaterialPageRoute(builder: (_) => const AudioLibraryScreen()),
+    );
+    if (track != null && mounted) {
+      setState(() => _selectedAudioTrack = track);
+    }
+  }
+
   void _openGifPicker() {
     showGifPicker(context, onSelected: (url) {
       setState(() {
@@ -457,6 +520,8 @@ class _ComposeScreenState extends ConsumerState<ComposeScreen> {
         imageUrl: imageUrl,
         ttlHours: _ttlHoursOverride,
         isNsfw: _isNsfw,
+        visibility: _visibility,
+        audioOverlayUrl: _selectedAudioTrack?.path,
       );
 
       if (mounted && !_popped) {
@@ -599,6 +664,7 @@ class _ComposeScreenState extends ConsumerState<ComposeScreen> {
       body: SafeArea(
         child: Column(
           children: [
+            _buildVisibilityRow(),
             _buildBlockedBanner(),
             if (_errorMessage != null)
               Container(
@@ -688,6 +754,7 @@ class _ComposeScreenState extends ConsumerState<ComposeScreen> {
             child: ComposeBottomBar(
               onAddMedia: _pickMedia,
               onAddGif: _openGifPicker,
+              onAddMusic: _openMusicPicker,
               onToggleBold: _toggleBold,
               onToggleItalic: _toggleItalic,
               onToggleChain: _toggleChain,
@@ -703,9 +770,52 @@ class _ComposeScreenState extends ConsumerState<ComposeScreen> {
               maxCharacters: _maxCharacters,
               isUploadingImage: _isUploadingImage,
               remainingChars: remaining,
+              selectedAudioTitle: _selectedAudioTrack?.title,
+              onClearAudio: _selectedAudioTrack != null
+                  ? () => setState(() => _selectedAudioTrack = null)
+                  : null,
             ),
           );
         },
+      ),
+    );
+  }
+
+  Widget _buildVisibilityRow() {
+    final opt = _visibilityOptions.firstWhere((o) => o.$1 == _visibility,
+        orElse: () => _visibilityOptions.first);
+    return Container(
+      color: AppTheme.scaffoldBg,
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
+      child: Row(
+        children: [
+          GestureDetector(
+            onTap: widget.chainParentPost == null ? _openVisibilitySelector : null,
+            child: Container(
+              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+              decoration: BoxDecoration(
+                border: Border.all(color: AppTheme.brightNavy.withValues(alpha: 0.35)),
+                borderRadius: BorderRadius.circular(20),
+              ),
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Icon(opt.$2, size: 14, color: AppTheme.brightNavy),
+                  const SizedBox(width: 5),
+                  Text(opt.$3,
+                      style: TextStyle(
+                          fontSize: 12,
+                          fontWeight: FontWeight.w600,
+                          color: AppTheme.brightNavy)),
+                  if (widget.chainParentPost == null) ...[
+                    const SizedBox(width: 3),
+                    Icon(Icons.arrow_drop_down, size: 16, color: AppTheme.brightNavy),
+                  ],
+                ],
+              ),
+            ),
+          ),
+        ],
       ),
     );
   }
@@ -1052,6 +1162,7 @@ class ComposeBody extends StatelessWidget {
 class ComposeBottomBar extends StatelessWidget {
   final VoidCallback onAddMedia;
   final VoidCallback? onAddGif;
+  final VoidCallback? onAddMusic;
   final VoidCallback onToggleBold;
   final VoidCallback onToggleItalic;
   final VoidCallback onToggleChain;
@@ -1067,11 +1178,14 @@ class ComposeBottomBar extends StatelessWidget {
   final int maxCharacters;
   final bool isUploadingImage;
   final int remainingChars;
+  final String? selectedAudioTitle;
+  final VoidCallback? onClearAudio;
 
   const ComposeBottomBar({
     super.key,
     required this.onAddMedia,
     this.onAddGif,
+    this.onAddMusic,
     required this.onToggleBold,
     required this.onToggleItalic,
     required this.onToggleChain,
@@ -1087,6 +1201,8 @@ class ComposeBottomBar extends StatelessWidget {
     required this.maxCharacters,
     required this.isUploadingImage,
     required this.remainingChars,
+    this.selectedAudioTitle,
+    this.onClearAudio,
   });
 
   @override
@@ -1100,30 +1216,63 @@ class ComposeBottomBar extends StatelessWidget {
           ),
         ),
       ),
-      padding: const EdgeInsets.symmetric(
-        horizontal: AppTheme.spacingMd,
-        vertical: AppTheme.spacingSm,
-      ),
       child: SafeArea(
         top: false,
-        child: ComposerToolbar(
-          onAddMedia: onAddMedia,
-          onAddGif: onAddGif,
-          onToggleBold: onToggleBold,
-          onToggleItalic: onToggleItalic,
-          onToggleChain: onToggleChain,
-          onToggleNsfw: onToggleNsfw,
-          onSelectTtl: onSelectTtl,
-          ttlOverrideActive: ttlOverrideActive,
-          ttlLabel: ttlLabel,
-          isBold: isBold,
-          isItalic: isItalic,
-          allowChain: allowChain,
-          isNsfw: isNsfw,
-          characterCount: characterCount,
-          maxCharacters: maxCharacters,
-          isUploadingImage: isUploadingImage,
-          remainingChars: remainingChars,
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            if (selectedAudioTitle != null)
+              Padding(
+                padding: const EdgeInsets.fromLTRB(12, 8, 12, 0),
+                child: Row(
+                  children: [
+                    const Icon(Icons.music_note, size: 14, color: Colors.purple),
+                    const SizedBox(width: 6),
+                    Expanded(
+                      child: Text(
+                        selectedAudioTitle!,
+                        style: const TextStyle(
+                          fontSize: 12,
+                          color: Colors.purple,
+                          fontWeight: FontWeight.w500,
+                        ),
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                    ),
+                    GestureDetector(
+                      onTap: onClearAudio,
+                      child: const Icon(Icons.close, size: 16, color: Colors.purple),
+                    ),
+                  ],
+                ),
+              ),
+            Padding(
+              padding: const EdgeInsets.symmetric(
+                horizontal: AppTheme.spacingMd,
+                vertical: AppTheme.spacingSm,
+              ),
+              child: ComposerToolbar(
+                onAddMedia: onAddMedia,
+                onAddGif: onAddGif,
+                onAddMusic: onAddMusic,
+                onToggleBold: onToggleBold,
+                onToggleItalic: onToggleItalic,
+                onToggleChain: onToggleChain,
+                onToggleNsfw: onToggleNsfw,
+                onSelectTtl: onSelectTtl,
+                ttlOverrideActive: ttlOverrideActive,
+                ttlLabel: ttlLabel,
+                isBold: isBold,
+                isItalic: isItalic,
+                allowChain: allowChain,
+                isNsfw: isNsfw,
+                characterCount: characterCount,
+                maxCharacters: maxCharacters,
+                isUploadingImage: isUploadingImage,
+                remainingChars: remainingChars,
+              ),
+            ),
+          ],
         ),
       ),
     );

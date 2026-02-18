@@ -1,4 +1,6 @@
 import 'dart:io';
+import 'package:camera/camera.dart' show XFile;
+import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../services/media/ffmpeg.dart';
 import 'package:path_provider/path_provider.dart';
@@ -43,7 +45,7 @@ class QuipUploadNotifier extends Notifier<QuipUploadState> {
   }
 
   Future<void> startUpload(
-    File videoFile,
+    XFile videoXFile,
     String caption, {
     double? thumbnailTimestampMs,
     String? overlayJson,
@@ -59,61 +61,53 @@ class QuipUploadNotifier extends Notifier<QuipUploadState> {
       }
 
       final timestamp = DateTime.now().millisecondsSinceEpoch.toString();
-
-      // Generate thumbnail using FFmpeg
-      final tempDir = await getTemporaryDirectory();
-      final thumbnailPath = '${tempDir.path}/${timestamp}_thumb.jpg';
-
-      final ss = thumbnailTimestampMs != null 
-        ? (thumbnailTimestampMs / 1000.0).toStringAsFixed(3)
-        : '00:00:01';
-
-      final session = await FFmpegKit.execute(
-        '-y -ss $ss -i "${videoFile.path}" -vframes 1 -q:v 2 "$thumbnailPath"'
-      );
-      
-      final returnCode = await session.getReturnCode();
-      if (!ReturnCode.isSuccess(returnCode)) {
-        throw Exception('Failed to generate thumbnail via FFmpeg');
-      }
-
-      final thumbnail = File(thumbnailPath);
-      if (!await thumbnail.exists()) {
-        throw Exception('Thumbnail file mismatch');
-      }
-
-      state = state.copyWith(progress: 0.1);
-
       final uploadService = ImageUploadService();
-      
-      // Upload video to Go Backend / R2
-      final videoUrl = await uploadService.uploadVideo(
-        videoFile,
-        onProgress: (p) => state = state.copyWith(progress: 0.1 + (p * 0.4)),
-      );
-
-      state = state.copyWith(progress: 0.5);
-
-
-      // Upload thumbnail to Go Backend / R2
       String? thumbnailUrl;
-      try {
-        thumbnailUrl = await uploadService.uploadImage(
-          thumbnail,
-          onProgress: (p) => state = state.copyWith(progress: 0.5 + (p * 0.3)),
-        );
-      } catch (e) {
-        // Continue without thumbnail - video is more important
+
+      // Generate thumbnail using FFmpeg — mobile only (ffmpeg_kit is not available on web)
+      if (!kIsWeb) {
+        try {
+          final tempDir = await getTemporaryDirectory();
+          final thumbnailPath = '${tempDir.path}/${timestamp}_thumb.jpg';
+          final ss = thumbnailTimestampMs != null
+              ? (thumbnailTimestampMs / 1000.0).toStringAsFixed(3)
+              : '00:00:01';
+
+          final session = await FFmpegKit.execute(
+              '-y -ss $ss -i "${videoXFile.path}" -vframes 1 -q:v 2 "$thumbnailPath"');
+          final returnCode = await session.getReturnCode();
+
+          if (ReturnCode.isSuccess(returnCode)) {
+            final thumbnail = File(thumbnailPath);
+            if (thumbnail.existsSync()) {
+              thumbnailUrl = await uploadService.uploadImage(
+                thumbnail,
+                onProgress: (p) =>
+                    state = state.copyWith(progress: 0.1 + (p * 0.3)),
+              );
+            }
+          }
+        } catch (_) {
+          // Thumbnail is optional — continue without it
+        }
       }
 
-      state = state.copyWith(progress: 0.8);
+      state = state.copyWith(progress: 0.4);
+
+      // Upload video (uses XFile — works on both mobile and web)
+      final videoUrl = await uploadService.uploadVideoXFile(
+        videoXFile,
+        onProgress: (p) => state = state.copyWith(progress: 0.4 + (p * 0.5)),
+      );
+
+      state = state.copyWith(progress: 0.9);
 
       // Publish post via Go API
       await ApiService.instance.publishPost(
         body: caption.isNotEmpty ? caption : ' ',
         videoUrl: videoUrl,
         thumbnailUrl: thumbnailUrl,
-        categoryId: null, // Default
+        categoryId: null,
         overlayJson: overlayJson,
       );
 

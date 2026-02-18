@@ -1,8 +1,10 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/foundation.dart';
 import 'dart:async';
 import 'package:firebase_messaging/firebase_messaging.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:go_router/go_router.dart';
+import 'package:geolocator/geolocator.dart';
 import '../../services/notification_service.dart';
 import '../../services/secure_chat_service.dart';
 import '../../theme/app_theme.dart';
@@ -101,11 +103,93 @@ class _HomeShellState extends ConsumerState<HomeShell> with WidgetsBindingObserv
         // Small delay so the onboarding modal (if shown) has time to appear first
         await Future.delayed(const Duration(milliseconds: 800));
         if (mounted) {
-          await NeighborhoodPickerSheet.show(context);
+          await _autoAssignNeighborhood();
         }
       }
     } catch (_) {
       // Non-critical — silently ignore if network unavailable
+    }
+  }
+
+  /// Auto-assigns the nearest neighborhood based on GPS. Falls back to the
+  /// picker sheet if GPS is unavailable or no neighborhood is found nearby.
+  Future<void> _autoAssignNeighborhood() async {
+    if (kIsWeb) {
+      // Web can't GPS reliably — show the picker
+      if (mounted) await NeighborhoodPickerSheet.show(context);
+      return;
+    }
+
+    try {
+      // Request / check location permission
+      LocationPermission permission = await Geolocator.checkPermission();
+      if (permission == LocationPermission.denied) {
+        permission = await Geolocator.requestPermission();
+      }
+      if (permission == LocationPermission.denied ||
+          permission == LocationPermission.deniedForever) {
+        // No permission — fall back to manual picker
+        if (mounted) await NeighborhoodPickerSheet.show(context);
+        return;
+      }
+
+      final position = await Geolocator.getCurrentPosition(
+        desiredAccuracy: LocationAccuracy.low,
+        timeLimit: const Duration(seconds: 10),
+      );
+
+      final detected = await ApiService.instance.detectNeighborhood(
+        lat: position.latitude,
+        long: position.longitude,
+      );
+
+      final hood = detected?['neighborhood'] as Map<String, dynamic>?;
+      final id = hood?['id']?.toString();
+
+      if (hood == null || id == null || id.isEmpty) {
+        // No nearby neighborhood found — show picker so user can search by ZIP
+        if (mounted) await NeighborhoodPickerSheet.show(context);
+        return;
+      }
+
+      // Silently assign the detected neighborhood
+      await ApiService.instance.chooseNeighborhood(id);
+
+      final name = hood['name'] as String? ?? 'your neighborhood';
+      final city = hood['city'] as String? ?? '';
+      final label = city.isNotEmpty ? '$name, $city' : name;
+
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Row(
+              children: [
+                const Icon(Icons.location_city_rounded, color: Colors.white, size: 18),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: Text(
+                    'Welcome to $label!',
+                    style: const TextStyle(fontWeight: FontWeight.w600),
+                  ),
+                ),
+              ],
+            ),
+            backgroundColor: AppTheme.brightNavy,
+            behavior: SnackBarBehavior.floating,
+            duration: const Duration(seconds: 5),
+            action: SnackBarAction(
+              label: 'Change',
+              textColor: Colors.white.withValues(alpha: 0.8),
+              onPressed: () {
+                if (mounted) NeighborhoodPickerSheet.show(context, isChangeMode: true);
+              },
+            ),
+          ),
+        );
+      }
+    } catch (_) {
+      // Any error — fall back to picker so user is never left without a neighborhood
+      if (mounted) await NeighborhoodPickerSheet.show(context);
     }
   }
 

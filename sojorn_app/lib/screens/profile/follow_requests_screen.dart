@@ -5,6 +5,7 @@ import '../../providers/api_provider.dart';
 import '../../theme/app_theme.dart';
 import '../../widgets/app_scaffold.dart';
 import '../../widgets/media/signed_media_image.dart';
+import '../../widgets/media/sojorn_avatar.dart';
 
 class FollowRequestsScreen extends ConsumerStatefulWidget {
   const FollowRequestsScreen({super.key});
@@ -130,30 +131,10 @@ class _FollowRequestsScreenState extends ConsumerState<FollowRequestsScreen> {
       ),
       child: Row(
         children: [
-          CircleAvatar(
-            radius: 24,
-            backgroundColor: AppTheme.queenPink,
-            child: request.avatarUrl != null
-                ? ClipOval(
-                    child: SizedBox(
-                      width: 48,
-                      height: 48,
-                      child: SignedMediaImage(
-                        url: request.avatarUrl!,
-                        width: 48,
-                        height: 48,
-                        fit: BoxFit.cover,
-                      ),
-                    ),
-                  )
-                : Text(
-                    request.displayName.isNotEmpty
-                        ? request.displayName[0].toUpperCase()
-                        : '?',
-                    style: AppTheme.textTheme.labelLarge?.copyWith(
-                      color: AppTheme.royalPurple,
-                    ),
-                  ),
+          SojornAvatar(
+            displayName: request.displayName,
+            avatarUrl: request.avatarUrl,
+            size: 48,
           ),
           const SizedBox(width: AppTheme.spacingMd),
           Expanded(

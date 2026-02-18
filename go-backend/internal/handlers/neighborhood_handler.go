@@ -476,10 +476,10 @@ func (h *NeighborhoodHandler) Choose(c *gin.Context) {
 	}
 
 	if changedAt != nil {
-		nextAllowed := changedAt.AddDate(0, 1, 0) // 1 month
+		nextAllowed := changedAt.Add(30 * 24 * time.Hour) // exactly 30 days
 		if time.Now().Before(nextAllowed) {
 			c.JSON(http.StatusTooManyRequests, gin.H{
-				"error":           "You can only change your neighborhood once per month",
+				"error":           "You can only change your neighborhood once every 30 days",
 				"changed_at":      changedAt.Format(time.RFC3339),
 				"next_allowed_at": nextAllowed.Format(time.RFC3339),
 			})
@@ -635,6 +635,10 @@ func (h *NeighborhoodHandler) GetMyNeighborhood(c *gin.Context) {
 			log.Printf("[Neighborhood] GetMyNeighborhood lazy group creation error: %v", createErr)
 		} else {
 			groupID = &newGroupID
+			// Auto-join the requesting user so they can immediately chat
+			if _, joinErr := h.autoJoin(ctx, newGroupID, userID); joinErr != nil {
+				log.Printf("[Neighborhood] GetMyNeighborhood auto-join error: %v", joinErr)
+			}
 		}
 	}
 
@@ -649,7 +653,7 @@ func (h *NeighborhoodHandler) GetMyNeighborhood(c *gin.Context) {
 
 	if changedAt != nil {
 		result["changed_at"] = changedAt.Format(time.RFC3339)
-		nextAllowed := changedAt.AddDate(0, 1, 0)
+		nextAllowed := changedAt.Add(30 * 24 * time.Hour) // exactly 30 days
 		result["next_change_allowed_at"] = nextAllowed.Format(time.RFC3339)
 		result["can_change"] = time.Now().After(nextAllowed)
 	} else {

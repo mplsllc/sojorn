@@ -241,10 +241,13 @@ class _QuipVideoItemState extends State<QuipVideoItem>
             width: 48,
             height: 48,
             decoration: BoxDecoration(
-              shape: BoxShape.circle,
+              borderRadius: BorderRadius.circular(13),
               border: Border.all(color: SojornColors.basicWhite, width: 2),
             ),
-            child: ClipOval(child: inner),
+            child: ClipRRect(
+              borderRadius: BorderRadius.circular(11),
+              child: inner,
+            ),
           ),
           // "+" badge
           Positioned(
@@ -523,17 +526,10 @@ class _QuipVideoItemState extends State<QuipVideoItem>
   Widget _buildPauseOverlay() {
     if (!widget.isActive || !widget.isUserPaused) return const SizedBox.shrink();
     return Center(
-      child: Container(
-        padding: const EdgeInsets.all(16),
-        decoration: const BoxDecoration(
-          color: Color(0x8A000000),
-          shape: BoxShape.circle,
-        ),
-        child: const Icon(
-          Icons.play_arrow,
-          color: SojornColors.basicWhite,
-          size: 52,
-        ),
+      child: Icon(
+        Icons.play_arrow_rounded,
+        color: Colors.white.withValues(alpha: 0.6),
+        size: 64,
       ),
     );
   }

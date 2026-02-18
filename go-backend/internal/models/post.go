@@ -42,6 +42,9 @@ type Post struct {
 	// Quip overlay JSON — stores text/sticker decorations as client-rendered widgets
 	OverlayJSON *string `json:"overlay_json,omitempty" db:"overlay_json"`
 
+	// Audio overlay URL — background music track attached to this post
+	AudioOverlayURL *string `json:"audio_overlay_url,omitempty" db:"audio_overlay_url"`
+
 	// Link preview (populated via enrichment, not in every query)
 	LinkPreviewURL         *string    `json:"link_preview_url,omitempty" db:"link_preview_url"`
 	LinkPreviewTitle       *string    `json:"link_preview_title,omitempty" db:"link_preview_title"`

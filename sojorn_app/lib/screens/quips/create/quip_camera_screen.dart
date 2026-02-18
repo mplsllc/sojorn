@@ -1,5 +1,4 @@
 import 'dart:async';
-import 'dart:io';
 
 import 'package:camera/camera.dart';
 import 'package:flutter/foundation.dart';
@@ -74,6 +73,8 @@ class _QuipCameraScreenState extends State<QuipCameraScreen>
         !_cameraController!.value.isInitialized) return;
     if (state == AppLifecycleState.inactive) {
       _cameraController?.dispose();
+      _cameraController = null;
+      if (mounted) setState(() {});
     } else if (state == AppLifecycleState.resumed) {
       _initCamera();
     }
@@ -115,11 +116,11 @@ class _QuipCameraScreenState extends State<QuipCameraScreen>
         camera,
         ResolutionPreset.high,
         enableAudio: true,
-        imageFormatGroup: ImageFormatGroup.yuv420,
+        imageFormatGroup: kIsWeb ? ImageFormatGroup.unknown : ImageFormatGroup.yuv420,
       );
 
       await _cameraController!.initialize();
-      await _cameraController!.prepareForVideoRecording();
+      if (!kIsWeb) await _cameraController!.prepareForVideoRecording();
       if (mounted) setState(() => _isInitializing = false);
     } catch (e) {
       if (mounted) setState(() => _isInitializing = false);
@@ -199,18 +200,20 @@ class _QuipCameraScreenState extends State<QuipCameraScreen>
         _isProcessing = true;
       });
       await _cameraController?.pausePreview();
-      final videoFile = File(xfile.path);
       if (mounted) {
         await Navigator.push(
           context,
           MaterialPageRoute(
             builder: (_) => QuipDecorateScreen(
-              videoFile: videoFile,
+              videoXFile: xfile,
               preloadedAudio: _selectedAudio,
             ),
           ),
         );
-        await _cameraController?.resumePreview();
+        // Guard against disposed controller (lifecycle change while on next screen)
+        if (mounted && _cameraController != null && _cameraController!.value.isInitialized) {
+          await _cameraController!.resumePreview();
+        }
         if (mounted) setState(() => _isProcessing = false);
       }
     } catch (_) {

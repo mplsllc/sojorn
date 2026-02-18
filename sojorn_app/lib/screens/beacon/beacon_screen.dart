@@ -28,6 +28,7 @@ import '../clusters/group_forum_tab.dart';
 import '../clusters/group_members_tab.dart';
 import '../../theme/tokens.dart';
 import '../../theme/app_theme.dart';
+import '../../widgets/media/sojorn_avatar.dart';
 import '../../widgets/neighborhood/neighborhood_picker_sheet.dart';
 
 enum BeaconTab { map, board, search, groups }
@@ -1254,7 +1255,27 @@ class BeaconScreenState extends ConsumerState<BeaconScreen> with TickerProviderS
               ? const Center(child: CircularProgressIndicator())
               : _boardEntries.isEmpty
                   ? Center(
-                      child: Text('No posts yet in $groupName', style: TextStyle(color: SojornColors.textDisabled)),
+                      child: Column(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Icon(Icons.forum_outlined, size: 52, color: AppTheme.navyBlue.withValues(alpha: 0.18)),
+                          const SizedBox(height: 14),
+                          Text('No posts yet', style: TextStyle(color: SojornColors.textDisabled, fontSize: 15, fontWeight: FontWeight.w600)),
+                          const SizedBox(height: 4),
+                          Text('Share something with $groupName', style: TextStyle(color: SojornColors.textDisabled, fontSize: 13)),
+                          const SizedBox(height: 20),
+                          OutlinedButton.icon(
+                            onPressed: _onCreateBoardPost,
+                            icon: const Icon(Icons.edit_outlined, size: 16),
+                            label: const Text('Post to Board'),
+                            style: OutlinedButton.styleFrom(
+                              foregroundColor: AppTheme.brightNavy,
+                              side: BorderSide(color: AppTheme.brightNavy.withValues(alpha: 0.5)),
+                              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+                            ),
+                          ),
+                        ],
+                      ),
                     )
                   : RefreshIndicator(
                       onRefresh: _loadBoardEntries,
@@ -1379,16 +1400,10 @@ class BeaconScreenState extends ConsumerState<BeaconScreen> with TickerProviderS
             // User row: avatar + name + resident badge
             Row(
               children: [
-                CircleAvatar(
-                  radius: 12,
-                  backgroundColor: AppTheme.brightNavy.withValues(alpha: 0.12),
-                  backgroundImage: entry.authorAvatarUrl.isNotEmpty ? NetworkImage(entry.authorAvatarUrl) : null,
-                  child: entry.authorAvatarUrl.isEmpty
-                      ? Text(
-                          avatarInitial,
-                          style: TextStyle(color: AppTheme.brightNavy, fontSize: 11, fontWeight: FontWeight.w700),
-                        )
-                      : null,
+                SojornAvatar(
+                  displayName: entry.authorDisplayName.isNotEmpty ? entry.authorDisplayName : entry.authorHandle,
+                  avatarUrl: entry.authorAvatarUrl.isNotEmpty ? entry.authorAvatarUrl : null,
+                  size: 24,
                 ),
                 const SizedBox(width: 8),
                 Expanded(
@@ -1669,13 +1684,10 @@ class BeaconScreenState extends ConsumerState<BeaconScreen> with TickerProviderS
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
       child: ListTile(
         dense: true,
-        leading: CircleAvatar(
-          radius: 18,
-          backgroundColor: AppTheme.brightNavy.withValues(alpha: 0.1),
-          backgroundImage: (g['avatar_url'] as String?)?.isNotEmpty == true
-              ? NetworkImage(g['avatar_url'] as String) : null,
-          child: (g['avatar_url'] as String?)?.isNotEmpty != true
-              ? Icon(Icons.groups, size: 18, color: AppTheme.brightNavy) : null,
+        leading: SojornAvatar(
+          displayName: g['name'] as String? ?? '',
+          avatarUrl: (g['avatar_url'] as String?)?.isNotEmpty == true ? g['avatar_url'] as String : null,
+          size: 36,
         ),
         title: Text(g['name'] ?? '', style: TextStyle(color: SojornColors.postContent, fontSize: 13, fontWeight: FontWeight.w600)),
         subtitle: Text('${g['member_count'] ?? 0} members · ${g['type'] ?? ''}',

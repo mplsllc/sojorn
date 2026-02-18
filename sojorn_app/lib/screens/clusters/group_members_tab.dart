@@ -4,6 +4,7 @@ import '../../services/api_service.dart';
 import '../../services/auth_service.dart';
 import '../../theme/tokens.dart';
 import '../../theme/app_theme.dart';
+import '../../widgets/media/sojorn_avatar.dart';
 
 class GroupMembersTab extends StatefulWidget {
   final String groupId;
@@ -182,11 +183,10 @@ class _GroupMembersTabState extends State<GroupMembersTab> {
                           onLongPress: canManage && !isMe ? () => _showMemberActions(m) : null,
                           onTap: canManage && !isMe ? () => _showMemberActions(m) : null,
                           contentPadding: const EdgeInsets.symmetric(horizontal: 4, vertical: 2),
-                          leading: CircleAvatar(
-                            radius: 20,
-                            backgroundColor: AppTheme.brightNavy.withValues(alpha: 0.1),
-                            backgroundImage: avatarUrl.isNotEmpty ? NetworkImage(avatarUrl) : null,
-                            child: avatarUrl.isEmpty ? Icon(Icons.person, size: 20, color: AppTheme.brightNavy) : null,
+                          leading: SojornAvatar(
+                            displayName: displayName.isNotEmpty ? displayName : handle,
+                            avatarUrl: avatarUrl.isNotEmpty ? avatarUrl : null,
+                            size: 40,
                           ),
                           title: Row(
                             children: [
@@ -327,11 +327,10 @@ class _InviteSheetState extends State<_InviteSheet> {
 
                   return ListTile(
                     contentPadding: EdgeInsets.zero,
-                    leading: CircleAvatar(
-                      radius: 18,
-                      backgroundColor: AppTheme.brightNavy.withValues(alpha: 0.1),
-                      backgroundImage: avatarUrl.isNotEmpty ? NetworkImage(avatarUrl) : null,
-                      child: avatarUrl.isEmpty ? Icon(Icons.person, size: 18, color: AppTheme.brightNavy) : null,
+                    leading: SojornAvatar(
+                      displayName: displayName.isNotEmpty ? displayName : handle,
+                      avatarUrl: avatarUrl.isNotEmpty ? avatarUrl : null,
+                      size: 36,
                     ),
                     title: Text(displayName, style: TextStyle(color: AppTheme.navyBlue, fontSize: 13, fontWeight: FontWeight.w600)),
                     subtitle: Text('@$handle', style: TextStyle(color: SojornColors.textDisabled, fontSize: 11)),

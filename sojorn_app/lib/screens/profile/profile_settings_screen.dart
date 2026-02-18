@@ -16,6 +16,7 @@ import '../../theme/tokens.dart';
 import 'privacy_dashboard_screen.dart';
 import '../../widgets/app_scaffold.dart';
 import '../../widgets/media/signed_media_image.dart';
+import '../../widgets/media/sojorn_avatar.dart';
 import '../../widgets/sojorn_input.dart';
 import '../../services/api_service.dart';
 import '../../widgets/sojorn_text_area.dart';
@@ -267,21 +268,24 @@ class _ProfileSettingsScreenState extends ConsumerState<ProfileSettingsScreen> {
             onTap: () => _pickMedia(isBanner: false),
             child: Stack(
               children: [
-                CircleAvatar(
-                  radius: 42,
-                  backgroundColor: AppTheme.scaffoldBg,
-                  child: CircleAvatar(
-                    radius: 38,
-                    backgroundColor: AppTheme.queenPink,
-                    child: _isAvatarUploading
-                      ? const CircularProgressIndicator()
-                      : profile.avatarUrl != null
-                        ? ClipOval(
-                            child: SignedMediaImage(url: profile.avatarUrl!, width: 76, height: 76, fit: BoxFit.cover),
-                          )
-                        : Text(profile.displayName?[0].toUpperCase() ?? '?', style: AppTheme.headlineSmall),
+                if (_isAvatarUploading)
+                  Container(
+                    width: 80,
+                    height: 80,
+                    decoration: BoxDecoration(
+                      color: AppTheme.queenPink,
+                      borderRadius: BorderRadius.circular(22),
+                    ),
+                    alignment: Alignment.center,
+                    child: const CircularProgressIndicator(),
+                  )
+                else
+                  SojornAvatar(
+                    displayName: profile.displayName ?? profile.handle ?? '?',
+                    avatarUrl: profile.avatarUrl,
+                    size: 80,
+                    borderRadius: 22,
                   ),
-                ),
                 Positioned(
                   bottom: 0,
                   right: 0,
@@ -474,7 +478,7 @@ class _ProfileSettingsScreenState extends ConsumerState<ProfileSettingsScreen> {
             ],
           ),
           content: Text(
-            'You can only change your neighborhood once per month.\n\nYour next change is available on ${_formatDateShort(nextChange)}.',
+            'You can only change your neighborhood once every 30 days.\n\nYour next change is available on ${_formatDateShort(nextChange)}.',
           ),
           actions: [
             TextButton(

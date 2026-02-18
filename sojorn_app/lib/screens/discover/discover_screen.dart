@@ -9,6 +9,7 @@ import '../../models/post.dart';
 import '../../theme/app_theme.dart';
 import '../../widgets/sojorn_post_card.dart';
 import '../../widgets/media/signed_media_image.dart';
+import '../../widgets/media/sojorn_avatar.dart';
 import '../profile/viewable_profile_screen.dart';
 import '../compose/compose_screen.dart';
 import '../post/post_detail_screen.dart';
@@ -560,28 +561,10 @@ class _DiscoverScreenState extends ConsumerState<DiscoverScreen> {
         margin: const EdgeInsets.only(right: 12),
         child: Column(
           children: [
-            CircleAvatar(
-              radius: 30,
-              backgroundColor: AppTheme.royalPurple.withValues(alpha: 0.2),
-              child: user.avatarUrl != null
-                  ? ClipRRect(
-                      borderRadius: BorderRadius.circular(30),
-                      child: SignedMediaImage(
-                        url: user.avatarUrl!,
-                        width: 60,
-                        height: 60,
-                        fit: BoxFit.cover,
-                      ),
-                    )
-                  : Text(
-                      user.displayName.isNotEmpty
-                          ? user.displayName[0].toUpperCase()
-                          : '?',
-                      style: TextStyle(
-                          color: AppTheme.royalPurple,
-                          fontWeight: FontWeight.bold,
-                          fontSize: 22),
-                    ),
+            SojornAvatar(
+              displayName: user.displayName,
+              avatarUrl: user.avatarUrl,
+              size: 60,
             ),
             const SizedBox(height: 6),
             Text(

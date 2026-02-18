@@ -1,6 +1,8 @@
 import 'dart:convert';
 import 'dart:io';
 import 'dart:typed_data';
+import 'package:camera/camera.dart' show XFile;
+import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as http;
 import 'package:http_parser/http_parser.dart' as http_parser;
 import 'package:image/image.dart' as img;
@@ -119,6 +121,53 @@ class ImageUploadService {
 
       final responseData = jsonDecode(response.body) as Map<String, dynamic>;
       // Return publicUrl or signedUrl depending on your function response
+      final url = (responseData['publicUrl'] ?? responseData['signedUrl']) as String;
+      return _fixR2Url(url);
+    } catch (e) {
+      throw UploadException('Video upload failed: $e');
+    }
+  }
+
+  /// Uploads a video from an [XFile] — works on both mobile and web.
+  ///
+  /// On mobile, delegates to [uploadVideo] which streams from disk and sanitizes.
+  /// On web, reads bytes from the blob URL and uploads via [MultipartFile.fromBytes].
+  Future<String> uploadVideoXFile(
+    XFile xFile, {
+    UploadProgressCallback? onProgress,
+  }) async {
+    if (!kIsWeb) {
+      // Mobile: use the existing efficient streaming path
+      return uploadVideo(File(xFile.path), onProgress: onProgress);
+    }
+
+    // Web: read the blob into memory and multipart-upload it
+    final token = await _getAuthToken();
+    if (token == null) throw UploadException('Not authenticated. Please sign in again.');
+
+    final bytes = await xFile.readAsBytes();
+    final uri = Uri.parse('${ApiConfig.baseUrl}/upload');
+    final request = http.MultipartRequest('POST', uri);
+    request.headers['Authorization'] = 'Bearer $token';
+    request.files.add(http.MultipartFile.fromBytes(
+      'media',
+      bytes,
+      filename: xFile.name.isNotEmpty ? xFile.name : 'video.webm',
+      contentType: http_parser.MediaType.parse('video/webm'),
+    ));
+    request.fields['type'] = 'video';
+    request.fields['fileName'] = xFile.name.isNotEmpty ? xFile.name : 'video.webm';
+
+    onProgress?.call(0.5);
+    try {
+      final streamedResponse = await request.send();
+      final response = await http.Response.fromStream(streamedResponse);
+      onProgress?.call(1.0);
+      if (response.statusCode != 200) {
+        final errorData = jsonDecode(response.body) as Map<String, dynamic>;
+        throw UploadException(errorData['message'] ?? 'Upload failed');
+      }
+      final responseData = jsonDecode(response.body) as Map<String, dynamic>;
       final url = (responseData['publicUrl'] ?? responseData['signedUrl']) as String;
       return _fixR2Url(url);
     } catch (e) {

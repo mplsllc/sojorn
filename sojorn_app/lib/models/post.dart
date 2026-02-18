@@ -101,6 +101,9 @@ class Post {
   final bool isNsfw;
   final String? nsfwReason;
 
+  // Audio overlay — background music track URL attached to this post
+  final String? audioOverlayUrl;
+
   // Link preview (OG metadata)
   final String? linkPreviewUrl;
   final String? linkPreviewTitle;
@@ -167,6 +170,7 @@ class Post {
     this.ctaText,
     this.isNsfw = false,
     this.nsfwReason,
+    this.audioOverlayUrl,
     this.linkPreviewUrl,
     this.linkPreviewTitle,
     this.linkPreviewDescription,
@@ -323,6 +327,7 @@ class Post {
       ctaText: json['advertiser_cta_text'] as String?,
       isNsfw: json['is_nsfw'] as bool? ?? false,
       nsfwReason: json['nsfw_reason'] as String?,
+      audioOverlayUrl: json['audio_overlay_url'] as String?,
       linkPreviewUrl: json['link_preview_url'] as String?,
       linkPreviewTitle: json['link_preview_title'] as String?,
       linkPreviewDescription: json['link_preview_description'] as String?,
@@ -378,6 +383,7 @@ class Post {
       'reaction_users': reactionUsers,
       'is_nsfw': isNsfw,
       'nsfw_reason': nsfwReason,
+      'audio_overlay_url': audioOverlayUrl,
       'link_preview_url': linkPreviewUrl,
       'link_preview_title': linkPreviewTitle,
       'link_preview_description': linkPreviewDescription,

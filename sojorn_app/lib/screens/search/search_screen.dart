@@ -10,6 +10,7 @@ import '../../theme/app_theme.dart';
 import '../../theme/tokens.dart';
 import '../../widgets/sojorn_post_card.dart';
 import '../../widgets/media/signed_media_image.dart';
+import '../../widgets/media/sojorn_avatar.dart';
 import '../profile/viewable_profile_screen.dart';
 import '../compose/compose_screen.dart';
 import '../post/post_detail_screen.dart';
@@ -33,7 +34,8 @@ class _SearchScreenState extends ConsumerState<SearchScreen> {
   SearchResults? results;
   List<RecentSearch> recentSearches = [];
   int _searchEpoch = 0;
-  
+  int _searchTab = 0; // 0=All, 1=People, 2=Posts, 3=Hashtags
+
   // Discovery State
   bool _isDiscoveryLoading = false;
   List<Post> _discoveryPosts = [];
@@ -212,6 +214,7 @@ class _SearchScreenState extends ConsumerState<SearchScreen> {
       results = null;
       hasSearched = false;
       isLoading = false;
+      _searchTab = 0;
     });
     focusNode.requestFocus();
   }
@@ -270,8 +273,58 @@ class _SearchScreenState extends ConsumerState<SearchScreen> {
               onPressed: clearSearch,
             ),
         ],
+        bottom: hasSearched && results != null
+            ? PreferredSize(
+                preferredSize: const Size.fromHeight(44),
+                child: _buildSearchTabs(),
+              )
+            : null,
       ),
       body: buildBody(),
+    );
+  }
+
+  Widget _buildSearchTabs() {
+    const tabs = ['All', 'People', 'Posts', 'Hashtags'];
+    return Container(
+      color: AppTheme.cardSurface,
+      height: 44,
+      child: SingleChildScrollView(
+        scrollDirection: Axis.horizontal,
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+        child: Row(
+          children: List.generate(tabs.length, (i) {
+            final selected = _searchTab == i;
+            return Padding(
+              padding: const EdgeInsets.only(right: 8),
+              child: GestureDetector(
+                onTap: () => setState(() => _searchTab = i),
+                child: AnimatedContainer(
+                  duration: const Duration(milliseconds: 150),
+                  padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 4),
+                  decoration: BoxDecoration(
+                    color: selected ? AppTheme.brightNavy : Colors.transparent,
+                    borderRadius: BorderRadius.circular(20),
+                    border: Border.all(
+                      color: selected
+                          ? AppTheme.brightNavy
+                          : AppTheme.navyText.withValues(alpha: 0.2),
+                    ),
+                  ),
+                  child: Text(
+                    tabs[i],
+                    style: TextStyle(
+                      fontSize: 13,
+                      fontWeight: selected ? FontWeight.w600 : FontWeight.w400,
+                      color: selected ? Colors.white : AppTheme.navyText,
+                    ),
+                  ),
+                ),
+              ),
+            );
+          }),
+        ),
+      ),
     );
   }
 
@@ -356,87 +409,100 @@ class _SearchScreenState extends ConsumerState<SearchScreen> {
                     .copyWith(color: AppTheme.navyText.withValues(alpha: 0.7))),
             const SizedBox(height: 8),
             Text('Try a different search term',
-                style:
-                    AppTheme.bodyMedium.copyWith(color: AppTheme.egyptianBlue)),
+                style: AppTheme.bodyMedium.copyWith(color: AppTheme.egyptianBlue)),
           ],
         ),
       );
     }
 
-    final isTagSearch = searchController.text.trim().startsWith('#');
+    final showPeople = _searchTab == 0 || _searchTab == 1;
+    final showPosts = _searchTab == 0 || _searchTab == 2;
+    final showTags = _searchTab == 0 || _searchTab == 3;
 
-    return SingleChildScrollView(
-      padding: const EdgeInsets.symmetric(vertical: 16),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          if (results!.users.isNotEmpty) ...[
-            buildSectionHeader('People'),
-            SizedBox(
-              height: 100,
-              child: ListView.builder(
-                scrollDirection: Axis.horizontal,
-                padding: const EdgeInsets.symmetric(horizontal: 16),
-                itemCount: results!.users.length,
-                itemBuilder: (context, index) {
-                  final user = results!.users[index];
-                  return UserResultItem(
-                    user: user,
-                    tierColor: getTierColor(user.harmonyTier),
-                    onTap: () => Navigator.of(context).push(
-                      MaterialPageRoute(
-                          builder: (_) =>
-                              UnifiedProfileScreen(handle: user.username)),
-                    ),
-                  );
-                },
-              ),
-            ),
-            const SizedBox(height: 24),
-          ],
-          if (results!.posts.isNotEmpty) ...[
-            buildSectionHeader('Posts'),
-            ListView.builder(
-              shrinkWrap: true,
-              physics: const NeverScrollableScrollPhysics(),
+    return ListView(
+      padding: const EdgeInsets.symmetric(vertical: 8),
+      children: [
+        if (showPeople && results!.users.isNotEmpty) ...[
+          buildSectionHeader('People'),
+          SizedBox(
+            height: 96,
+            child: ListView.builder(
+              scrollDirection: Axis.horizontal,
               padding: const EdgeInsets.symmetric(horizontal: 16),
-              itemCount: results!.posts.length,
+              itemCount: results!.users.length,
               itemBuilder: (context, index) {
-                final post = results!.posts[index];
-                return buildPostResultItem(post);
-              },
-            ),
-            const SizedBox(height: 24),
-          ],
-          if (results!.tags.isNotEmpty) ...[
-            buildSectionHeader(isTagSearch ? 'Tag' : 'Tags'),
-            ListView.builder(
-              shrinkWrap: true,
-              physics: const NeverScrollableScrollPhysics(),
-              padding: const EdgeInsets.symmetric(horizontal: 16),
-              itemCount: results!.tags.length,
-              itemBuilder: (context, index) {
-                final tag = results!.tags[index];
-                return TagResultItem(
-                  tag: tag,
-                  onTap: () {
-                    final query = '#${tag.tag}';
-                    searchController.text = query;
-                    performSearch(query);
-                    saveRecentSearch(RecentSearch(
-                      id: 'tag_${tag.tag}',
-                      text: tag.tag,
-                      searchedAt: DateTime.now(),
-                      type: RecentSearchType.tag,
-                    ));
-                  },
+                final user = results!.users[index];
+                return UserResultItem(
+                  user: user,
+                  tierColor: getTierColor(user.harmonyTier),
+                  onTap: () => Navigator.of(context).push(
+                    MaterialPageRoute(
+                        builder: (_) => UnifiedProfileScreen(handle: user.username)),
+                  ),
                 );
               },
             ),
-            const SizedBox(height: 24),
-          ],
+          ),
+          const SizedBox(height: 16),
         ],
-      ),
+        if (showTags && results!.tags.isNotEmpty) ...[
+          buildSectionHeader('Hashtags'),
+          SingleChildScrollView(
+            scrollDirection: Axis.horizontal,
+            padding: const EdgeInsets.symmetric(horizontal: 16),
+            child: Row(
+              children: results!.tags.map((tag) {
+                return Padding(
+                  padding: const EdgeInsets.only(right: 8, bottom: 12),
+                  child: GestureDetector(
+                    onTap: () {
+                      final query = '#${tag.tag}';
+                      searchController.text = query;
+                      performSearch(query);
+                      saveRecentSearch(RecentSearch(
+                        id: 'tag_${tag.tag}',
+                        text: tag.tag,
+                        searchedAt: DateTime.now(),
+                        type: RecentSearchType.tag,
+                      ));
+                    },
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                      decoration: BoxDecoration(
+                        color: AppTheme.royalPurple.withValues(alpha: 0.08),
+                        borderRadius: BorderRadius.circular(20),
+                        border: Border.all(
+                            color: AppTheme.royalPurple.withValues(alpha: 0.25)),
+                      ),
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Icon(Icons.tag, size: 14, color: AppTheme.royalPurple),
+                          const SizedBox(width: 4),
+                          Text(tag.tag,
+                              style: TextStyle(
+                                  color: AppTheme.royalPurple,
+                                  fontWeight: FontWeight.w600,
+                                  fontSize: 13)),
+                          const SizedBox(width: 6),
+                          Text('${tag.count}',
+                              style: TextStyle(
+                                  color: AppTheme.royalPurple.withValues(alpha: 0.6),
+                                  fontSize: 11)),
+                        ],
+                      ),
+                    ),
+                  ),
+                );
+              }).toList(),
+            ),
+          ),
+        ],
+        if (showPosts && results!.posts.isNotEmpty) ...[
+          buildSectionHeader('Posts'),
+          ...results!.posts.map((post) => buildPostResultItem(post)),
+        ],
+      ],
     );
   }
 
@@ -498,32 +564,49 @@ class _SearchScreenState extends ConsumerState<SearchScreen> {
         children: [
           Padding(
             padding: const EdgeInsets.fromLTRB(16, 16, 16, 8),
-            child: Text('Top Trending',
-                style: AppTheme.labelMedium.copyWith(color: AppTheme.navyBlue)),
+            child: Text('Trending',
+                style: AppTheme.labelMedium.copyWith(color: AppTheme.navyBlue, fontSize: 16)),
           ),
-          GridView.builder(
-            shrinkWrap: true,
-            physics: const NeverScrollableScrollPhysics(),
+          SingleChildScrollView(
+            scrollDirection: Axis.horizontal,
             padding: const EdgeInsets.symmetric(horizontal: 16),
-            gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-              crossAxisCount: 2,
-              childAspectRatio: 3,
-              crossAxisSpacing: 12,
-              mainAxisSpacing: 12,
+            child: Row(
+              children: trendingTags.map((tag) {
+                return Padding(
+                  padding: const EdgeInsets.only(right: 8),
+                  child: GestureDetector(
+                    onTap: () {
+                      final query = '#$tag';
+                      searchController.text = query;
+                      performSearch(query);
+                    },
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+                      decoration: BoxDecoration(
+                        color: AppTheme.royalPurple.withValues(alpha: 0.07),
+                        borderRadius: BorderRadius.circular(20),
+                        border: Border.all(
+                            color: AppTheme.royalPurple.withValues(alpha: 0.2)),
+                      ),
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Icon(Icons.trending_up, size: 14, color: AppTheme.royalPurple),
+                          const SizedBox(width: 5),
+                          Text('#$tag',
+                              style: TextStyle(
+                                  color: AppTheme.navyText,
+                                  fontWeight: FontWeight.w600,
+                                  fontSize: 13)),
+                        ],
+                      ),
+                    ),
+                  ),
+                );
+              }).toList(),
             ),
-            itemCount: trendingTags.length,
-            itemBuilder: (context, index) {
-              final tag = trendingTags[index];
-              return TrendingTagItem(
-                tag: tag,
-                onTap: () {
-                  final query = '#$tag';
-                  searchController.text = query;
-                  performSearch(query);
-                },
-              );
-            },
           ),
+          const SizedBox(height: 8),
           
           if (_isDiscoveryLoading) ...[
             const SizedBox(height: 32),
@@ -578,49 +661,93 @@ class _SearchScreenState extends ConsumerState<SearchScreen> {
   }
 
   Widget buildPostResultItem(SearchPost post) {
-    // Convert SearchPost to minimal Post immediately
-    final minimalPost = Post(
-      id: post.id,
-      body: post.body,
-      authorId: post.authorId,
-      createdAt: post.createdAt,
-      
-      // REQUIRED fields missing previously
-      status: PostStatus.active,
-      detectedTone: ToneLabel.neutral,
-      contentIntegrityScore: 0.0,
-      
-      author: Profile(
-        id: post.authorId,
-        handle: post.authorHandle,
-        displayName: post.authorDisplayName,
-        createdAt: DateTime.now(),
-        avatarUrl: null, 
-      ),
-      // Set defaults for rest
-      isLiked: false,
-      likeCount: 0,
-      commentCount: 0, 
-      tags: [],
-    );
-
-    return ClipRRect(
-      borderRadius: BorderRadius.circular(12),
+    return InkWell(
+      onTap: () {
+        final minimalPost = Post(
+          id: post.id,
+          body: post.body,
+          authorId: post.authorId,
+          createdAt: post.createdAt,
+          status: PostStatus.active,
+          detectedTone: ToneLabel.neutral,
+          contentIntegrityScore: 0.0,
+          author: Profile(
+            id: post.authorId,
+            handle: post.authorHandle,
+            displayName: post.authorDisplayName,
+            createdAt: DateTime.now(),
+            avatarUrl: null,
+          ),
+          isLiked: false,
+          likeCount: 0,
+          commentCount: 0,
+          tags: [],
+        );
+        _openPostDetail(minimalPost);
+      },
       child: Container(
-        margin: const EdgeInsets.only(bottom: 12),
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
         decoration: BoxDecoration(
-          color: AppTheme.cardSurface,
-          borderRadius: BorderRadius.circular(12),
-          border: Border.all(color: AppTheme.egyptianBlue.withValues(alpha: 0.2)),
+          border: Border(
+            bottom: BorderSide(color: AppTheme.egyptianBlue.withValues(alpha: 0.1)),
+          ),
         ),
-        child: sojornPostCard(
-          post: minimalPost,
-          onTap: () => _openPostDetail(minimalPost),
-          onChain: () => _openChainComposer(minimalPost),
-          // showActions removed (not supported)
+        child: Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            // Author avatar
+            Container(
+              width: 38,
+              height: 38,
+              decoration: BoxDecoration(
+                color: AppTheme.navyBlue.withValues(alpha: 0.1),
+                borderRadius: BorderRadius.circular(10),
+              ),
+              child: Center(
+                child: Text(
+                  post.authorDisplayName.isNotEmpty
+                      ? post.authorDisplayName[0].toUpperCase()
+                      : '?',
+                  style: TextStyle(
+                      fontWeight: FontWeight.w700,
+                      color: AppTheme.navyBlue,
+                      fontSize: 16),
+                ),
+              ),
+            ),
+            const SizedBox(width: 10),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    children: [
+                      Text(post.authorDisplayName,
+                          style: TextStyle(
+                              fontWeight: FontWeight.w600,
+                              fontSize: 13,
+                              color: AppTheme.navyText)),
+                      const SizedBox(width: 4),
+                      Text('@${post.authorHandle}',
+                          style: TextStyle(
+                              fontSize: 12,
+                              color: AppTheme.textSecondary)),
+                    ],
+                  ),
+                  const SizedBox(height: 2),
+                  Text(
+                    post.body,
+                    style: TextStyle(fontSize: 13, color: AppTheme.navyText, height: 1.35),
+                    maxLines: 3,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                ],
+              ),
+            ),
+          ],
         ),
       ),
-    ); 
+    );
   }
 }
 
@@ -644,28 +771,10 @@ class UserResultItem extends StatelessWidget {
         margin: const EdgeInsets.only(right: 12),
         child: Column(
           children: [
-            CircleAvatar(
-              radius: 30,
-              backgroundColor: tierColor,
-                child: user.avatarUrl != null
-                    ? ClipRRect(
-                        borderRadius: BorderRadius.circular(30),
-                        child: SignedMediaImage(
-                          url: user.avatarUrl!,
-                          width: 60,
-                          height: 60,
-                          fit: BoxFit.cover,
-                        ),
-                      )
-                    : Text(
-                      user.displayName.isNotEmpty
-                          ? user.displayName[0].toUpperCase()
-                          : '?',
-                      style: const TextStyle(
-                          color: SojornColors.basicWhite,
-                          fontWeight: FontWeight.bold,
-                          fontSize: 22),
-                    ),
+            SojornAvatar(
+              displayName: user.displayName,
+              avatarUrl: user.avatarUrl,
+              size: 60,
             ),
             const SizedBox(height: 6),
             Text(
