@@ -70,8 +70,9 @@ func (h *GroupsHandler) ListGroups(c *gin.Context) {
 
 	query := `
 		SELECT g.id, g.name, g.description, g.category, g.avatar_url, g.banner_url,
-		       g.is_private, g.created_by, g.member_count, g.post_count, g.created_at, g.updated_at,
-		       gm.role, 
+		       COALESCE(g.is_private, FALSE), COALESCE(g.created_by::text, ''), g.member_count,
+		       COALESCE(g.post_count, 0), g.created_at, COALESCE(g.updated_at, g.created_at),
+		       gm.role,
 		       EXISTS(SELECT 1 FROM group_members WHERE group_id = g.id AND user_id = $1) as is_member,
 		       EXISTS(SELECT 1 FROM group_join_requests WHERE group_id = g.id AND user_id = $1 AND status = 'pending') as has_pending
 		FROM groups g
@@ -109,12 +110,13 @@ func (h *GroupsHandler) GetMyGroups(c *gin.Context) {
 
 	query := `
 		SELECT g.id, g.name, g.description, g.category, g.avatar_url, g.banner_url,
-		       g.is_private, g.created_by, g.member_count, g.post_count, g.created_at, g.updated_at,
+		       COALESCE(g.is_private, FALSE), COALESCE(g.created_by::text, ''), g.member_count,
+		       COALESCE(g.post_count, 0), g.created_at, COALESCE(g.updated_at, g.created_at),
 		       gm.role
 		FROM groups g
 		JOIN group_members gm ON g.id = gm.group_id
 		WHERE gm.user_id = $1
-		ORDER BY gm.joined_at DESC
+		ORDER BY gm.joined_at DESC NULLS LAST
 	`
 
 	rows, err := h.db.Query(c.Request.Context(), query, userID)
@@ -181,7 +183,8 @@ func (h *GroupsHandler) GetGroup(c *gin.Context) {
 
 	query := `
 		SELECT g.id, g.name, g.description, g.category, g.avatar_url, g.banner_url,
-		       g.is_private, g.created_by, g.member_count, g.post_count, g.created_at, g.updated_at,
+		       COALESCE(g.is_private, FALSE), COALESCE(g.created_by::text, ''), g.member_count,
+		       COALESCE(g.post_count, 0), g.created_at, COALESCE(g.updated_at, g.created_at),
 		       gm.role,
 		       EXISTS(SELECT 1 FROM group_members WHERE group_id = g.id AND user_id = $2) as is_member,
 		       EXISTS(SELECT 1 FROM group_join_requests WHERE group_id = g.id AND user_id = $2 AND status = 'pending') as has_pending
@@ -243,10 +246,10 @@ func (h *GroupsHandler) CreateGroup(c *gin.Context) {
 	// Create group
 	var groupID string
 	err = tx.QueryRow(c.Request.Context(), `
-		INSERT INTO groups (name, description, category, privacy, created_by, avatar_url)
-		VALUES ($1, $2, $3, $4, $5, $6)
+		INSERT INTO groups (name, description, category, privacy, is_private, created_by, avatar_url)
+		VALUES ($1, $2, $3, $4, $5, $6, $7)
 		RETURNING id
-	`, req.Name, req.Description, req.Category, privacy, userID, req.AvatarURL).Scan(&groupID)
+	`, req.Name, req.Description, req.Category, privacy, req.IsPrivate, userID, req.AvatarURL).Scan(&groupID)
 
 	if err != nil {
 		if strings.Contains(err.Error(), "duplicate") || strings.Contains(err.Error(), "unique") {
@@ -288,7 +291,7 @@ func (h *GroupsHandler) JoinGroup(c *gin.Context) {
 
 	// Check if group exists and is private
 	var isPrivate bool
-	err := h.db.QueryRow(c.Request.Context(), `SELECT is_private FROM groups WHERE id = $1`, groupID).Scan(&isPrivate)
+	err := h.db.QueryRow(c.Request.Context(), `SELECT COALESCE(is_private, FALSE) FROM groups WHERE id = $1`, groupID).Scan(&isPrivate)
 	if err == sql.ErrNoRows {
 		c.JSON(http.StatusNotFound, gin.H{"error": "Group not found"})
 		return

@@ -635,10 +635,13 @@ func (h *NeighborhoodHandler) GetMyNeighborhood(c *gin.Context) {
 			log.Printf("[Neighborhood] GetMyNeighborhood lazy group creation error: %v", createErr)
 		} else {
 			groupID = &newGroupID
-			// Auto-join the requesting user so they can immediately chat
-			if _, joinErr := h.autoJoin(ctx, newGroupID, userID); joinErr != nil {
-				log.Printf("[Neighborhood] GetMyNeighborhood auto-join error: %v", joinErr)
-			}
+		}
+	}
+
+	// Always auto-join the user to their neighborhood group (idempotent — ON CONFLICT DO NOTHING)
+	if groupID != nil {
+		if _, joinErr := h.autoJoin(ctx, *groupID, userID); joinErr != nil {
+			log.Printf("[Neighborhood] GetMyNeighborhood auto-join error: %v", joinErr)
 		}
 	}
 
