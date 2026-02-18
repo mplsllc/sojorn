@@ -761,3 +761,64 @@ func (h *CapsuleHandler) RotateKeys(c *gin.Context) {
 
 	c.JSON(http.StatusOK, gin.H{"status": "keys_rotated"})
 }
+
+// ReportCapsuleEntry stores a member's report of an encrypted entry.
+// The client voluntarily decrypts the payload to provide plaintext evidence.
+func (h *CapsuleHandler) ReportCapsuleEntry(c *gin.Context) {
+	userIDStr, _ := c.Get("user_id")
+	userID, _ := uuid.Parse(userIDStr.(string))
+	groupID, err := uuid.Parse(c.Param("id"))
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid group ID"})
+		return
+	}
+	entryID, err := uuid.Parse(c.Param("entryId"))
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid entry ID"})
+		return
+	}
+
+	ctx := c.Request.Context()
+
+	// Verify membership
+	var isMember bool
+	h.pool.QueryRow(ctx,
+		`SELECT EXISTS(SELECT 1 FROM group_members WHERE group_id = $1 AND user_id = $2)`,
+		groupID, userID,
+	).Scan(&isMember)
+	if !isMember {
+		c.JSON(http.StatusForbidden, gin.H{"error": "not a member"})
+		return
+	}
+
+	var req struct {
+		Reason          string  `json:"reason" binding:"required"`
+		DecryptedSample *string `json:"decrypted_sample"`
+	}
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "reason required"})
+		return
+	}
+
+	// Prevent duplicate reports from the same user for the same entry
+	var alreadyReported bool
+	h.pool.QueryRow(ctx,
+		`SELECT EXISTS(SELECT 1 FROM capsule_reports WHERE reporter_id = $1 AND entry_id = $2)`,
+		userID, entryID,
+	).Scan(&alreadyReported)
+	if alreadyReported {
+		c.JSON(http.StatusConflict, gin.H{"error": "already reported"})
+		return
+	}
+
+	_, err = h.pool.Exec(ctx, `
+		INSERT INTO capsule_reports (reporter_id, capsule_id, entry_id, decrypted_sample, reason)
+		VALUES ($1, $2, $3, $4, $5)
+	`, userID, groupID, entryID, req.DecryptedSample, req.Reason)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to store report"})
+		return
+	}
+
+	c.JSON(http.StatusCreated, gin.H{"message": "Report submitted"})
+}

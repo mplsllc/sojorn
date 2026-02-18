@@ -30,7 +30,7 @@ class _GroupForumTabState extends State<GroupForumTab> {
   static const _subforums = ['General', 'Events', 'Information', 'Safety', 'Recommendations', 'Marketplace'];
 
   static const _subforumDescriptions = {
-    'General': 'Open neighborhood discussion',
+    'General': 'Open public discussion',
     'Events': 'Plans, meetups, and happenings',
     'Information': 'Updates, notices, and resources',
     'Safety': 'Alerts and local safety conversations',
@@ -50,7 +50,7 @@ class _GroupForumTabState extends State<GroupForumTab> {
       if (widget.isEncrypted) {
         await _loadEncryptedThreads();
       } else {
-        // Non-encrypted neighborhood forums support sub-forums via category.
+        // Non-encrypted public forums support sub-forums via category.
         final queryParams = <String, String>{
           'limit': _activeSubforum == null ? '120' : '30',
         };

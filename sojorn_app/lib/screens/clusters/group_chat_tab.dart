@@ -1,10 +1,13 @@
+import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
 import 'package:cryptography/cryptography.dart';
+import '../../config/api_config.dart';
 import '../../services/api_service.dart';
 import '../../services/capsule_security_service.dart';
 import '../../services/content_guard_service.dart';
 import '../../theme/tokens.dart';
 import '../../theme/app_theme.dart';
+import '../../widgets/gif/gif_picker.dart';
 
 class GroupChatTab extends StatefulWidget {
   final String groupId;
@@ -30,6 +33,7 @@ class _GroupChatTabState extends State<GroupChatTab> {
   List<Map<String, dynamic>> _messages = [];
   bool _loading = true;
   bool _sending = false;
+  String? _pendingGif; // GIF URL staged before send
 
   @override
   void initState() {
@@ -84,6 +88,7 @@ class _GroupChatTabState extends State<GroupChatTab> {
           'author_avatar_url': entry['author_avatar_url'] ?? '',
           'created_at': entry['created_at'],
           'body': payload['text'] ?? '',
+          'gif_url': payload['gif_url'],
         });
       } catch (_) {
         decrypted.add({
@@ -100,35 +105,45 @@ class _GroupChatTabState extends State<GroupChatTab> {
 
   Future<void> _sendMessage() async {
     final text = _msgCtrl.text.trim();
-    if (text.isEmpty || _sending) return;
+    final gif = _pendingGif;
+    if (text.isEmpty && gif == null) return;
+    if (_sending) return;
 
-    // Local content guard — block before encryption
-    final guardReason = ContentGuardService.instance.check(text);
-    if (guardReason != null) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text(guardReason), backgroundColor: Colors.red),
-        );
+    if (text.isNotEmpty) {
+      // Local content guard — block before encryption
+      final guardReason = ContentGuardService.instance.check(text);
+      if (guardReason != null) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text(guardReason), backgroundColor: Colors.red),
+          );
+        }
+        return;
       }
-      return;
-    }
 
-    // Server-side AI moderation — stateless, nothing stored
-    final aiReason = await ApiService.instance.moderateContent(text: text, context: 'group');
-    if (aiReason != null) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text(aiReason), backgroundColor: Colors.red),
-        );
+      // Server-side AI moderation — stateless, nothing stored
+      final aiReason = await ApiService.instance.moderateContent(text: text, context: 'group');
+      if (aiReason != null) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text(aiReason), backgroundColor: Colors.red),
+          );
+        }
+        return;
       }
-      return;
     }
 
     setState(() => _sending = true);
     try {
+      final payload = {
+        'text': text,
+        'ts': DateTime.now().toIso8601String(),
+        if (gif != null) 'gif_url': gif,
+      };
+
       if (widget.isEncrypted && widget.capsuleKey != null) {
         final encrypted = await CapsuleSecurityService.encryptPayload(
-          payload: {'text': text, 'ts': DateTime.now().toIso8601String()},
+          payload: payload,
           capsuleKey: widget.capsuleKey!,
         );
         await ApiService.instance.callGoApi(
@@ -142,9 +157,11 @@ class _GroupChatTabState extends State<GroupChatTab> {
           },
         );
       } else {
-        await ApiService.instance.sendGroupMessage(widget.groupId, body: text);
+        await ApiService.instance.sendGroupMessage(widget.groupId,
+            body: text.isNotEmpty ? text : gif ?? '');
       }
       _msgCtrl.clear();
+      setState(() => _pendingGif = null);
       await _loadMessages();
     } catch (e) {
       if (mounted) {
@@ -152,6 +169,99 @@ class _GroupChatTabState extends State<GroupChatTab> {
       }
     }
     if (mounted) setState(() => _sending = false);
+  }
+
+  void _reportMessage(Map<String, dynamic> msg) {
+    final entryId = msg['id']?.toString() ?? '';
+    final body = msg['body'] as String? ?? '';
+    if (entryId.isEmpty) return;
+
+    String? selectedReason;
+    const reasons = ['Harassment', 'Hate speech', 'Threats', 'Spam', 'Illegal content', 'Other'];
+
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      builder: (ctx) => StatefulBuilder(
+        builder: (ctx, setBS) => Padding(
+          padding: EdgeInsets.only(
+            left: 20, right: 20, top: 20,
+            bottom: MediaQuery.of(ctx).viewInsets.bottom + 24,
+          ),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text('Report Message',
+                  style: TextStyle(
+                      color: AppTheme.navyBlue,
+                      fontSize: 16,
+                      fontWeight: FontWeight.w700)),
+              const SizedBox(height: 4),
+              Text('Why are you reporting this message?',
+                  style: TextStyle(color: SojornColors.textDisabled, fontSize: 13)),
+              const SizedBox(height: 16),
+              ...reasons.map((r) => RadioListTile<String>(
+                    dense: true,
+                    title: Text(r,
+                        style: TextStyle(color: SojornColors.postContent, fontSize: 14)),
+                    value: r,
+                    groupValue: selectedReason,
+                    activeColor: AppTheme.brightNavy,
+                    onChanged: (v) => setBS(() => selectedReason = v),
+                  )),
+              const SizedBox(height: 12),
+              SizedBox(
+                width: double.infinity,
+                child: FilledButton(
+                  style: FilledButton.styleFrom(
+                    backgroundColor: AppTheme.brightNavy,
+                    shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(12)),
+                  ),
+                  onPressed: selectedReason == null
+                      ? null
+                      : () async {
+                          Navigator.of(ctx).pop();
+                          await _submitReport(entryId, selectedReason!, body);
+                        },
+                  child: const Text('Submit Report'),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Future<void> _submitReport(String entryId, String reason, String sample) async {
+    try {
+      await ApiService.instance.callGoApi(
+        '/capsules/${widget.groupId}/entries/$entryId/report',
+        method: 'POST',
+        body: {
+          'reason': reason,
+          if (sample.isNotEmpty && sample != '[Decryption failed]')
+            'decrypted_sample': sample,
+        },
+      );
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Report submitted. Thank you.')),
+        );
+      }
+    } catch (_) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+              content: Text('Could not submit report. Please try again.')),
+        );
+      }
+    }
   }
 
   void _scrollToBottom() {
@@ -213,6 +323,10 @@ class _GroupChatTabState extends State<GroupChatTab> {
                             isMine: isMine,
                             isEncrypted: widget.isEncrypted,
                             timeStr: _timeStr(msg['created_at']?.toString()),
+                            gifUrl: msg['gif_url'] as String?,
+                            onReport: (!isMine && widget.isEncrypted)
+                                ? () => _reportMessage(msg)
+                                : null,
                           );
                         },
                       ),
@@ -220,44 +334,97 @@ class _GroupChatTabState extends State<GroupChatTab> {
         ),
         // Compose bar
         Container(
-          padding: const EdgeInsets.fromLTRB(12, 8, 8, 12),
+          padding: const EdgeInsets.fromLTRB(12, 6, 8, 12),
           decoration: BoxDecoration(
             color: AppTheme.cardSurface,
             border: Border(top: BorderSide(color: AppTheme.navyBlue.withValues(alpha: 0.08))),
           ),
           child: SafeArea(
             top: false,
-            child: Row(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisSize: MainAxisSize.min,
               children: [
-                Expanded(
-                  child: TextField(
-                    controller: _msgCtrl,
-                    style: TextStyle(color: SojornColors.postContent, fontSize: 14),
-                    decoration: InputDecoration(
-                      hintText: widget.isEncrypted ? 'Encrypted message…' : 'Type a message…',
-                      hintStyle: TextStyle(color: SojornColors.textDisabled),
-                      filled: true,
-                      fillColor: AppTheme.scaffoldBg,
-                      contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
-                      border: OutlineInputBorder(borderRadius: BorderRadius.circular(20), borderSide: BorderSide.none),
+                // GIF preview
+                if (_pendingGif != null)
+                  Padding(
+                    padding: const EdgeInsets.only(bottom: 6),
+                    child: Stack(
+                      children: [
+                        ClipRRect(
+                          borderRadius: BorderRadius.circular(10),
+                          child: Image.network(
+                            ApiConfig.needsProxy(_pendingGif!)
+                                ? ApiConfig.proxyImageUrl(_pendingGif!)
+                                : _pendingGif!,
+                            height: 100, fit: BoxFit.cover),
+                        ),
+                        Positioned(
+                          top: 4, right: 4,
+                          child: GestureDetector(
+                            onTap: () => setState(() => _pendingGif = null),
+                            child: Container(
+                              decoration: BoxDecoration(
+                                shape: BoxShape.circle,
+                                color: Colors.black54,
+                              ),
+                              padding: const EdgeInsets.all(2),
+                              child: const Icon(Icons.close, color: Colors.white, size: 14),
+                            ),
+                          ),
+                        ),
+                      ],
                     ),
-                    textInputAction: TextInputAction.send,
-                    onSubmitted: (_) => _sendMessage(),
                   ),
-                ),
-                const SizedBox(width: 8),
-                GestureDetector(
-                  onTap: _sendMessage,
-                  child: Container(
-                    width: 40, height: 40,
-                    decoration: BoxDecoration(
-                      shape: BoxShape.circle,
-                      color: _sending ? AppTheme.brightNavy.withValues(alpha: 0.5) : AppTheme.brightNavy,
+                Row(
+                  children: [
+                    // GIF button
+                    GestureDetector(
+                      onTap: () => showGifPicker(
+                        context,
+                        onSelected: (url) => setState(() => _pendingGif = url),
+                      ),
+                      child: Container(
+                        width: 36, height: 36,
+                        decoration: BoxDecoration(
+                          shape: BoxShape.circle,
+                          color: AppTheme.navyBlue.withValues(alpha: 0.07),
+                        ),
+                        child: Icon(Icons.gif_outlined, color: AppTheme.textSecondary, size: 22),
+                      ),
                     ),
-                    child: _sending
-                        ? const Padding(padding: EdgeInsets.all(10), child: CircularProgressIndicator(strokeWidth: 2, color: SojornColors.basicWhite))
-                        : const Icon(Icons.send, color: SojornColors.basicWhite, size: 18),
-                  ),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: TextField(
+                        controller: _msgCtrl,
+                        style: TextStyle(color: SojornColors.postContent, fontSize: 14),
+                        decoration: InputDecoration(
+                          hintText: widget.isEncrypted ? 'Encrypted message…' : 'Type a message…',
+                          hintStyle: TextStyle(color: SojornColors.textDisabled),
+                          filled: true,
+                          fillColor: AppTheme.scaffoldBg,
+                          contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+                          border: OutlineInputBorder(borderRadius: BorderRadius.circular(20), borderSide: BorderSide.none),
+                        ),
+                        textInputAction: TextInputAction.send,
+                        onSubmitted: (_) => _sendMessage(),
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                    GestureDetector(
+                      onTap: _sendMessage,
+                      child: Container(
+                        width: 40, height: 40,
+                        decoration: BoxDecoration(
+                          shape: BoxShape.circle,
+                          color: _sending ? AppTheme.brightNavy.withValues(alpha: 0.5) : AppTheme.brightNavy,
+                        ),
+                        child: _sending
+                            ? const Padding(padding: EdgeInsets.all(10), child: CircularProgressIndicator(strokeWidth: 2, color: SojornColors.basicWhite))
+                            : const Icon(Icons.send, color: SojornColors.basicWhite, size: 18),
+                      ),
+                    ),
+                  ],
                 ),
               ],
             ),
@@ -274,12 +441,16 @@ class _ChatBubble extends StatelessWidget {
   final bool isMine;
   final bool isEncrypted;
   final String timeStr;
+  final String? gifUrl;
+  final VoidCallback? onReport;
 
   const _ChatBubble({
     required this.message,
     required this.isMine,
     required this.isEncrypted,
     required this.timeStr,
+    this.gifUrl,
+    this.onReport,
   });
 
   @override
@@ -290,7 +461,9 @@ class _ChatBubble extends StatelessWidget {
 
     return Align(
       alignment: isMine ? Alignment.centerRight : Alignment.centerLeft,
-      child: Container(
+      child: GestureDetector(
+        onLongPress: onReport,
+        child: Container(
         margin: const EdgeInsets.symmetric(vertical: 3),
         constraints: BoxConstraints(maxWidth: MediaQuery.of(context).size.width * 0.78),
         padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
@@ -334,8 +507,29 @@ class _ChatBubble extends StatelessWidget {
                 ],
               ),
             ),
-            Text(body, style: TextStyle(color: SojornColors.postContent, fontSize: 14, height: 1.35)),
+            if (body.isNotEmpty)
+              Text(body, style: TextStyle(color: SojornColors.postContent, fontSize: 14, height: 1.35)),
+            if (gifUrl != null) ...[
+              if (body.isNotEmpty) const SizedBox(height: 6),
+              ClipRRect(
+                borderRadius: BorderRadius.circular(10),
+                child: CachedNetworkImage(
+                  imageUrl: ApiConfig.needsProxy(gifUrl!)
+                      ? ApiConfig.proxyImageUrl(gifUrl!)
+                      : gifUrl!,
+                  width: 200,
+                  fit: BoxFit.cover,
+                  placeholder: (_, __) => Container(
+                    width: 200, height: 120,
+                    color: AppTheme.navyBlue.withValues(alpha: 0.05),
+                    child: Icon(Icons.gif_outlined, color: AppTheme.textSecondary, size: 32),
+                  ),
+                  errorWidget: (_, __, ___) => const SizedBox.shrink(),
+                ),
+              ),
+            ],
           ],
+        ),
         ),
       ),
     );

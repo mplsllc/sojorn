@@ -28,4 +28,18 @@ class ApiConfig {
 
     return raw;
   }
+
+  /// Wraps external GIF/image URLs (Reddit, GifCities) through the server proxy
+  /// so the client's IP is never sent to third-party origins.
+  static String proxyImageUrl(String url) {
+    return '$baseUrl/image-proxy?url=${Uri.encodeComponent(url)}';
+  }
+
+  /// Returns true if [url] is an external GIF that should be proxied.
+  static bool needsProxy(String url) {
+    return url.startsWith('https://i.redd.it/') ||
+        url.startsWith('https://preview.redd.it/') ||
+        url.startsWith('https://external-preview.redd.it/') ||
+        url.startsWith('https://blob.gifcities.org/gifcities/');
+  }
 }

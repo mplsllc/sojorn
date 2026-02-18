@@ -232,6 +232,22 @@ class ApiClient {
     });
   }
 
+  // Capsule Reports
+  async listCapsuleReports(params: { limit?: number; offset?: number; status?: string } = {}) {
+    const qs = new URLSearchParams();
+    if (params.limit) qs.set('limit', String(params.limit));
+    if (params.offset) qs.set('offset', String(params.offset));
+    if (params.status) qs.set('status', params.status);
+    return this.request<any>(`/api/v1/admin/capsule-reports?${qs}`);
+  }
+
+  async updateCapsuleReportStatus(id: string, status: string) {
+    return this.request<any>(`/api/v1/admin/capsule-reports/${id}`, {
+      method: 'PATCH',
+      body: JSON.stringify({ status }),
+    });
+  }
+
   // Algorithm
   async getAlgorithmConfig() {
     return this.request<any>('/api/v1/admin/algorithm');

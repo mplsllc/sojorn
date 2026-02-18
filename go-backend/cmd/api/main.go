@@ -404,6 +404,7 @@ func main() {
 			// Media routes
 			authorized.POST("/upload", mediaHandler.Upload)
 			authorized.GET("/media/sign", mediaHandler.GetSignedMediaURL)
+			authorized.GET("/image-proxy", mediaHandler.ImageProxy)
 
 			// Search & Discover routes
 			discoverHandler := handlers.NewDiscoverHandler(userRepo, postRepo, tagRepo, categoryRepo, assetService)
@@ -529,6 +530,7 @@ func main() {
 				capsules.GET("/:id/entries", capsuleHandler.GetCapsuleEntries)
 				capsules.POST("/:id/invite", capsuleHandler.InviteToCapsule)
 				capsules.POST("/:id/rotate-keys", capsuleHandler.RotateKeys)
+				capsules.POST("/:id/entries/:entryId/report", capsuleHandler.ReportCapsuleEntry)
 
 				// Group features (posts, chat, forum, members)
 				capsules.GET("/:id/posts", groupHandler.ListGroupPosts)
@@ -643,6 +645,10 @@ func main() {
 		admin.GET("/reports", adminHandler.ListReports)
 		admin.PATCH("/reports/:id", adminHandler.UpdateReportStatus)
 		admin.POST("/reports/bulk", adminHandler.BulkUpdateReports)
+
+		// Capsule (encrypted group) reports
+		admin.GET("/capsule-reports", adminHandler.ListCapsuleReports)
+		admin.PATCH("/capsule-reports/:id", adminHandler.UpdateCapsuleReportStatus)
 
 		// Algorithm / Feed Config
 		admin.GET("/algorithm", adminHandler.GetAlgorithmConfig)

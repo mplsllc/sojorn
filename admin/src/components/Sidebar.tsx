@@ -45,6 +45,7 @@ const navigation: NavEntry[] = [
       { href: '/ai-audit-log', label: 'AI Audit Log', icon: ScrollText },
       { href: '/appeals', label: 'Appeals', icon: Scale },
       { href: '/reports', label: 'Reports', icon: Flag },
+      { href: '/capsule-reports', label: 'Capsule Reports', icon: ShieldAlert },
       { href: '/safe-links', label: 'Safe Links', icon: ShieldCheck },
       { href: '/content-tools', label: 'Content Tools', icon: Wrench },
     ],

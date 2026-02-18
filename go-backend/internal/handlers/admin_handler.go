@@ -1727,6 +1727,89 @@ func (h *AdminHandler) UpdateReportStatus(c *gin.Context) {
 }
 
 // ──────────────────────────────────────────────
+// Capsule Reports
+// ──────────────────────────────────────────────
+
+func (h *AdminHandler) ListCapsuleReports(c *gin.Context) {
+	ctx := c.Request.Context()
+	limit, _ := strconv.Atoi(c.DefaultQuery("limit", "50"))
+	offset, _ := strconv.Atoi(c.DefaultQuery("offset", "0"))
+	statusFilter := c.DefaultQuery("status", "pending")
+
+	rows, err := h.pool.Query(ctx, `
+		SELECT cr.id, cr.reporter_id, cr.capsule_id, cr.entry_id,
+		       cr.decrypted_sample, cr.reason, cr.status, cr.created_at,
+		       g.name  AS capsule_name,
+		       p.handle AS reporter_handle
+		FROM capsule_reports cr
+		JOIN groups  g ON cr.capsule_id = g.id
+		JOIN profiles p ON cr.reporter_id = p.id
+		WHERE cr.status = $1
+		ORDER BY cr.created_at ASC
+		LIMIT $2 OFFSET $3
+	`, statusFilter, limit, offset)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to list capsule reports"})
+		return
+	}
+	defer rows.Close()
+
+	var total int
+	h.pool.QueryRow(ctx, `SELECT COUNT(*) FROM capsule_reports WHERE status = $1`, statusFilter).Scan(&total)
+
+	var reports []gin.H
+	for rows.Next() {
+		var rID, reporterID, capsuleID, entryID uuid.UUID
+		var decryptedSample *string
+		var reason, status, capsuleName, reporterHandle string
+		var createdAt time.Time
+
+		if err := rows.Scan(&rID, &reporterID, &capsuleID, &entryID,
+			&decryptedSample, &reason, &status, &createdAt,
+			&capsuleName, &reporterHandle); err != nil {
+			continue
+		}
+
+		reports = append(reports, gin.H{
+			"id": rID, "reporter_id": reporterID,
+			"capsule_id": capsuleID, "capsule_name": capsuleName,
+			"entry_id": entryID, "decrypted_sample": decryptedSample,
+			"reason": reason, "status": status,
+			"created_at": createdAt, "reporter_handle": reporterHandle,
+		})
+	}
+
+	if reports == nil {
+		reports = []gin.H{}
+	}
+	c.JSON(http.StatusOK, gin.H{"reports": reports, "total": total, "limit": limit, "offset": offset})
+}
+
+func (h *AdminHandler) UpdateCapsuleReportStatus(c *gin.Context) {
+	ctx := c.Request.Context()
+	reportID := c.Param("id")
+
+	var req struct {
+		Status string `json:"status" binding:"required,oneof=reviewed dismissed actioned"`
+	}
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+
+	_, err := h.pool.Exec(ctx,
+		`UPDATE capsule_reports SET status = $1, updated_at = NOW() WHERE id = $2::uuid`,
+		req.Status, reportID,
+	)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to update report"})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{"message": "Report updated"})
+}
+
+// ──────────────────────────────────────────────
 // Algorithm / Feed Settings
 // ──────────────────────────────────────────────
 

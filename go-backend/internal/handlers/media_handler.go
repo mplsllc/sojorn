@@ -268,3 +268,67 @@ func (h *MediaHandler) putObjectR2API(c *gin.Context, fileBytes []byte, contentT
 
 	return fmt.Sprintf("https://%s.r2.cloudflarestorage.com/%s/%s", h.accountID, bucket, key), nil
 }
+
+// ImageProxy streams an image from an external URL through the server so that
+// the client's IP is never exposed to the origin (Reddit, GifCities, etc.).
+// The image is streamed chunk-by-chunk and never written to disk or cached.
+//
+// Usage: GET /image-proxy?url=https%3A%2F%2Fi.redd.it%2Ffoo.gif
+func (h *MediaHandler) ImageProxy(c *gin.Context) {
+	rawURL := c.Query("url")
+	if rawURL == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "url required"})
+		return
+	}
+
+	// Allowlist: only proxy from known GIF sources to prevent SSRF abuse
+	allowed := false
+	for _, prefix := range []string{
+		"https://i.redd.it/",
+		"https://preview.redd.it/",
+		"https://external-preview.redd.it/",
+		"https://blob.gifcities.org/gifcities/",
+	} {
+		if strings.HasPrefix(rawURL, prefix) {
+			allowed = true
+			break
+		}
+	}
+	if !allowed {
+		c.JSON(http.StatusForbidden, gin.H{"error": "origin not allowed"})
+		return
+	}
+
+	ctx := c.Request.Context()
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, rawURL, nil)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid url"})
+		return
+	}
+	req.Header.Set("User-Agent", "Mozilla/5.0 (compatible; Sojorn/1.0)")
+
+	client := &http.Client{Timeout: 20 * time.Second}
+	resp, err := client.Do(req)
+	if err != nil {
+		c.JSON(http.StatusBadGateway, gin.H{"error": "fetch failed"})
+		return
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		c.Status(resp.StatusCode)
+		return
+	}
+
+	contentType := resp.Header.Get("Content-Type")
+	if contentType == "" {
+		contentType = "image/gif"
+	}
+
+	c.Header("Content-Type", contentType)
+	c.Header("Cache-Control", "public, max-age=3600")
+	c.Status(http.StatusOK)
+
+	// Stream body directly to client — no buffering, no disk writes
+	io.Copy(c.Writer, resp.Body) //nolint:errcheck
+}
