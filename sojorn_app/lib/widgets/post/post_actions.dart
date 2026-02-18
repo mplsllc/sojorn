@@ -318,7 +318,7 @@ class _PostActionsState extends ConsumerState<PostActions> {
                   ),
                   style: IconButton.styleFrom(
                     backgroundColor: AppTheme.navyBlue.withValues(alpha: 0.08),
-                    minimumSize: const Size(38, 38),
+                    minimumSize: const Size(34, 34),
                     shape: RoundedRectangleBorder(
                       borderRadius: BorderRadius.circular(10),
                     ),
@@ -333,7 +333,7 @@ class _PostActionsState extends ConsumerState<PostActions> {
                   ),
                   style: IconButton.styleFrom(
                     backgroundColor: AppTheme.navyBlue.withValues(alpha: 0.08),
-                    minimumSize: const Size(38, 38),
+                    minimumSize: const Size(34, 34),
                     shape: RoundedRectangleBorder(
                       borderRadius: BorderRadius.circular(10),
                     ),

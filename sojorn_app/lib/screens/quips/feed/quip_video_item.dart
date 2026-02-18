@@ -20,11 +20,13 @@ class QuipVideoItem extends StatefulWidget {
   final int commentCount;
   final bool isUserPaused;
   final Function(String emoji) onReact;
-  final VoidCallback onOpenReactionPicker;
+  final Function(Offset tapPosition) onOpenReactionPicker;
   final VoidCallback onComment;
   final VoidCallback onShare;
   final VoidCallback onTogglePause;
   final VoidCallback onNotInterested;
+  final bool isFollowing;
+  final VoidCallback? onFollow;
 
   const QuipVideoItem({
     super.key,
@@ -35,12 +37,14 @@ class QuipVideoItem extends StatefulWidget {
     this.myReactions = const {},
     this.commentCount = 0,
     required this.isUserPaused,
+    this.isFollowing = false,
     required this.onReact,
     required this.onOpenReactionPicker,
     required this.onComment,
     required this.onShare,
     required this.onTogglePause,
     required this.onNotInterested,
+    this.onFollow,
   });
 
   @override
@@ -232,12 +236,12 @@ class _QuipVideoItemState extends State<QuipVideoItem>
       inner = _fallbackAvatarInner(letter);
     }
 
-    return GestureDetector(
-      onTap: _navigateToProfile,
-      child: Stack(
-        clipBehavior: Clip.none,
-        children: [
-          Container(
+    return Stack(
+      clipBehavior: Clip.none,
+      children: [
+        GestureDetector(
+          onTap: _navigateToProfile,
+          child: Container(
             width: 48,
             height: 48,
             decoration: BoxDecoration(
@@ -249,25 +253,37 @@ class _QuipVideoItemState extends State<QuipVideoItem>
               child: inner,
             ),
           ),
-          // "+" badge
+        ),
+        // Follow badge — tapping follows/unfollows the author
+        if (widget.onFollow != null)
           Positioned(
-            bottom: -4,
+            bottom: -6,
             left: 0,
             right: 0,
             child: Center(
-              child: Container(
-                width: 20,
-                height: 20,
-                decoration: const BoxDecoration(
-                  color: Color(0xFF2979FF),
-                  shape: BoxShape.circle,
+              child: GestureDetector(
+                onTap: widget.onFollow,
+                child: AnimatedContainer(
+                  duration: const Duration(milliseconds: 200),
+                  width: 22,
+                  height: 22,
+                  decoration: BoxDecoration(
+                    color: widget.isFollowing
+                        ? const Color(0xFF4CAF50)
+                        : const Color(0xFF2979FF),
+                    shape: BoxShape.circle,
+                    border: Border.all(color: SojornColors.basicWhite, width: 1.5),
+                  ),
+                  child: Icon(
+                    widget.isFollowing ? Icons.check : Icons.add,
+                    color: Colors.white,
+                    size: 13,
+                  ),
                 ),
-                child: const Icon(Icons.add, color: Colors.white, size: 14),
               ),
             ),
           ),
-        ],
-      ),
+      ],
     );
   }
 
@@ -304,7 +320,7 @@ class _QuipVideoItemState extends State<QuipVideoItem>
         _buildActionBtn(
           child: _buildReactionIcon(),
           onTap: () => widget.onReact(_quickReactEmoji),
-          onLongPress: widget.onOpenReactionPicker,
+          onLongPressAt: widget.onOpenReactionPicker,
           label: reactionLabel,
         ),
         const SizedBox(height: 20),
@@ -389,6 +405,7 @@ class _QuipVideoItemState extends State<QuipVideoItem>
     required Widget child,
     required VoidCallback onTap,
     VoidCallback? onLongPress,
+    Function(Offset globalPos)? onLongPressAt,
     String? label,
   }) {
     return Column(
@@ -396,7 +413,10 @@ class _QuipVideoItemState extends State<QuipVideoItem>
       children: [
         GestureDetector(
           onTap: onTap,
-          onLongPress: onLongPress,
+          onLongPress: onLongPressAt == null ? onLongPress : null,
+          onLongPressStart: onLongPressAt != null
+              ? (details) => onLongPressAt(details.globalPosition)
+              : null,
           behavior: HitTestBehavior.opaque,
           child: Padding(padding: const EdgeInsets.all(4), child: child),
         ),

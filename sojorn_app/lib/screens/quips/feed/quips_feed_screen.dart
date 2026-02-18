@@ -22,6 +22,7 @@ class Quip {
   final String username;
   final String? displayName;
   final String? avatarUrl;
+  final String authorId;
   final int? durationMs;
   final int commentCount;
   final String? overlayJson;
@@ -36,6 +37,7 @@ class Quip {
     required this.username,
     this.displayName,
     this.avatarUrl,
+    this.authorId = '',
     this.durationMs,
     this.commentCount = 0,
     this.overlayJson,
@@ -57,6 +59,7 @@ class Quip {
       username: (author?['handle'] ?? 'unknown') as String,
       displayName: author?['display_name'] as String?,
       avatarUrl: author?['avatar_url'] as String?,
+      authorId: (author?['id'] ?? '') as String,
       durationMs: map['duration_ms'] as int?,
       commentCount: _parseCount(map['comment_count']),
       overlayJson: map['overlay_json'] as String?,
@@ -103,6 +106,7 @@ class _QuipsFeedScreenState extends ConsumerState<QuipsFeedScreen>
   final Map<int, Future<void>> _controllerFutures = {};
   final Map<String, Map<String, int>> _reactionCounts = {};
   final Map<String, Set<String>> _myReactions = {};
+  final Map<String, bool> _followStates = {};
 
   bool _isLoading = false;
   bool _hasMore = true;
@@ -466,7 +470,91 @@ class _QuipsFeedScreenState extends ConsumerState<QuipsFeedScreen>
     }
   }
 
-  void _openReactionPicker(Quip quip) {
+  void _openReactionPicker(Quip quip, Offset tapPosition) {
+    const quickEmojis = ['❤️', '👍', '😂', '😮', '😢', '😡', '🎉', '🔥'];
+    final screenSize = MediaQuery.of(context).size;
+
+    // Position the pill to the left of the tap point, vertically centered on it
+    // Pill is ~320px wide × 52px tall; keep it within screen bounds
+    const pillWidth = 320.0;
+    const pillHeight = 52.0;
+    double left = tapPosition.dx - pillWidth - 8;
+    double top = tapPosition.dy - pillHeight / 2;
+    left = left.clamp(8.0, screenSize.width - pillWidth - 8);
+    top = top.clamp(8.0, screenSize.height - pillHeight - 8);
+
+    showDialog<void>(
+      context: context,
+      barrierColor: Colors.transparent,
+      builder: (ctx) => GestureDetector(
+        behavior: HitTestBehavior.opaque,
+        onTap: () => Navigator.pop(ctx),
+        child: Stack(
+          children: [
+            Positioned(
+              left: left,
+              top: top,
+              child: GestureDetector(
+                onTap: () {}, // prevent dismiss when tapping inside pill
+                child: Material(
+                  elevation: 12,
+                  borderRadius: BorderRadius.circular(32),
+                  color: AppTheme.cardSurface,
+                  child: Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        ...quickEmojis.map((emoji) {
+                          final isActive = (_myReactions[quip.id] ?? quip.myReactions).contains(emoji);
+                          return GestureDetector(
+                            onTap: () {
+                              Navigator.pop(ctx);
+                              _toggleReaction(quip, emoji);
+                            },
+                            child: AnimatedContainer(
+                              duration: const Duration(milliseconds: 120),
+                              margin: const EdgeInsets.symmetric(horizontal: 2),
+                              padding: const EdgeInsets.all(4),
+                              decoration: isActive
+                                  ? BoxDecoration(
+                                      color: AppTheme.brightNavy.withValues(alpha: 0.15),
+                                      borderRadius: BorderRadius.circular(12),
+                                    )
+                                  : null,
+                              child: Text(emoji, style: const TextStyle(fontSize: 26)),
+                            ),
+                          );
+                        }),
+                        const SizedBox(width: 4),
+                        GestureDetector(
+                          onTap: () {
+                            Navigator.pop(ctx);
+                            _openFullReactionPicker(quip);
+                          },
+                          child: Container(
+                            width: 36,
+                            height: 36,
+                            decoration: BoxDecoration(
+                              color: AppTheme.navyBlue.withValues(alpha: 0.08),
+                              borderRadius: BorderRadius.circular(18),
+                            ),
+                            child: Icon(Icons.add, size: 18, color: AppTheme.navyBlue),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  void _openFullReactionPicker(Quip quip) {
     showModalBottomSheet(
       context: context,
       isScrollControlled: true,
@@ -503,6 +591,24 @@ class _QuipsFeedScreenState extends ConsumerState<QuipsFeedScreen>
 
     // Fire-and-forget to backend — no revert on failure (signal still valuable)
     ref.read(apiServiceProvider).hidePost(quip.id).catchError((_) {});
+  }
+
+  Future<void> _toggleFollow(Quip quip) async {
+    final id = quip.authorId;
+    if (id.isEmpty) return;
+    final isFollowing = _followStates[id] ?? false;
+    setState(() => _followStates[id] = !isFollowing);
+    try {
+      final api = ref.read(apiServiceProvider);
+      if (isFollowing) {
+        await api.unfollowUser(id);
+      } else {
+        await api.followUser(id);
+      }
+    } catch (_) {
+      if (!mounted) return;
+      setState(() => _followStates[id] = isFollowing);
+    }
   }
 
   Future<void> _openComments(Quip quip) async {
@@ -611,12 +717,14 @@ class _QuipsFeedScreenState extends ConsumerState<QuipsFeedScreen>
                     myReactions: _myReactions[quip.id] ?? quip.myReactions,
                     commentCount: quip.commentCount,
                     isUserPaused: _isUserPaused,
+                    isFollowing: _followStates[quip.authorId] ?? false,
                     onReact: (emoji) => _toggleReaction(quip, emoji),
-                    onOpenReactionPicker: () => _openReactionPicker(quip),
+                    onOpenReactionPicker: (pos) => _openReactionPicker(quip, pos),
                     onComment: () => _openComments(quip),
                     onShare: () => _shareQuip(quip),
                     onTogglePause: _toggleUserPause,
                     onNotInterested: () => _handleNotInterested(quip),
+                    onFollow: quip.authorId.isNotEmpty ? () => _toggleFollow(quip) : null,
                   ),
                 );
               },

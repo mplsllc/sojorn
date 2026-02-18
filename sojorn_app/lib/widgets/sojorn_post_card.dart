@@ -148,8 +148,8 @@ class _sojornPostCardState extends ConsumerState<sojornPostCard> {
           color: AppTheme.cardSurface,
           borderRadius: BorderRadius.circular(_isThread ? 12 : 20),
           border: _isThread
-              ? Border.all(color: AppTheme.navyBlue.withValues(alpha: 0.08), width: 1)
-              : Border.all(color: AppTheme.navyBlue.withValues(alpha: 0.3), width: 1.5),
+              ? Border.all(color: AppTheme.navyBlue.withValues(alpha: 0.06), width: 1)
+              : Border.all(color: AppTheme.navyBlue.withValues(alpha: 0.1), width: 1),
           boxShadow: _isThread
               ? []
               : [
@@ -467,7 +467,7 @@ class _sojornPostCardState extends ConsumerState<sojornPostCard> {
 
 
                 // Actions section - with padding
-                const SizedBox(height: 16),
+                const SizedBox(height: 10),
                 Padding(
                   padding: EdgeInsets.symmetric(horizontal: _padding.left),
                   child: PostActions(
@@ -478,7 +478,7 @@ class _sojornPostCardState extends ConsumerState<sojornPostCard> {
                     showReactions: _effectiveThreadView,
                   ),
                 ),
-                const SizedBox(height: 4),
+                const SizedBox(height: 2),
               ],
             ),
           ),
