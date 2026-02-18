@@ -1170,6 +1170,22 @@ func (h *PostHandler) UnlikePost(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{"message": "Post unliked"})
 }
 
+// HidePost records a "Not Interested" signal for a post.
+// The post will be excluded from all subsequent feed queries for this user,
+// and repeated hides of the same author trigger algorithmic suppression.
+func (h *PostHandler) HidePost(c *gin.Context) {
+	postID := c.Param("id")
+	userIDStr, _ := c.Get("user_id")
+
+	err := h.postRepo.HidePost(c.Request.Context(), postID, userIDStr.(string))
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to hide post", "details": err.Error()})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{"message": "Post hidden"})
+}
+
 func (h *PostHandler) SavePost(c *gin.Context) {
 	postID := c.Param("id")
 	userIDStr, _ := c.Get("user_id")

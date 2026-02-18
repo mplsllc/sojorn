@@ -9,9 +9,9 @@ import '../../../providers/feed_refresh_provider.dart';
 import '../../../routes/app_routes.dart';
 import '../../../theme/app_theme.dart';
 import '../../../theme/tokens.dart';
-import '../../post/post_detail_screen.dart';
 import 'quip_video_item.dart';
 import '../../home/home_shell.dart';
+import '../../../widgets/reactions/reaction_picker.dart';
 import '../../../widgets/video_comments_sheet.dart';
 
 class Quip {
@@ -23,8 +23,10 @@ class Quip {
   final String? displayName;
   final String? avatarUrl;
   final int? durationMs;
-  final int? likeCount;
+  final int commentCount;
   final String? overlayJson;
+  final Map<String, int> reactions;
+  final Set<String> myReactions;
 
   const Quip({
     required this.id,
@@ -35,8 +37,10 @@ class Quip {
     this.displayName,
     this.avatarUrl,
     this.durationMs,
-    this.likeCount,
+    this.commentCount = 0,
     this.overlayJson,
+    this.reactions = const {},
+    this.myReactions = const {},
   });
 
   factory Quip.fromMap(Map<String, dynamic> map) {
@@ -54,18 +58,29 @@ class Quip {
       displayName: author?['display_name'] as String?,
       avatarUrl: author?['avatar_url'] as String?,
       durationMs: map['duration_ms'] as int?,
-      likeCount: _parseLikeCount(map['metrics']),
+      commentCount: _parseCount(map['comment_count']),
       overlayJson: map['overlay_json'] as String?,
+      reactions: _parseReactions(map['reactions']),
+      myReactions: _parseMyReactions(map['my_reactions']),
     );
   }
 
-  static int? _parseLikeCount(dynamic metrics) {
-    if (metrics is Map<String, dynamic>) {
-      final val = metrics['like_count'];
-      if (val is int) return val;
-      if (val is num) return val.toInt();
+  static Map<String, int> _parseReactions(dynamic v) {
+    if (v is Map<String, dynamic>) {
+      return v.map((k, val) => MapEntry(k, val is int ? val : (val is num ? val.toInt() : 0)));
     }
-    return null;
+    return {};
+  }
+
+  static Set<String> _parseMyReactions(dynamic v) {
+    if (v is List) return v.whereType<String>().toSet();
+    return {};
+  }
+
+  static int _parseCount(dynamic v) {
+    if (v is int) return v;
+    if (v is num) return v.toInt();
+    return 0;
   }
 }
 
@@ -86,8 +101,8 @@ class _QuipsFeedScreenState extends ConsumerState<QuipsFeedScreen>
   final List<Quip> _quips = [];
   final Map<int, VideoPlayerController> _controllers = {};
   final Map<int, Future<void>> _controllerFutures = {};
-  final Map<String, bool> _liked = {};
-  final Map<String, int> _likeCounts = {};
+  final Map<String, Map<String, int>> _reactionCounts = {};
+  final Map<String, Set<String>> _myReactions = {};
 
   bool _isLoading = false;
   bool _hasMore = true;
@@ -268,7 +283,8 @@ class _QuipsFeedScreenState extends ConsumerState<QuipsFeedScreen>
               }
             } else {
             }
-          } catch (e) {
+          } catch (_) {
+            // Ignore — initial post will just not appear at top
           }
         }
       }
@@ -297,7 +313,10 @@ class _QuipsFeedScreenState extends ConsumerState<QuipsFeedScreen>
         _quips.addAll(items);
         _hasMore = items.length == _pageSize;
         for (final item in items) {
-          _likeCounts.putIfAbsent(item.id, () => item.likeCount ?? 0);
+          _reactionCounts.putIfAbsent(
+              item.id, () => Map<String, int>.from(item.reactions));
+          _myReactions.putIfAbsent(
+              item.id, () => Set<String>.from(item.myReactions));
         }
       });
 
@@ -409,41 +428,79 @@ class _QuipsFeedScreenState extends ConsumerState<QuipsFeedScreen>
     await _fetchQuips();
   }
 
-  Future<void> _toggleLike(Quip quip) async {
+  Future<void> _toggleReaction(Quip quip, String emoji) async {
     final api = ref.read(apiServiceProvider);
-    final currentlyLiked = _liked[quip.id] ?? false;
+    final currentCounts =
+        Map<String, int>.from(_reactionCounts[quip.id] ?? quip.reactions);
+    final currentMine =
+        Set<String>.from(_myReactions[quip.id] ?? quip.myReactions);
+
+    // Optimistic update
+    final isRemoving = currentMine.contains(emoji);
     setState(() {
-      _liked[quip.id] = !currentlyLiked;
-      final currentCount = _likeCounts[quip.id] ?? 0;
-      final next = currentlyLiked ? currentCount - 1 : currentCount + 1;
-      _likeCounts[quip.id] = next < 0 ? 0 : next;
+      if (isRemoving) {
+        currentMine.remove(emoji);
+        final newCount = (currentCounts[emoji] ?? 1) - 1;
+        if (newCount <= 0) {
+          currentCounts.remove(emoji);
+        } else {
+          currentCounts[emoji] = newCount;
+        }
+      } else {
+        currentMine.add(emoji);
+        currentCounts[emoji] = (currentCounts[emoji] ?? 0) + 1;
+      }
+      _reactionCounts[quip.id] = currentCounts;
+      _myReactions[quip.id] = currentMine;
     });
 
     try {
-      if (currentlyLiked) {
-        await api.unappreciatePost(quip.id);
-      } else {
-        await api.appreciatePost(quip.id);
-      }
+      await api.toggleReaction(quip.id, emoji);
     } catch (_) {
-      // revert on failure
+      // Revert on failure
       if (!mounted) return;
       setState(() {
-        _liked[quip.id] = currentlyLiked;
-        _likeCounts[quip.id] =
-            (_likeCounts[quip.id] ?? 0) + (currentlyLiked ? 1 : -1);
-        if ((_likeCounts[quip.id] ?? 0) < 0) {
-          _likeCounts[quip.id] = 0;
-        }
+        _reactionCounts[quip.id] = Map<String, int>.from(quip.reactions);
+        _myReactions[quip.id] = Set<String>.from(quip.myReactions);
       });
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('Could not update like. Please try again.'),
-          ),
-        );
-      }
     }
+  }
+
+  void _openReactionPicker(Quip quip) {
+    showDialog(
+      context: context,
+      builder: (_) => ReactionPicker(
+        onReactionSelected: (emoji) => _toggleReaction(quip, emoji),
+        reactionCounts: _reactionCounts[quip.id] ?? quip.reactions,
+        myReactions: _myReactions[quip.id] ?? quip.myReactions,
+      ),
+    );
+  }
+
+  Future<void> _handleNotInterested(Quip quip) async {
+    final index = _quips.indexOf(quip);
+    if (index == -1) return;
+
+    // Optimistic removal — user sees it gone immediately
+    setState(() {
+      _quips.removeAt(index);
+      final ctrl = _controllers.remove(index);
+      ctrl?.dispose();
+      // Remap controllers above the removed index
+      final remapped = <int, VideoPlayerController>{};
+      _controllers.forEach((k, v) {
+        remapped[k > index ? k - 1 : k] = v;
+      });
+      _controllers
+        ..clear()
+        ..addAll(remapped);
+      if (_currentIndex >= _quips.length && _currentIndex > 0) {
+        _currentIndex = _quips.length - 1;
+      }
+    });
+
+    // Fire-and-forget to backend — no revert on failure (signal still valuable)
+    ref.read(apiServiceProvider).hidePost(quip.id).catchError((_) {});
   }
 
   Future<void> _openComments(Quip quip) async {
@@ -453,10 +510,9 @@ class _QuipsFeedScreenState extends ConsumerState<QuipsFeedScreen>
       backgroundColor: SojornColors.transparent,
       builder: (context) => VideoCommentsSheet(
         postId: quip.id,
-        initialCommentCount: 0,
-        onCommentPosted: () {
-          // Optional: handle reload if needed
-        },
+        initialCommentCount: quip.commentCount,
+        showNavActions: false,
+        onCommentPosted: () {},
       ),
     );
   }
@@ -528,8 +584,7 @@ class _QuipsFeedScreenState extends ConsumerState<QuipsFeedScreen>
             child: PageView.builder(
               controller: _pageController,
               scrollDirection: Axis.vertical,
-              // Ensure physics allows scrolling to trigger refresh
-              physics: const AlwaysScrollableScrollPhysics(),
+              physics: const PageScrollPhysics(parent: AlwaysScrollableScrollPhysics()),
               itemCount: _quips.length,
               onPageChanged: (index) {
                 _currentIndex = index;
@@ -542,8 +597,6 @@ class _QuipsFeedScreenState extends ConsumerState<QuipsFeedScreen>
               itemBuilder: (context, index) {
                 final quip = _quips[index];
                 final controller = _controllers[index];
-                final isLiked = _liked[quip.id] ?? false;
-                final likeCount = _likeCounts[quip.id] ?? quip.likeCount ?? 0;
                 return VisibilityDetector(
                   key: ValueKey('quip-${quip.id}'),
                   onVisibilityChanged: (info) =>
@@ -552,13 +605,16 @@ class _QuipsFeedScreenState extends ConsumerState<QuipsFeedScreen>
                     quip: quip,
                     controller: controller,
                     isActive: index == _currentIndex,
-                    isLiked: isLiked,
-                    likeCount: likeCount,
+                    reactions: _reactionCounts[quip.id] ?? quip.reactions,
+                    myReactions: _myReactions[quip.id] ?? quip.myReactions,
+                    commentCount: quip.commentCount,
                     isUserPaused: _isUserPaused,
-                    onLike: () => _toggleLike(quip),
+                    onReact: (emoji) => _toggleReaction(quip, emoji),
+                    onOpenReactionPicker: () => _openReactionPicker(quip),
                     onComment: () => _openComments(quip),
                     onShare: () => _shareQuip(quip),
                     onTogglePause: _toggleUserPause,
+                    onNotInterested: () => _handleNotInterested(quip),
                   ),
                 );
               },

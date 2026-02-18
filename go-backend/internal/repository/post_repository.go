@@ -186,6 +186,10 @@ func (r *PostRepository) GetFeed(ctx context.Context, userID string, categorySlu
 		      )
 		  )
 		  AND NOT public.has_block_between(p.author_id, CASE WHEN $4::text != '' THEN $4::text::uuid ELSE NULL END)
+		  AND ($4::text = '' OR NOT EXISTS (
+		      SELECT 1 FROM public.post_hides ph
+		      WHERE ph.post_id = p.id AND ph.user_id = $4::text::uuid
+		  ))
 		  AND ($3 = FALSE OR (COALESCE(p.video_url, '') <> '' OR (COALESCE(p.image_url, '') ILIKE '%.mp4')))
 		  AND ($5 = '' OR c.slug = $5)
 		  AND (
@@ -494,6 +498,18 @@ func (r *PostRepository) UnlikePost(ctx context.Context, postID string, userID s
 		WHERE post_id = $1::uuid
 	`
 	_, err := r.pool.Exec(ctx, query, postID, userID)
+	return err
+}
+
+// HidePost records a "Not Interested" signal.
+// Denormalises author_id so feeds can suppress prolific-hide authors without a JOIN.
+func (r *PostRepository) HidePost(ctx context.Context, postID, userID string) error {
+	_, err := r.pool.Exec(ctx, `
+		INSERT INTO public.post_hides (user_id, post_id, author_id)
+		SELECT $2::uuid, $1::uuid, author_id
+		FROM public.posts WHERE id = $1::uuid
+		ON CONFLICT (user_id, post_id) DO NOTHING
+	`, postID, userID)
 	return err
 }
 

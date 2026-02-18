@@ -465,6 +465,11 @@ func (s *FeedAlgorithmService) GetAlgorithmicFeed(ctx context.Context, viewerID 
 		LEFT JOIN user_feed_impressions ufi
 		       ON ufi.post_id = pfs.post_id AND ufi.user_id = $1
 		WHERE p.status = 'active'
+		  AND pfs.post_id NOT IN (SELECT post_id FROM public.post_hides WHERE user_id = $1::uuid)
+		  AND p.user_id NOT IN (
+		      SELECT author_id FROM public.post_hides
+		      WHERE user_id = $1::uuid GROUP BY author_id HAVING COUNT(*) >= 2
+		  )
 	`
 	personalArgs := []interface{}{viewerID}
 	argIdx := 2
@@ -567,6 +572,11 @@ func (s *FeedAlgorithmService) GetAlgorithmicFeed(ctx context.Context, viewerID 
 			JOIN post_feed_scores pfs ON pfs.post_id = p.id
 			WHERE p.status = 'active'
 			  AND p.category NOT IN (%s)
+			  AND p.id NOT IN (SELECT post_id FROM public.post_hides WHERE user_id = $1)
+			  AND p.user_id NOT IN (
+			      SELECT author_id FROM public.post_hides
+			      WHERE user_id = $1 GROUP BY author_id HAVING COUNT(*) >= 2
+			  )
 			ORDER BY random()
 			LIMIT $2
 		`, placeholders)

@@ -26,12 +26,16 @@ class TraditionalQuipsSheet extends ConsumerStatefulWidget {
   final String postId;
   final int initialQuipCount;
   final VoidCallback? onQuipPosted;
+  /// When false (e.g. Quips video feed), shows only "X Comments" + close button
+  /// with no Home/Chat/Search navigation icons.
+  final bool showNavActions;
 
   const TraditionalQuipsSheet({
     super.key,
     required this.postId,
     this.initialQuipCount = 0,
     this.onQuipPosted,
+    this.showNavActions = true,
   });
 
   @override
@@ -300,8 +304,8 @@ class _TraditionalQuipsSheetState extends ConsumerState<TraditionalQuipsSheet> {
         borderRadius: const BorderRadius.vertical(top: Radius.circular(24)),
         border: Border(
           bottom: BorderSide(
-            color: AppTheme.egyptianBlue.withValues(alpha: 0.1), 
-            width: 1
+            color: AppTheme.egyptianBlue.withValues(alpha: 0.1),
+            width: 1,
           ),
         ),
       ),
@@ -321,44 +325,7 @@ class _TraditionalQuipsSheetState extends ConsumerState<TraditionalQuipsSheet> {
             padding: const EdgeInsets.fromLTRB(8, 0, 8, 8),
             child: Row(
               children: [
-                if (!_isSelectionMode) ...[
-                  IconButton(
-                    onPressed: () => Navigator.pop(context),
-                    icon: Icon(Icons.arrow_back, color: AppTheme.navyBlue),
-                  ),
-                  const SizedBox(width: 4),
-                  Text(
-                    'Thread',
-                    style: GoogleFonts.inter(
-                      fontWeight: FontWeight.w700,
-                      fontSize: 18,
-                      color: AppTheme.textPrimary,
-                    ),
-                  ),
-                  const Spacer(),
-                  IconButton(
-                    onPressed: () => context.go(AppRoutes.homeAlias),
-                    icon: Icon(Icons.home_outlined, color: AppTheme.navyBlue),
-                  ),
-                  IconButton(
-                    onPressed: () {}, // Search - to be implemented or consistent with ThreadedConversationScreen
-                    icon: Icon(Icons.search, color: AppTheme.navyBlue),
-                  ),
-                  IconButton(
-                    onPressed: () => context.go(AppRoutes.secureChat),
-                    icon: Consumer(
-                      builder: (context, ref, child) {
-                        final badge = ref.watch(currentBadgeProvider);
-                        return Badge(
-                          label: Text(badge.messageCount.toString()),
-                          isLabelVisible: badge.messageCount > 0,
-                          backgroundColor: AppTheme.brightNavy,
-                          child: Icon(Icons.chat_bubble_outline, color: AppTheme.navyBlue),
-                        );
-                      },
-                    ),
-                  ),
-                ] else ...[
+                if (_isSelectionMode) ...[
                   IconButton(
                     onPressed: () => setState(() {
                       _isSelectionMode = false;
@@ -380,7 +347,64 @@ class _TraditionalQuipsSheetState extends ConsumerState<TraditionalQuipsSheet> {
                     icon: const Icon(Icons.delete_outline, color: SojornColors.destructive),
                     onPressed: _bulkDelete,
                   ),
-                ]
+                ] else if (widget.showNavActions) ...[
+                  // Full thread header with nav buttons (used in regular post view)
+                  IconButton(
+                    onPressed: () => Navigator.pop(context),
+                    icon: Icon(Icons.arrow_back, color: AppTheme.navyBlue),
+                  ),
+                  const SizedBox(width: 4),
+                  Text(
+                    'Thread',
+                    style: GoogleFonts.inter(
+                      fontWeight: FontWeight.w700,
+                      fontSize: 18,
+                      color: AppTheme.textPrimary,
+                    ),
+                  ),
+                  const Spacer(),
+                  IconButton(
+                    onPressed: () => context.go(AppRoutes.homeAlias),
+                    icon: Icon(Icons.home_outlined, color: AppTheme.navyBlue),
+                  ),
+                  IconButton(
+                    onPressed: () {},
+                    icon: Icon(Icons.search, color: AppTheme.navyBlue),
+                  ),
+                  IconButton(
+                    onPressed: () => context.go(AppRoutes.secureChat),
+                    icon: Consumer(
+                      builder: (context, ref, child) {
+                        final badge = ref.watch(currentBadgeProvider);
+                        return Badge(
+                          label: Text(badge.messageCount.toString()),
+                          isLabelVisible: badge.messageCount > 0,
+                          backgroundColor: AppTheme.brightNavy,
+                          child: Icon(Icons.chat_bubble_outline, color: AppTheme.navyBlue),
+                        );
+                      },
+                    ),
+                  ),
+                ] else ...[
+                  // Clean Quips-style header: "X Comments" + close X
+                  Expanded(
+                    child: Padding(
+                      padding: const EdgeInsets.only(left: 12),
+                      child: Text(
+                        '$_commentCount Comment${_commentCount == 1 ? '' : 's'}',
+                        style: GoogleFonts.inter(
+                          fontWeight: FontWeight.w700,
+                          fontSize: 17,
+                          color: AppTheme.textPrimary,
+                        ),
+                      ),
+                    ),
+                  ),
+                  IconButton(
+                    onPressed: () => Navigator.pop(context),
+                    icon: Icon(Icons.close, color: AppTheme.navyBlue),
+                  ),
+                ],
               ],
             ),
           ),

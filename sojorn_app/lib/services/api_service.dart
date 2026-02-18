@@ -1089,6 +1089,10 @@ class ApiService {
     );
   }
 
+  Future<void> hidePost(String postId) async {
+    await _callGoApi('/posts/$postId/hide', method: 'POST');
+  }
+
   Future<void> appreciatePost(String postId) async {
     await _callGoApi(
       '/posts/$postId/like',

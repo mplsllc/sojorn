@@ -1,3 +1,4 @@
+import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:google_fonts/google_fonts.dart';
@@ -245,17 +246,27 @@ class _ReactionIcon extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    // CDN URL
+    if (reactionId.startsWith('https://')) {
+      return CachedNetworkImage(
+        imageUrl: reactionId,
+        width: size,
+        height: size,
+        fit: BoxFit.contain,
+        placeholder: (_, __) => SizedBox(width: size, height: size),
+        errorWidget: (_, __, ___) =>
+            Icon(Icons.image_not_supported, size: size * 0.8),
+      );
+    }
+
+    // Local asset
     if (reactionId.startsWith('assets/') || reactionId.startsWith('asset:')) {
       final assetPath = reactionId.startsWith('asset:')
           ? reactionId.replaceFirst('asset:', '')
           : reactionId;
 
       if (assetPath.endsWith('.svg')) {
-        return SvgPicture.asset(
-          assetPath,
-          width: size,
-          height: size,
-        );
+        return SvgPicture.asset(assetPath, width: size, height: size);
       }
       return Image.asset(
         assetPath,
@@ -264,9 +275,8 @@ class _ReactionIcon extends StatelessWidget {
         fit: BoxFit.contain,
       );
     }
-    return Text(
-      reactionId,
-      style: TextStyle(fontSize: size),
-    );
+
+    // Emoji
+    return Text(reactionId, style: TextStyle(fontSize: size));
   }
 }

@@ -218,7 +218,6 @@ func (h *GroupsHandler) CreateGroup(c *gin.Context) {
 		Category    string  `json:"category" binding:"required"`
 		IsPrivate   bool    `json:"is_private"`
 		AvatarURL   *string `json:"avatar_url"`
-		BannerURL   *string `json:"banner_url"`
 	}
 
 	if err := c.ShouldBindJSON(&req); err != nil {
@@ -228,6 +227,11 @@ func (h *GroupsHandler) CreateGroup(c *gin.Context) {
 
 	// Normalize name for uniqueness check
 	req.Name = strings.TrimSpace(req.Name)
+
+	privacy := "public"
+	if req.IsPrivate {
+		privacy = "private"
+	}
 
 	tx, err := h.db.Begin(c.Request.Context())
 	if err != nil {
@@ -239,10 +243,10 @@ func (h *GroupsHandler) CreateGroup(c *gin.Context) {
 	// Create group
 	var groupID string
 	err = tx.QueryRow(c.Request.Context(), `
-		INSERT INTO groups (name, description, category, is_private, created_by, avatar_url, banner_url)
-		VALUES ($1, $2, $3, $4, $5, $6, $7)
+		INSERT INTO groups (name, description, category, privacy, created_by, avatar_url)
+		VALUES ($1, $2, $3, $4, $5, $6)
 		RETURNING id
-	`, req.Name, req.Description, req.Category, req.IsPrivate, userID, req.AvatarURL, req.BannerURL).Scan(&groupID)
+	`, req.Name, req.Description, req.Category, privacy, userID, req.AvatarURL).Scan(&groupID)
 
 	if err != nil {
 		if strings.Contains(err.Error(), "duplicate") || strings.Contains(err.Error(), "unique") {

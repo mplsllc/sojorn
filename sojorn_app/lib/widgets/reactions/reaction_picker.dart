@@ -1,15 +1,15 @@
+import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:flutter/services.dart';
 import 'package:flutter_svg/flutter_svg.dart';
 import 'package:flutter_markdown_plus/flutter_markdown_plus.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:url_launcher/url_launcher.dart';
-import 'dart:convert';
+import '../../providers/reactions_provider.dart';
 import '../../theme/app_theme.dart';
 import '../../theme/tokens.dart';
 
-class ReactionPicker extends StatefulWidget {
+class ReactionPicker extends ConsumerStatefulWidget {
   final Function(String) onReactionSelected;
   final VoidCallback? onClosed;
   final List<String>? reactions;
@@ -26,134 +26,45 @@ class ReactionPicker extends StatefulWidget {
   });
 
   @override
-  State<ReactionPicker> createState() => _ReactionPickerState();
+  ConsumerState<ReactionPicker> createState() => _ReactionPickerState();
 }
 
-class _ReactionPickerState extends State<ReactionPicker> with SingleTickerProviderStateMixin {
-  late TabController _tabController;
+class _ReactionPickerState extends ConsumerState<ReactionPicker>
+    with SingleTickerProviderStateMixin {
+  TabController? _tabController;
   int _currentTabIndex = 0;
   final TextEditingController _searchController = TextEditingController();
   bool _isSearching = false;
   List<String> _filteredReactions = [];
-  
-  // Dynamic reaction sets
-  Map<String, List<String>> _reactionSets = {};
-  Map<String, String> _folderCredits = {};
-  List<String> _tabOrder = [];
-  bool _isLoading = true;
 
   @override
   void initState() {
     super.initState();
     _searchController.addListener(_onSearchChanged);
-    _loadReactionSets();
   }
-
-
-
-  Future<void> _loadReactionSets() async {
-    try {
-      final reactionSets = <String, List<String>>{
-        'emoji': [
-          '❤️', '👍', '😂', '😮', '😢', '😡',
-          '🎉', '🔥', '👏', '🙏', '💯', '🤔',
-          '😍', '🤣', '😊', '👌', '🙌', '💪',
-          '🎯', '⭐', '✨', '🌟', '💫', '☀️',
-        ],
-      };
-      
-      final folderCredits = <String, String>{};
-      final tabOrder = ['emoji'];
-
-      // Load the manifest to discover assets
-      final manifest = await AssetManifest.loadFromAssetBundle(rootBundle);
-      final assetPaths = manifest.listAssets();
-      
-      // Filter for reaction assets
-      final reactionAssets = assetPaths.where((path) {
-        final lowerPath = path.toLowerCase();
-        return lowerPath.startsWith('assets/reactions/') && 
-        (lowerPath.endsWith('.png') || 
-         lowerPath.endsWith('.svg') || 
-         lowerPath.endsWith('.webp') || 
-         lowerPath.endsWith('.jpg') || 
-         lowerPath.endsWith('.jpeg') ||
-         lowerPath.endsWith('.gif'));
-      }).toList();
-
-      for (final path in reactionAssets) {
-        // Path format: assets/reactions/FOLDER_NAME/FILE_NAME.ext
-        final parts = path.split('/');
-        if (parts.length >= 4) {
-          final folderName = parts[2];
-          
-          if (!reactionSets.containsKey(folderName)) {
-            reactionSets[folderName] = [];
-            tabOrder.add(folderName);
-            
-            // Try to load credit file if it's the first time we see this folder
-            try {
-              final creditPath = 'assets/reactions/$folderName/credit.md';
-              // Check if credit file exists in manifest too
-              if (assetPaths.contains(creditPath)) {
-                final creditData = await rootBundle.loadString(creditPath);
-                folderCredits[folderName] = creditData;
-              }
-            } catch (e) {
-              // Ignore missing credit files
-            }
-          }
-          
-          reactionSets[folderName]!.add(path);
-        }
-      }
-
-      // Sort reactions within each set by file name
-      for (final key in reactionSets.keys) {
-        if (key != 'emoji') {
-          reactionSets[key]!.sort((a, b) => a.split('/').last.compareTo(b.split('/').last));
-        }
-      }
-
-      if (mounted) {
-        setState(() {
-          _reactionSets = reactionSets;
-          _folderCredits = folderCredits;
-          _tabOrder = tabOrder;
-          _isLoading = false;
-          
-          _tabController = TabController(length: _tabOrder.length, vsync: this);
-          _tabController.addListener(() {
-            if (mounted) {
-              setState(() {
-                _currentTabIndex = _tabController.index;
-                _clearSearch();
-              });
-            }
-          });
-        });
-      }
-    } catch (e) {
-      // Fallback
-      if (mounted) {
-        setState(() {
-          _reactionSets = {
-            'emoji': ['❤️', '👍', '😂', '😮', '😢', '😡']
-          };
-          _tabOrder = ['emoji'];
-          _isLoading = false;
-          _tabController = TabController(length: 1, vsync: this);
-        });
-      }
-    }
-  }
-
 
   @override
   void dispose() {
-    _tabController.dispose();
+    _tabController?.dispose();
     _searchController.dispose();
     super.dispose();
+  }
+
+  void _ensureTabController(ReactionPackage package) {
+    final neededLength = package.tabOrder.length;
+    if (_tabController != null && _tabController!.length == neededLength) {
+      return;
+    }
+    _tabController?.dispose();
+    _tabController = TabController(length: neededLength, vsync: this);
+    _tabController!.addListener(() {
+      if (mounted) {
+        setState(() {
+          _currentTabIndex = _tabController!.index;
+          _clearSearch();
+        });
+      }
+    });
   }
 
   void _clearSearch() {
@@ -180,47 +91,61 @@ class _ReactionPickerState extends State<ReactionPicker> with SingleTickerProvid
   }
 
   List<String> _filterReactions(String query) {
-    final reactions = _currentReactions;
+    final reactions = _filterCurrentTab();
     return reactions.where((reaction) {
-      // For image reactions, search by filename
-      if (reaction.startsWith('assets/reactions/')) {
+      if (reaction.startsWith('assets/reactions/') ||
+          reaction.startsWith('https://')) {
         final fileName = reaction.split('/').last.toLowerCase();
         return fileName.contains(query);
       }
-      // For emoji, search by description (you could add a mapping)
       return reaction.toLowerCase().contains(query);
     }).toList();
   }
 
-  List<String> get _currentReactions {
-    if (_tabOrder.isEmpty || _currentTabIndex >= _tabOrder.length) {
-      return [];
-    }
-    final currentTab = _tabOrder[_currentTabIndex];
-    return _reactionSets[currentTab] ?? [];
+  List<String> _filterCurrentTab() {
+    final package = ref.read(reactionPackageProvider).value;
+    if (package == null) return [];
+    final tabOrder = package.tabOrder;
+    if (_currentTabIndex >= tabOrder.length) return [];
+    return package.reactionSets[tabOrder[_currentTabIndex]] ?? [];
   }
 
   @override
   Widget build(BuildContext context) {
-    if (_isLoading) {
-      return Dialog(
-        backgroundColor: SojornColors.transparent,
-        child: Container(
-          width: 400,
-          height: 300,
-          decoration: BoxDecoration(
-            color: AppTheme.cardSurface,
-            borderRadius: BorderRadius.circular(16),
-            border: Border.all(color: AppTheme.navyBlue.withValues(alpha: 0.1)),
-          ),
-          child: const Center(
-            child: CircularProgressIndicator(),
-          ),
+    final packageAsync = ref.watch(reactionPackageProvider);
+
+    return packageAsync.when(
+      loading: () => _buildLoadingDialog(),
+      error: (_, __) => _buildLoadingDialog(),
+      data: (package) {
+        _ensureTabController(package);
+        if (_tabController == null) return _buildLoadingDialog();
+        return _buildPicker(package);
+      },
+    );
+  }
+
+  Widget _buildLoadingDialog() {
+    return Dialog(
+      backgroundColor: SojornColors.transparent,
+      child: Container(
+        width: 400,
+        height: 300,
+        decoration: BoxDecoration(
+          color: AppTheme.cardSurface,
+          borderRadius: BorderRadius.circular(16),
+          border:
+              Border.all(color: AppTheme.navyBlue.withValues(alpha: 0.1)),
         ),
-      );
-    }
-    
-    final reactions = widget.reactions ?? (_isSearching ? _filteredReactions : _currentReactions);
+        child: const Center(child: CircularProgressIndicator()),
+      ),
+    );
+  }
+
+  Widget _buildPicker(ReactionPackage package) {
+    final tabOrder = package.tabOrder;
+    final reactionSets = package.reactionSets;
+
     final reactionCounts = widget.reactionCounts ?? {};
     final myReactions = widget.myReactions ?? {};
 
@@ -247,84 +172,78 @@ class _ReactionPickerState extends State<ReactionPicker> with SingleTickerProvid
           mainAxisSize: MainAxisSize.min,
           children: [
             // Header with search
-            Column(
+            Row(
               children: [
-                Row(
-                  children: [
-                    Text(
-                      _isSearching ? 'Search Reactions' : 'Add Reaction',
-                      style: GoogleFonts.inter(
-                        color: AppTheme.navyBlue,
-                        fontSize: 16,
-                        fontWeight: FontWeight.w600,
-                      ),
-                    ),
-                    const Spacer(),
-                    IconButton(
-                      onPressed: () {
-                        Navigator.of(context).pop();
-                        widget.onClosed?.call();
-                      },
-                      icon: Icon(
-                        Icons.close,
-                        color: AppTheme.textSecondary,
-                        size: 20,
-                      ),
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 12),
-                
-                // Search bar
-                Container(
-                  decoration: BoxDecoration(
-                    color: AppTheme.navyBlue.withValues(alpha: 0.05),
-                    borderRadius: BorderRadius.circular(12),
-                    border: Border.all(
-                      color: AppTheme.navyBlue.withValues(alpha: 0.1),
-                    ),
+                Text(
+                  _isSearching ? 'Search Reactions' : 'Add Reaction',
+                  style: GoogleFonts.inter(
+                    color: AppTheme.navyBlue,
+                    fontSize: 16,
+                    fontWeight: FontWeight.w600,
                   ),
-                  child: TextField(
-                    controller: _searchController,
-                    style: GoogleFonts.inter(
-                      color: AppTheme.navyBlue,
-                      fontSize: 14,
-                    ),
-                    decoration: InputDecoration(
-                      hintText: 'Search reactions...',
-                      hintStyle: GoogleFonts.inter(
-                        color: AppTheme.textSecondary,
-                        fontSize: 14,
-                      ),
-                      prefixIcon: Icon(
-                        Icons.search,
-                        color: AppTheme.textSecondary,
-                        size: 20,
-                      ),
-                      suffixIcon: _searchController.text.isNotEmpty
-                          ? IconButton(
-                              icon: Icon(
-                                Icons.clear,
-                                color: AppTheme.textSecondary,
-                                size: 18,
-                              ),
-                              onPressed: () {
-                                _searchController.clear();
-                              },
-                            )
-                          : null,
-                      border: InputBorder.none,
-                      contentPadding: const EdgeInsets.symmetric(
-                        horizontal: 12,
-                        vertical: 8,
-                      ),
-                    ),
+                ),
+                const Spacer(),
+                IconButton(
+                  onPressed: () {
+                    Navigator.of(context).pop();
+                    widget.onClosed?.call();
+                  },
+                  icon: Icon(
+                    Icons.close,
+                    color: AppTheme.textSecondary,
+                    size: 20,
                   ),
                 ),
               ],
             ),
+            const SizedBox(height: 12),
+
+            // Search bar
+            Container(
+              decoration: BoxDecoration(
+                color: AppTheme.navyBlue.withValues(alpha: 0.05),
+                borderRadius: BorderRadius.circular(12),
+                border: Border.all(
+                  color: AppTheme.navyBlue.withValues(alpha: 0.1),
+                ),
+              ),
+              child: TextField(
+                controller: _searchController,
+                style: GoogleFonts.inter(
+                  color: AppTheme.navyBlue,
+                  fontSize: 14,
+                ),
+                decoration: InputDecoration(
+                  hintText: 'Search reactions...',
+                  hintStyle: GoogleFonts.inter(
+                    color: AppTheme.textSecondary,
+                    fontSize: 14,
+                  ),
+                  prefixIcon: Icon(
+                    Icons.search,
+                    color: AppTheme.textSecondary,
+                    size: 20,
+                  ),
+                  suffixIcon: _searchController.text.isNotEmpty
+                      ? IconButton(
+                          icon: Icon(
+                            Icons.clear,
+                            color: AppTheme.textSecondary,
+                            size: 18,
+                          ),
+                          onPressed: () => _searchController.clear(),
+                        )
+                      : null,
+                  border: InputBorder.none,
+                  contentPadding: const EdgeInsets.symmetric(
+                    horizontal: 12,
+                    vertical: 8,
+                  ),
+                ),
+              ),
+            ),
             const SizedBox(height: 16),
-            
+
             // Tabs
             Container(
               height: 40,
@@ -333,7 +252,7 @@ class _ReactionPickerState extends State<ReactionPicker> with SingleTickerProvid
                 borderRadius: BorderRadius.circular(12),
               ),
               child: TabBar(
-                controller: _tabController,
+                controller: _tabController!,
                 onTap: (index) {
                   setState(() {
                     _currentTabIndex = index;
@@ -353,16 +272,14 @@ class _ReactionPickerState extends State<ReactionPicker> with SingleTickerProvid
                   fontWeight: FontWeight.w600,
                 ),
                 indicatorSize: TabBarIndicatorSize.tab,
-                tabs: _tabOrder.map((tabName) {
-                  return Tab(
-                    text: tabName.toUpperCase(),
-                  );
-                }).toList(),
+                tabs: tabOrder
+                    .map((name) => Tab(text: name.toUpperCase()))
+                    .toList(),
               ),
             ),
             const SizedBox(height: 16),
-            
-            // Search results info
+
+            // No results message
             if (_isSearching && _filteredReactions.isEmpty)
               Container(
                 padding: const EdgeInsets.all(12),
@@ -379,28 +296,31 @@ class _ReactionPickerState extends State<ReactionPicker> with SingleTickerProvid
                   textAlign: TextAlign.center,
                 ),
               ),
-            
+
             // Reaction grid
             SizedBox(
-              height: 420, // Increased height to show more rows at once
+              height: 420,
               child: TabBarView(
-                controller: _tabController,
-                children: _tabOrder.map((tabName) {
-                  final reactions = _reactionSets[tabName] ?? [];
+                controller: _tabController!,
+                children: tabOrder.map((tabName) {
+                  final tabReactions = reactionSets[tabName] ?? [];
                   final isEmoji = tabName == 'emoji';
-                  final credit = _folderCredits[tabName];
-                  
+                  final credit = package.folderCredits[tabName];
+
                   return Column(
                     children: [
-                      // Reaction grid
                       Expanded(
-                        child: _buildReactionGrid(reactions, widget.reactionCounts ?? {}, widget.myReactions ?? {}, !isEmoji),
+                        child: _buildReactionGrid(
+                          _isSearching ? _filteredReactions : tabReactions,
+                          reactionCounts,
+                          myReactions,
+                          !isEmoji,
+                        ),
                       ),
-                      
-                      // Credit section (only for non-emoji tabs)
                       if (credit != null && credit.isNotEmpty)
                         Container(
-                          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                          padding: const EdgeInsets.symmetric(
+                              horizontal: 16, vertical: 8),
                           child: Column(
                             crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
@@ -415,7 +335,6 @@ class _ReactionPickerState extends State<ReactionPicker> with SingleTickerProvid
                                 ),
                               ),
                               const SizedBox(height: 4),
-                              // Parse and display credit markdown
                               _buildCreditDisplay(credit),
                             ],
                           ),
@@ -437,18 +356,32 @@ class _ReactionPickerState extends State<ReactionPicker> with SingleTickerProvid
       data: credit,
       selectable: true,
       onTapLink: (text, href, title) {
-        if (href != null) {
-          launchUrl(Uri.parse(href));
-        }
+        if (href != null) launchUrl(Uri.parse(href));
       },
       styleSheet: MarkdownStyleSheet(
         p: GoogleFonts.inter(fontSize: 10, color: AppTheme.textPrimary),
-        h1: GoogleFonts.inter(fontSize: 12, fontWeight: FontWeight.bold, color: AppTheme.textPrimary),
-        h2: GoogleFonts.inter(fontSize: 11, fontWeight: FontWeight.bold, color: AppTheme.textPrimary),
-        listBullet: GoogleFonts.inter(fontSize: 10, color: AppTheme.textPrimary),
-        strong: GoogleFonts.inter(fontSize: 10, fontWeight: FontWeight.bold, color: AppTheme.textPrimary),
-        em: GoogleFonts.inter(fontSize: 10, fontStyle: FontStyle.italic, color: AppTheme.textPrimary),
-        a: GoogleFonts.inter(fontSize: 10, color: AppTheme.brightNavy, decoration: TextDecoration.underline),
+        h1: GoogleFonts.inter(
+            fontSize: 12,
+            fontWeight: FontWeight.bold,
+            color: AppTheme.textPrimary),
+        h2: GoogleFonts.inter(
+            fontSize: 11,
+            fontWeight: FontWeight.bold,
+            color: AppTheme.textPrimary),
+        listBullet:
+            GoogleFonts.inter(fontSize: 10, color: AppTheme.textPrimary),
+        strong: GoogleFonts.inter(
+            fontSize: 10,
+            fontWeight: FontWeight.bold,
+            color: AppTheme.textPrimary),
+        em: GoogleFonts.inter(
+            fontSize: 10,
+            fontStyle: FontStyle.italic,
+            color: AppTheme.textPrimary),
+        a: GoogleFonts.inter(
+            fontSize: 10,
+            color: AppTheme.brightNavy,
+            decoration: TextDecoration.underline),
       ),
     );
   }
@@ -473,26 +406,26 @@ class _ReactionPickerState extends State<ReactionPicker> with SingleTickerProvid
         final reaction = reactions[index];
         final count = reactionCounts[reaction] ?? 0;
         final isSelected = myReactions.contains(reaction);
-        
+
         return Material(
           color: SojornColors.transparent,
           child: InkWell(
             onTap: () {
               Navigator.of(context).pop();
-              final result = reaction.startsWith('assets/') 
-                  ? 'asset:$reaction' 
-                  : reaction;
+              // CDN URLs and emoji are passed as-is; local assets get 'asset:' prefix
+              final result =
+                  reaction.startsWith('assets/') ? 'asset:$reaction' : reaction;
               widget.onReactionSelected(result);
             },
             borderRadius: BorderRadius.circular(12),
             child: Container(
               decoration: BoxDecoration(
-                color: isSelected 
+                color: isSelected
                     ? AppTheme.brightNavy.withValues(alpha: 0.2)
                     : AppTheme.navyBlue.withValues(alpha: 0.05),
                 borderRadius: BorderRadius.circular(12),
                 border: Border.all(
-                  color: isSelected 
+                  color: isSelected
                       ? AppTheme.brightNavy
                       : AppTheme.navyBlue.withValues(alpha: 0.1),
                   width: isSelected ? 2 : 1,
@@ -510,7 +443,8 @@ class _ReactionPickerState extends State<ReactionPicker> with SingleTickerProvid
                       right: 2,
                       bottom: 2,
                       child: Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 1),
+                        padding: const EdgeInsets.symmetric(
+                            horizontal: 4, vertical: 1),
                         decoration: BoxDecoration(
                           color: AppTheme.brightNavy,
                           borderRadius: BorderRadius.circular(8),
@@ -535,13 +469,27 @@ class _ReactionPickerState extends State<ReactionPicker> with SingleTickerProvid
   }
 
   Widget _buildEmojiReaction(String emoji) {
-    return Text(
-      emoji,
-      style: const TextStyle(fontSize: 24),
-    );
+    return Text(emoji, style: const TextStyle(fontSize: 24));
   }
 
   Widget _buildImageReaction(String reaction) {
+    // CDN URL
+    if (reaction.startsWith('https://')) {
+      return CachedNetworkImage(
+        imageUrl: reaction,
+        width: 32,
+        height: 32,
+        fit: BoxFit.contain,
+        placeholder: (_, __) => const SizedBox(width: 32, height: 32),
+        errorWidget: (_, __, ___) => Icon(
+          Icons.image_not_supported,
+          size: 24,
+          color: AppTheme.textSecondary,
+        ),
+      );
+    }
+
+    // Local asset (with or without 'asset:' prefix)
     final imagePath = reaction.startsWith('asset:')
         ? reaction.replaceFirst('asset:', '')
         : reaction;
@@ -560,27 +508,23 @@ class _ReactionPickerState extends State<ReactionPicker> with SingleTickerProvid
             color: AppTheme.textSecondary,
           ),
         ),
-        errorBuilder: (context, error, stackTrace) {
-          return Icon(
-            Icons.image_not_supported,
-            size: 24,
-            color: AppTheme.textSecondary,
-          );
-        },
+        errorBuilder: (context, error, stackTrace) => Icon(
+          Icons.image_not_supported,
+          size: 24,
+          color: AppTheme.textSecondary,
+        ),
       );
     }
-    
+
     return Image.asset(
       imagePath,
       width: 32,
       height: 32,
-      errorBuilder: (context, error, stackTrace) {
-        return Icon(
-          Icons.image_not_supported,
-          size: 24,
-          color: AppTheme.textSecondary,
-        );
-      },
+      errorBuilder: (context, error, stackTrace) => Icon(
+        Icons.image_not_supported,
+        size: 24,
+        color: AppTheme.textSecondary,
+      ),
     );
   }
 }

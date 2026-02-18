@@ -12,12 +12,15 @@ class VideoCommentsSheet extends StatefulWidget {
   final String postId;
   final int initialCommentCount;
   final VoidCallback? onCommentPosted;
+  /// Set to false for Quips feed (hides Home/Chat/Search nav icons in header)
+  final bool showNavActions;
 
   const VideoCommentsSheet({
     super.key,
     required this.postId,
     this.initialCommentCount = 0,
     this.onCommentPosted,
+    this.showNavActions = true,
   });
 
   @override
@@ -31,6 +34,7 @@ class _VideoCommentsSheetState extends State<VideoCommentsSheet> {
       postId: widget.postId,
       initialQuipCount: widget.initialCommentCount,
       onQuipPosted: widget.onCommentPosted,
+      showNavActions: widget.showNavActions,
     );
   }
 }

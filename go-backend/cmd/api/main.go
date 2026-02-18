@@ -343,6 +343,7 @@ func main() {
 			authorized.DELETE("/posts/:id", postHandler.DeletePost)
 			authorized.POST("/posts/:id/pin", postHandler.PinPost)
 			authorized.PATCH("/posts/:id/visibility", postHandler.UpdateVisibility)
+			authorized.POST("/posts/:id/hide", postHandler.HidePost)
 			authorized.POST("/posts/:id/like", postHandler.LikePost)
 			authorized.DELETE("/posts/:id/like", postHandler.UnlikePost)
 			authorized.POST("/posts/:id/save", postHandler.SavePost)

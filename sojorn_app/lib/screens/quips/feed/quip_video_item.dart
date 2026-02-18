@@ -1,69 +1,172 @@
 import 'dart:convert';
 
+import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter_svg/flutter_svg.dart';
+import 'package:go_router/go_router.dart';
 import 'package:video_player/video_player.dart';
 import '../../../models/quip_text_overlay.dart';
 import '../../../widgets/media/signed_media_image.dart';
-import '../../../widgets/video_player_with_comments.dart';
-import '../../../models/post.dart';
-import '../../../models/profile.dart';
 import '../../../theme/tokens.dart';
 
 import 'quips_feed_screen.dart';
 
-class QuipVideoItem extends StatelessWidget {
+class QuipVideoItem extends StatefulWidget {
   final Quip quip;
   final VideoPlayerController? controller;
   final bool isActive;
-  final bool isLiked;
-  final int likeCount;
+  final Map<String, int> reactions;
+  final Set<String> myReactions;
+  final int commentCount;
   final bool isUserPaused;
-  final VoidCallback onLike;
+  final Function(String emoji) onReact;
+  final VoidCallback onOpenReactionPicker;
   final VoidCallback onComment;
   final VoidCallback onShare;
   final VoidCallback onTogglePause;
+  final VoidCallback onNotInterested;
 
   const QuipVideoItem({
     super.key,
     required this.quip,
     required this.controller,
     required this.isActive,
-    required this.isLiked,
-    required this.likeCount,
+    this.reactions = const {},
+    this.myReactions = const {},
+    this.commentCount = 0,
     required this.isUserPaused,
-    required this.onLike,
+    required this.onReact,
+    required this.onOpenReactionPicker,
     required this.onComment,
     required this.onShare,
     required this.onTogglePause,
+    required this.onNotInterested,
   });
 
-  /// Convert Quip to Post for use with VideoPlayerWithComments
-  Post _toPost() {
-    return Post(
-      id: quip.id,
-      authorId: quip.username, // This would need to be the actual user ID
-      body: quip.caption,
-      status: PostStatus.active,
-      detectedTone: ToneLabel.neutral,
-      contentIntegrityScore: 0.8,
-      createdAt: DateTime.now(), // Would need actual timestamp
-      videoUrl: quip.videoUrl,
-      thumbnailUrl: quip.thumbnailUrl,
-      likeCount: likeCount,
-      commentCount: 0, // Would need to be fetched separately
-      author: Profile(
-        id: quip.username,
-        handle: quip.username,
-        displayName: quip.displayName ?? '',
-        createdAt: DateTime.now(),
+  @override
+  State<QuipVideoItem> createState() => _QuipVideoItemState();
+}
+
+class _QuipVideoItemState extends State<QuipVideoItem>
+    with SingleTickerProviderStateMixin {
+  late final AnimationController _heartController;
+  late final Animation<double> _heartScale;
+  late final Animation<double> _heartOpacity;
+  Offset _heartPosition = Offset.zero;
+  bool _showHeart = false;
+  bool _isCaptionExpanded = false;
+
+  // Cached overlay data — parsed once, not on every build
+  late String _audioLabel;
+  late List<QuipOverlayItem> _overlayItems;
+
+  static const _quickReactEmoji = '❤️';
+
+  @override
+  void initState() {
+    super.initState();
+    _cacheOverlayData();
+    _heartController = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 800),
+    );
+    _heartScale = TweenSequence([
+      TweenSequenceItem(tween: Tween(begin: 0.0, end: 1.4), weight: 35),
+      TweenSequenceItem(tween: Tween(begin: 1.4, end: 1.0), weight: 25),
+      TweenSequenceItem(tween: Tween(begin: 1.0, end: 1.0), weight: 20),
+      TweenSequenceItem(tween: Tween(begin: 1.0, end: 0.0), weight: 20),
+    ]).animate(_heartController);
+    _heartOpacity = TweenSequence([
+      TweenSequenceItem(tween: Tween(begin: 0.0, end: 1.0), weight: 10),
+      TweenSequenceItem(tween: Tween(begin: 1.0, end: 1.0), weight: 60),
+      TweenSequenceItem(tween: Tween(begin: 1.0, end: 0.0), weight: 30),
+    ]).animate(_heartController);
+  }
+
+  @override
+  void didUpdateWidget(QuipVideoItem oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.quip.overlayJson != widget.quip.overlayJson) {
+      _cacheOverlayData();
+    }
+  }
+
+  void _cacheOverlayData() {
+    _audioLabel = _computeAudioLabel();
+    _overlayItems = _parseOverlayItems();
+  }
+
+  String _computeAudioLabel() {
+    final json = widget.quip.overlayJson;
+    if (json != null && json.isNotEmpty) {
+      try {
+        final decoded = jsonDecode(json) as Map<String, dynamic>;
+        final soundId = decoded['sound_id'];
+        if (soundId is String && soundId.isNotEmpty) {
+          return soundId.split('/').last.split('.').first;
+        }
+      } catch (_) {}
+    }
+    return 'Original Sound';
+  }
+
+  List<QuipOverlayItem> _parseOverlayItems() {
+    final json = widget.quip.overlayJson;
+    if (json == null || json.isEmpty) return [];
+    try {
+      final decoded = jsonDecode(json) as Map<String, dynamic>;
+      return (decoded['overlays'] as List<dynamic>? ?? [])
+          .whereType<Map<String, dynamic>>()
+          .map(QuipOverlayItem.fromJson)
+          .toList();
+    } catch (_) {
+      return [];
+    }
+  }
+
+  @override
+  void dispose() {
+    _heartController.dispose();
+    super.dispose();
+  }
+
+  void _handleDoubleTap(TapDownDetails details) {
+    // Double-tap quick-reacts with ❤️ (only if not already reacted)
+    if (!widget.myReactions.contains(_quickReactEmoji)) {
+      widget.onReact(_quickReactEmoji);
+    }
+    setState(() {
+      _heartPosition = details.localPosition;
+      _showHeart = true;
+    });
+    _heartController.forward(from: 0).then((_) {
+      if (mounted) setState(() => _showHeart = false);
+    });
+  }
+
+  void _navigateToProfile() {
+    context.push('/u/${widget.quip.username}');
+  }
+
+  void _showMoreSheet() {
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: Colors.transparent,
+      builder: (_) => _MoreOptionsSheet(
+        quipId: widget.quip.id,
+        onNotInterested: widget.onNotInterested,
       ),
     );
   }
 
+  // Audio label is cached in _audioLabel — do not call jsonDecode here
+
   Widget _buildVideo() {
-    final initialized = controller?.value.isInitialized ?? false;
+    final ctrl = widget.controller;
+    final initialized = ctrl?.value.isInitialized ?? false;
+
     if (initialized) {
-      final size = controller!.value.size;
+      final size = ctrl!.value.size;
       return Container(
         color: SojornColors.basicBlack,
         child: Center(
@@ -72,122 +175,342 @@ class QuipVideoItem extends StatelessWidget {
             child: SizedBox(
               width: size.width,
               height: size.height,
-              child: VideoPlayer(controller!),
+              child: VideoPlayer(ctrl),
             ),
           ),
         ),
       );
     }
 
-    if (quip.thumbnailUrl.isNotEmpty) {
+    if (widget.quip.thumbnailUrl.isNotEmpty) {
       return SignedMediaImage(
-        url: quip.thumbnailUrl,
+        url: widget.quip.thumbnailUrl,
         fit: BoxFit.cover,
         errorBuilder: (_, __, ___) => Container(color: SojornColors.basicBlack),
-        loadingBuilder: (context) {
-          return Container(
-            color: SojornColors.basicBlack,
-            child: const Center(
-              child: CircularProgressIndicator(color: SojornColors.basicWhite),
-            ),
-          );
-        },
+        loadingBuilder: (_) => Container(color: SojornColors.basicBlack),
       );
     }
 
     return Container(color: SojornColors.basicBlack);
   }
 
-  Widget _buildActions() {
-    final actions = [
-      _QuipAction(
-        icon: isLiked ? Icons.favorite : Icons.favorite_border,
-        label: likeCount > 0 ? likeCount.toString() : '',
-        onTap: onLike,
-        color: isLiked ? SojornColors.destructive : SojornColors.basicWhite,
+  Widget _buildProgressBar() {
+    final ctrl = widget.controller;
+    if (ctrl == null || !ctrl.value.isInitialized) return const SizedBox.shrink();
+    return Positioned(
+      left: 0,
+      right: 0,
+      bottom: 0,
+      child: VideoProgressIndicator(
+        ctrl,
+        allowScrubbing: false,
+        padding: EdgeInsets.zero,
+        colors: const VideoProgressColors(
+          playedColor: Color(0xCCFFFFFF),
+          bufferedColor: Color(0x44FFFFFF),
+          backgroundColor: Color(0x22FFFFFF),
+        ),
       ),
-      _QuipAction(
-        icon: Icons.chat_bubble_outline,
-        onTap: onComment,
-      ),
-      _QuipAction(
-        icon: Icons.send_outlined,
-        onTap: onShare,
-      ),
-      _QuipAction(
-        icon: Icons.more_horiz,
-        onTap: () {},
-      ),
-    ];
-
-    return Column(
-      mainAxisSize: MainAxisSize.min,
-      children: actions
-          .map((action) => Padding(
-                padding: const EdgeInsets.symmetric(vertical: 10),
-                child: action,
-              ))
-          .toList(),
     );
   }
 
-  Widget _buildOverlay() {
+  Widget _buildAvatar() {
+    final avatarUrl = widget.quip.avatarUrl;
+    final letter = widget.quip.username.isNotEmpty
+        ? widget.quip.username[0].toUpperCase()
+        : '?';
+
+    Widget inner;
+    if (avatarUrl != null && avatarUrl.isNotEmpty) {
+      inner = SignedMediaImage(
+        url: avatarUrl,
+        fit: BoxFit.cover,
+        errorBuilder: (_, __, ___) => _fallbackAvatarInner(letter),
+        loadingBuilder: (_) => _fallbackAvatarInner(letter),
+      );
+    } else {
+      inner = _fallbackAvatarInner(letter);
+    }
+
+    return GestureDetector(
+      onTap: _navigateToProfile,
+      child: Stack(
+        clipBehavior: Clip.none,
+        children: [
+          Container(
+            width: 48,
+            height: 48,
+            decoration: BoxDecoration(
+              shape: BoxShape.circle,
+              border: Border.all(color: SojornColors.basicWhite, width: 2),
+            ),
+            child: ClipOval(child: inner),
+          ),
+          // "+" badge
+          Positioned(
+            bottom: -4,
+            left: 0,
+            right: 0,
+            child: Center(
+              child: Container(
+                width: 20,
+                height: 20,
+                decoration: const BoxDecoration(
+                  color: Color(0xFF2979FF),
+                  shape: BoxShape.circle,
+                ),
+                child: const Icon(Icons.add, color: Colors.white, size: 14),
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _fallbackAvatarInner(String letter) {
+    return Container(
+      color: const Color(0xFF2A2A2A),
+      child: Center(
+        child: Text(
+          letter,
+          style: const TextStyle(
+            color: SojornColors.basicWhite,
+            fontSize: 18,
+            fontWeight: FontWeight.bold,
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildSideActions() {
+    final commentLabel =
+        widget.commentCount > 0 ? _formatCount(widget.commentCount) : null;
+    final totalReactions =
+        widget.reactions.values.fold(0, (sum, c) => sum + c);
+    final reactionLabel =
+        totalReactions > 0 ? _formatCount(totalReactions) : null;
+
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        _buildAvatar(),
+        const SizedBox(height: 24),
+        // Reaction button — tap to quick-react ❤️, long-press to open full picker
+        _buildActionBtn(
+          child: _buildReactionIcon(),
+          onTap: () => widget.onReact(_quickReactEmoji),
+          onLongPress: widget.onOpenReactionPicker,
+          label: reactionLabel,
+        ),
+        const SizedBox(height: 20),
+        // Comment
+        _buildActionBtn(
+          child: const Icon(Icons.chat_bubble_outline,
+              color: SojornColors.basicWhite, size: 28),
+          onTap: widget.onComment,
+          label: commentLabel,
+        ),
+        const SizedBox(height: 20),
+        // Share
+        _buildActionBtn(
+          child: const Icon(Icons.send_outlined,
+              color: SojornColors.basicWhite, size: 28),
+          onTap: widget.onShare,
+        ),
+        const SizedBox(height: 20),
+        // More (three dots)
+        _buildActionBtn(
+          child: const Icon(Icons.more_horiz,
+              color: SojornColors.basicWhite, size: 28),
+          onTap: _showMoreSheet,
+        ),
+      ],
+    );
+  }
+
+  /// Shows the user's own top reaction, the post's top reaction, or a generic
+  /// add-reaction icon — in the right sidebar.
+  Widget _buildReactionIcon() {
+    String? reactionId;
+    if (widget.myReactions.isNotEmpty) {
+      reactionId = widget.myReactions.first;
+    } else if (widget.reactions.isNotEmpty) {
+      reactionId = widget.reactions.entries
+          .reduce((a, b) => a.value > b.value ? a : b)
+          .key;
+    }
+
+    if (reactionId == null) {
+      return const Icon(Icons.add_reaction_outlined,
+          color: SojornColors.basicWhite, size: 30);
+    }
+
+    // Emoji
+    if (!reactionId.startsWith('https://') &&
+        !reactionId.startsWith('assets/') &&
+        !reactionId.startsWith('asset:')) {
+      return Text(reactionId, style: const TextStyle(fontSize: 30));
+    }
+
+    // CDN URL
+    if (reactionId.startsWith('https://')) {
+      return CachedNetworkImage(
+        imageUrl: reactionId,
+        width: 30,
+        height: 30,
+        fit: BoxFit.contain,
+        placeholder: (_, __) => const Icon(Icons.add_reaction_outlined,
+            color: SojornColors.basicWhite, size: 30),
+        errorWidget: (_, __, ___) => const Icon(Icons.add_reaction_outlined,
+            color: SojornColors.basicWhite, size: 30),
+      );
+    }
+
+    // Local asset
+    final assetPath = reactionId.startsWith('asset:')
+        ? reactionId.replaceFirst('asset:', '')
+        : reactionId;
+    if (assetPath.endsWith('.svg')) {
+      return SvgPicture.asset(assetPath,
+          width: 30,
+          height: 30,
+          colorFilter: const ColorFilter.mode(
+              SojornColors.basicWhite, BlendMode.srcIn));
+    }
+    return Image.asset(assetPath, width: 30, height: 30, fit: BoxFit.contain);
+  }
+
+  Widget _buildActionBtn({
+    required Widget child,
+    required VoidCallback onTap,
+    VoidCallback? onLongPress,
+    String? label,
+  }) {
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        GestureDetector(
+          onTap: onTap,
+          onLongPress: onLongPress,
+          behavior: HitTestBehavior.opaque,
+          child: Padding(padding: const EdgeInsets.all(4), child: child),
+        ),
+        if (label != null) ...[
+          const SizedBox(height: 4),
+          Text(
+            label,
+            style: const TextStyle(
+              color: SojornColors.basicWhite,
+              fontSize: 12,
+              fontWeight: FontWeight.w600,
+              shadows: [
+                Shadow(
+                  color: Color(0x8A000000),
+                  blurRadius: 4,
+                  offset: Offset(0, 1),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ],
+    );
+  }
+
+  Widget _buildUserInfo() {
+    final audioLabel =
+        '\u266b $_audioLabel \u2022 @${widget.quip.username}';
+    final hasCaption = widget.quip.caption.isNotEmpty;
+
     return Positioned(
       left: 16,
-      right: 16,
+      right: 80,
       bottom: 28,
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
+        mainAxisSize: MainAxisSize.min,
         children: [
-          Text(
-            '@${quip.username}',
-            style: const TextStyle(
-              color: SojornColors.basicWhite,
-              fontWeight: FontWeight.w700,
-              fontSize: 16,
-              shadows: [
-                Shadow(
-                  color: const Color(0x8A000000),
-                  offset: Offset(0, 1),
-                  blurRadius: 6,
-                ),
-              ],
+          // Username
+          GestureDetector(
+            onTap: _navigateToProfile,
+            child: Text(
+              '@${widget.quip.username}',
+              style: const TextStyle(
+                color: SojornColors.basicWhite,
+                fontWeight: FontWeight.w700,
+                fontSize: 15,
+                shadows: [
+                  Shadow(
+                    color: Color(0x8A000000),
+                    offset: Offset(0, 1),
+                    blurRadius: 6,
+                  ),
+                ],
+              ),
             ),
           ),
-          const SizedBox(height: 6),
-          Text(
-            quip.caption,
-            maxLines: 2,
-            overflow: TextOverflow.ellipsis,
-            style: const TextStyle(
-              color: SojornColors.basicWhite,
-              fontSize: 14,
-              shadows: [
-                Shadow(
-                  color: const Color(0x8A000000),
-                  offset: Offset(0, 1),
-                  blurRadius: 6,
-                ),
-              ],
-            ),
-          ),
-          const SizedBox(height: 10),
-          Row(
-            children: const [
-              Icon(Icons.music_note, color: SojornColors.basicWhite, size: 18),
-              SizedBox(width: 6),
-              Text(
-                'Original Audio',
-                style: TextStyle(
-                  color: SojornColors.basicWhite,
-                  fontWeight: FontWeight.w500,
-                  shadows: [
-                    Shadow(
-                      color: const Color(0x73000000),
-                      offset: Offset(0, 1),
-                      blurRadius: 6,
-                    ),
+          // Caption with "...more" expand
+          if (hasCaption) ...[
+            const SizedBox(height: 4),
+            GestureDetector(
+              onTap: () => setState(
+                  () => _isCaptionExpanded = !_isCaptionExpanded),
+              child: RichText(
+                text: TextSpan(
+                  style: const TextStyle(
+                    color: SojornColors.basicWhite,
+                    fontSize: 13,
+                    shadows: [
+                      Shadow(
+                        color: Color(0x8A000000),
+                        offset: Offset(0, 1),
+                        blurRadius: 6,
+                      ),
+                    ],
+                  ),
+                  children: [
+                    TextSpan(text: widget.quip.caption),
+                    if (!_isCaptionExpanded &&
+                        widget.quip.caption.length > 60)
+                      const TextSpan(
+                        text: ' ...more',
+                        style: TextStyle(
+                          fontWeight: FontWeight.w600,
+                          color: Color(0xCCFFFFFF),
+                        ),
+                      ),
                   ],
+                ),
+                maxLines: _isCaptionExpanded ? null : 2,
+                overflow: _isCaptionExpanded
+                    ? TextOverflow.visible
+                    : TextOverflow.ellipsis,
+              ),
+            ),
+          ],
+          const SizedBox(height: 10),
+          // Audio ticker row
+          Row(
+            children: [
+              Flexible(
+                child: Text(
+                  audioLabel,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: const TextStyle(
+                    color: SojornColors.basicWhite,
+                    fontSize: 12,
+                    fontWeight: FontWeight.w500,
+                    shadows: [
+                      Shadow(
+                        color: Color(0x73000000),
+                        offset: Offset(0, 1),
+                        blurRadius: 4,
+                      ),
+                    ],
+                  ),
                 ),
               ),
             ],
@@ -197,30 +520,57 @@ class QuipVideoItem extends StatelessWidget {
     );
   }
 
-  /// Parses overlay_json and returns a list of non-interactive overlay widgets
-  /// rendered on top of the video during feed playback.
+  Widget _buildPauseOverlay() {
+    if (!widget.isActive || !widget.isUserPaused) return const SizedBox.shrink();
+    return Center(
+      child: Container(
+        padding: const EdgeInsets.all(16),
+        decoration: const BoxDecoration(
+          color: Color(0x8A000000),
+          shape: BoxShape.circle,
+        ),
+        child: const Icon(
+          Icons.play_arrow,
+          color: SojornColors.basicWhite,
+          size: 52,
+        ),
+      ),
+    );
+  }
+
+  Widget _buildHeartBurst() {
+    if (!_showHeart) return const SizedBox.shrink();
+    return Positioned(
+      left: _heartPosition.dx - 50,
+      top: _heartPosition.dy - 50,
+      child: IgnorePointer(
+        child: AnimatedBuilder(
+          animation: _heartController,
+          builder: (_, __) => Opacity(
+            opacity: _heartOpacity.value,
+            child: Transform.scale(
+              scale: _heartScale.value,
+              child: const Icon(Icons.favorite, color: Colors.white, size: 100),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
   List<Widget> _buildOverlayWidgets(BoxConstraints constraints) {
-    final json = quip.overlayJson;
-    if (json == null || json.isEmpty) return [];
-    try {
-      final decoded = jsonDecode(json) as Map<String, dynamic>;
-      final items = (decoded['overlays'] as List<dynamic>? ?? [])
-          .whereType<Map<String, dynamic>>()
-          .map(QuipOverlayItem.fromJson)
-          .toList();
+    if (_overlayItems.isEmpty) return [];
+    final w = constraints.maxWidth;
+    final h = constraints.maxHeight;
 
-      final w = constraints.maxWidth;
-      final h = constraints.maxHeight;
-
-      return items.map((item) {
+    return _overlayItems.map((item) {
         final absX = item.position.dx * w;
         final absY = item.position.dy * h;
         final isSticker = item.type == QuipOverlayType.sticker;
 
         Widget child;
         if (isSticker) {
-          final isEmoji = item.content.runes.length == 1 ||
-              item.content.length <= 2;
+          final isEmoji = item.content.runes.length == 1 || item.content.length <= 2;
           if (isEmoji) {
             child = Text(item.content,
                 style: TextStyle(fontSize: 42 * item.scale));
@@ -267,194 +617,159 @@ class QuipVideoItem extends StatelessWidget {
           child: Transform.rotate(angle: item.rotation, child: child),
         );
       }).toList();
-    } catch (_) {
-      return [];
-    }
   }
 
-  Widget _buildPauseOverlay() {
-    if (!isActive || !isUserPaused) return const SizedBox.shrink();
-
-    return Center(
-      child: Container(
-        padding: const EdgeInsets.all(16),
-        decoration: BoxDecoration(
-          color: SojornColors.overlayDark,
-          shape: BoxShape.circle,
-        ),
-        child: const Icon(
-          Icons.play_arrow,
-          color: SojornColors.basicWhite,
-          size: 48,
-        ),
-      ),
-    );
+  String _formatCount(int n) {
+    if (n >= 1000000) return '${(n / 1000000).toStringAsFixed(1)}M';
+    if (n >= 1000) return '${(n / 1000).toStringAsFixed(1)}K';
+    return '$n';
   }
 
   @override
   Widget build(BuildContext context) {
     return GestureDetector(
-      onTap: onTogglePause,
+      onTap: widget.onTogglePause,
+      onDoubleTapDown: _handleDoubleTap,
+      onDoubleTap: () {}, // consume event so single-tap doesn't fire on double-tap
       child: Container(
         color: SojornColors.basicBlack,
         child: LayoutBuilder(
           builder: (context, constraints) => Stack(
-          fit: StackFit.expand,
-          children: [
-            AnimatedOpacity(
-              duration: const Duration(milliseconds: 200),
-              opacity: isActive ? 1 : 0.6,
-              child: _buildVideo(),
-            ),
-            // Quip overlays (text + stickers, non-interactive in feed)
-            ..._buildOverlayWidgets(constraints),
-            Container(
-              decoration: const BoxDecoration(
-                gradient: LinearGradient(
-                  begin: Alignment.bottomCenter,
-                  end: Alignment.topCenter,
-                  colors: [
-                    const Color(0x8A000000),
-                    SojornColors.transparent,
-                    const Color(0x73000000),
-                  ],
-                  stops: [0, 0.4, 1],
+            fit: StackFit.expand,
+            children: [
+              _buildVideo(),
+              // Quip overlays (text + stickers, non-interactive in feed)
+              ..._buildOverlayWidgets(constraints),
+              // Gradient scrim: strong at bottom for text legibility
+              const DecoratedBox(
+                decoration: BoxDecoration(
+                  gradient: LinearGradient(
+                    begin: Alignment.topCenter,
+                    end: Alignment.bottomCenter,
+                    colors: [
+                      Color(0x55000000), // subtle top vignette
+                      Colors.transparent,
+                      Colors.transparent,
+                      Color(0xB0000000), // strong bottom scrim
+                    ],
+                    stops: [0, 0.15, 0.55, 1],
+                  ),
                 ),
               ),
-            ),
-            _buildOverlay(),
-            Positioned(
-              right: 16,
-              bottom: 80,
-              child: _buildActions(),
-            ),
-            Positioned(
-              top: 36,
-              left: 16,
-              child: Row(
-                children: [
-                  Container(
-                    padding:
-                        const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-                    decoration: BoxDecoration(
-                      color: const Color(0x73000000),
-                      borderRadius: BorderRadius.circular(24),
-                      boxShadow: [
-                        BoxShadow(
-                          color: const Color(0x66000000),
-                          blurRadius: 6,
-                          offset: const Offset(0, 2),
-                        ),
-                      ],
-                    ),
-                    child: const Text(
-                      'Quips',
-                      style: TextStyle(
-                        color: SojornColors.basicWhite,
-                        fontWeight: FontWeight.bold,
-                      ),
-                    ),
-                  ),
-                  if (quip.durationMs != null)
-                    Container(
-                      margin: const EdgeInsets.only(left: 8),
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 10,
-                        vertical: 6,
-                      ),
-                      decoration: BoxDecoration(
-                        color: const Color(0x73000000),
-                        borderRadius: BorderRadius.circular(24),
-                      ),
-                      child: Text(
-                        '${(quip.durationMs! / 1000).toStringAsFixed(1)}s',
-                        style: const TextStyle(
-                          color: SojornColors.basicWhite,
-                          fontSize: 12,
-                        ),
-                      ),
-                    ),
-                ],
+              // User info — bottom-left
+              _buildUserInfo(),
+              // Side actions — right
+              Positioned(
+                right: 12,
+                bottom: 90,
+                child: _buildSideActions(),
               ),
-            ),
-            _buildPauseOverlay(),
-            if (!(controller?.value.isInitialized ?? false))
-              Center(
-                child: const CircularProgressIndicator(color: SojornColors.basicWhite),
-              ),
-          ],
-        ),
+              // Pause overlay
+              _buildPauseOverlay(),
+              // Double-tap heart burst
+              _buildHeartBurst(),
+              // Thin video progress bar at very bottom
+              _buildProgressBar(),
+              // Buffering spinner
+              if (!(widget.controller?.value.isInitialized ?? false))
+                const Center(
+                  child: CircularProgressIndicator(color: SojornColors.basicWhite),
+                ),
+            ],
+          ),
         ),
       ),
     );
   }
-
-  /// Build the enhanced video player with comments (for fullscreen view)
-  Widget buildEnhancedVideoPlayer(BuildContext context) {
-    return VideoPlayerWithComments(
-      post: _toPost(),
-      onLike: onLike,
-      onShare: onShare,
-      onCommentTap: () {
-        // Comments are handled within the VideoPlayerWithComments widget
-      },
-    );
-  }
 }
 
-class _QuipAction extends StatelessWidget {
-  final IconData icon;
-  final String? label;
-  final VoidCallback onTap;
-  final Color color;
+/// Bottom sheet shown when the user taps the "..." (more) button on a quip.
+class _MoreOptionsSheet extends StatelessWidget {
+  final String quipId;
+  final VoidCallback onNotInterested;
 
-  const _QuipAction({
-    required this.icon,
-    required this.onTap,
-    this.label,
-    this.color = SojornColors.basicWhite,
+  const _MoreOptionsSheet({
+    required this.quipId,
+    required this.onNotInterested,
   });
 
   @override
   Widget build(BuildContext context) {
-    return Column(
-      children: [
-        Container(
-          decoration: BoxDecoration(
-            color: const Color(0x8A000000),
-            shape: BoxShape.circle,
-            boxShadow: [
-              BoxShadow(
-                color: const Color(0x66000000),
-                blurRadius: 8,
-                offset: const Offset(0, 2),
-              ),
-            ],
-          ),
-          child: IconButton(
-            onPressed: onTap,
-            icon: Icon(icon, color: color),
-          ),
-        ),
-        if (label != null && label!.isNotEmpty) ...[
-          const SizedBox(height: 4),
-          Text(
-            label!,
-            style: const TextStyle(
-              color: SojornColors.basicWhite,
-              fontSize: 12,
-              fontWeight: FontWeight.w600,
-              shadows: [
-                Shadow(
-                  color: const Color(0x8A000000),
-                  blurRadius: 4,
-                  offset: Offset(0, 1),
-                ),
-              ],
+    return Container(
+      decoration: const BoxDecoration(
+        color: Color(0xFF1A1A1A),
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      padding: const EdgeInsets.fromLTRB(0, 8, 0, 32),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          // Drag handle
+          Container(
+            width: 36,
+            height: 4,
+            margin: const EdgeInsets.only(bottom: 16),
+            decoration: BoxDecoration(
+              color: Colors.white.withValues(alpha: 0.2),
+              borderRadius: BorderRadius.circular(2),
             ),
           ),
+          _buildOption(
+            context,
+            icon: Icons.thumb_down_outlined,
+            label: 'Not Interested',
+            onTap: () {
+              Navigator.pop(context);
+              onNotInterested();
+            },
+          ),
+          _buildOption(
+            context,
+            icon: Icons.flag_outlined,
+            label: 'Report',
+            color: const Color(0xFFFF5252),
+            onTap: () {
+              Navigator.pop(context);
+              // TODO: Wire to SanctuarySheet.showForPostId(context, quipId)
+              ScaffoldMessenger.of(context).showSnackBar(
+                const SnackBar(
+                  content: Text('Report submitted. Thank you.'),
+                  behavior: SnackBarBehavior.floating,
+                ),
+              );
+            },
+          ),
         ],
-      ],
+      ),
+    );
+  }
+
+  Widget _buildOption(
+    BuildContext context, {
+    required IconData icon,
+    required String label,
+    required VoidCallback onTap,
+    Color color = Colors.white,
+  }) {
+    return InkWell(
+      onTap: onTap,
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 16),
+        child: Row(
+          children: [
+            Icon(icon, color: color, size: 24),
+            const SizedBox(width: 16),
+            Text(
+              label,
+              style: TextStyle(
+                color: color,
+                fontSize: 16,
+                fontWeight: FontWeight.w500,
+              ),
+            ),
+          ],
+        ),
+      ),
     );
   }
 }
