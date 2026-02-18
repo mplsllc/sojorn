@@ -3,7 +3,7 @@ import 'dart:math';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
-import 'package:timeago/timeago.dart' as timeago;
+import 'package:intl/intl.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 import '../../theme/app_theme.dart';
@@ -104,7 +104,17 @@ class _ChatBubbleWidgetState extends State<ChatBubbleWidget>
     if (widget.sendFailed) return 'Failed to send';
     if (widget.isSending) return 'Sending...';
     if (widget.timestamp != null) {
-      return timeago.format(widget.timestamp!, locale: 'en_short');
+      final ts = widget.timestamp!;
+      final now = DateTime.now();
+      final today = DateTime(now.year, now.month, now.day);
+      final tsDay = DateTime(ts.year, ts.month, ts.day);
+      if (tsDay == today) {
+        return DateFormat.jm().format(ts); // e.g. 2:34 PM
+      } else if (today.difference(tsDay).inDays < 7) {
+        return DateFormat('E h:mm a').format(ts); // e.g. Mon 2:34 PM
+      } else {
+        return DateFormat('MMM d, h:mm a').format(ts); // e.g. Feb 14, 2:34 PM
+      }
     }
     return '';
   }

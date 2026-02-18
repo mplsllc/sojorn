@@ -109,7 +109,12 @@ class FullScreenShell extends ConsumerWidget {
     if (showHome) {
       actions.add(
         IconButton(
-          onPressed: () => context.go(AppRoutes.homeAlias),
+          onPressed: () {
+            // Pop any Navigator-managed overlays before GoRouter navigates home
+            final nav = Navigator.of(context, rootNavigator: true);
+            if (nav.canPop()) nav.popUntil((r) => r.isFirst);
+            context.go(AppRoutes.homeAlias);
+          },
           icon: Icon(Icons.home_outlined, color: AppTheme.navyBlue),
         ),
       );

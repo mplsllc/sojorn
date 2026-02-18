@@ -1,6 +1,7 @@
 import 'dart:io';
 import 'dart:async';
 import 'package:flutter/material.dart';
+import 'snackbar_ext.dart';
 
 /// Global error handler for consistent error messaging and logging
 class ErrorHandler {
@@ -17,17 +18,7 @@ class ErrorHandler {
     _logError(error, displayMessage);
     
     if (showSnackbar && context.mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(displayMessage),
-          action: SnackBarAction(
-            label: 'Dismiss',
-            onPressed: () {},
-          ),
-          duration: const Duration(seconds: 4),
-          backgroundColor: Colors.red[700],
-        ),
-      );
+      context.showError(displayMessage);
     }
   }
 

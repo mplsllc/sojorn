@@ -3,6 +3,7 @@ import 'package:url_launcher/url_launcher.dart';
 import '../theme/app_theme.dart';
 import '../theme/tokens.dart';
 import 'external_link_controller.dart';
+import 'snackbar_ext.dart';
 
 /// Helper class for safely launching URLs with user warnings for unknown sites.
 /// 
@@ -30,21 +31,11 @@ class UrlLauncherHelper {
     try {
       final uri = Uri.parse(url.startsWith('http') ? url : 'https://$url');
       if (!['http:', 'https:'].contains(uri.scheme)) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('Invalid URL scheme. Only HTTP and HTTPS URLs are allowed.'),
-            backgroundColor: AppTheme.error,
-          ),
-        );
+        context.showError('Invalid URL scheme. Only HTTP and HTTPS URLs are allowed.');
         return;
       }
     } catch (e) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Invalid URL format.'),
-          backgroundColor: AppTheme.error,
-        ),
-      );
+      context.showError('Invalid URL format.');
       return;
     }
 
@@ -137,22 +128,12 @@ class UrlLauncherHelper {
         );
       } else {
         if (context.mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(
-              content: Text('Could not open link: $url'),
-              backgroundColor: AppTheme.error,
-            ),
-          );
+          context.showError('Could not open link: $url');
         }
       }
     } catch (e) {
       if (context.mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('Error opening link: ${e.toString()}'),
-            backgroundColor: AppTheme.error,
-          ),
-        );
+        context.showError('Error opening link: ${e.toString()}');
       }
     }
   }

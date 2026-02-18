@@ -39,10 +39,19 @@ class LocalMessageStore {
   /// Track save timestamps for sync verification
   final Map<String, DateTime> _lastSaveTimestamps = {};
 
+  // ── Decrypted record cache — avoids re-decrypting unchanged msgs ──
+  final Map<String, LocalMessageRecord> _recordCache = {};
+
   Future<void> _ensureBoxes() async {
     if (_boxesReady) return;
     _boxesOpenFuture ??= _openBoxes();
     await _boxesOpenFuture;
+  }
+
+  /// Pre-warm Hive storage in the background (call at app startup).
+  /// Ensures IndexedDB/Hive is ready before the user opens a chat.
+  Future<void> prewarm() async {
+    _boxesOpenFuture ??= _openBoxes();
   }
 
   Future<void> _openBoxes() async {
@@ -441,6 +450,7 @@ class LocalMessageStore {
   Future<bool> deleteMessage(String messageId) async {
     _writeAheadLog.remove(messageId);
     _lastSaveTimestamps.remove(messageId);
+    _recordCache.remove(messageId);
 
     for (var attempt = 0; attempt < _maxRetries; attempt++) {
       try {
@@ -468,6 +478,15 @@ class LocalMessageStore {
   /// Delete all messages in a conversation.
   Future<bool> deleteConversation(String conversationId) async {
     _writeAheadLog.removeWhere((_, v) => v.conversationId == conversationId);
+
+    // Invalidate cache for this conversation's messages
+    final idsToEvict = _recordCache.entries
+        .where((e) => e.value.conversationId == conversationId)
+        .map((e) => e.key)
+        .toList();
+    for (final id in idsToEvict) {
+      _recordCache.remove(id);
+    }
 
     try {
       await _ensureBoxes();
@@ -559,6 +578,7 @@ class LocalMessageStore {
     _cachedKey = null;
     _writeAheadLog.clear();
     _lastSaveTimestamps.clear();
+    _recordCache.clear();
 
     if (_boxesReady) {
       await _messageBox?.clear();
@@ -591,6 +611,10 @@ class LocalMessageStore {
     required String payload,
     required SecretKey key,
   }) async {
+    // Return cached record to avoid redundant AES-GCM decryptions
+    final cached = _recordCache[messageId];
+    if (cached != null) return cached;
+
     try {
       final data = jsonDecode(payload) as Map<String, dynamic>;
       final version = data['v'] as int? ?? 1;
@@ -624,7 +648,7 @@ class LocalMessageStore {
       final readAt = _parseTimestamp(data['read_at']);
       final expiresAt = _parseTimestamp(data['expires_at']);
 
-      return LocalMessageRecord(
+      final record = LocalMessageRecord(
         conversationId: conversationId,
         messageId: messageId,
         plaintext: plaintext,
@@ -635,6 +659,8 @@ class LocalMessageStore {
         readAt: readAt,
         expiresAt: expiresAt,
       );
+      _recordCache[messageId] = record;
+      return record;
     } catch (e) {
       if (e.toString().contains('SecretBoxAuthenticationError')) {
         _messageBox!.delete(messageId);

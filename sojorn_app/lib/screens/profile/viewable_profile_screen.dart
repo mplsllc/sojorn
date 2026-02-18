@@ -80,7 +80,7 @@ class _UnifiedProfileScreenState extends ConsumerState<UnifiedProfileScreen>
 
   late TabController _tabController;
   int _activeTab = 0;
-  bool _isGridView = false;
+  bool _isGridView = true; // default grid for own profile; toggled by user
 
   List<Post> _posts = [];
   bool _isPostsLoading = false;
@@ -924,7 +924,7 @@ class _UnifiedProfileScreenState extends ConsumerState<UnifiedProfileScreen>
 
   Widget _buildSliverAppBar(Profile profile) {
     return SliverAppBar(
-      expandedHeight: _isOwnProfile ? 172 : 200,
+      expandedHeight: _isOwnProfile ? 212 : 200,
       pinned: true,
       toolbarHeight: 0,
       collapsedHeight: 0,
@@ -1107,18 +1107,25 @@ class _UnifiedProfileScreenState extends ConsumerState<UnifiedProfileScreen>
                     final imageUrl = post.imageUrl ?? post.thumbnailUrl;
                     return GestureDetector(
                       onTap: () => _openPostDetail(post),
-                      child: Container(
-                        color: AppTheme.navyBlue.withValues(alpha: 0.05),
-                        child: imageUrl != null && imageUrl.isNotEmpty
-                            ? SignedMediaImage(url: imageUrl, fit: BoxFit.cover)
-                            : Center(
-                                child: Icon(
-                                  post.videoUrl != null ? Icons.play_circle_outline : Icons.article_outlined,
-                                  color: AppTheme.navyText.withValues(alpha: 0.4),
-                                  size: 32,
-                                ),
-                              ),
-                      ),
+                      child: imageUrl != null && imageUrl.isNotEmpty
+                          ? Stack(
+                              fit: StackFit.expand,
+                              children: [
+                                SignedMediaImage(url: imageUrl, fit: BoxFit.cover),
+                                if (post.videoUrl != null)
+                                  const Positioned(
+                                    top: 6,
+                                    right: 6,
+                                    child: Icon(
+                                      Icons.play_circle_filled,
+                                      color: Colors.white,
+                                      size: 20,
+                                      shadows: [Shadow(color: Colors.black45, blurRadius: 4)],
+                                    ),
+                                  ),
+                              ],
+                            )
+                          : _buildTextGridCell(post),
                     );
                   },
                   childCount: posts.length,
@@ -1420,6 +1427,45 @@ class _UnifiedProfileScreenState extends ConsumerState<UnifiedProfileScreen>
     } else {
       return 'Today';
     }
+  }
+
+  /// Mini post card for grid cells that have no image or thumbnail.
+  Widget _buildTextGridCell(Post post) {
+    return Container(
+      decoration: BoxDecoration(
+        color: AppTheme.cardSurface,
+        border: Border.all(
+          color: AppTheme.navyBlue.withValues(alpha: 0.08),
+          width: 1,
+        ),
+      ),
+      padding: const EdgeInsets.all(8),
+      child: Stack(
+        children: [
+          if (post.body.isNotEmpty)
+            Text(
+              post.body,
+              maxLines: 6,
+              overflow: TextOverflow.fade,
+              style: GoogleFonts.inter(
+                fontSize: 11,
+                color: AppTheme.navyText.withValues(alpha: 0.85),
+                height: 1.35,
+              ),
+            ),
+          if (post.videoUrl != null)
+            Positioned(
+              bottom: 4,
+              right: 4,
+              child: Icon(
+                Icons.play_circle_outline,
+                color: AppTheme.brightNavy,
+                size: 18,
+              ),
+            ),
+        ],
+      ),
+    );
   }
 }
 
@@ -1935,16 +1981,15 @@ class _HarmonyAvatar extends StatelessWidget {
       child: Stack(
         alignment: Alignment.center,
         children: [
-          // Progress arc ring
-          SizedBox(
-            width: totalSize,
-            height: totalSize,
-            child: CircularProgressIndicator(
-              value: harmonyScore > 0 ? harmonyScore : null,
+          // Progress arc ring (rounded square to match avatar shape)
+          CustomPaint(
+            size: Size(totalSize, totalSize),
+            painter: _HarmonyRingPainter(
+              value: harmonyScore,
               strokeWidth: strokeWidth,
               backgroundColor: Colors.white.withValues(alpha: 0.2),
-              valueColor: AlwaysStoppedAnimation<Color>(ringColor),
-              strokeCap: StrokeCap.round,
+              valueColor: ringColor,
+              cornerRadius: radius * 0.4 + strokeWidth + 2,
             ),
           ),
           // Avatar image
@@ -1975,6 +2020,62 @@ class _HarmonyAvatar extends StatelessWidget {
       ),
     );
   }
+}
+
+// ==============================================================================
+// HARMONY RING PAINTER — rounded-square progress arc
+// ==============================================================================
+
+class _HarmonyRingPainter extends CustomPainter {
+  final double value;
+  final double strokeWidth;
+  final Color backgroundColor;
+  final Color valueColor;
+  final double cornerRadius;
+
+  const _HarmonyRingPainter({
+    required this.value,
+    required this.strokeWidth,
+    required this.backgroundColor,
+    required this.valueColor,
+    required this.cornerRadius,
+  });
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final half = strokeWidth / 2;
+    final rect = Rect.fromLTWH(half, half, size.width - strokeWidth, size.height - strokeWidth);
+    final rrect = RRect.fromRectAndRadius(rect, Radius.circular(cornerRadius));
+    final path = Path()..addRRect(rrect);
+
+    // Background track
+    canvas.drawPath(
+      path,
+      Paint()
+        ..color = backgroundColor
+        ..style = PaintingStyle.stroke
+        ..strokeWidth = strokeWidth
+        ..strokeCap = StrokeCap.round,
+    );
+
+    // Progress arc
+    if (value > 0) {
+      final metrics = path.computeMetrics().first;
+      final progressPath = metrics.extractPath(0, metrics.length * value.clamp(0.0, 1.0));
+      canvas.drawPath(
+        progressPath,
+        Paint()
+          ..color = valueColor
+          ..style = PaintingStyle.stroke
+          ..strokeWidth = strokeWidth
+          ..strokeCap = StrokeCap.round,
+      );
+    }
+  }
+
+  @override
+  bool shouldRepaint(_HarmonyRingPainter old) =>
+      old.value != value || old.valueColor != valueColor || old.backgroundColor != backgroundColor;
 }
 
 // ==============================================================================

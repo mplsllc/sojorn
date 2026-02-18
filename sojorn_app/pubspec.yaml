@@ -62,6 +62,7 @@ dependencies:
 
   # E2EE Cryptography
   cryptography: ^2.5.0
+  cryptography_flutter: ^2.3.4
   convert: ^3.1.1
   file_picker: ^10.3.10
   universal_html: ^2.0.8

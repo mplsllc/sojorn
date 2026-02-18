@@ -86,7 +86,7 @@ class SkeletonPostCard extends StatelessWidget {
           // Author row
           Row(
             children: [
-              const SkeletonBox(width: 40, height: 40, borderRadius: 20),
+              const SkeletonBox(width: 40, height: 40, borderRadius: 11),
               const SizedBox(width: 10),
               Column(
                 crossAxisAlignment: CrossAxisAlignment.start,

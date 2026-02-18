@@ -168,6 +168,7 @@ class _NewConversationSheetState extends State<NewConversationSheet> {
           Padding(
             padding: const EdgeInsets.symmetric(horizontal: 20),
             child: TextField(
+              autofocus: true,
               onChanged: (value) => setState(() => _searchQuery = value),
               decoration: InputDecoration(
                 hintText: 'Search...',

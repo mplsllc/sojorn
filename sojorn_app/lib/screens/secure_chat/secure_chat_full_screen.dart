@@ -1,3 +1,5 @@
+import 'dart:async';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:timeago/timeago.dart' as timeago;
@@ -20,7 +22,8 @@ class SecureChatFullScreen extends StatefulWidget {
   State<SecureChatFullScreen> createState() => _SecureChatFullScreenState();
 }
 
-class _SecureChatFullScreenState extends State<SecureChatFullScreen> {
+class _SecureChatFullScreenState extends State<SecureChatFullScreen>
+    with WidgetsBindingObserver {
   final SecureChatService _chatService = SecureChatService();
 
   List<SecureConversation> _conversations = [];
@@ -28,25 +31,55 @@ class _SecureChatFullScreenState extends State<SecureChatFullScreen> {
   bool _isInitializing = false;
   String? _error;
 
-  late Stream<List<SecureConversation>> _conversationStream;
+  Timer? _pollTimer;
+  StreamSubscription? _changesSub;
 
   @override
   void initState() {
     super.initState();
-    
-    // Create LIVE stream that automatically updates every 2 seconds
-    _conversationStream = Stream.periodic(const Duration(seconds: 2))
-        .asyncMap((_) => _chatService.getConversations())
-        .asBroadcastStream();
-    
-    // Also trigger immediate reload on conversation changes
-    _chatService.conversationListChanges.listen((_) {
-      if (mounted) {
-        setState(() {}); // Force rebuild to get latest from stream
-      }
+    WidgetsBinding.instance.addObserver(this);
+
+    // Poll every 30 s — paused when app is backgrounded
+    _startPolling();
+
+    // Re-load only when the list actually changed (push notification, send, etc.)
+    _changesSub = _chatService.conversationListChanges.listen((_) {
+      if (mounted) _loadConversations();
     });
-    
+
     _initialize();
+  }
+
+  void _startPolling() {
+    _pollTimer?.cancel();
+    _pollTimer = Timer.periodic(const Duration(seconds: 30), (_) {
+      if (mounted) _loadConversations();
+    });
+  }
+
+  void _stopPolling() {
+    _pollTimer?.cancel();
+    _pollTimer = null;
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.paused ||
+        state == AppLifecycleState.detached) {
+      _stopPolling();
+    } else if (state == AppLifecycleState.resumed) {
+      _startPolling();
+      // Refresh immediately on resume to catch any missed updates
+      _loadConversations();
+    }
+  }
+
+  @override
+  void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
+    _stopPolling();
+    _changesSub?.cancel();
+    super.dispose();
   }
 
   Future<void> _initialize() async {
@@ -79,13 +112,17 @@ class _SecureChatFullScreenState extends State<SecureChatFullScreen> {
   Future<void> _loadConversations() async {
     try {
       final conversations = await _chatService.getConversations();
-      
-      if (mounted) {
-        setState(() {
-          _conversations = conversations;
-          _error = null;
-        });
-      }
+      if (!mounted) return;
+
+      // Skip rebuild if conversation IDs haven't changed
+      final newIds = conversations.map((c) => c.id).toList();
+      final oldIds = _conversations.map((c) => c.id).toList();
+      if (listEquals(newIds, oldIds)) return;
+
+      setState(() {
+        _conversations = conversations;
+        _error = null;
+      });
     } catch (e) {
       if (mounted) {
         setState(() {
@@ -339,85 +376,28 @@ class _SecureChatFullScreenState extends State<SecureChatFullScreen> {
       );
     }
 
-    return StreamBuilder<List<SecureConversation>>(
-      stream: _conversationStream,
-      builder: (context, snapshot) {
-        if (snapshot.connectionState == ConnectionState.waiting && _conversations.isEmpty) {
-          return Center(
-            child: CircularProgressIndicator(
-              valueColor: AlwaysStoppedAnimation<Color>(AppTheme.brightNavy),
-            ),
-          );
-        }
-
-        if (snapshot.hasError) {
-          return Center(
-            child: Text(
-              'Error loading conversations: ${snapshot.error}',
-              style: GoogleFonts.inter(color: SojornColors.destructive),
-            ),
-          );
-        }
-
-        final conversations = snapshot.data ?? _conversations;
-
-        if (conversations.isEmpty) {
-          return Center(
-            child: Column(
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: [
-                Icon(
-                  Icons.lock,
-                  size: 64,
-                  color: AppTheme.brightNavy.withValues(alpha: 0.3),
+    return RefreshIndicator(
+      onRefresh: _loadConversations,
+      color: AppTheme.brightNavy,
+      child: ListView.builder(
+        padding: const EdgeInsets.symmetric(vertical: 8),
+        itemCount: _conversations.length,
+        itemBuilder: (context, index) {
+          final conversation = _conversations[index];
+          return _ConversationTile(
+            conversation: conversation,
+            onTap: () {
+              Navigator.push(
+                context,
+                MaterialPageRoute(
+                  builder: (context) => SecureChatScreen(conversation: conversation),
                 ),
-                const SizedBox(height: 16),
-                Text(
-                  'No messages yet',
-                  style: GoogleFonts.literata(
-                    fontSize: 20,
-                    fontWeight: FontWeight.w600,
-                    color: AppTheme.navyBlue,
-                  ),
-                ),
-                const SizedBox(height: 8),
-                Text(
-                  'Start a secure conversation with someone',
-                  textAlign: TextAlign.center,
-                  style: GoogleFonts.inter(
-                    fontSize: 14,
-                    color: AppTheme.textSecondary,
-                  ),
-                ),
-              ],
-            ),
-          );
-        }
-
-        return RefreshIndicator(
-          onRefresh: _loadConversations,
-          color: AppTheme.brightNavy,
-          child: ListView.builder(
-            padding: const EdgeInsets.symmetric(vertical: 8),
-            itemCount: conversations.length,
-            itemBuilder: (context, index) {
-              final conversation = conversations[index];
-              return _ConversationTile(
-                conversation: conversation,
-                onTap: () {
-                  Navigator.push(
-                    context,
-                    MaterialPageRoute(
-                      builder: (context) => SecureChatScreen(conversation: conversation),
-                    ),
-                  );
-                },
-                onDelete: () => _confirmDeleteConversation(conversation),
               );
             },
-          ),
-        );
-      },
+            onDelete: () => _confirmDeleteConversation(conversation),
+          );
+        },
+      ),
     );
   }
 
@@ -625,13 +605,16 @@ class _ConversationTileState extends State<_ConversationTile> {
                               Expanded(
                                   child: Text(
                                     widget.conversation.lastMessageAt != null
-                                        ? 'Recent message'
+                                        ? 'Encrypted message'
                                         : 'Start a conversation',
                                     style: GoogleFonts.inter(
                                       color: widget.conversation.lastMessageAt != null
                                           ? AppTheme.textSecondary
                                           : AppTheme.textDisabled,
-                                      fontSize: 14,
+                                      fontSize: 13,
+                                      fontStyle: widget.conversation.lastMessageAt != null
+                                          ? FontStyle.italic
+                                          : FontStyle.normal,
                                     ),
                                     overflow: TextOverflow.ellipsis,
                                     maxLines: 1,

@@ -126,18 +126,10 @@ class _ReactionPickerState extends ConsumerState<ReactionPicker>
   }
 
   Widget _buildLoadingDialog() {
-    return Dialog(
-      backgroundColor: SojornColors.transparent,
-      child: Container(
-        width: 400,
-        height: 300,
-        decoration: BoxDecoration(
-          color: AppTheme.cardSurface,
-          borderRadius: BorderRadius.circular(16),
-          border:
-              Border.all(color: AppTheme.navyBlue.withValues(alpha: 0.1)),
-        ),
-        child: const Center(child: CircularProgressIndicator()),
+    return _SheetShell(
+      child: const SizedBox(
+        height: 200,
+        child: Center(child: CircularProgressIndicator()),
       ),
     );
   }
@@ -149,30 +141,14 @@ class _ReactionPickerState extends ConsumerState<ReactionPicker>
     final reactionCounts = widget.reactionCounts ?? {};
     final myReactions = widget.myReactions ?? {};
 
-    return Dialog(
-      backgroundColor: SojornColors.transparent,
-      child: Container(
-        padding: const EdgeInsets.all(20),
-        decoration: BoxDecoration(
-          color: AppTheme.cardSurface,
-          borderRadius: BorderRadius.circular(20),
-          border: Border.all(
-            color: AppTheme.navyBlue.withValues(alpha: 0.2),
-            width: 1,
-          ),
-          boxShadow: [
-            BoxShadow(
-              color: SojornColors.overlayScrim,
-              blurRadius: 20,
-              offset: const Offset(0, 10),
-            ),
-          ],
-        ),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            // Header with search
-            Row(
+    return _SheetShell(
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          // Header
+          Padding(
+            padding: const EdgeInsets.fromLTRB(20, 4, 8, 12),
+            child: Row(
               children: [
                 Text(
                   _isSearching ? 'Search Reactions' : 'Add Reaction',
@@ -188,15 +164,16 @@ class _ReactionPickerState extends ConsumerState<ReactionPicker>
                     Navigator.of(context).pop();
                     widget.onClosed?.call();
                   },
-                  icon: Icon(
-                    Icons.close,
-                    color: AppTheme.textSecondary,
-                    size: 20,
-                  ),
+                  icon: Icon(Icons.close, color: AppTheme.textSecondary, size: 20),
                 ),
               ],
             ),
-            const SizedBox(height: 12),
+          ),
+          Padding(
+            padding: const EdgeInsets.fromLTRB(20, 0, 20, 12),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
 
             // Search bar
             Container(
@@ -344,11 +321,12 @@ class _ReactionPickerState extends ConsumerState<ReactionPicker>
                 }).toList(),
               ),
             ),
-            const SizedBox(height: 16),
-          ],
+              const SizedBox(height: 16),
+            ],
+          ),
         ),
-      ),
-    );
+      ],
+    ));
   }
 
   Widget _buildCreditDisplay(String credit) {
@@ -524,6 +502,44 @@ class _ReactionPickerState extends ConsumerState<ReactionPicker>
         Icons.image_not_supported,
         size: 24,
         color: AppTheme.textSecondary,
+      ),
+    );
+  }
+}
+
+// Bottom-sheet shell: rounded top corners + drag handle + keyboard padding
+class _SheetShell extends StatelessWidget {
+  final Widget child;
+  const _SheetShell({required this.child});
+
+  @override
+  Widget build(BuildContext context) {
+    final bottom = MediaQuery.of(context).viewInsets.bottom;
+    return Container(
+      decoration: BoxDecoration(
+        color: Theme.of(context).scaffoldBackgroundColor,
+        borderRadius: const BorderRadius.vertical(
+          top: Radius.circular(SojornRadii.modal),
+        ),
+      ),
+      padding: EdgeInsets.only(bottom: bottom + 12),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          // Drag handle
+          Center(
+            child: Container(
+              width: 40,
+              height: 4,
+              margin: const EdgeInsets.symmetric(vertical: 12),
+              decoration: BoxDecoration(
+                color: AppTheme.textDisabled.withValues(alpha: 0.3),
+                borderRadius: BorderRadius.circular(2),
+              ),
+            ),
+          ),
+          child,
+        ],
       ),
     );
   }

@@ -220,7 +220,11 @@ class _sojornPostCardState extends ConsumerState<sojornPostCard> {
                             ),
                           ),
                           GestureDetector(
-                            onTap: () => SanctuarySheet.show(context, post),
+                            onTapDown: (details) => SanctuarySheet.showQuick(
+                              context,
+                              post,
+                              details.globalPosition,
+                            ),
                             child: Container(
                               margin: const EdgeInsets.symmetric(horizontal: 4),
                               padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
@@ -229,7 +233,7 @@ class _sojornPostCardState extends ConsumerState<sojornPostCard> {
                                 borderRadius: BorderRadius.circular(12),
                               ),
                               child: Text("!", style: TextStyle(
-                                fontSize: 18, 
+                                fontSize: 18,
                                 fontWeight: FontWeight.w900,
                                 color: AppTheme.royalPurple.withValues(alpha: 0.7),
                               )),

@@ -206,7 +206,7 @@ class _ComposerWidgetState extends State<ComposerWidget>
                 ),
 
               // ── Horizontal tool drawer ─────────────────────────────────
-              AnimatedContainer(
+              ClipRect(child: AnimatedContainer(
                 duration: const Duration(milliseconds: 200),
                 curve: Curves.easeOut,
                 height: _drawerOpen ? 52 : 0,
@@ -239,7 +239,7 @@ class _ComposerWidgetState extends State<ComposerWidget>
                     ),
                   ),
                 ),
-              ),
+              )),
 
               // ── Input row ──────────────────────────────────────────────
               Padding(

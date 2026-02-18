@@ -1,5 +1,7 @@
+import 'dart:convert';
 import 'dart:io';
 import 'package:flutter/foundation.dart';
+import 'package:universal_html/html.dart' as universal_html;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -177,10 +179,18 @@ class _VaultSetupGateState extends ConsumerState<VaultSetupGate> {
 
     try {
       if (kIsWeb) {
-        await Clipboard.setData(ClipboardData(text: _recoveryKey!));
+        // Trigger a browser file download via a data URI
+        final bytes = utf8.encode(content);
+        final base64Data = base64Encode(bytes);
+        final anchor = universal_html.AnchorElement(
+          href: 'data:text/plain;charset=utf-8;base64,$base64Data',
+        )
+          ..setAttribute('download', 'sojorn_recovery_key.txt')
+          ..click();
+        anchor.remove();
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(content: Text('Recovery key copied to clipboard'), backgroundColor: Color(0xFF4CAF50)));
+            const SnackBar(content: Text('Recovery key downloaded'), backgroundColor: Color(0xFF4CAF50)));
         }
       } else {
         final result = await FilePicker.platform.saveFile(

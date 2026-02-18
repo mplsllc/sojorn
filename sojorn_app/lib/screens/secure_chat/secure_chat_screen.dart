@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:google_fonts/google_fonts.dart';
@@ -40,7 +42,9 @@ class _SecureChatScreenState extends State<SecureChatScreen>
   final Set<String> _deletedMessageIds = {};
 
   late final Stream<List<LocalMessageRecord>> _messageStream;
+  StreamSubscription<List<LocalMessageRecord>>? _reconcileSubscription;
   final List<_PendingMessage> _pendingMessages = [];
+  int _lastBuiltItemCount = 0;
 
   bool _isSending = false;
   String _activeDateLabel = '';
@@ -57,7 +61,16 @@ class _SecureChatScreenState extends State<SecureChatScreen>
   void initState() {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
-    _messageStream = _chatService.getMessagesStream(widget.conversation.id);
+    // Use a broadcast stream so both StreamBuilder and the reconcile
+    // subscription can listen without conflict.
+    _messageStream = _chatService
+        .getMessagesStream(widget.conversation.id)
+        .asBroadcastStream();
+    // Reconcile pending messages outside the build path so setState can be
+    // called directly rather than via addPostFrameCallback.
+    _reconcileSubscription = _messageStream.listen((messages) {
+      _reconcilePendingDirect(messages);
+    });
     NotificationService.instance.activeConversationId = widget.conversation.id;
     _markAsRead();
     _hydrateAvatars();
@@ -67,6 +80,7 @@ class _SecureChatScreenState extends State<SecureChatScreen>
   void dispose() {
     WidgetsBinding.instance.removeObserver(this);
     NotificationService.instance.activeConversationId = null;
+    _reconcileSubscription?.cancel();
     _messageController.dispose();
     _scrollController.dispose();
     _focusNode.dispose();
@@ -291,7 +305,8 @@ class _SecureChatScreenState extends State<SecureChatScreen>
       stream: _messageStream,
       builder: (context, snapshot) {
         final messages = snapshot.data ?? [];
-        _reconcilePending(messages);
+        // Reconciliation is handled in _reconcileSubscription (initState)
+        // to avoid running in the build path.
 
         if (snapshot.connectionState == ConnectionState.waiting &&
             messages.isEmpty &&
@@ -304,13 +319,16 @@ class _SecureChatScreenState extends State<SecureChatScreen>
           return _buildEmptyState();
         }
 
-        WidgetsBinding.instance.addPostFrameCallback((_) {
-          if (!mounted) return;
-          _markAsRead();
-          _refreshActiveHeader(items);
-          _updateStickyDateLabel();
-          _maybeScrollToBottom();
-        });
+        // Only run post-frame work when the item count actually changes to
+        // avoid cascading rebuilds on every stream emission.
+        if (items.length != _lastBuiltItemCount) {
+          _lastBuiltItemCount = items.length;
+          WidgetsBinding.instance.addPostFrameCallback((_) {
+            if (!mounted) return;
+            _refreshActiveHeader(items);
+            _maybeScrollToBottom();
+          });
+        }
 
         return NotificationListener<ScrollNotification>(
           onNotification: (notification) {
@@ -361,62 +379,65 @@ class _SecureChatScreenState extends State<SecureChatScreen>
                               label: dateLabel,
                             ),
                           ),
-                        Dismissible(
-                          key: ValueKey('swipe-${current.id}-${current.isPending}'),
-                          direction: DismissDirection.endToStart,
-                          confirmDismiss: (direction) async {
-                            if (current.isPending) {
-                              _removePending(current.id);
-                            } else {
-                              _confirmDeleteMessage(current.id, forEveryone: false);
-                            }
-                            return false; // Let confirmation dialog handle it
-                          },
-                          background: Container(
-                            margin: const EdgeInsets.symmetric(vertical: 4),
-                            decoration: BoxDecoration(
-                              color: AppTheme.error.withValues(alpha: 0.1),
-                              borderRadius: BorderRadius.circular(12),
+                        if (current.collapsedFailureCount > 0)
+                          _buildDecryptionNotice(current.text, current.collapsedFailureCount)
+                        else
+                          Dismissible(
+                            key: ValueKey('swipe-${current.id}-${current.isPending}'),
+                            direction: DismissDirection.endToStart,
+                            confirmDismiss: (direction) async {
+                              if (current.isPending) {
+                                _removePending(current.id);
+                              } else {
+                                _confirmDeleteMessage(current.id, forEveryone: false);
+                              }
+                              return false; // Let confirmation dialog handle it
+                            },
+                            background: Container(
+                              margin: const EdgeInsets.symmetric(vertical: 4),
+                              decoration: BoxDecoration(
+                                color: AppTheme.error.withValues(alpha: 0.1),
+                                borderRadius: BorderRadius.circular(12),
+                              ),
+                              alignment: Alignment.centerRight,
+                              padding: const EdgeInsets.only(right: 24),
+                              child: Icon(
+                                Icons.delete_outline,
+                                color: AppTheme.error,
+                                size: 24,
+                              ),
                             ),
-                            alignment: Alignment.centerRight,
-                            padding: const EdgeInsets.only(right: 24),
-                            child: Icon(
-                              Icons.delete_outline,
-                              color: AppTheme.error,
-                              size: 24,
+                            child: ChatBubbleWidget(
+                              key: ValueKey('${current.id}-${current.isPending}'),
+                              message: current.text,
+                              isMe: current.isMe,
+                              timestamp: current.timestamp,
+                              isSending: current.isPending && !current.sendFailed,
+                              sendFailed: current.sendFailed,
+                              isDelivered: current.isDelivered,
+                              isRead: current.isRead,
+                              decryptionFailed: current.decryptionFailed,
+                              isFirstInCluster: startsCluster,
+                              isLastInCluster: endsCluster,
+                              showAvatar: true,
+                              avatarUrl: current.isMe
+                                  ? _currentUserAvatarUrl
+                                  : _otherUserAvatarUrl,
+                              avatarInitial: current.isMe
+                                  ? _currentUserInitial
+                                  : _otherUserInitial,
+                              onLongPress: current.isPending
+                                  ? null
+                                  : () => _showMessageOptions(current),
+                              onDelete: current.isPending
+                                  ? () => _removePending(current.id)
+                                  : () => _confirmDeleteMessage(
+                                        current.id,
+                                        forEveryone: false,
+                                      ),
+                              onReply: () => _startReply(current),
                             ),
                           ),
-                          child: ChatBubbleWidget(
-                            key: ValueKey('${current.id}-${current.isPending}'),
-                            message: current.text,
-                            isMe: current.isMe,
-                            timestamp: current.timestamp,
-                            isSending: current.isPending && !current.sendFailed,
-                            sendFailed: current.sendFailed,
-                            isDelivered: current.isDelivered,
-                            isRead: current.isRead,
-                            decryptionFailed: current.decryptionFailed,
-                            isFirstInCluster: startsCluster,
-                            isLastInCluster: endsCluster,
-                            showAvatar: true,
-                            avatarUrl: current.isMe
-                                ? _currentUserAvatarUrl
-                                : _otherUserAvatarUrl,
-                            avatarInitial: current.isMe
-                                ? _currentUserInitial
-                                : _otherUserInitial,
-                            onLongPress: current.isPending
-                                ? null
-                                : () => _showMessageOptions(current),
-                            onDelete: current.isPending
-                                ? () => _removePending(current.id)
-                                : () => _confirmDeleteMessage(
-                                      current.id,
-                                      forEveryone: false,
-                                    ),
-                            onReply: () => _startReply(current),
-                          ),
-                        ),
                       ],
                     );
                   },
@@ -483,6 +504,7 @@ class _SecureChatScreenState extends State<SecureChatScreen>
           isDelivered: msg.deliveredAt != null,
           isRead: msg.readAt != null,
           decryptionFailed: failed,
+          collapsedFailureCount: 0,
           isPending: false,
           sendFailed: false,
         ),
@@ -499,6 +521,7 @@ class _SecureChatScreenState extends State<SecureChatScreen>
           isDelivered: false,
           isRead: false,
           decryptionFailed: false,
+          collapsedFailureCount: 0,
           isPending: true,
           sendFailed: pending.failed,
         ),
@@ -506,10 +529,49 @@ class _SecureChatScreenState extends State<SecureChatScreen>
     }
 
     items.sort((a, b) => a.timestamp.compareTo(b.timestamp));
-    return items;
+    return _collapseDecryptionFailures(items);
   }
 
-  void _reconcilePending(List<LocalMessageRecord> messages) {
+  /// Collapse consecutive decryption failures into a single notice widget.
+  List<_ChatListItem> _collapseDecryptionFailures(List<_ChatListItem> items) {
+    final result = <_ChatListItem>[];
+    int failStart = -1;
+    int failCount = 0;
+
+    for (var i = 0; i <= items.length; i++) {
+      final item = i < items.length ? items[i] : null;
+      if (item != null && item.decryptionFailed) {
+        if (failStart == -1) failStart = i;
+        failCount++;
+      } else {
+        if (failCount > 0) {
+          final firstFailed = items[failStart];
+          result.add(_ChatListItem(
+            id: 'collapsed-${firstFailed.id}',
+            text: '$failCount message${failCount == 1 ? '' : 's'} couldn\'t be decrypted with your current keys',
+            isMe: false,
+            timestamp: firstFailed.timestamp,
+            isDelivered: false,
+            isRead: false,
+            decryptionFailed: true,
+            collapsedFailureCount: failCount,
+            isPending: false,
+            sendFailed: false,
+          ));
+          failStart = -1;
+          failCount = 0;
+        }
+        if (item != null) result.add(item);
+      }
+    }
+
+    return result;
+  }
+
+  /// Reconcile pending messages against confirmed server messages.
+  /// Called from a stream subscription (outside the build path) so setState
+  /// can be invoked directly without addPostFrameCallback.
+  void _reconcilePendingDirect(List<LocalMessageRecord> messages) {
     if (_pendingMessages.isEmpty) return;
     final myMessages = messages.where((m) => m.senderId == _currentUserId);
 
@@ -523,12 +585,9 @@ class _SecureChatScreenState extends State<SecureChatScreen>
       if (match) resolvedIds.add(pending.id);
     }
 
-    if (resolvedIds.isNotEmpty) {
-      WidgetsBinding.instance.addPostFrameCallback((_) {
-        if (!mounted) return;
-        setState(() {
-          _pendingMessages.removeWhere((p) => resolvedIds.contains(p.id));
-        });
+    if (resolvedIds.isNotEmpty && mounted) {
+      setState(() {
+        _pendingMessages.removeWhere((p) => resolvedIds.contains(p.id));
       });
     }
   }
@@ -1088,6 +1147,36 @@ class _SecureChatScreenState extends State<SecureChatScreen>
     return a.isMe == b.isMe;
   }
 
+  Widget _buildDecryptionNotice(String text, int count) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+        decoration: BoxDecoration(
+          color: AppTheme.egyptianBlue.withValues(alpha: 0.05),
+          borderRadius: BorderRadius.circular(10),
+          border: Border.all(color: AppTheme.egyptianBlue.withValues(alpha: 0.15)),
+        ),
+        child: Row(
+          children: [
+            Icon(Icons.lock_reset, size: 14, color: AppTheme.navyText.withValues(alpha: 0.35)),
+            const SizedBox(width: 8),
+            Expanded(
+              child: Text(
+                text,
+                style: GoogleFonts.inter(
+                  fontSize: 12,
+                  color: AppTheme.navyText.withValues(alpha: 0.45),
+                  fontStyle: FontStyle.italic,
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
   Widget _buildWarningItem(String text) {
     return Padding(
       padding: const EdgeInsets.only(bottom: 8),
@@ -1120,6 +1209,7 @@ class _ChatListItem {
     required this.isDelivered,
     required this.isRead,
     required this.decryptionFailed,
+    required this.collapsedFailureCount,
     required this.isPending,
     required this.sendFailed,
   });
@@ -1131,6 +1221,7 @@ class _ChatListItem {
   final bool isDelivered;
   final bool isRead;
   final bool decryptionFailed;
+  final int collapsedFailureCount;
   final bool isPending;
   final bool sendFailed;
 }

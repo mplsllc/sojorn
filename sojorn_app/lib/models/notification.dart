@@ -70,7 +70,14 @@ class AppNotification {
       ),
       actor: json['actor'] != null
         ? Profile.fromJson(json['actor'] as Map<String, dynamic>)
-        : null,
+        : (json['actor_id'] != null
+            ? Profile.fromJson({
+                'id': json['actor_id'],
+                'handle': json['actor_handle'] ?? '',
+                'display_name': json['actor_display_name'] ?? '',
+                'avatar_url': json['actor_avatar_url'] ?? '',
+              })
+            : null),
       postId: json['post_id'] as String?,
       postBody: postBody,
       postImageUrl: postImageUrl,

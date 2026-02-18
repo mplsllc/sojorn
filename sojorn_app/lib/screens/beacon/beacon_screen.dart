@@ -791,13 +791,57 @@ class BeaconScreenState extends ConsumerState<BeaconScreen> with TickerProviderS
                   if (_beacons.isEmpty)
                     SliverToBoxAdapter(
                       child: Padding(
-                        padding: const EdgeInsets.all(32),
-                        child: Center(child: Column(children: [
-                          Icon(Icons.shield, color: AppTheme.brightNavy.withValues(alpha: 0.3), size: 48),
-                          const SizedBox(height: 12),
-                          Text('All clear in your area',
-                            style: TextStyle(color: AppTheme.navyBlue.withValues(alpha: 0.5), fontSize: 14)),
-                        ])),
+                        padding: const EdgeInsets.fromLTRB(20, 8, 20, 32),
+                        child: Column(
+                          children: [
+                            // What are Beacons? explainer card
+                            Container(
+                              padding: const EdgeInsets.all(16),
+                              decoration: BoxDecoration(
+                                color: AppTheme.brightNavy.withValues(alpha: 0.06),
+                                borderRadius: BorderRadius.circular(16),
+                                border: Border.all(color: AppTheme.brightNavy.withValues(alpha: 0.12)),
+                              ),
+                              child: Row(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Icon(Icons.lightbulb_outline, color: AppTheme.brightNavy, size: 20),
+                                  const SizedBox(width: 12),
+                                  Expanded(
+                                    child: Column(
+                                      crossAxisAlignment: CrossAxisAlignment.start,
+                                      children: [
+                                        Text('What are Beacons?',
+                                          style: TextStyle(
+                                            color: AppTheme.navyBlue,
+                                            fontWeight: FontWeight.w700,
+                                            fontSize: 13,
+                                          )),
+                                        const SizedBox(height: 4),
+                                        Text(
+                                          'Beacons are real-time local alerts from people in your area — road closures, safety incidents, community events, and more. Tap + Create to post your first beacon.',
+                                          style: TextStyle(
+                                            color: AppTheme.navyBlue.withValues(alpha: 0.65),
+                                            fontSize: 12,
+                                            height: 1.4,
+                                          ),
+                                        ),
+                                      ],
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                            const SizedBox(height: 24),
+                            Icon(Icons.shield, color: AppTheme.brightNavy.withValues(alpha: 0.25), size: 40),
+                            const SizedBox(height: 10),
+                            Text('All clear in your area',
+                              style: TextStyle(color: AppTheme.navyBlue.withValues(alpha: 0.45), fontSize: 14, fontWeight: FontWeight.w500)),
+                            const SizedBox(height: 4),
+                            Text('No active alerts nearby',
+                              style: TextStyle(color: AppTheme.navyBlue.withValues(alpha: 0.3), fontSize: 12)),
+                          ],
+                        ),
                       ),
                     )
                   else

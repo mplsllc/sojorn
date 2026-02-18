@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'dart:ui';
+import 'package:cryptography_flutter/cryptography_flutter.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/scheduler.dart';
@@ -15,6 +16,7 @@ import 'services/auth_service.dart';
 import 'services/secure_chat_service.dart';
 import 'services/simple_e2ee_service.dart';
 import 'services/key_vault_service.dart';
+import 'services/local_message_store.dart';
 import 'services/sync_manager.dart';
 import 'services/network_service.dart';
 import 'package:google_fonts/google_fonts.dart';
@@ -35,6 +37,14 @@ void main() {
   runZonedGuarded(
     () async {
       WidgetsFlutterBinding.ensureInitialized();
+
+      // Register platform-native crypto implementations (WebCrypto on web,
+      // SecureRandom/OS crypto on mobile). Must be called before any
+      // AesGcm / X25519 / Hkdf operations.
+      FlutterCryptography.enable();
+
+      // Pre-warm message store so IndexedDB/Hive is ready before first chat open.
+      unawaited(LocalMessageStore.instance.prewarm());
 
       // ── Global error handlers for freeze/crash diagnosis ──────────────
       FlutterError.onError = (FlutterErrorDetails details) {
@@ -228,6 +238,7 @@ class _sojornAppState extends ConsumerState<sojornApp> with WidgetsBindingObserv
           KeyVaultService.instance.autoSync();
         });
         NotificationService.instance.init();
+        _listenForNotifications();
         _ensureSyncManager();
       } else if (data.event == AuthChangeEvent.signedOut) {
         _syncManager?.dispose();

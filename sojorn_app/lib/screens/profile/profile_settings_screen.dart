@@ -14,7 +14,7 @@ import '../../services/notification_service.dart';
 import '../../theme/app_theme.dart';
 import '../../theme/tokens.dart';
 import 'privacy_dashboard_screen.dart';
-import '../../widgets/app_scaffold.dart';
+import '../home/full_screen_shell.dart';
 import '../../widgets/media/signed_media_image.dart';
 import '../../widgets/media/sojorn_avatar.dart';
 import '../../widgets/sojorn_input.dart';
@@ -77,21 +77,21 @@ class _ProfileSettingsScreenState extends ConsumerState<ProfileSettingsScreen> {
     final profile = state.profile;
     
     if (state.isLoading && profile == null) {
-      return const AppScaffold(
-        title: 'Settings',
+      return const FullScreenShell(
+        titleText: 'Settings',
         body: Center(child: CircularProgressIndicator()),
       );
     }
 
     if (profile == null) {
-      return const AppScaffold(
-        title: 'Settings',
+      return const FullScreenShell(
+        titleText: 'Settings',
         body: Center(child: Text('Failed to load profile')),
       );
     }
 
-    return AppScaffold(
-      title: 'Sanctuary Settings',
+    return FullScreenShell(
+      titleText: 'Settings',
       body: SingleChildScrollView(
         physics: const BouncingScrollPhysics(),
         child: Column(
@@ -107,24 +107,27 @@ class _ProfileSettingsScreenState extends ConsumerState<ProfileSettingsScreen> {
                    const SizedBox(height: AppTheme.spacingLg),
                    
                    _buildSection(
-                     title: 'Account Sovereignty',
-                     subtitle: 'Your data, your sanctuary',
+                     title: 'Account',
+                     subtitle: 'Your profile, data, and privacy',
                      children: [
                        _buildEditTile(
                          icon: Icons.person_outline,
-                         title: 'Identity',
+                         title: 'Profile',
+                         subtitle: 'Name, handle, bio, avatar',
                          onTap: () => _showIdentityEditor(profile),
                        ),
                        _buildEditTile(
                          icon: Icons.lock,
                          title: 'Encryption & Backup',
+                         subtitle: 'Manage your encryption keys',
                          onTap: () => Navigator.of(context).push(
                            MaterialPageRoute(builder: (_) => const EncryptionHubScreen()),
                          ),
                        ),
                        _buildEditTile(
-                         icon: Icons.shield_outlined,
-                         title: 'Discovery Cohorts',
+                         icon: Icons.interests_outlined,
+                         title: 'Content Interests',
+                         subtitle: 'Topics used to personalize your feed',
                          onTap: () => Navigator.of(context).push(
                            MaterialPageRoute(builder: (_) => const CategoryDiscoveryScreen()),
                          ),
@@ -132,18 +135,21 @@ class _ProfileSettingsScreenState extends ConsumerState<ProfileSettingsScreen> {
                        _buildEditTile(
                          icon: Icons.pause_circle_outline,
                          title: 'Deactivate Account',
+                         subtitle: 'Temporarily hide your profile',
                          color: SojornColors.nsfwWarningIcon,
                          onTap: () => _showDeactivateDialog(),
                        ),
                        _buildEditTile(
                          icon: Icons.delete_outline,
                          title: 'Delete Account',
+                         subtitle: 'Permanently remove your account',
                          color: SojornColors.destructive,
                          onTap: () => _showDeleteDialog(),
                        ),
                        _buildEditTile(
                          icon: Icons.warning_amber_rounded,
-                         title: 'Immediate Destroy',
+                         title: 'Permanently Delete Now',
+                         subtitle: 'Immediately erase all data — cannot be undone',
                          color: const Color(0xFFC62828),
                          onTap: () => _showSuperDeleteDialog(),
                        ),
@@ -233,76 +239,97 @@ class _ProfileSettingsScreenState extends ConsumerState<ProfileSettingsScreen> {
   }
 
   Widget _buildProfileHeader(Profile profile) {
-    return Stack(
+    const bannerHeight = 140.0;
+    const avatarSize = 80.0;
+    // Avatar is vertically centered on the banner's bottom edge
+    const avatarTop = bannerHeight - avatarSize / 2;
+    const avatarOverflow = avatarSize / 2; // how far avatar extends below banner
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        // Banner
-        GestureDetector(
-          onTap: () => _pickMedia(isBanner: true),
-          child: Container(
-            height: 180,
-            width: double.infinity,
-            decoration: BoxDecoration(
-              color: AppTheme.egyptianBlue.withValues(alpha: 0.1),
-            ),
-            child: _isBannerUploading
-              ? const Center(child: CircularProgressIndicator())
-              : profile.coverUrl != null
-                ? SignedMediaImage(url: profile.coverUrl!, fit: BoxFit.cover)
-                : Center(child: Icon(Icons.add_photo_alternate_outlined, color: AppTheme.egyptianBlue.withValues(alpha: 0.5), size: 40)),
-          ),
-        ),
-        // Glass Overlay for Banner Action
-        Positioned(
-          bottom: 12,
-          right: 12,
-          child: _buildGlassButton(
-            onTap: () => _pickMedia(isBanner: true),
-            icon: Icons.camera_alt_outlined,
-          ),
-        ),
-        // Avatar
-        Positioned(
-          top: 130,
-          left: 24,
-          child: GestureDetector(
-            onTap: () => _pickMedia(isBanner: false),
-            child: Stack(
-              children: [
-                if (_isAvatarUploading)
-                  Container(
-                    width: 80,
-                    height: 80,
-                    decoration: BoxDecoration(
-                      color: AppTheme.queenPink,
-                      borderRadius: BorderRadius.circular(22),
-                    ),
-                    alignment: Alignment.center,
-                    child: const CircularProgressIndicator(),
-                  )
-                else
-                  SojornAvatar(
-                    displayName: profile.displayName ?? profile.handle ?? '?',
-                    avatarUrl: profile.avatarUrl,
-                    size: 80,
-                    borderRadius: 22,
-                  ),
-                Positioned(
-                  bottom: 0,
-                  right: 0,
-                  child: Container(
-                    padding: const EdgeInsets.all(4),
-                    decoration: BoxDecoration(
-                      color: AppTheme.brightNavy,
-                      shape: BoxShape.circle,
-                      border: Border.all(color: AppTheme.scaffoldBg, width: 2),
-                    ),
-                    child: const Icon(Icons.add_a_photo, size: 14, color: SojornColors.basicWhite),
-                  ),
+        Stack(
+          clipBehavior: Clip.none,
+          children: [
+            // Banner
+            GestureDetector(
+              onTap: () => _pickMedia(isBanner: true),
+              child: Container(
+                height: bannerHeight,
+                width: double.infinity,
+                decoration: BoxDecoration(
+                  color: AppTheme.egyptianBlue.withValues(alpha: 0.1),
                 ),
-              ],
+                child: _isBannerUploading
+                  ? const Center(child: CircularProgressIndicator())
+                  : profile.coverUrl != null
+                    ? SignedMediaImage(url: profile.coverUrl!, fit: BoxFit.cover)
+                    : Center(child: Icon(Icons.add_photo_alternate_outlined, color: AppTheme.egyptianBlue.withValues(alpha: 0.5), size: 36)),
+              ),
             ),
-          ),
+            // Camera button — top-right of banner, above the avatar overlap zone
+            Positioned(
+              top: 10,
+              right: 12,
+              child: _buildGlassButton(
+                onTap: () => _pickMedia(isBanner: true),
+                icon: Icons.camera_alt_outlined,
+              ),
+            ),
+            // Avatar — overlaps banner bottom edge
+            Positioned(
+              top: avatarTop,
+              left: 24,
+              child: GestureDetector(
+                onTap: () => _pickMedia(isBanner: false),
+                child: Stack(
+                  children: [
+                    if (_isAvatarUploading)
+                      Container(
+                        width: avatarSize,
+                        height: avatarSize,
+                        decoration: BoxDecoration(
+                          color: AppTheme.queenPink,
+                          borderRadius: BorderRadius.circular(22),
+                          border: Border.all(color: AppTheme.scaffoldBg, width: 3),
+                        ),
+                        alignment: Alignment.center,
+                        child: const CircularProgressIndicator(),
+                      )
+                    else
+                      Container(
+                        decoration: BoxDecoration(
+                          borderRadius: BorderRadius.circular(22),
+                          border: Border.all(color: AppTheme.scaffoldBg, width: 3),
+                        ),
+                        child: SojornAvatar(
+                          displayName: profile.displayName ?? profile.handle ?? '?',
+                          avatarUrl: profile.avatarUrl,
+                          size: avatarSize,
+                          borderRadius: 20,
+                        ),
+                      ),
+                    Positioned(
+                      bottom: 2,
+                      right: 2,
+                      child: Container(
+                        padding: const EdgeInsets.all(4),
+                        decoration: BoxDecoration(
+                          color: AppTheme.brightNavy,
+                          shape: BoxShape.circle,
+                          border: Border.all(color: AppTheme.scaffoldBg, width: 2),
+                        ),
+                        child: const Icon(Icons.add_a_photo, size: 13, color: SojornColors.basicWhite),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ],
         ),
+        // Space for the portion of the avatar that hangs below the banner
+        SizedBox(height: avatarOverflow + 12),
       ],
     );
   }
@@ -333,10 +360,10 @@ class _ProfileSettingsScreenState extends ConsumerState<ProfileSettingsScreen> {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text('Harmony State: ${trust.tier.displayName}', style: AppTheme.textTheme.labelMedium),
+                Text('Trust Level: ${trust.tier.displayName}', style: AppTheme.textTheme.labelMedium),
                 const SizedBox(height: 2),
                 Text(
-                  'Your current reach multiplier is based on your contribution to the community.',
+                  'Your posts reach more people as you contribute positively to the community. Tap to learn more.',
                   style: AppTheme.textTheme.bodySmall?.copyWith(color: AppTheme.navyText.withValues(alpha: 0.6)),
                 ),
               ],
@@ -367,11 +394,14 @@ class _ProfileSettingsScreenState extends ConsumerState<ProfileSettingsScreen> {
     );
   }
 
-  Widget _buildEditTile({required IconData icon, required String title, required VoidCallback onTap, Color? color}) {
+  Widget _buildEditTile({required IconData icon, required String title, required VoidCallback onTap, Color? color, String? subtitle}) {
     return ListTile(
       onTap: onTap,
       leading: Icon(icon, color: color ?? AppTheme.navyBlue, size: 22),
-      title: Text(title, style: AppTheme.textTheme.bodyLarge),
+      title: Text(title, style: AppTheme.textTheme.bodyLarge?.copyWith(color: color)),
+      subtitle: subtitle != null
+          ? Text(subtitle, style: AppTheme.textTheme.bodySmall?.copyWith(color: AppTheme.navyText.withValues(alpha: 0.45)))
+          : null,
       trailing: Icon(Icons.chevron_right, color: AppTheme.egyptianBlue.withValues(alpha: 0.3)),
     );
   }
@@ -399,7 +429,7 @@ class _ProfileSettingsScreenState extends ConsumerState<ProfileSettingsScreen> {
       child: TextButton.icon(
         onPressed: _signOut,
         icon: const Icon(Icons.logout),
-        label: const Text('Return to Silence (Logout)'),
+        label: const Text('Sign Out'),
         style: TextButton.styleFrom(
           foregroundColor: AppTheme.error,
           padding: const EdgeInsets.symmetric(vertical: 16),
@@ -1052,12 +1082,15 @@ class _ProfileSettingsScreenState extends ConsumerState<ProfileSettingsScreen> {
   Future<void> _pickMedia({required bool isBanner}) async {
     final XFile? file = await _imagePicker.pickImage(source: ImageSource.gallery);
     if (file == null) return;
-
     if (!mounted) return;
+
+    // Read bytes upfront — works on both web (blob URL) and mobile (file path).
+    final bytes = await file.readAsBytes();
+
     final result = await Navigator.push<SojornMediaResult>(
       context,
       MaterialPageRoute(
-        builder: (_) => sojornImageEditor(imagePath: file.path, imageName: file.name),
+        builder: (_) => sojornImageEditor(imageBytes: bytes, imageName: file.name),
       ),
     );
 
@@ -1066,7 +1099,12 @@ class _ProfileSettingsScreenState extends ConsumerState<ProfileSettingsScreen> {
     setState(() => isBanner ? _isBannerUploading = true : _isAvatarUploading = true);
 
     try {
-      final url = await _imageUploadService.uploadImage(File(result.filePath!));
+      final String url;
+      if (result.bytes != null) {
+        url = await _imageUploadService.uploadImageBytes(result.bytes!, fileName: result.name);
+      } else {
+        url = await _imageUploadService.uploadImage(File(result.filePath!));
+      }
       final profile = ref.read(settingsProvider).profile;
       if (profile != null) {
         if (isBanner) {

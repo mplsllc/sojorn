@@ -80,6 +80,9 @@ class AppTheme {
   static const double radiusXs = SojornRadii.xs;
   static const double radiusMd = SojornRadii.md;
   static const double radiusMdValue = SojornRadii.md;
+  static const double radiusLg = SojornRadii.lg;
+  static const double radiusCard = SojornRadii.card;
+  static const double radiusModal = SojornRadii.modal;
   static const double radiusFull = SojornRadii.full;
 
   // Text Colors - COLOR HIERARCHY: Content neutral, UI branded.

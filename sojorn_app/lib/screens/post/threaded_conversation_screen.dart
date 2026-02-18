@@ -359,7 +359,7 @@ class _ThreadedConversationScreenState extends ConsumerState<ThreadedConversatio
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
                         Text(
-                          'Previous chain',
+                          'In reply to',
                           style: GoogleFonts.inter(
                             color: AppTheme.textSecondary.withValues(alpha: 0.9),
                             fontSize: 10,
@@ -369,7 +369,7 @@ class _ThreadedConversationScreenState extends ConsumerState<ThreadedConversatio
                         ),
                         const SizedBox(height: 4),
                         Text(
-                          parentPost.author?.displayName ?? 'Anonymous',
+                          '@${parentPost.author?.handle ?? parentPost.author?.displayName ?? 'anonymous'}',
                           style: GoogleFonts.inter(
                             color: AppTheme.navyBlue.withValues(alpha: 0.95),
                             fontSize: 13,
@@ -448,14 +448,14 @@ class _ThreadedConversationScreenState extends ConsumerState<ThreadedConversatio
             color: AppTheme.cardSurface,
             borderRadius: BorderRadius.circular(26),
             border: Border.all(
-              color: AppTheme.brightNavy,
-              width: 3,
+              color: AppTheme.brightNavy.withValues(alpha: 0.35),
+              width: 1.5,
             ),
             boxShadow: [
               BoxShadow(
-                color: AppTheme.brightNavy.withValues(alpha: 0.22),
-                blurRadius: 30,
-                offset: const Offset(0, 10),
+                color: AppTheme.brightNavy.withValues(alpha: 0.08),
+                blurRadius: 12,
+                offset: const Offset(0, 4),
               ),
             ],
           ),

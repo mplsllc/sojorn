@@ -413,22 +413,19 @@ class _HomeShellState extends ConsumerState<HomeShell> with WidgetsBindingObserv
         ),
       ),
       actions: [
-        if (isBeacon)
-          _buildBeaconCreateButton()
-        else
-          IconButton(
-            constraints: const BoxConstraints(minWidth: 48, minHeight: 48),
-            padding: const EdgeInsets.all(12),
-            icon: Icon(Icons.search, color: AppTheme.navyBlue),
-            tooltip: 'Discover',
-            onPressed: () {
-              Navigator.of(context, rootNavigator: true).push(
-                MaterialPageRoute(
-                  builder: (_) => const DiscoverScreen(),
-                ),
-              );
-            },
-          ),
+        IconButton(
+          constraints: const BoxConstraints(minWidth: 48, minHeight: 48),
+          padding: const EdgeInsets.all(12),
+          icon: Icon(Icons.search, color: AppTheme.navyBlue),
+          tooltip: 'Discover',
+          onPressed: () {
+            Navigator.of(context, rootNavigator: true).push(
+              MaterialPageRoute(
+                builder: (_) => const DiscoverScreen(),
+              ),
+            );
+          },
+        ),
         const SizedBox(width: 4),
         IconButton(
           constraints: const BoxConstraints(minWidth: 48, minHeight: 48),

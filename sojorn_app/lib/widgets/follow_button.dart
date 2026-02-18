@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../providers/api_provider.dart';
 import '../theme/app_theme.dart';
+import '../utils/snackbar_ext.dart';
 
 /// Follow/Unfollow button with loading state and animations
 class FollowButton extends ConsumerStatefulWidget {
@@ -57,13 +58,7 @@ class _FollowButtonState extends ConsumerState<FollowButton> {
       widget.onFollowChanged?.call(_isFollowing);
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('Failed to ${_isFollowing ? 'unfollow' : 'follow'}. Try again.'),
-            backgroundColor: Colors.red,
-            duration: const Duration(seconds: 2),
-          ),
-        );
+        context.showError('Failed to ${_isFollowing ? 'unfollow' : 'follow'}. Try again.');
       }
     } finally {
       if (mounted) {

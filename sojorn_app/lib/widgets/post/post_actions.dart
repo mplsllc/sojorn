@@ -120,11 +120,90 @@ class _PostActionsState extends ConsumerState<PostActions> {
     }
   }
 
+  /// Discord-style quick picker: 8 common emojis in a floating pill.
+  /// Tap "+" to open the full tabbed picker below.
   void _showReactionPicker() {
-    // Sort reactions: existing reactions first (by count), then common emojis
+    const quickEmojis = ['❤️', '👍', '😂', '😮', '😢', '😡', '🎉', '🔥'];
+
+    showDialog<void>(
+      context: context,
+      barrierColor: Colors.black26,
+      builder: (ctx) => GestureDetector(
+        behavior: HitTestBehavior.opaque,
+        onTap: () => Navigator.pop(ctx),
+        child: Align(
+          alignment: Alignment.bottomCenter,
+          child: Padding(
+            padding: EdgeInsets.only(
+              bottom: MediaQuery.of(ctx).viewInsets.bottom + 72,
+              left: 12,
+              right: 12,
+            ),
+            child: GestureDetector(
+              onTap: () {}, // prevent dismiss when tapping inside pill
+              child: Material(
+                elevation: 10,
+                borderRadius: BorderRadius.circular(32),
+                color: AppTheme.cardSurface,
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      ...quickEmojis.map((emoji) {
+                        final isActive = _myReactions.contains(emoji);
+                        return GestureDetector(
+                          onTap: () {
+                            Navigator.pop(ctx);
+                            _toggleReaction(emoji);
+                          },
+                          child: AnimatedContainer(
+                            duration: const Duration(milliseconds: 120),
+                            margin: const EdgeInsets.symmetric(horizontal: 2),
+                            padding: const EdgeInsets.all(4),
+                            decoration: isActive
+                                ? BoxDecoration(
+                                    color: AppTheme.brightNavy.withValues(alpha: 0.15),
+                                    borderRadius: BorderRadius.circular(12),
+                                  )
+                                : null,
+                            child: Text(emoji,
+                                style: const TextStyle(fontSize: 26)),
+                          ),
+                        );
+                      }),
+                      const SizedBox(width: 4),
+                      GestureDetector(
+                        onTap: () {
+                          Navigator.pop(ctx);
+                          _showFullReactionPicker();
+                        },
+                        child: Container(
+                          width: 36,
+                          height: 36,
+                          decoration: BoxDecoration(
+                            color: AppTheme.navyBlue.withValues(alpha: 0.08),
+                            borderRadius: BorderRadius.circular(18),
+                          ),
+                          child: Icon(Icons.add, size: 18, color: AppTheme.navyBlue),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  /// Full tabbed/searchable picker — opened via the "+" button.
+  void _showFullReactionPicker() {
     final existingReactions = _reactionCounts.entries.toList()
       ..sort((a, b) => b.value.compareTo(a.value));
-    
+
     final allReactions = [
       ...existingReactions.map((e) => e.key),
       '❤️', '👍', '😂', '😮', '😢', '😡',
@@ -133,15 +212,12 @@ class _PostActionsState extends ConsumerState<PostActions> {
       '🎯', '⭐', '✨', '🌟', '💫', '☀️',
     ];
 
-    showDialog(
+    showModalBottomSheet(
       context: context,
-      builder: (context) => ReactionPicker(
-        onReactionSelected: (emoji) {
-          _toggleReaction(emoji);
-        },
-        onClosed: () {
-          // Optional: Handle picker closed without selection
-        },
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (_) => ReactionPicker(
+        onReactionSelected: _toggleReaction,
         reactions: allReactions,
         reactionCounts: _reactionCounts,
         myReactions: _myReactions,
@@ -242,9 +318,9 @@ class _PostActionsState extends ConsumerState<PostActions> {
                   ),
                   style: IconButton.styleFrom(
                     backgroundColor: AppTheme.navyBlue.withValues(alpha: 0.08),
-                    minimumSize: const Size(44, 44),
+                    minimumSize: const Size(38, 38),
                     shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(12),
+                      borderRadius: BorderRadius.circular(10),
                     ),
                   ),
                 ),
@@ -257,9 +333,9 @@ class _PostActionsState extends ConsumerState<PostActions> {
                   ),
                   style: IconButton.styleFrom(
                     backgroundColor: AppTheme.navyBlue.withValues(alpha: 0.08),
-                    minimumSize: const Size(44, 44),
+                    minimumSize: const Size(38, 38),
                     shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(12),
+                      borderRadius: BorderRadius.circular(10),
                     ),
                   ),
                 ),
@@ -286,8 +362,8 @@ class _PostActionsState extends ConsumerState<PostActions> {
                       foregroundColor: AppTheme.navyBlue,
                       elevation: 0,
                       shadowColor: SojornColors.transparent,
-                      minimumSize: const Size(0, 44),
-                      padding: const EdgeInsets.symmetric(horizontal: 16),
+                      minimumSize: const Size(0, 38),
+                      padding: const EdgeInsets.symmetric(horizontal: 14),
                       shape: RoundedRectangleBorder(
                         borderRadius: BorderRadius.circular(12),
                       ),

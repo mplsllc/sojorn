@@ -11,6 +11,7 @@ import '../../widgets/feed_filter_button.dart';
 import '../compose/compose_screen.dart';
 import '../post/post_detail_screen.dart';
 import '../../widgets/first_use_hint.dart';
+import '../../widgets/skeleton_loader.dart';
 
 /// Personal feed - chronological posts from followed users, presented vibrantly
 class FeedPersonalScreen extends ConsumerStatefulWidget {
@@ -134,12 +135,7 @@ class _FeedPersonalScreenState extends ConsumerState<FeedPersonalScreen> {
                       ),
                       if (_isLoading && _posts.isEmpty)
                         const SliverToBoxAdapter(
-                          child: Padding(
-                            padding: EdgeInsets.symmetric(
-                              vertical: AppTheme.spacingLg,
-                            ),
-                            child: Center(child: CircularProgressIndicator()),
-                          ),
+                          child: SkeletonFeedList(count: 5),
                         ),
                       SliverPadding(
                         padding: EdgeInsets.only(

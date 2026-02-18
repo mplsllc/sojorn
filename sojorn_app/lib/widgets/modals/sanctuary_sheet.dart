@@ -19,6 +19,116 @@ class SanctuarySheet extends StatefulWidget {
     );
   }
 
+  /// Lightweight popup menu — no full-screen takeover.
+  /// Reports are submitted immediately; block shows a compact confirmation.
+  static Future<void> showQuick(
+    BuildContext context,
+    Post post,
+    Offset tapPosition,
+  ) async {
+    final value = await showMenu<String>(
+      context: context,
+      position: RelativeRect.fromLTRB(
+        tapPosition.dx,
+        tapPosition.dy,
+        tapPosition.dx + 1,
+        tapPosition.dy + 1,
+      ),
+      items: const [
+        PopupMenuItem(
+          value: 'harassment',
+          child: Row(children: [
+            Icon(Icons.flag_outlined, size: 18),
+            SizedBox(width: 10),
+            Text('Flag: Harassment'),
+          ]),
+        ),
+        PopupMenuItem(
+          value: 'scam',
+          child: Row(children: [
+            Icon(Icons.flag_outlined, size: 18),
+            SizedBox(width: 10),
+            Text('Flag: Scam / Fraud'),
+          ]),
+        ),
+        PopupMenuItem(
+          value: 'misinformation',
+          child: Row(children: [
+            Icon(Icons.flag_outlined, size: 18),
+            SizedBox(width: 10),
+            Text('Flag: Misinformation'),
+          ]),
+        ),
+        PopupMenuDivider(),
+        PopupMenuItem(
+          value: 'block',
+          child: Row(children: [
+            Icon(Icons.block, size: 18, color: SojornColors.destructive),
+            SizedBox(width: 10),
+            Text('Block User',
+                style: TextStyle(color: SojornColors.destructive)),
+          ]),
+        ),
+      ],
+    );
+
+    if (value == null || !context.mounted) return;
+
+    if (value == 'block') {
+      final confirmed = await showDialog<bool>(
+        context: context,
+        builder: (ctx) => AlertDialog(
+          title: const Text('Block User?'),
+          content: Text(
+            'This will structurally separate you and '
+            '@${post.author?.handle ?? 'this user'}.',
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(ctx, false),
+              child: const Text('Cancel'),
+            ),
+            ElevatedButton(
+              style: ElevatedButton.styleFrom(
+                  backgroundColor: SojornColors.destructive),
+              onPressed: () => Navigator.pop(ctx, true),
+              child: const Text('Block',
+                  style: TextStyle(color: SojornColors.basicWhite)),
+            ),
+          ],
+        ),
+      );
+      if (confirmed != true || !context.mounted) return;
+      try {
+        await ApiService.instance
+            .callGoApi('/users/${post.authorId}/block', method: 'POST');
+        if (context.mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('User blocked.')),
+          );
+        }
+      } catch (_) {}
+    } else {
+      try {
+        await ApiService.instance.callGoApi(
+          '/users/report',
+          method: 'POST',
+          body: {
+            'target_user_id': post.authorId,
+            'post_id': post.id,
+            'violation_type': value,
+            'description': '',
+          },
+        );
+        if (context.mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('Report submitted. Thank you.')),
+          );
+        }
+      } catch (_) {}
+    }
+  }
+
   @override
   State<SanctuarySheet> createState() => _SanctuarySheetState();
 }
