@@ -67,7 +67,7 @@ class _EnhancedBeaconMapState extends ConsumerState<EnhancedBeaconMap>
   Future<void> _getUserLocation() async {
     try {
       final position = await Geolocator.getCurrentPosition(
-        desiredAccuracy: LocationAccuracy.high,
+        desiredAccuracy: LocationAccuracy.low,
       );
       setState(() {
         _userLocation = LatLng(position.latitude, position.longitude);

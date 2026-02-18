@@ -515,6 +515,7 @@ func (h *PostHandler) CreatePost(c *gin.Context) {
 		IsNSFW        bool     `json:"is_nsfw"`
 		NSFWReason    string   `json:"nsfw_reason"`
 		Visibility    string   `json:"visibility"`
+		OverlayJSON   *string  `json:"overlay_json"`
 	}
 
 	if err := c.ShouldBindJSON(&req); err != nil {
@@ -611,11 +612,12 @@ func (h *PostHandler) CreatePost(c *gin.Context) {
 			}
 			return "public"
 		}(),
-		ExpiresAt:  expiresAt,
-		IsNSFW:     req.IsNSFW,
-		NSFWReason: req.NSFWReason,
-		Lat:        req.BeaconLat,
-		Long:       req.BeaconLong,
+		ExpiresAt:   expiresAt,
+		IsNSFW:      req.IsNSFW,
+		NSFWReason:  req.NSFWReason,
+		Lat:         req.BeaconLat,
+		Long:        req.BeaconLong,
+		OverlayJSON: req.OverlayJSON,
 	}
 
 	if req.CategoryID != nil {

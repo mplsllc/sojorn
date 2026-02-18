@@ -84,6 +84,9 @@ class ImageUploadService {
       throw UploadException('Not authenticated. Please sign in again.');
     }
 
+    // Strip metadata (GPS, device info, timestamps) before upload
+    final sanitized = await MediaSanitizer.sanitizeVideo(videoFile);
+
     // Use Go API upload endpoint with R2 integration
     final uri = Uri.parse('${ApiConfig.baseUrl}/upload');
 
@@ -92,15 +95,14 @@ class ImageUploadService {
     request.headers['Authorization'] = 'Bearer $token';
 
     // CRITICAL: Use fromPath to stream from disk instead of loading into memory
-    final fileLength = await videoFile.length();
     request.files.add(await http.MultipartFile.fromPath(
       'media', // Field name matches upload-media
-      videoFile.path,
+      sanitized.path,
       contentType: http_parser.MediaType.parse('video/mp4'),
     ));
 
     request.fields['type'] = 'video';
-    request.fields['fileName'] = videoFile.path.split('/').last;
+    request.fields['fileName'] = sanitized.path.split('/').last;
 
     onProgress?.call(0.1);
 

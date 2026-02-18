@@ -24,6 +24,7 @@ class Quip {
   final String? avatarUrl;
   final int? durationMs;
   final int? likeCount;
+  final String? overlayJson;
 
   const Quip({
     required this.id,
@@ -35,6 +36,7 @@ class Quip {
     this.avatarUrl,
     this.durationMs,
     this.likeCount,
+    this.overlayJson,
   });
 
   factory Quip.fromMap(Map<String, dynamic> map) {
@@ -53,6 +55,7 @@ class Quip {
       avatarUrl: author?['avatar_url'] as String?,
       durationMs: map['duration_ms'] as int?,
       likeCount: _parseLikeCount(map['metrics']),
+      overlayJson: map['overlay_json'] as String?,
     );
   }
 

@@ -42,7 +42,12 @@ class QuipUploadNotifier extends Notifier<QuipUploadState> {
     return QuipUploadState(isUploading: false, progress: 0.0);
   }
 
-  Future<void> startUpload(File videoFile, String caption, {double? thumbnailTimestampMs}) async {
+  Future<void> startUpload(
+    File videoFile,
+    String caption, {
+    double? thumbnailTimestampMs,
+    String? overlayJson,
+  }) async {
     try {
       state = state.copyWith(
           isUploading: true, progress: 0.0, error: null, successMessage: null);
@@ -105,10 +110,11 @@ class QuipUploadNotifier extends Notifier<QuipUploadState> {
 
       // Publish post via Go API
       await ApiService.instance.publishPost(
-        body: caption,
+        body: caption.isNotEmpty ? caption : ' ',
         videoUrl: videoUrl,
         thumbnailUrl: thumbnailUrl,
         categoryId: null, // Default
+        overlayJson: overlayJson,
       );
 
       // Trigger feed refresh

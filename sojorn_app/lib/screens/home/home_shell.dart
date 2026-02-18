@@ -17,6 +17,8 @@ import 'package:shared_preferences/shared_preferences.dart';
 import '../../widgets/radial_menu_overlay.dart';
 import '../../widgets/onboarding_modal.dart';
 import '../../widgets/offline_indicator.dart';
+import '../../widgets/neighborhood/neighborhood_picker_sheet.dart';
+import '../../services/api_service.dart';
 import '../../providers/quip_upload_provider.dart';
 import '../../providers/notification_provider.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -61,7 +63,10 @@ class _HomeShellState extends ConsumerState<HomeShell> with WidgetsBindingObserv
     _initNotificationListener();
     _loadNavTapCounts();
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (mounted) OnboardingModal.showIfNeeded(context);
+      if (mounted) {
+        OnboardingModal.showIfNeeded(context);
+        _checkNeighborhoodOnboarding();
+      }
     });
   }
 
@@ -84,6 +89,23 @@ class _HomeShellState extends ConsumerState<HomeShell> with WidgetsBindingObserv
     await prefs.setInt('nav_tap_$index', current + 1);
     if (mounted) {
       setState(() => _navTapCounts[index] = current + 1);
+    }
+  }
+
+  Future<void> _checkNeighborhoodOnboarding() async {
+    try {
+      final data = await ApiService.instance.getMyNeighborhood();
+      if (data == null) return;
+      final onboarded = data['onboarded'] as bool? ?? false;
+      if (!onboarded && mounted) {
+        // Small delay so the onboarding modal (if shown) has time to appear first
+        await Future.delayed(const Duration(milliseconds: 800));
+        if (mounted) {
+          await NeighborhoodPickerSheet.show(context);
+        }
+      }
+    } catch (_) {
+      // Non-critical — silently ignore if network unavailable
     }
   }
 

@@ -54,21 +54,21 @@ func (r *PostRepository) CreatePost(ctx context.Context, post *models.Post) erro
 
 	query := `
 		INSERT INTO public.posts (
-			author_id, category_id, body, status, tone_label, cis_score, 
-			image_url, video_url, thumbnail_url, duration_ms, body_format, background_id, tags, 
-			is_beacon, beacon_type, location, confidence_score, 
+			author_id, category_id, body, status, tone_label, cis_score,
+			image_url, video_url, thumbnail_url, duration_ms, body_format, background_id, tags,
+			is_beacon, beacon_type, location, confidence_score,
 			is_active_beacon, allow_chain, chain_parent_id, visibility, expires_at,
 			is_nsfw, nsfw_reason,
-			severity, incident_status, radius
+			severity, incident_status, radius, overlay_json
 		) VALUES (
-			$1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, 
+			$1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13,
 			$14, $15,
-			CASE WHEN ($16::double precision) IS NOT NULL AND ($17::double precision) IS NOT NULL 
-				 THEN ST_SetSRID(ST_MakePoint(($17::double precision), ($16::double precision)), 4326)::geography 
-				 ELSE NULL END, 
+			CASE WHEN ($16::double precision) IS NOT NULL AND ($17::double precision) IS NOT NULL
+				 THEN ST_SetSRID(ST_MakePoint(($17::double precision), ($16::double precision)), 4326)::geography
+				 ELSE NULL END,
 			$18, $19, $20, $21, $22, $23,
 			$24, $25,
-			$26, $27, $28
+			$26, $27, $28, $29
 		) RETURNING id, created_at
 	`
 
@@ -84,7 +84,7 @@ func (r *PostRepository) CreatePost(ctx context.Context, post *models.Post) erro
 		post.IsBeacon, post.BeaconType, post.Lat, post.Long, post.Confidence,
 		post.IsActiveBeacon, post.AllowChain, post.ChainParentID, post.Visibility, post.ExpiresAt,
 		post.IsNSFW, post.NSFWReason,
-		post.Severity, post.IncidentStatus, post.Radius,
+		post.Severity, post.IncidentStatus, post.Radius, post.OverlayJSON,
 	).Scan(&post.ID, &post.CreatedAt)
 
 	if err != nil {
@@ -168,7 +168,8 @@ func (r *PostRepository) GetFeed(ctx context.Context, userID string, categorySlu
 			CASE WHEN ($4::text) != '' THEN COALESCE((SELECT jsonb_agg(emoji) FROM public.post_reactions WHERE post_id = p.id AND user_id = $4::text::uuid), '[]'::jsonb) ELSE '[]'::jsonb END as my_reactions,
 			COALESCE(p.is_nsfw, FALSE) as is_nsfw,
 			COALESCE(p.nsfw_reason, '') as nsfw_reason,
-			p.link_preview_url, p.link_preview_title, p.link_preview_description, p.link_preview_image_url, p.link_preview_site_name
+			p.link_preview_url, p.link_preview_title, p.link_preview_description, p.link_preview_image_url, p.link_preview_site_name,
+			p.overlay_json
 		FROM public.posts p
 		JOIN public.profiles pr ON p.author_id = pr.id
 		LEFT JOIN public.post_metrics m ON p.id = m.post_id
@@ -220,6 +221,7 @@ func (r *PostRepository) GetFeed(ctx context.Context, userID string, categorySlu
 			&p.AllowChain, &p.Visibility, &p.Reactions, &p.MyReactions,
 			&p.IsNSFW, &p.NSFWReason,
 			&p.LinkPreviewURL, &p.LinkPreviewTitle, &p.LinkPreviewDescription, &p.LinkPreviewImageURL, &p.LinkPreviewSiteName,
+			&p.OverlayJSON,
 		)
 		if err != nil {
 			return nil, err
@@ -358,7 +360,8 @@ func (r *PostRepository) GetPostByID(ctx context.Context, postID string, userID 
 			p.allow_chain, p.visibility,
 			COALESCE(p.is_nsfw, FALSE) as is_nsfw,
 			COALESCE(p.nsfw_reason, '') as nsfw_reason,
-			p.link_preview_url, p.link_preview_title, p.link_preview_description, p.link_preview_image_url, p.link_preview_site_name
+			p.link_preview_url, p.link_preview_title, p.link_preview_description, p.link_preview_image_url, p.link_preview_site_name,
+			p.overlay_json
 		FROM public.posts p
 		JOIN public.profiles pr ON p.author_id = pr.id
 		LEFT JOIN public.post_metrics m ON p.id = m.post_id
@@ -383,6 +386,7 @@ func (r *PostRepository) GetPostByID(ctx context.Context, postID string, userID 
 		&p.AllowChain, &p.Visibility,
 		&p.IsNSFW, &p.NSFWReason,
 		&p.LinkPreviewURL, &p.LinkPreviewTitle, &p.LinkPreviewDescription, &p.LinkPreviewImageURL, &p.LinkPreviewSiteName,
+		&p.OverlayJSON,
 	)
 	if err != nil {
 		return nil, err

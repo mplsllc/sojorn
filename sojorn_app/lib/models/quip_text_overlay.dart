@@ -1,30 +1,43 @@
 import 'package:flutter/material.dart';
 
-/// Model for text overlays on Quip videos
-class QuipTextOverlay {
-  final String text;
-  final Color color;
-  final Offset position; // Normalized 0.0-1.0 coordinates
-  final double scale;
-  final double rotation; // In radians
+/// Type of overlay item on a Quip video.
+enum QuipOverlayType { text, sticker }
 
-  const QuipTextOverlay({
-    required this.text,
-    required this.color,
-    required this.position,
+/// A single overlay item (text or sticker/emoji) placed on a Quip video.
+/// Position is normalized (0.0–1.0) relative to the video dimensions so it
+/// renders correctly at any screen size.
+class QuipOverlayItem {
+  final String id; // unique identifier for widget keying
+  final QuipOverlayType type;
+  final String content; // text string or emoji/sticker character
+  final Color color; // text color (default white)
+  final Offset position; // normalized 0.0–1.0
+  final double scale;
+  final double rotation; // radians
+
+  const QuipOverlayItem({
+    required this.id,
+    required this.type,
+    required this.content,
+    this.color = Colors.white,
+    this.position = const Offset(0.5, 0.5),
     this.scale = 1.0,
     this.rotation = 0.0,
   });
 
-  QuipTextOverlay copyWith({
-    String? text,
+  QuipOverlayItem copyWith({
+    String? id,
+    QuipOverlayType? type,
+    String? content,
     Color? color,
     Offset? position,
     double? scale,
     double? rotation,
   }) {
-    return QuipTextOverlay(
-      text: text ?? this.text,
+    return QuipOverlayItem(
+      id: id ?? this.id,
+      type: type ?? this.type,
+      content: content ?? this.content,
       color: color ?? this.color,
       position: position ?? this.position,
       scale: scale ?? this.scale,
@@ -34,7 +47,9 @@ class QuipTextOverlay {
 
   Map<String, dynamic> toJson() {
     return {
-      'text': text,
+      'id': id,
+      'type': type.name,
+      'content': content,
       'color': color.value,
       'position': {'x': position.dx, 'y': position.dy},
       'scale': scale,
@@ -42,9 +57,13 @@ class QuipTextOverlay {
     };
   }
 
-  factory QuipTextOverlay.fromJson(Map<String, dynamic> json) {
-    return QuipTextOverlay(
-      text: json['text'] as String,
+  factory QuipOverlayItem.fromJson(Map<String, dynamic> json) {
+    return QuipOverlayItem(
+      id: json['id'] as String? ?? UniqueKey().toString(),
+      type: QuipOverlayType.values.byName(
+        (json['type'] as String?) ?? 'text',
+      ),
+      content: (json['content'] ?? json['text'] ?? '') as String,
       color: Color(json['color'] as int),
       position: Offset(
         (json['position']['x'] as num).toDouble(),
@@ -56,7 +75,11 @@ class QuipTextOverlay {
   }
 }
 
-/// Placeholder for future music track functionality
+/// Backward-compat alias so existing screens that reference QuipTextOverlay
+/// do not require immediate migration.
+typedef QuipTextOverlay = QuipOverlayItem;
+
+/// Placeholder for music track metadata.
 class MusicTrack {
   final String id;
   final String name;

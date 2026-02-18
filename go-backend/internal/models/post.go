@@ -39,6 +39,9 @@ type Post struct {
 	NSFWReason     string     `json:"nsfw_reason" db:"nsfw_reason"`
 	ExpiresAt      *time.Time `json:"expires_at" db:"expires_at"`
 
+	// Quip overlay JSON — stores text/sticker decorations as client-rendered widgets
+	OverlayJSON *string `json:"overlay_json,omitempty" db:"overlay_json"`
+
 	// Link preview (populated via enrichment, not in every query)
 	LinkPreviewURL         *string    `json:"link_preview_url,omitempty" db:"link_preview_url"`
 	LinkPreviewTitle       *string    `json:"link_preview_title,omitempty" db:"link_preview_title"`

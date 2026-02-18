@@ -2,6 +2,7 @@ import 'dart:io';
 import 'package:flutter/services.dart';
 import 'package:flutter_image_compress/flutter_image_compress.dart';
 import 'package:image/image.dart' as img;
+import 'media/ffmpeg.dart';
 
 class MediaSanitizer {
   static Future<File> sanitizeImage(File rawFile) async {
@@ -39,10 +40,6 @@ class MediaSanitizer {
   }
 
   static Future<File> sanitizeVideo(File rawFile) async {
-    // For videos, we just validate and return the original file
-    // Video processing is handled by the video compression library
-    // This method ensures the file exists and is readable
-
     if (!await rawFile.exists()) {
       throw Exception('Video file does not exist');
     }
@@ -54,7 +51,6 @@ class MediaSanitizer {
       throw Exception('Video size exceeds 50MB limit');
     }
 
-    // Check if it's a valid video file by extension
     final fileName = rawFile.path.split('/').last.toLowerCase();
     final extension = fileName.split('.').last;
     const validExtensions = {'mp4', 'mov', 'webm'};
@@ -63,7 +59,23 @@ class MediaSanitizer {
       throw Exception('Unsupported video format: $extension');
     }
 
-    // Return the original file as videos don't need sanitization like images
+    // Strip all metadata (GPS, device info, timestamps) via FFmpeg remux — no re-encode.
+    try {
+      final tempDir = Directory.systemTemp;
+      final output = File(
+        '${tempDir.path}${Platform.pathSeparator}stripped_${DateTime.now().microsecondsSinceEpoch}.mp4',
+      );
+      final session = await FFmpegKit.execute(
+        '-y -i "${rawFile.path}" -map_metadata -1 -c copy "${output.path}"',
+      );
+      final rc = await session.getReturnCode();
+      if (ReturnCode.isSuccess(rc) && await output.exists()) {
+        return output;
+      }
+    } catch (_) {
+      // FFmpeg unavailable — fall through and return original
+    }
+
     return rawFile;
   }
 }

@@ -171,7 +171,7 @@ class BeaconScreenState extends ConsumerState<BeaconScreen> with TickerProviderS
     if (!_locationPermissionGranted) return;
     setState(() => _isLoadingLocation = true);
     try {
-      final position = await Geolocator.getCurrentPosition(desiredAccuracy: LocationAccuracy.high);
+      final position = await Geolocator.getCurrentPosition(desiredAccuracy: LocationAccuracy.low);
       if (mounted) {
         setState(() {
           _userLocation = LatLng(position.latitude, position.longitude);

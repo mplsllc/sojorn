@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:geolocator/geolocator.dart';
 import '../../services/api_service.dart';
@@ -71,6 +72,15 @@ class _NeighborhoodPickerSheetState extends State<NeighborhoodPickerSheet> {
       _isLoadingGps = true;
       _gpsError = null;
     });
+
+    if (kIsWeb) {
+      setState(() {
+        _gpsError = 'GPS detection unavailable on web. Enter your ZIP code below.';
+        _isLoadingGps = false;
+      });
+      return;
+    }
+
     try {
       final position = await Geolocator.getCurrentPosition(
         desiredAccuracy: LocationAccuracy.low, // "fuzzy" — faster + less battery

@@ -1,5 +1,8 @@
+import 'dart:convert';
+
 import 'package:flutter/material.dart';
 import 'package:video_player/video_player.dart';
+import '../../../models/quip_text_overlay.dart';
 import '../../../widgets/media/signed_media_image.dart';
 import '../../../widgets/video_player_with_comments.dart';
 import '../../../models/post.dart';
@@ -194,6 +197,81 @@ class QuipVideoItem extends StatelessWidget {
     );
   }
 
+  /// Parses overlay_json and returns a list of non-interactive overlay widgets
+  /// rendered on top of the video during feed playback.
+  List<Widget> _buildOverlayWidgets(BoxConstraints constraints) {
+    final json = quip.overlayJson;
+    if (json == null || json.isEmpty) return [];
+    try {
+      final decoded = jsonDecode(json) as Map<String, dynamic>;
+      final items = (decoded['overlays'] as List<dynamic>? ?? [])
+          .whereType<Map<String, dynamic>>()
+          .map(QuipOverlayItem.fromJson)
+          .toList();
+
+      final w = constraints.maxWidth;
+      final h = constraints.maxHeight;
+
+      return items.map((item) {
+        final absX = item.position.dx * w;
+        final absY = item.position.dy * h;
+        final isSticker = item.type == QuipOverlayType.sticker;
+
+        Widget child;
+        if (isSticker) {
+          final isEmoji = item.content.runes.length == 1 ||
+              item.content.length <= 2;
+          if (isEmoji) {
+            child = Text(item.content,
+                style: TextStyle(fontSize: 42 * item.scale));
+          } else {
+            child = Container(
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+              decoration: BoxDecoration(
+                border: Border.all(color: SojornColors.basicWhite, width: 2),
+                borderRadius: BorderRadius.circular(8),
+                color: Colors.black.withValues(alpha: 0.3),
+              ),
+              child: Text(
+                item.content,
+                style: TextStyle(
+                  color: SojornColors.basicWhite,
+                  fontSize: 20 * item.scale,
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
+            );
+          }
+        } else {
+          child = Container(
+            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+            decoration: BoxDecoration(
+              color: Colors.black.withValues(alpha: 0.4),
+              borderRadius: BorderRadius.circular(6),
+            ),
+            child: Text(
+              item.content,
+              style: TextStyle(
+                color: item.color,
+                fontSize: 24 * item.scale,
+                fontWeight: FontWeight.bold,
+                shadows: const [Shadow(blurRadius: 4, color: Colors.black)],
+              ),
+            ),
+          );
+        }
+
+        return Positioned(
+          left: absX - 50,
+          top: absY - 20,
+          child: Transform.rotate(angle: item.rotation, child: child),
+        );
+      }).toList();
+    } catch (_) {
+      return [];
+    }
+  }
+
   Widget _buildPauseOverlay() {
     if (!isActive || !isUserPaused) return const SizedBox.shrink();
 
@@ -219,7 +297,8 @@ class QuipVideoItem extends StatelessWidget {
       onTap: onTogglePause,
       child: Container(
         color: SojornColors.basicBlack,
-        child: Stack(
+        child: LayoutBuilder(
+          builder: (context, constraints) => Stack(
           fit: StackFit.expand,
           children: [
             AnimatedOpacity(
@@ -227,6 +306,8 @@ class QuipVideoItem extends StatelessWidget {
               opacity: isActive ? 1 : 0.6,
               child: _buildVideo(),
             ),
+            // Quip overlays (text + stickers, non-interactive in feed)
+            ..._buildOverlayWidgets(constraints),
             Container(
               decoration: const BoxDecoration(
                 gradient: LinearGradient(
@@ -302,6 +383,7 @@ class QuipVideoItem extends StatelessWidget {
                 child: const CircularProgressIndicator(color: SojornColors.basicWhite),
               ),
           ],
+        ),
         ),
       ),
     );

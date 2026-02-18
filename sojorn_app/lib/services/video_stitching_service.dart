@@ -79,7 +79,7 @@ class VideoStitchingService {
       
       if (segments.length == 1) {
         // Single video with effects
-        command = "-i '${segments.first.path}' $filterString '${outputFile.path}'";
+        command = "-i '${segments.first.path}' $filterString -map_metadata -1 '${outputFile.path}'";
       } else {
         // Multiple videos - stitch first, then apply effects
         final listFile = File('${tempDir.path}/segments_list.txt');
@@ -88,22 +88,22 @@ class VideoStitchingService {
           buffer.writeln("file '${segment.path}'");
         }
         await listFile.writeAsString(buffer.toString());
-        
+
         final tempStitched = File('${tempDir.path}/temp_stitched.mp4');
-        
-        // First stitch without effects
+
+        // First stitch without effects (metadata stripped at final pass)
         final stitchCommand = "-f concat -safe 0 -i '${listFile.path}' -c copy '${tempStitched.path}'";
         final stitchSession = await FFmpegKit.execute(stitchCommand);
         final stitchReturnCode = await stitchSession.getReturnCode();
-        
+
         if (!ReturnCode.isSuccess(stitchReturnCode)) {
           return null;
         }
-        
-        // Then apply effects to the stitched video
-        command = "-i '${tempStitched.path}' $filterString '${outputFile.path}'";
+
+        // Then apply effects to the stitched video, stripping metadata at final output
+        command = "-i '${tempStitched.path}' $filterString -map_metadata -1 '${outputFile.path}'";
       }
-      
+
       final session = await FFmpegKit.execute(command);
       final returnCode = await session.getReturnCode();
 
@@ -120,7 +120,7 @@ class VideoStitchingService {
         final audioCmd =
             "-i '${outputFile.path}' -i '$audioOverlayPath' "
             "-filter_complex '[1:a]volume=${vol}[a1];[0:a][a1]amix=inputs=2:duration=first:dropout_transition=0' "
-            "-c:v copy -shortest '${audioOutputFile.path}'";
+            "-map_metadata -1 -c:v copy -shortest '${audioOutputFile.path}'";
         final audioSession = await FFmpegKit.execute(audioCmd);
         final audioCode = await audioSession.getReturnCode();
         if (ReturnCode.isSuccess(audioCode)) {
