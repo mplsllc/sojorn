@@ -484,18 +484,38 @@ class _TraditionalQuipsSheetState extends ConsumerState<TraditionalQuipsSheet> {
       children: [
         if (_replyingToNode != null)
           Container(
-            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+            padding: const EdgeInsets.fromLTRB(16, 8, 16, 8),
             color: AppTheme.brightNavy.withValues(alpha: 0.05),
             child: Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Icon(Icons.reply, size: 14, color: AppTheme.brightNavy),
+                Padding(
+                  padding: const EdgeInsets.only(top: 2),
+                  child: Icon(Icons.reply, size: 14, color: AppTheme.brightNavy),
+                ),
                 const SizedBox(width: 8),
                 Expanded(
-                  child: Text(
-                    'Replying to @${_replyingToNode!.post.author?.handle}',
-                    style: TextStyle(color: AppTheme.navyBlue, fontSize: 13, fontWeight: FontWeight.w600),
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Text(
+                        'Replying to @${_replyingToNode!.post.author?.handle}',
+                        style: TextStyle(color: AppTheme.navyBlue, fontSize: 12, fontWeight: FontWeight.w600),
+                      ),
+                      if (_replyingToNode!.post.body.isNotEmpty) ...[
+                        const SizedBox(height: 2),
+                        Text(
+                          _replyingToNode!.post.body,
+                          style: TextStyle(
+                            color: AppTheme.navyText.withValues(alpha: 0.6),
+                            fontSize: 12,
+                          ),
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      ],
+                    ],
                   ),
                 ),
                 GestureDetector(
@@ -506,7 +526,10 @@ class _TraditionalQuipsSheetState extends ConsumerState<TraditionalQuipsSheet> {
             ),
           ),
         Container(
-          padding: EdgeInsets.fromLTRB(16, 12, 16, MediaQuery.of(context).viewInsets.bottom + 16),
+          padding: EdgeInsets.fromLTRB(16, 12, 16,
+              (MediaQuery.of(context).viewInsets.bottom > 0
+                  ? MediaQuery.of(context).viewInsets.bottom
+                  : MediaQuery.of(context).padding.bottom) + 16),
           decoration: BoxDecoration(
             color: AppTheme.cardSurface,
             border: Border(top: BorderSide(color: AppTheme.egyptianBlue.withValues(alpha: 0.1))),
