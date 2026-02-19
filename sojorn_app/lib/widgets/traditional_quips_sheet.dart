@@ -20,7 +20,10 @@ import '../widgets/composer/composer_bar.dart';
 import '../widgets/modals/sanctuary_sheet.dart';
 import '../widgets/sojorn_snackbar.dart';
 import '../providers/notification_provider.dart';
+import 'package:chewie/chewie.dart';
+import 'package:video_player/video_player.dart';
 import 'post/post_body.dart';
+import 'post/post_media.dart';
 import 'post/post_view_mode.dart';
 
 class TraditionalQuipsSheet extends ConsumerStatefulWidget {
@@ -649,6 +652,23 @@ class _CommentTile extends StatelessWidget {
                       backgroundId: node.post.backgroundId,
                       mode: PostViewMode.feed,
                     ),
+                    // Video / image reply — render inline, never navigate away
+                    if (node.post.hasVideoContent == true ||
+                        (node.post.imageUrl?.isNotEmpty == true) ||
+                        (node.post.thumbnailUrl?.isNotEmpty == true))
+                      PostMedia(
+                        post: node.post,
+                        mode: PostViewMode.compact,
+                        onVideoTap: node.post.hasVideoContent == true
+                            ? () => showModalBottomSheet(
+                                  context: context,
+                                  backgroundColor: Colors.transparent,
+                                  isScrollControlled: true,
+                                  useSafeArea: true,
+                                  builder: (_) => _VideoReplySheet(post: node.post),
+                                )
+                            : null,
+                      ),
                     const SizedBox(height: 14),
                     Row(
                       children: [
@@ -805,5 +825,175 @@ class _CommentTile extends StatelessWidget {
       reactionCounts: node.post.reactions,
       onReaction: onReaction,
     );
+  }
+}
+
+// ─── Inline video reply player sheet ─────────────────────────────────
+class _VideoReplySheet extends StatefulWidget {
+  final Post post;
+  const _VideoReplySheet({required this.post});
+
+  @override
+  State<_VideoReplySheet> createState() => _VideoReplySheetState();
+}
+
+class _VideoReplySheetState extends State<_VideoReplySheet> {
+  VideoPlayerController? _vpc;
+  ChewieController? _chewie;
+  bool _loading = true;
+  bool _error = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _init();
+  }
+
+  Future<void> _init() async {
+    final url = widget.post.videoUrl;
+    if (url == null || url.isEmpty) {
+      setState(() { _loading = false; _error = true; });
+      return;
+    }
+    try {
+      _vpc = VideoPlayerController.networkUrl(Uri.parse(url));
+      await _vpc!.initialize();
+      _chewie = ChewieController(
+        videoPlayerController: _vpc!,
+        autoPlay: true,
+        looping: false,
+        allowFullScreen: true,
+        allowMuting: true,
+        showControls: true,
+        aspectRatio: _vpc!.value.aspectRatio > 0 ? _vpc!.value.aspectRatio : 9 / 16,
+        materialProgressColors: ChewieProgressColors(
+          playedColor: AppTheme.brightNavy,
+          handleColor: AppTheme.brightNavy,
+          bufferedColor: AppTheme.brightNavy.withValues(alpha: 0.3),
+          backgroundColor: Colors.white24,
+        ),
+      );
+      if (mounted) setState(() => _loading = false);
+    } catch (e) {
+      debugPrint('[VideoReply] init error: $e');
+      _vpc?.dispose();
+      _vpc = null;
+      if (mounted) setState(() { _loading = false; _error = true; });
+    }
+  }
+
+  @override
+  void dispose() {
+    _chewie?.dispose();
+    _vpc?.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final author = widget.post.author;
+    final bottomPad = MediaQuery.of(context).padding.bottom;
+
+    return Container(
+      decoration: BoxDecoration(
+        color: AppTheme.cardSurface,
+        borderRadius: const BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          // Drag handle
+          Padding(
+            padding: const EdgeInsets.symmetric(vertical: 10),
+            child: Center(
+              child: Container(
+                width: 36, height: 4,
+                decoration: BoxDecoration(
+                  color: AppTheme.navyBlue.withValues(alpha: 0.12),
+                  borderRadius: BorderRadius.circular(2),
+                ),
+              ),
+            ),
+          ),
+          // Author row
+          Padding(
+            padding: const EdgeInsets.fromLTRB(16, 0, 12, 10),
+            child: Row(
+              children: [
+                CircleAvatar(
+                  radius: 16,
+                  backgroundImage: author?.avatarUrl?.isNotEmpty == true
+                      ? NetworkImage(author!.avatarUrl!) as ImageProvider
+                      : null,
+                  backgroundColor: AppTheme.navyBlue.withValues(alpha: 0.1),
+                  child: author?.avatarUrl?.isNotEmpty != true
+                      ? Icon(Icons.person, size: 16, color: AppTheme.navyBlue.withValues(alpha: 0.5))
+                      : null,
+                ),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: Text(
+                    author?.displayName ?? author?.handle ?? 'Unknown',
+                    style: TextStyle(
+                      color: AppTheme.navyBlue,
+                      fontWeight: FontWeight.w700,
+                      fontSize: 14,
+                    ),
+                  ),
+                ),
+                IconButton(
+                  onPressed: () => Navigator.pop(context),
+                  icon: Icon(Icons.close, color: AppTheme.navyBlue.withValues(alpha: 0.35), size: 20),
+                  padding: EdgeInsets.zero,
+                  constraints: const BoxConstraints(minWidth: 36, minHeight: 36),
+                ),
+              ],
+            ),
+          ),
+          Divider(height: 1, color: AppTheme.navyBlue.withValues(alpha: 0.08)),
+          // Video player area
+          ClipRRect(
+            borderRadius: BorderRadius.only(
+              bottomLeft: const Radius.circular(20),
+              bottomRight: const Radius.circular(20),
+            ),
+            child: Container(
+              constraints: BoxConstraints(
+                maxHeight: MediaQuery.of(context).size.height * 0.6,
+              ),
+              color: const Color(0xFF0A1628),
+              padding: EdgeInsets.only(bottom: bottomPad),
+              child: _buildPlayer(),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildPlayer() {
+    if (_loading) {
+      return const AspectRatio(
+        aspectRatio: 9 / 16,
+        child: Center(child: CircularProgressIndicator(color: AppTheme.white)),
+      );
+    }
+    if (_error || _chewie == null) {
+      return AspectRatio(
+        aspectRatio: 9 / 16,
+        child: Center(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Icon(Icons.videocam_off, color: Colors.white.withValues(alpha: 0.5), size: 40),
+              const SizedBox(height: 12),
+              Text('Video unavailable',
+                style: TextStyle(color: Colors.white.withValues(alpha: 0.5), fontSize: 13)),
+            ],
+          ),
+        ),
+      );
+    }
+    return Chewie(controller: _chewie!);
   }
 }

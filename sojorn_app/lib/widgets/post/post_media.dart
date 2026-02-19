@@ -19,6 +19,10 @@ class PostMedia extends StatelessWidget {
   final Widget? child;
   final PostViewMode mode;
   final VoidCallback? onTap;
+  /// If provided, called instead of the default `context.go()` navigation
+  /// when a video thumbnail is tapped. Use this to keep the user in-context
+  /// (e.g. inside a comments sheet) rather than navigating to the quips feed.
+  final VoidCallback? onVideoTap;
 
   const PostMedia({
     super.key,
@@ -26,6 +30,7 @@ class PostMedia extends StatelessWidget {
     this.child,
     this.mode = PostViewMode.feed,
     this.onTap,
+    this.onVideoTap,
   });
 
 
@@ -72,11 +77,11 @@ class PostMedia extends StatelessWidget {
                 // For videos in feed mode, use a more vertical 4:5 aspect ratio
                 // For other modes or non-videos, use the constrained height logic
                 child: InkWell(
-                  onTap: isVideo 
-                      ? () {
+                  onTap: isVideo
+                      ? (onVideoTap ?? () {
                           final url = '${AppRoutes.quips}?postId=${post!.id}';
                           context.go(url);
-                        }
+                        })
                       : onTap,
 
 
