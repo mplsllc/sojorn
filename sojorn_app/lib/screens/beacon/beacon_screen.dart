@@ -3,6 +3,7 @@ import 'dart:ui';
 import 'package:flutter/material.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter_map/flutter_map.dart';
+import 'package:flutter_map_marker_cluster/flutter_map_marker_cluster.dart';
 import 'package:latlong2/latlong.dart';
 import 'package:geolocator/geolocator.dart';
 import 'package:permission_handler/permission_handler.dart';
@@ -2498,17 +2499,73 @@ class BeaconScreenState extends ConsumerState<BeaconScreen> with TickerProviderS
           userAgentPackageName: 'com.sojorn.app',
           retinaMode: RetinaMode.isHighDensity(context),
         ),
-        MarkerLayer(
-          markers: [
-            // Only geo-alert beacons on the map (not discussions)
-            ...[..._beacons, ..._officialPosts]
-                .where((p) => p.isBeaconPost && (p.beaconType?.isGeoAlert ?? false))
-                .map((beacon) => _createMarker(beacon)),
-            if (_locationPermissionGranted && _userLocation != null)
-              _createUserLocationMarker(),
-          ],
+        // Clustered beacon markers — auto-groups nearby pins
+        MarkerClusterLayerWidget(
+          options: MarkerClusterLayerOptions(
+            maxClusterRadius: 55,
+            disableClusteringAtZoom: 16,
+            size: const Size(44, 44),
+            alignment: Alignment.center,
+            zoomToBoundsOnClick: true,
+            spiderfyCluster: false,
+            markers: _buildAllBeaconMarkers(),
+            builder: _buildClusterWidget,
+          ),
         ),
+        // User location marker (not clustered)
+        if (_locationPermissionGranted && _userLocation != null)
+          MarkerLayer(markers: [_createUserLocationMarker()]),
       ],
+    );
+  }
+
+  // Builds the flat list of all beacon Markers for the cluster layer
+  List<Marker> _buildAllBeaconMarkers() {
+    return [..._beacons, ..._officialPosts]
+        .where((p) => p.isBeaconPost && (p.beaconType?.isGeoAlert ?? false))
+        .map((p) => _createMarker(p))
+        .toList();
+  }
+
+  // Renders a cluster bubble with count + severity-tinted color
+  Widget _buildClusterWidget(BuildContext context, List<Marker> clusterMarkers) {
+    // Determine the highest severity among clustered posts.
+    // Encode severity in marker keys: "severity:critical:id", "severity:high:id", etc.
+    Color clusterColor = AppTheme.navyBlue;
+    for (final m in clusterMarkers) {
+      final keyStr = m.key?.toString() ?? '';
+      if (keyStr.contains('severity:critical')) { clusterColor = SojornColors.destructive; break; }
+      if (keyStr.contains('severity:high')) { clusterColor = const Color(0xFFFF5722); }
+      else if (keyStr.contains('severity:medium') && clusterColor == AppTheme.navyBlue) {
+        clusterColor = const Color(0xFFFFC107);
+      }
+    }
+
+    return Container(
+      width: 44,
+      height: 44,
+      decoration: BoxDecoration(
+        color: clusterColor,
+        shape: BoxShape.circle,
+        border: Border.all(color: Colors.white, width: 2),
+        boxShadow: [
+          BoxShadow(
+            color: clusterColor.withValues(alpha: 0.40),
+            blurRadius: 8,
+            offset: const Offset(0, 2),
+          ),
+        ],
+      ),
+      child: Center(
+        child: Text(
+          clusterMarkers.length.toString(),
+          style: const TextStyle(
+            color: Colors.white,
+            fontSize: 14,
+            fontWeight: FontWeight.w800,
+          ),
+        ),
+      ),
     );
   }
 
@@ -2573,7 +2630,11 @@ class BeaconScreenState extends ConsumerState<BeaconScreen> with TickerProviderS
             fallbackBase.longitude + ((post.distanceMeters ?? 0) / 111000),
           );
 
+    // Encode severity in the key so _buildClusterWidget can tint the cluster bubble
+    final markerKey = ValueKey('severity:${beacon.severity.value}:${post.id}');
+
     return Marker(
+      key: markerKey,
       point: markerPosition,
       width: 56,
       height: 56,
