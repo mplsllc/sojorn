@@ -159,13 +159,152 @@ func (h *PostHandler) GetOfficialAlerts(c *gin.Context) {
 // mn511CategoryToBeaconType maps MN511 category strings to Sojorn beacon types.
 func mn511CategoryToBeaconType(category string) string {
 	switch category {
-	case "CRASH", "INCIDENT", "WARNING":
+	case "CRASH", "INCIDENT", "WARNING", "SURFACE_INCIDENT":
 		return "safety"
-	case "CLOSURE", "LANE_CLOSURE", "CONSTRUCTION", "WEATHER":
+	case "CLOSURE", "LANE_CLOSURE", "CONSTRUCTION", "WEATHER", "CONDITION", "ROAD":
 		return "hazard"
+	case "RESTRICTION":
+		return "checkpoint"
 	default:
 		return "hazard"
 	}
+}
+
+// mn511Camera represents a single entry from the /api/camera-views endpoint.
+type mn511Camera struct {
+	ID                    string  `json:"id"`
+	Title                 string  `json:"title"`
+	Category              string  `json:"category"` // VIDEO or IMAGE
+	URL                   string  `json:"url"`      // web viewer URL
+	ParentRouteDesignator string  `json:"parent_route_designator"`
+	Lat                   float64 `json:"lat"`
+	Lon                   float64 `json:"lon"`
+	LastUpdatedAt         string  `json:"last_updated_at"`
+	Sources               []struct {
+		Type string `json:"type"`
+		Src  string `json:"src"`
+	} `json:"sources"`
+}
+
+type mn511CameraResponse struct {
+	OK      bool           `json:"ok"`
+	Count   int            `json:"count"`
+	Cameras []mn511Camera  `json:"cameras"`
+}
+
+// GetOfficialCameras fetches MN511 traffic cameras within the given radius and
+// returns them in the beacon JSON shape with beacon_type "camera".
+func (h *PostHandler) GetOfficialCameras(c *gin.Context) {
+	lat := utils.GetQueryFloat(c, "lat", 0)
+	long := utils.GetQueryFloat(c, "long", 0)
+	radius := utils.GetQueryFloat(c, "radius", 16000)
+
+	if lat == 0 || long == 0 {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "lat and long are required"})
+		return
+	}
+
+	latDelta := (radius / 1000.0) / 111.0
+	lonDelta := (radius / 1000.0) / (111.0 * math.Cos(lat*math.Pi/180.0))
+
+	bbox := fmt.Sprintf("%.6f,%.6f,%.6f,%.6f",
+		long-lonDelta, lat-latDelta, long+lonDelta, lat+latDelta)
+	apiURL := fmt.Sprintf("%s/api/camera-views?bbox=%s&limit=300", mn511BaseURL, bbox)
+
+	client := &http.Client{Timeout: 8 * time.Second}
+	resp, err := client.Get(apiURL)
+	if err != nil {
+		log.Error().Err(err).Str("url", apiURL).Msg("mn511 cameras: upstream request failed")
+		c.JSON(http.StatusOK, gin.H{"beacons": []gin.H{}})
+		return
+	}
+	defer resp.Body.Close()
+
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		log.Error().Err(err).Msg("mn511 cameras: failed to read response body")
+		c.JSON(http.StatusOK, gin.H{"beacons": []gin.H{}})
+		return
+	}
+
+	var camResp mn511CameraResponse
+	if err := json.Unmarshal(body, &camResp); err != nil {
+		log.Error().Err(err).Str("body", string(body)[:min(200, len(body))]).Msg("mn511 cameras: failed to parse response")
+		c.JSON(http.StatusOK, gin.H{"beacons": []gin.H{}})
+		return
+	}
+
+	results := make([]gin.H, 0, len(camResp.Cameras))
+	for _, cam := range camResp.Cameras {
+		if cam.Lat == 0 || cam.Lon == 0 {
+			continue
+		}
+
+		// Extract HLS stream URL from sources array.
+		streamURL := ""
+		for _, s := range cam.Sources {
+			if s.Type == "application/x-mpegURL" || s.Src != "" {
+				streamURL = s.Src
+				break
+			}
+		}
+
+		createdAt := cam.LastUpdatedAt
+		if createdAt == "" {
+			createdAt = time.Now().UTC().Format(time.RFC3339)
+		}
+
+		displayTitle := cam.Title
+		if cam.ParentRouteDesignator != "" {
+			displayTitle = cam.ParentRouteDesignator + " — " + cam.Title
+		}
+
+		dist := haversineMeters(lat, long, cam.Lat, cam.Lon)
+
+		item := gin.H{
+			"id":         cam.ID,
+			"body":       displayTitle,
+			"created_at": createdAt,
+
+			"is_beacon":          true,
+			"is_active_beacon":   true,
+			"beacon_type":        "camera",
+			"severity":           "low",
+			"incident_status":    "active",
+			"confidence_score":   1.0,
+			"verification_count": 0,
+			"vouch_count":        0,
+			"report_count":       0,
+			"status_color":       "green",
+
+			"beacon_lat":      cam.Lat,
+			"beacon_long":     cam.Lon,
+			"distance_meters": dist,
+			"radius":          50,
+
+			"author_id":           "00000000-0000-0000-0000-000000000511",
+			"author_handle":       "@mn511",
+			"author_display_name": "MN 511",
+			"is_official":         true,
+			"official_source":     "MN 511",
+
+			// image_url = web viewer; video_url = HLS stream
+			"image_url": cam.URL,
+			"video_url": streamURL,
+			"tags":      []string{},
+		}
+		results = append(results, item)
+	}
+
+	log.Info().Int("count", len(results)).Msg("mn511 cameras: returned")
+	c.JSON(http.StatusOK, gin.H{"beacons": results})
+}
+
+func min(a, b int) int {
+	if a < b {
+		return a
+	}
+	return b
 }
 
 // mn511SeverityToString maps MN511 1–10 severity to Sojorn severity strings.
