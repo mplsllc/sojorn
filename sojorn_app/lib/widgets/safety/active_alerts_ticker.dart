@@ -3,8 +3,8 @@ import '../../models/beacon.dart';
 import '../../theme/tokens.dart';
 import '../../theme/app_theme.dart';
 
-/// Horizontal scrolling list of high-priority geo-alert beacons.
-/// Compact, high-contrast cards with pulse animation for recent alerts.
+/// Horizontal scrolling live-tile strip for critical/high geo-alerts.
+/// Apple Maps–style: bold type, color-filled cards, minimal metadata.
 class ActiveAlertsTicker extends StatelessWidget {
   final List<Beacon> alerts;
   final void Function(Beacon)? onAlertTap;
@@ -17,7 +17,7 @@ class ActiveAlertsTicker extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    // High priority ticker: critical + high severity geo-alerts only
+    // Only critical + high severity active geo-alerts in the strip
     final highPriority = alerts
         .where((a) =>
             a.beaconType.isGeoAlert &&
@@ -30,35 +30,12 @@ class ActiveAlertsTicker extends StatelessWidget {
         return b.createdAt.compareTo(a.createdAt);
       });
 
-    // All active geo-alerts count for badge
     final totalActive = alerts
         .where((a) => a.beaconType.isGeoAlert && a.incidentStatus == BeaconIncidentStatus.active)
         .length;
 
     if (highPriority.isEmpty) {
-      // No high-priority alerts — show compact all-clear or just total count
-      if (totalActive == 0) {
-        return Padding(
-          padding: const EdgeInsets.fromLTRB(16, 6, 16, 4),
-          child: Row(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Container(
-                width: 28, height: 28,
-                decoration: BoxDecoration(
-                  color: const Color(0xFF4CAF50).withValues(alpha: 0.12),
-                  shape: BoxShape.circle,
-                ),
-                child: Icon(Icons.shield, size: 16, color: const Color(0xFF4CAF50)),
-              ),
-              const SizedBox(width: 10),
-              Text('All clear — no active alerts nearby',
-                style: TextStyle(color: const Color(0xFF4CAF50), fontSize: 13, fontWeight: FontWeight.w600)),
-            ],
-          ),
-        );
-      }
-      // Only medium/low alerts — don't show ticker, let the list handle it
+      // Nothing high-priority — ticker is silent; lower alerts appear in the list below
       return const SizedBox.shrink();
     }
 
@@ -66,83 +43,90 @@ class ActiveAlertsTicker extends StatelessWidget {
       crossAxisAlignment: CrossAxisAlignment.start,
       mainAxisSize: MainAxisSize.min,
       children: [
+        // Section label
         Padding(
-          padding: const EdgeInsets.fromLTRB(16, 6, 16, 6),
+          padding: const EdgeInsets.fromLTRB(16, 10, 16, 8),
           child: Row(
             children: [
               Container(
                 padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
                 decoration: BoxDecoration(
-                  color: SojornColors.destructive.withValues(alpha: 0.12),
-                  borderRadius: BorderRadius.circular(10),
+                  color: SojornColors.destructive.withValues(alpha: 0.10),
+                  borderRadius: BorderRadius.circular(6),
                 ),
                 child: Row(mainAxisSize: MainAxisSize.min, children: [
-                  Icon(Icons.warning_rounded, size: 12, color: SojornColors.destructive),
+                  Icon(Icons.warning_rounded, size: 11, color: SojornColors.destructive),
                   const SizedBox(width: 4),
-                  Text('HIGH PRIORITY',
-                    style: TextStyle(color: SojornColors.destructive, fontSize: 10, fontWeight: FontWeight.w800, letterSpacing: 0.5)),
+                  Text('PRIORITY',
+                    style: TextStyle(
+                        color: SojornColors.destructive,
+                        fontSize: 10,
+                        fontWeight: FontWeight.w800,
+                        letterSpacing: 0.6)),
                 ]),
               ),
-              const SizedBox(width: 8),
-              if (totalActive > highPriority.length)
-                Text('+${totalActive - highPriority.length} more',
+              if (totalActive > highPriority.length) ...[
+                const SizedBox(width: 8),
+                Text('· +${totalActive - highPriority.length} more below',
                   style: TextStyle(color: SojornColors.textDisabled, fontSize: 11)),
+              ],
             ],
           ),
         ),
+        // Live-tile carousel
         SizedBox(
-          height: 72,
+          height: 98,
           child: ListView.separated(
             scrollDirection: Axis.horizontal,
             padding: const EdgeInsets.symmetric(horizontal: 16),
             itemCount: highPriority.length,
-            separatorBuilder: (_, __) => const SizedBox(width: 8),
+            separatorBuilder: (_, __) => const SizedBox(width: 10),
             itemBuilder: (context, index) {
               final alert = highPriority[index];
-              return _AlertCard(
+              return _LiveTile(
                 alert: alert,
                 onTap: () => onAlertTap?.call(alert),
               );
             },
           ),
         ),
-        const SizedBox(height: 4),
+        const SizedBox(height: 6),
       ],
     );
   }
 }
 
-class _AlertCard extends StatefulWidget {
+class _LiveTile extends StatefulWidget {
   final Beacon alert;
   final VoidCallback? onTap;
-  const _AlertCard({required this.alert, this.onTap});
+  const _LiveTile({required this.alert, this.onTap});
 
   @override
-  State<_AlertCard> createState() => _AlertCardState();
+  State<_LiveTile> createState() => _LiveTileState();
 }
 
-class _AlertCardState extends State<_AlertCard> with SingleTickerProviderStateMixin {
-  late AnimationController _pulseController;
-  late Animation<double> _pulseAnim;
+class _LiveTileState extends State<_LiveTile> with SingleTickerProviderStateMixin {
+  late AnimationController _glowController;
+  late Animation<double> _glowAnim;
 
   @override
   void initState() {
     super.initState();
-    _pulseController = AnimationController(
-      duration: const Duration(milliseconds: 1400),
+    _glowController = AnimationController(
+      duration: const Duration(milliseconds: 1600),
       vsync: this,
     );
-    _pulseAnim = Tween<double>(begin: 0.0, end: 1.0).animate(
-      CurvedAnimation(parent: _pulseController, curve: Curves.easeInOut),
+    _glowAnim = Tween<double>(begin: 0.0, end: 1.0).animate(
+      CurvedAnimation(parent: _glowController, curve: Curves.easeInOut),
     );
     if (widget.alert.isRecent) {
-      _pulseController.repeat(reverse: true);
+      _glowController.repeat(reverse: true);
     }
   }
 
   @override
   void dispose() {
-    _pulseController.dispose();
+    _glowController.dispose();
     super.dispose();
   }
 
@@ -150,76 +134,89 @@ class _AlertCardState extends State<_AlertCard> with SingleTickerProviderStateMi
   Widget build(BuildContext context) {
     final color = widget.alert.pinColor;
     final isRecent = widget.alert.isRecent;
+    final isCritical = widget.alert.severity == BeaconSeverity.critical;
 
     return GestureDetector(
       onTap: widget.onTap,
       child: AnimatedBuilder(
-        animation: _pulseAnim,
+        animation: _glowAnim,
         builder: (context, child) {
-          final glowAlpha = isRecent ? 0.15 + (_pulseAnim.value * 0.15) : 0.0;
+          final glowRadius = isRecent ? 8.0 + _glowAnim.value * 10.0 : 6.0;
+          final glowAlpha = isRecent ? 0.20 + _glowAnim.value * 0.18 : 0.10;
+
           return Container(
-            width: 160,
-            padding: const EdgeInsets.all(10),
+            width: 148,
+            padding: const EdgeInsets.all(12),
             decoration: BoxDecoration(
-              color: AppTheme.cardSurface,
-              borderRadius: BorderRadius.circular(12),
+              // Color-filled background tinted by severity
+              color: color.withValues(alpha: isCritical ? 0.14 : 0.10),
+              borderRadius: BorderRadius.circular(14),
               border: Border.all(
-                color: isRecent
-                    ? color.withValues(alpha: 0.4 + (_pulseAnim.value * 0.3))
-                    : AppTheme.navyBlue.withValues(alpha: 0.08),
-                width: isRecent ? 1.5 : 1,
+                color: color.withValues(alpha: isRecent ? 0.5 + _glowAnim.value * 0.25 : 0.30),
+                width: isCritical ? 1.5 : 1.0,
               ),
-              boxShadow: isRecent
-                  ? [BoxShadow(color: color.withValues(alpha: glowAlpha), blurRadius: 12)]
-                  : null,
+              boxShadow: [
+                BoxShadow(
+                  color: color.withValues(alpha: glowAlpha),
+                  blurRadius: glowRadius,
+                  offset: const Offset(0, 2),
+                ),
+              ],
             ),
             child: child,
           );
         },
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
-          mainAxisAlignment: MainAxisAlignment.spaceBetween,
           children: [
-            // Top row: icon + type + live badge
+            // Icon + LIVE badge
             Row(
               children: [
-                Icon(widget.alert.beaconType.icon, color: color, size: 16),
-                const SizedBox(width: 6),
-                Expanded(
-                  child: Text(
-                    widget.alert.beaconType.displayName,
-                    style: TextStyle(color: color, fontSize: 11, fontWeight: FontWeight.w700),
-                    overflow: TextOverflow.ellipsis,
+                Container(
+                  width: 28, height: 28,
+                  decoration: BoxDecoration(
+                    color: widget.alert.pinColor.withValues(alpha: 0.18),
+                    shape: BoxShape.circle,
                   ),
+                  child: Icon(widget.alert.beaconType.icon, size: 16, color: widget.alert.pinColor),
                 ),
+                const Spacer(),
                 if (isRecent)
                   Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 1),
+                    padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 2),
                     decoration: BoxDecoration(
-                      color: SojornColors.destructive.withValues(alpha: 0.2),
-                      borderRadius: BorderRadius.circular(3),
+                      color: SojornColors.destructive,
+                      borderRadius: BorderRadius.circular(4),
                     ),
-                    child: const Text('LIVE', style: TextStyle(color: SojornColors.destructive, fontSize: 8, fontWeight: FontWeight.bold)),
+                    child: const Text('LIVE',
+                      style: TextStyle(color: Colors.white, fontSize: 8, fontWeight: FontWeight.w900, letterSpacing: 0.5)),
                   ),
               ],
             ),
-            // Body preview
+            const SizedBox(height: 8),
+            // Bold type label
             Text(
-              widget.alert.body,
-              style: TextStyle(color: SojornColors.postContentLight, fontSize: 11),
+              widget.alert.beaconType.displayName,
+              style: TextStyle(
+                color: widget.alert.pinColor,
+                fontSize: 13,
+                fontWeight: FontWeight.w800,
+                height: 1.1,
+              ),
               maxLines: 1,
               overflow: TextOverflow.ellipsis,
             ),
-            // Bottom: time + distance
+            const SizedBox(height: 3),
+            // Distance only — ditch the time metadata
             Row(
               children: [
-                Icon(Icons.schedule, size: 10, color: SojornColors.textDisabled),
+                Icon(Icons.near_me, size: 10, color: AppTheme.navyBlue.withValues(alpha: 0.45)),
                 const SizedBox(width: 3),
-                Text(widget.alert.getTimeAgo(), style: TextStyle(color: SojornColors.textDisabled, fontSize: 10)),
-                const Spacer(),
-                Icon(Icons.location_on, size: 10, color: SojornColors.textDisabled),
-                const SizedBox(width: 2),
-                Text(widget.alert.getFormattedDistance(), style: TextStyle(color: SojornColors.textDisabled, fontSize: 10)),
+                Text(widget.alert.getFormattedDistance(),
+                  style: TextStyle(
+                      color: AppTheme.navyBlue.withValues(alpha: 0.55),
+                      fontSize: 11,
+                      fontWeight: FontWeight.w600)),
               ],
             ),
           ],

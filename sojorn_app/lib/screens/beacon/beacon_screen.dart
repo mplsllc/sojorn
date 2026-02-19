@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:ui';
 import 'package:flutter/material.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter_map/flutter_map.dart';
@@ -60,6 +61,7 @@ class BeaconScreenState extends ConsumerState<BeaconScreen> with TickerProviderS
   late final TabController _tabController;
 
   List<Post> _beacons = [];
+  List<Post> _officialPosts = []; // MN511 government alerts
   List<Beacon> _beaconModels = [];
   bool _isLoading = false;
   bool _isLoadingLocation = false;
@@ -103,6 +105,9 @@ class BeaconScreenState extends ConsumerState<BeaconScreen> with TickerProviderS
   bool _neighborhoodDetected = false;
   bool _homeNeighborhoodChecked = false;
 
+  // Sheet size tracking (for toggle button and tap-outside-to-close overlay)
+  double _sheetSize = 0.15;
+
   // Beacon search state
   final _searchController = TextEditingController();
   bool _isSearching = false;
@@ -129,10 +134,27 @@ class BeaconScreenState extends ConsumerState<BeaconScreen> with TickerProviderS
     _checkLocationPermission();
     _loadClusters();
     _checkHomeNeighborhood();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _sheetController.addListener(_onSheetSizeChanged);
+    });
+  }
+
+  void _onSheetSizeChanged() {
+    if (mounted && _sheetController.isAttached) {
+      setState(() => _sheetSize = _sheetController.size);
+    }
+  }
+
+  void _collapseSheet() {
+    if (_sheetController.isAttached) {
+      _sheetController.animateTo(0.15,
+          duration: const Duration(milliseconds: 300), curve: Curves.easeOut);
+    }
   }
 
   @override
   void dispose() {
+    _sheetController.removeListener(_onSheetSizeChanged);
     _tabController.dispose();
     _searchController.dispose();
     _searchDebounce?.cancel();
@@ -309,17 +331,27 @@ class BeaconScreenState extends ConsumerState<BeaconScreen> with TickerProviderS
     setState(() => _isLoading = true);
     try {
       final apiService = ref.read(apiServiceProvider);
-      final beacons = await apiService.fetchNearbyBeacons(
-        lat: target.latitude,
-        long: target.longitude,
-        radius: 16000,
-      );
-      debugPrint('[Beacon] fetched ${beacons.length} beacons');
+      final results = await Future.wait([
+        apiService.fetchNearbyBeacons(
+          lat: target.latitude,
+          long: target.longitude,
+          radius: 16000,
+        ),
+        apiService.fetchOfficialAlerts(
+          lat: target.latitude,
+          long: target.longitude,
+          radius: 16000,
+        ),
+      ]);
+      final beacons = results[0];
+      final official = results[1];
+      debugPrint('[Beacon] fetched ${beacons.length} user beacons + ${official.length} official alerts');
       if (mounted) {
         setState(() {
           _beacons = beacons.where((p) => p.isBeaconPost).toList()
             ..sort((a, b) => (a.distanceMeters ?? 0).compareTo(b.distanceMeters ?? 0));
-          _beaconModels = _beacons.map((p) => p.toBeacon()).toList();
+          _officialPosts = official.where((p) => p.isBeaconPost).toList();
+          _beaconModels = [..._beacons, ..._officialPosts].map((p) => p.toBeacon()).toList();
           _isLoading = false;
         });
       }
@@ -752,8 +784,23 @@ class BeaconScreenState extends ConsumerState<BeaconScreen> with TickerProviderS
     );
   }
 
+  /// Active geo-alerts only: no discussion types, no expired unverified reports.
+  List<Post> get _activeGeoAlerts {
+    final now = DateTime.now();
+    return [..._beacons, ..._officialPosts].where((p) {
+      if (!(p.beaconType?.isGeoAlert ?? false)) return false;
+      // Official MN511 alerts: never expire client-side (server controls TTL)
+      if (p.isOfficial == true) return true;
+      final b = p.toBeacon();
+      final isExpired = b.verificationCount < 3 &&
+          now.difference(p.createdAt).inHours >= 4;
+      return !isExpired;
+    }).toList();
+  }
+
   // ─── Map tab (map + overlay + draggable sheet) ────────────────────────
   Widget _buildMapTab() {
+    final screenH = MediaQuery.of(context).size.height;
     return Stack(
       children: [
         _buildMap(),
@@ -778,103 +825,141 @@ class BeaconScreenState extends ConsumerState<BeaconScreen> with TickerProviderS
                   ),
                 ],
               ),
-              child: CustomScrollView(
-                controller: scrollController,
-                slivers: [
-                  SliverToBoxAdapter(child: _buildDragHandle()),
-                  SliverToBoxAdapter(
-                    child: ActiveAlertsTicker(alerts: _beaconModels, onAlertTap: _onBeaconModelTap),
-                  ),
-                  if (_beacons.isNotEmpty)
-                    SliverToBoxAdapter(
-                      child: Padding(
-                        padding: const EdgeInsets.fromLTRB(16, 8, 16, 4),
-                        child: Row(
-                          children: [
-                            Text('${_beacons.length} ACTIVE INCIDENT${_beacons.length == 1 ? '' : 'S'}',
-                              style: TextStyle(
-                                color: AppTheme.navyBlue.withValues(alpha: 0.45),
-                                fontSize: 10, fontWeight: FontWeight.w700, letterSpacing: 1,
-                              )),
-                            const Spacer(),
-                            // Sort by proximity hint
-                            Icon(Icons.location_on, size: 11, color: SojornColors.textDisabled),
-                            const SizedBox(width: 3),
-                            Text('nearest first',
-                              style: TextStyle(color: SojornColors.textDisabled, fontSize: 10)),
-                          ],
+              child: Column(
+                children: [
+                  // Drag handle is pinned above the scroll view so it's always visible
+                  _buildDragHandle(),
+                  Expanded(
+                    child: CustomScrollView(
+                      controller: scrollController,
+                      slivers: [
+                        SliverToBoxAdapter(
+                          child: ActiveAlertsTicker(alerts: _beaconModels, onAlertTap: _onBeaconModelTap),
                         ),
-                      ),
-                    ),
-                  if (_beacons.isEmpty)
-                    SliverToBoxAdapter(
-                      child: Padding(
-                        padding: const EdgeInsets.fromLTRB(20, 8, 20, 32),
-                        child: Column(
-                          children: [
-                            // What are Beacons? explainer card
-                            Container(
-                              padding: const EdgeInsets.all(16),
-                              decoration: BoxDecoration(
-                                color: AppTheme.brightNavy.withValues(alpha: 0.06),
-                                borderRadius: BorderRadius.circular(16),
-                                border: Border.all(color: AppTheme.brightNavy.withValues(alpha: 0.12)),
-                              ),
+                        if (_activeGeoAlerts.isNotEmpty)
+                          SliverToBoxAdapter(
+                            child: Padding(
+                              padding: const EdgeInsets.fromLTRB(16, 8, 16, 2),
                               child: Row(
-                                crossAxisAlignment: CrossAxisAlignment.start,
                                 children: [
-                                  Icon(Icons.lightbulb_outline, color: AppTheme.brightNavy, size: 20),
-                                  const SizedBox(width: 12),
-                                  Expanded(
-                                    child: Column(
+                                  Icon(Icons.location_on, size: 11, color: SojornColors.textDisabled),
+                                  const SizedBox(width: 3),
+                                  Text('Sorted by distance',
+                                    style: TextStyle(color: SojornColors.textDisabled, fontSize: 10)),
+                                ],
+                              ),
+                            ),
+                          ),
+                        if (_activeGeoAlerts.isEmpty)
+                          SliverToBoxAdapter(
+                            child: Padding(
+                              padding: const EdgeInsets.fromLTRB(20, 8, 20, 32),
+                              child: Column(
+                                children: [
+                                  Container(
+                                    padding: const EdgeInsets.all(16),
+                                    decoration: BoxDecoration(
+                                      color: AppTheme.brightNavy.withValues(alpha: 0.06),
+                                      borderRadius: BorderRadius.circular(16),
+                                      border: Border.all(color: AppTheme.brightNavy.withValues(alpha: 0.12)),
+                                    ),
+                                    child: Row(
                                       crossAxisAlignment: CrossAxisAlignment.start,
                                       children: [
-                                        Text('What are Beacons?',
-                                          style: TextStyle(
-                                            color: AppTheme.navyBlue,
-                                            fontWeight: FontWeight.w700,
-                                            fontSize: 13,
-                                          )),
-                                        const SizedBox(height: 4),
-                                        Text(
-                                          'Beacons are real-time local alerts from people in your area — road closures, safety incidents, community events, and more. Tap + Create to post your first beacon.',
-                                          style: TextStyle(
-                                            color: AppTheme.navyBlue.withValues(alpha: 0.65),
-                                            fontSize: 12,
-                                            height: 1.4,
+                                        Icon(Icons.lightbulb_outline, color: AppTheme.brightNavy, size: 20),
+                                        const SizedBox(width: 12),
+                                        Expanded(
+                                          child: Column(
+                                            crossAxisAlignment: CrossAxisAlignment.start,
+                                            children: [
+                                              Text('What are Beacons?',
+                                                style: TextStyle(
+                                                  color: AppTheme.navyBlue,
+                                                  fontWeight: FontWeight.w700,
+                                                  fontSize: 13,
+                                                )),
+                                              const SizedBox(height: 4),
+                                              Text(
+                                                'Beacons are real-time local alerts from people in your area — road closures, safety incidents, community events, and more. Tap the + button to post your first beacon.',
+                                                style: TextStyle(
+                                                  color: AppTheme.navyBlue.withValues(alpha: 0.65),
+                                                  fontSize: 12,
+                                                  height: 1.4,
+                                                ),
+                                              ),
+                                            ],
                                           ),
                                         ),
                                       ],
                                     ),
                                   ),
+                                  const SizedBox(height: 24),
+                                  Icon(Icons.shield, color: AppTheme.brightNavy.withValues(alpha: 0.25), size: 40),
+                                  const SizedBox(height: 10),
+                                  Text('All clear in your area',
+                                    style: TextStyle(color: AppTheme.navyBlue.withValues(alpha: 0.45), fontSize: 14, fontWeight: FontWeight.w500)),
+                                  const SizedBox(height: 4),
+                                  Text('No active alerts nearby',
+                                    style: TextStyle(color: AppTheme.navyBlue.withValues(alpha: 0.3), fontSize: 12)),
                                 ],
                               ),
                             ),
-                            const SizedBox(height: 24),
-                            Icon(Icons.shield, color: AppTheme.brightNavy.withValues(alpha: 0.25), size: 40),
-                            const SizedBox(height: 10),
-                            Text('All clear in your area',
-                              style: TextStyle(color: AppTheme.navyBlue.withValues(alpha: 0.45), fontSize: 14, fontWeight: FontWeight.w500)),
-                            const SizedBox(height: 4),
-                            Text('No active alerts nearby',
-                              style: TextStyle(color: AppTheme.navyBlue.withValues(alpha: 0.3), fontSize: 12)),
-                          ],
-                        ),
-                      ),
-                    )
-                  else
-                    SliverList(
-                      delegate: SliverChildBuilderDelegate(
-                        (context, index) => _buildIncidentCard(_beacons[index]),
-                        childCount: _beacons.length,
-                      ),
+                          )
+                        else
+                          SliverList(
+                            delegate: SliverChildBuilderDelegate(
+                              (context, index) => _buildIncidentCard(_activeGeoAlerts[index]),
+                              childCount: _activeGeoAlerts.length,
+                            ),
+                          ),
+                        SliverToBoxAdapter(child: SizedBox(height: MediaQuery.of(context).padding.bottom + 16)),
+                      ],
                     ),
-                  SliverToBoxAdapter(child: SizedBox(height: MediaQuery.of(context).padding.bottom + 16)),
+                  ),
                 ],
               ),
             );
           },
         ),
+        // Transparent overlay — tapping the map area above the sheet collapses it
+        if (_sheetSize > 0.25)
+          Positioned(
+            top: 0, left: 0, right: 0,
+            bottom: screenH * _sheetSize,
+            child: GestureDetector(
+              onTap: _collapseSheet,
+              behavior: HitTestBehavior.opaque,
+              child: const SizedBox.expand(),
+            ),
+          ),
+        // Floating status pill — glanceable summary above collapsed sheet
+        _buildFloatingStatusPill(screenH),
+        // FAB — create a new report
+        if (_sheetSize < 0.6)
+          Positioned(
+            bottom: screenH * _sheetSize + 16,
+            right: 16,
+            child: GestureDetector(
+              onTap: _onCreateBeacon,
+              child: ClipRRect(
+                borderRadius: BorderRadius.circular(28),
+                child: BackdropFilter(
+                  filter: ImageFilter.blur(sigmaX: 12, sigmaY: 12),
+                  child: Container(
+                    width: 52, height: 52,
+                    decoration: BoxDecoration(
+                      color: AppTheme.brightNavy.withValues(alpha: 0.92),
+                      shape: BoxShape.circle,
+                      boxShadow: [
+                        BoxShadow(color: AppTheme.brightNavy.withValues(alpha: 0.35), blurRadius: 14, offset: const Offset(0, 4)),
+                      ],
+                    ),
+                    child: const Icon(Icons.add, color: Colors.white, size: 26),
+                  ),
+                ),
+              ),
+            ),
+          ),
       ],
     );
   }
@@ -885,23 +970,40 @@ class BeaconScreenState extends ConsumerState<BeaconScreen> with TickerProviderS
       top: 8, left: 8, right: 8,
       child: Row(
         children: [
-          // Weather chip (far left)
+          // Weather chip — frosted glass, matches pill visual language
           if (_weather != null)
-            Container(
-              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-              decoration: BoxDecoration(
-                color: SojornColors.basicWhite.withValues(alpha: 0.96),
-                borderRadius: BorderRadius.circular(20),
-                boxShadow: [BoxShadow(color: SojornColors.basicBlack.withValues(alpha: 0.18), blurRadius: 8)],
-              ),
-              child: Row(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Icon(_weatherIcon(_weather!.weatherCode), size: 16, color: AppTheme.navyBlue),
-                  const SizedBox(width: 4),
-                  Text('${_weather!.temperature.round()}°',
-                    style: TextStyle(color: AppTheme.navyBlue, fontSize: 13, fontWeight: FontWeight.w600)),
-                ],
+            ClipRRect(
+              borderRadius: BorderRadius.circular(22),
+              child: BackdropFilter(
+                filter: ImageFilter.blur(sigmaX: 18, sigmaY: 18),
+                child: Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+                  decoration: BoxDecoration(
+                    color: SojornColors.basicWhite.withValues(alpha: 0.28),
+                    borderRadius: BorderRadius.circular(22),
+                    border: Border.all(
+                      color: SojornColors.basicWhite.withValues(alpha: 0.55),
+                      width: 1.0,
+                    ),
+                    boxShadow: [
+                      BoxShadow(color: SojornColors.basicBlack.withValues(alpha: 0.10), blurRadius: 10),
+                    ],
+                  ),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Icon(_weatherIcon(_weather!.weatherCode), size: 17,
+                        color: AppTheme.navyBlue.withValues(alpha: 0.85)),
+                      const SizedBox(width: 6),
+                      Text('${_weather!.temperature.round()}°',
+                        style: TextStyle(
+                          color: AppTheme.navyBlue,
+                          fontSize: 15,
+                          fontWeight: FontWeight.w800,
+                        )),
+                    ],
+                  ),
+                ),
               ),
             ),
           const Spacer(),
@@ -919,14 +1021,119 @@ class BeaconScreenState extends ConsumerState<BeaconScreen> with TickerProviderS
   Widget _mapIconButton(IconData icon, {VoidCallback? onTap}) {
     return GestureDetector(
       onTap: onTap,
-      child: Container(
-        width: 36, height: 36,
-        decoration: BoxDecoration(
-          color: SojornColors.basicWhite.withValues(alpha: 0.85),
-          shape: BoxShape.circle,
-          boxShadow: [BoxShadow(color: SojornColors.basicBlack.withValues(alpha: 0.1), blurRadius: 6)],
+      child: ClipRRect(
+        borderRadius: BorderRadius.circular(18),
+        child: BackdropFilter(
+          filter: ImageFilter.blur(sigmaX: 12, sigmaY: 12),
+          child: Container(
+            width: 36, height: 36,
+            decoration: BoxDecoration(
+              color: SojornColors.basicWhite.withValues(alpha: 0.70),
+              shape: BoxShape.circle,
+              border: Border.all(color: SojornColors.basicWhite.withValues(alpha: 0.5), width: 0.5),
+              boxShadow: [BoxShadow(color: SojornColors.basicBlack.withValues(alpha: 0.08), blurRadius: 6)],
+            ),
+            child: Icon(icon, size: 18, color: AppTheme.navyBlue.withValues(alpha: 0.75)),
+          ),
         ),
-        child: Icon(icon, size: 18, color: AppTheme.navyBlue.withValues(alpha: 0.7)),
+      ),
+    );
+  }
+
+  // ─── Floating status pill — glanceable summary between overlay bar and sheet ──
+  Widget _buildFloatingStatusPill(double screenH) {
+    // Count = total active alerts (same as the list below — pill IS the entry point)
+    final total = _activeGeoAlerts.length;
+
+    // Color driven by highest severity tier present
+    final hasCritical = _beaconModels.any((b) =>
+        b.beaconType.isGeoAlert &&
+        b.severity == BeaconSeverity.critical &&
+        b.incidentStatus == BeaconIncidentStatus.active);
+    final hasHigh = _beaconModels.any((b) =>
+        b.beaconType.isGeoAlert &&
+        b.severity == BeaconSeverity.high &&
+        b.incidentStatus == BeaconIncidentStatus.active);
+
+    final Color pillColor;
+    final IconData pillIcon;
+
+    if (total == 0) {
+      pillColor = const Color(0xFF4CAF50);
+      pillIcon = Icons.shield;
+    } else if (hasCritical) {
+      pillColor = SojornColors.destructive;
+      pillIcon = Icons.warning_rounded;
+    } else if (hasHigh) {
+      pillColor = const Color(0xFFFF5722);
+      pillIcon = Icons.error_outline;
+    } else {
+      pillColor = const Color(0xFFFFC107);
+      pillIcon = Icons.info_outline;
+    }
+
+    final pillText = total == 0
+        ? 'All Clear'
+        : '$total Alert${total == 1 ? '' : 's'} Nearby';
+
+    // Float left (avoids FAB on the right); hides as sheet opens past halfway
+    final pillBottom = (screenH * _sheetSize).clamp(screenH * 0.15, screenH * 0.5) + 14.0;
+    final visible = _sheetSize < 0.55;
+
+    return Positioned(
+      bottom: pillBottom,
+      left: 16,
+      child: AnimatedOpacity(
+        opacity: visible ? 1.0 : 0.0,
+        duration: const Duration(milliseconds: 200),
+        child: GestureDetector(
+          onTap: () {
+            if (!_sheetController.isAttached) return;
+            _sheetController.animateTo(0.5,
+                duration: const Duration(milliseconds: 300), curve: Curves.easeOut);
+          },
+          child: ClipRRect(
+            borderRadius: BorderRadius.circular(22),
+            child: BackdropFilter(
+              filter: ImageFilter.blur(sigmaX: 18, sigmaY: 18),
+              child: Container(
+                padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+                decoration: BoxDecoration(
+                  // Translucent tint — blur does the heavy lifting
+                  color: pillColor.withValues(alpha: 0.28),
+                  borderRadius: BorderRadius.circular(22),
+                  border: Border.all(
+                    color: pillColor.withValues(alpha: 0.5),
+                    width: 1.0,
+                  ),
+                  boxShadow: [
+                    BoxShadow(
+                      color: pillColor.withValues(alpha: 0.18),
+                      blurRadius: 12,
+                      offset: const Offset(0, 3),
+                    ),
+                  ],
+                ),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Icon(pillIcon, size: 14, color: pillColor),
+                    const SizedBox(width: 6),
+                    Text(pillText,
+                      style: TextStyle(
+                        color: pillColor,
+                        fontSize: 13,
+                        fontWeight: FontWeight.w800,
+                      )),
+                    const SizedBox(width: 5),
+                    Icon(Icons.keyboard_arrow_up_rounded, size: 15,
+                      color: pillColor.withValues(alpha: 0.65)),
+                  ],
+                ),
+              ),
+            ),
+          ),
+        ),
       ),
     );
   }
@@ -2105,86 +2312,53 @@ class BeaconScreenState extends ConsumerState<BeaconScreen> with TickerProviderS
   }
 
   Widget _buildDragHandle() {
-    final geoAlerts = _beaconModels.where((b) => b.beaconType.isGeoAlert).toList();
-    final critCount = geoAlerts.where((b) => b.severity == BeaconSeverity.critical).length;
-    final highCount = geoAlerts.where((b) => b.severity == BeaconSeverity.high).length;
-    final medCount  = geoAlerts.where((b) => b.severity == BeaconSeverity.medium).length;
-    final lowCount  = geoAlerts.where((b) => b.severity == BeaconSeverity.low).length;
-
+    final alertCount = _activeGeoAlerts.length;
     return GestureDetector(
       onTap: () {
-        final currentSize = _sheetController.size;
-        if (currentSize < 0.3) {
+        if (!_sheetController.isAttached) return;
+        if (_sheetSize < 0.3) {
           _sheetController.animateTo(0.5, duration: const Duration(milliseconds: 300), curve: Curves.easeOut);
         } else {
-          _sheetController.animateTo(0.15, duration: const Duration(milliseconds: 300), curve: Curves.easeOut);
+          _collapseSheet();
         }
       },
-      child: Container(
-        padding: const EdgeInsets.fromLTRB(20, 12, 20, 10),
+      behavior: HitTestBehavior.opaque,
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(0, 10, 0, 8),
         child: Column(
           children: [
             // Drag pill
             Container(
-              width: 40, height: 4,
+              width: 36, height: 4,
               decoration: BoxDecoration(
-                color: AppTheme.navyBlue.withValues(alpha: 0.15),
+                color: AppTheme.navyBlue.withValues(alpha: 0.18),
                 borderRadius: BorderRadius.circular(2),
               ),
             ),
             const SizedBox(height: 10),
-            Row(
-              children: [
-                Icon(Icons.radar, color: AppTheme.brightNavy, size: 18),
-                const SizedBox(width: 6),
-                Text(
-                  'RADAR',
-                  style: TextStyle(
-                    color: AppTheme.navyBlue,
-                    fontSize: 13,
-                    fontWeight: FontWeight.w800,
-                    letterSpacing: 1.5,
-                  ),
-                ),
-                const SizedBox(width: 10),
-                // Severity breakdown dots
-                if (geoAlerts.isEmpty)
-                  Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-                    decoration: BoxDecoration(
-                      color: const Color(0xFF4CAF50).withValues(alpha: 0.12),
-                      borderRadius: BorderRadius.circular(12),
+            // Summary row
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 20),
+              child: Row(
+                children: [
+                  Text(
+                    alertCount == 0 ? 'All Clear' : '$alertCount Incident${alertCount == 1 ? '' : 's'} Nearby',
+                    style: TextStyle(
+                      color: alertCount == 0
+                          ? const Color(0xFF4CAF50)
+                          : AppTheme.navyBlue,
+                      fontSize: 14,
+                      fontWeight: FontWeight.w700,
                     ),
-                    child: Row(mainAxisSize: MainAxisSize.min, children: [
-                      Icon(Icons.shield, size: 12, color: const Color(0xFF4CAF50)),
-                      const SizedBox(width: 4),
-                      Text('All clear', style: TextStyle(color: const Color(0xFF4CAF50), fontSize: 11, fontWeight: FontWeight.w600)),
-                    ]),
-                  )
-                else
-                  Row(children: [
-                    if (critCount > 0) _severityDot(SojornColors.destructive, critCount),
-                    if (critCount > 0 && highCount > 0) const SizedBox(width: 4),
-                    if (highCount > 0) _severityDot(const Color(0xFFFF5722), highCount),
-                    if ((critCount > 0 || highCount > 0) && medCount > 0) const SizedBox(width: 4),
-                    if (medCount > 0) _severityDot(const Color(0xFFFFC107), medCount),
-                    if ((critCount > 0 || highCount > 0 || medCount > 0) && lowCount > 0) const SizedBox(width: 4),
-                    if (lowCount > 0) _severityDot(const Color(0xFF4CAF50), lowCount),
-                  ]),
-                const Spacer(),
-                if (geoAlerts.isNotEmpty)
-                  GestureDetector(
-                    onTap: () => _sheetController.animateTo(0.85,
-                        duration: const Duration(milliseconds: 300), curve: Curves.easeOut),
-                    child: Row(mainAxisSize: MainAxisSize.min, children: [
-                      Text('See all',
-                        style: TextStyle(color: AppTheme.brightNavy, fontSize: 12, fontWeight: FontWeight.w600)),
-                      Icon(Icons.keyboard_arrow_up, color: AppTheme.brightNavy, size: 16),
-                    ]),
-                  )
-                else
-                  Icon(Icons.keyboard_arrow_up, color: AppTheme.navyBlue.withValues(alpha: 0.3), size: 18),
-              ],
+                  ),
+                  const Spacer(),
+                  Icon(
+                    _sheetSize >= 0.7 ? Icons.keyboard_arrow_down_rounded : Icons.keyboard_arrow_up_rounded,
+                    color: AppTheme.navyBlue.withValues(alpha: 0.35),
+                    size: 20,
+                  ),
+                ],
+              ),
             ),
           ],
         ),
@@ -2192,26 +2366,17 @@ class BeaconScreenState extends ConsumerState<BeaconScreen> with TickerProviderS
     );
   }
 
-  Widget _severityDot(Color color, int count) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 3),
-      decoration: BoxDecoration(
-        color: color.withValues(alpha: 0.15),
-        borderRadius: BorderRadius.circular(10),
-      ),
-      child: Row(mainAxisSize: MainAxisSize.min, children: [
-        Container(width: 6, height: 6,
-          decoration: BoxDecoration(color: color, shape: BoxShape.circle)),
-        const SizedBox(width: 4),
-        Text('$count', style: TextStyle(color: color, fontSize: 11, fontWeight: FontWeight.w700)),
-      ]),
-    );
-  }
-
   Widget _buildIncidentCard(Post post) {
     final beacon = post.toBeacon();
     final severityColor = beacon.pinColor;
     final isRecent = beacon.isRecent;
+    final isOfficialSource = beacon.isOfficial; // MN511 government alert
+    final isOfficialType = beacon.beaconType == BeaconType.officialPresence ||
+        beacon.beaconType == BeaconType.checkpoint ||
+        beacon.beaconType == BeaconType.taskForce;
+    final isOfficial = isOfficialSource || isOfficialType;
+    const officialBlue = Color(0xFF1565C0);
+    final iconColor = isOfficial ? officialBlue : severityColor;
 
     return GestureDetector(
       onTap: () => _onMarkerTap(post),
@@ -2222,7 +2387,11 @@ class BeaconScreenState extends ConsumerState<BeaconScreen> with TickerProviderS
           color: AppTheme.cardSurface,
           borderRadius: BorderRadius.circular(12),
           border: Border.all(
-            color: isRecent ? severityColor.withValues(alpha: 0.5) : AppTheme.navyBlue.withValues(alpha: 0.08),
+            color: isOfficial
+                ? officialBlue.withValues(alpha: isRecent ? 0.5 : 0.25)
+                : isRecent
+                    ? severityColor.withValues(alpha: 0.5)
+                    : AppTheme.navyBlue.withValues(alpha: 0.08),
           ),
         ),
         child: Row(
@@ -2230,10 +2399,10 @@ class BeaconScreenState extends ConsumerState<BeaconScreen> with TickerProviderS
             Container(
               width: 40, height: 40,
               decoration: BoxDecoration(
-                color: severityColor.withValues(alpha: 0.12),
+                color: iconColor.withValues(alpha: 0.12),
                 borderRadius: BorderRadius.circular(10),
               ),
-              child: Icon(beacon.beaconType.icon, color: severityColor, size: 22),
+              child: Icon(beacon.beaconType.icon, color: iconColor, size: 22),
             ),
             const SizedBox(width: 12),
             Expanded(
@@ -2247,8 +2416,32 @@ class BeaconScreenState extends ConsumerState<BeaconScreen> with TickerProviderS
                           style: TextStyle(color: AppTheme.navyBlue, fontSize: 14, fontWeight: FontWeight.w600),
                           overflow: TextOverflow.ellipsis),
                       ),
+                      if (isOfficialSource)
+                        Container(
+                          margin: const EdgeInsets.only(left: 4),
+                          padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 2),
+                          decoration: BoxDecoration(
+                            color: officialBlue,
+                            borderRadius: BorderRadius.circular(4),
+                          ),
+                          child: Text(beacon.officialSource ?? 'OFFICIAL',
+                            style: const TextStyle(color: Colors.white, fontSize: 8, fontWeight: FontWeight.bold, letterSpacing: 0.4)),
+                        )
+                      else if (isOfficialType)
+                        Container(
+                          margin: const EdgeInsets.only(left: 4),
+                          padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 2),
+                          decoration: BoxDecoration(
+                            color: officialBlue.withValues(alpha: 0.12),
+                            borderRadius: BorderRadius.circular(4),
+                            border: Border.all(color: officialBlue.withValues(alpha: 0.35)),
+                          ),
+                          child: const Text('OFFICIAL',
+                            style: TextStyle(color: officialBlue, fontSize: 8, fontWeight: FontWeight.bold, letterSpacing: 0.4)),
+                        ),
                       if (isRecent)
                         Container(
+                          margin: const EdgeInsets.only(left: 4),
                           padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
                           decoration: BoxDecoration(
                             color: SojornColors.destructive.withValues(alpha: 0.12),
@@ -2272,9 +2465,11 @@ class BeaconScreenState extends ConsumerState<BeaconScreen> with TickerProviderS
                       const SizedBox(width: 3),
                       Text(beacon.getFormattedDistance(), style: TextStyle(color: SojornColors.textDisabled, fontSize: 11)),
                       const Spacer(),
-                      Icon(Icons.visibility, size: 11, color: SojornColors.textDisabled),
-                      const SizedBox(width: 3),
-                      Text('${beacon.verificationCount}', style: TextStyle(color: SojornColors.textDisabled, fontSize: 11)),
+                      if (beacon.verificationCount > 0) ...[
+                        Icon(Icons.visibility, size: 11, color: SojornColors.textDisabled),
+                        const SizedBox(width: 3),
+                        Text('${beacon.verificationCount}', style: TextStyle(color: SojornColors.textDisabled, fontSize: 11)),
+                      ],
                     ],
                   ),
                 ],
@@ -2306,7 +2501,7 @@ class BeaconScreenState extends ConsumerState<BeaconScreen> with TickerProviderS
         MarkerLayer(
           markers: [
             // Only geo-alert beacons on the map (not discussions)
-            ..._beacons
+            ...[..._beacons, ..._officialPosts]
                 .where((p) => p.isBeaconPost && (p.beaconType?.isGeoAlert ?? false))
                 .map((beacon) => _createMarker(beacon)),
             if (_locationPermissionGranted && _userLocation != null)
@@ -2380,8 +2575,8 @@ class BeaconScreenState extends ConsumerState<BeaconScreen> with TickerProviderS
 
     return Marker(
       point: markerPosition,
-      width: 48,
-      height: 48,
+      width: 56,
+      height: 56,
       child: GestureDetector(
         onTap: () => _onMarkerTap(post),
         child: _SeverityMarker(
@@ -2403,7 +2598,7 @@ class BeaconScreenState extends ConsumerState<BeaconScreen> with TickerProviderS
   }
 }
 
-// ─── Severity-colored Marker with pulse for recent ─────────────
+// ─── Severity-colored Marker with ripple ring for recent ─────────────
 class _SeverityMarker extends StatefulWidget {
   final Color color;
   final IconData icon;
@@ -2420,57 +2615,105 @@ class _SeverityMarker extends StatefulWidget {
 }
 
 class _SeverityMarkerState extends State<_SeverityMarker>
-    with SingleTickerProviderStateMixin {
-  late AnimationController _controller;
-  late Animation<double> _pulseAnimation;
+    with TickerProviderStateMixin {
+  late AnimationController _rippleController;
+  late AnimationController _ripple2Controller;
+  late Animation<double> _rippleAnim;
+  late Animation<double> _ripple2Anim;
 
   @override
   void initState() {
     super.initState();
-    _controller = AnimationController(
-      duration: const Duration(milliseconds: 1200),
+    _rippleController = AnimationController(
+      duration: const Duration(milliseconds: 1600),
+      vsync: this,
+    );
+    _ripple2Controller = AnimationController(
+      duration: const Duration(milliseconds: 1600),
       vsync: this,
     );
 
     if (widget.isRecent) {
-      _pulseAnimation = Tween<double>(begin: 0.85, end: 1.15).animate(
-        CurvedAnimation(parent: _controller, curve: Curves.easeInOut),
+      _rippleAnim = Tween<double>(begin: 0.0, end: 1.0).animate(
+        CurvedAnimation(parent: _rippleController, curve: Curves.easeOut),
       );
-      _controller.repeat(reverse: true);
+      _ripple2Anim = Tween<double>(begin: 0.0, end: 1.0).animate(
+        CurvedAnimation(parent: _ripple2Controller, curve: Curves.easeOut),
+      );
+      _rippleController.repeat();
+      // Offset the second ring by half the duration
+      Future.delayed(const Duration(milliseconds: 800), () {
+        if (mounted) _ripple2Controller.repeat();
+      });
     } else {
-      _pulseAnimation = const AlwaysStoppedAnimation(1.0);
+      _rippleAnim = const AlwaysStoppedAnimation(0.0);
+      _ripple2Anim = const AlwaysStoppedAnimation(0.0);
     }
   }
 
   @override
   void dispose() {
-    _controller.dispose();
+    _rippleController.dispose();
+    _ripple2Controller.dispose();
     super.dispose();
   }
 
   @override
   Widget build(BuildContext context) {
-    return AnimatedBuilder(
-      animation: _pulseAnimation,
-      builder: (context, child) {
-        return Transform.scale(
-          scale: _pulseAnimation.value,
-          child: Container(
-            decoration: BoxDecoration(
-              shape: BoxShape.circle,
-              color: widget.color,
-              boxShadow: [
-                BoxShadow(
-                  color: widget.color.withValues(alpha: widget.isRecent ? 0.6 : 0.3),
-                  blurRadius: widget.isRecent ? 12 : 6,
-                  spreadRadius: widget.isRecent ? 3 : 0,
+    return SizedBox(
+      width: 56, height: 56,
+      child: AnimatedBuilder(
+        animation: Listenable.merge([_rippleAnim, _ripple2Anim]),
+        builder: (context, child) {
+          return Stack(
+            alignment: Alignment.center,
+            children: [
+              // Ripple ring 1
+              if (widget.isRecent)
+                Transform.scale(
+                  scale: 0.7 + _rippleAnim.value * 1.1,
+                  child: Container(
+                    width: 56, height: 56,
+                    decoration: BoxDecoration(
+                      shape: BoxShape.circle,
+                      color: widget.color.withValues(
+                          alpha: (0.55 * (1.0 - _rippleAnim.value)).clamp(0.0, 1.0)),
+                    ),
+                  ),
                 ),
-              ],
-            ),
-            child: Icon(widget.icon, color: SojornColors.basicWhite, size: 26),
-          ),
-        );
-      },
+              // Ripple ring 2 (offset)
+              if (widget.isRecent)
+                Transform.scale(
+                  scale: 0.7 + _ripple2Anim.value * 1.1,
+                  child: Container(
+                    width: 56, height: 56,
+                    decoration: BoxDecoration(
+                      shape: BoxShape.circle,
+                      color: widget.color.withValues(
+                          alpha: (0.45 * (1.0 - _ripple2Anim.value)).clamp(0.0, 1.0)),
+                    ),
+                  ),
+                ),
+              // Main pin
+              Container(
+                width: 38, height: 38,
+                decoration: BoxDecoration(
+                  shape: BoxShape.circle,
+                  color: widget.color,
+                  boxShadow: [
+                    BoxShadow(
+                      color: widget.color.withValues(alpha: widget.isRecent ? 0.5 : 0.3),
+                      blurRadius: widget.isRecent ? 10 : 6,
+                      spreadRadius: 1,
+                    ),
+                  ],
+                ),
+                child: Icon(widget.icon, color: SojornColors.basicWhite, size: 22),
+              ),
+            ],
+          );
+        },
+      ),
     );
   }
 }

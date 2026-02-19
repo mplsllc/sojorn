@@ -50,6 +50,11 @@ class _BeaconDetailScreenState extends ConsumerState<BeaconDetailScreen>
   Beacon get _beacon => widget.beaconPost.toBeacon();
   Post get _post => widget.beaconPost;
 
+  /// Unverified reports auto-expire 4 hours after creation.
+  bool get _isExpired =>
+      _beacon.verificationCount < 3 &&
+      DateTime.now().difference(_beacon.createdAt).inHours >= 4;
+
   @override
   Widget build(BuildContext context) {
     final severityColor = _beacon.pinColor;
@@ -118,28 +123,52 @@ class _BeaconDetailScreenState extends ConsumerState<BeaconDetailScreen>
               ),
             ),
 
-            // Severity + incident status badges
+            // Severity badge — size and style scale with urgency
             Positioned(
               top: 60, right: 16,
               child: AnimatedBuilder(
                 animation: _pulseAnimation,
                 builder: (context, child) {
+                  final isCritical = _beacon.severity == BeaconSeverity.critical;
+                  final isHigh = _beacon.severity == BeaconSeverity.high;
+                  final isLow = _beacon.severity == BeaconSeverity.low;
                   return Transform.scale(
                     scale: _pulseAnimation.value,
                     child: Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+                      padding: EdgeInsets.symmetric(
+                        horizontal: isCritical || isHigh ? 12 : 10,
+                        vertical: isCritical || isHigh ? 7 : 5,
+                      ),
                       decoration: BoxDecoration(
-                        color: severityColor.withValues(alpha: 0.9),
-                        borderRadius: BorderRadius.circular(16),
-                        boxShadow: [BoxShadow(color: severityColor.withValues(alpha: 0.4), blurRadius: 8, spreadRadius: 2)],
+                        color: isLow
+                            ? severityColor.withValues(alpha: 0.15)
+                            : severityColor.withValues(alpha: 0.9),
+                        borderRadius: BorderRadius.circular(isCritical ? 8 : 16),
+                        border: isLow ? Border.all(color: severityColor.withValues(alpha: 0.5)) : null,
+                        boxShadow: isLow ? null : [
+                          BoxShadow(
+                            color: severityColor.withValues(alpha: isCritical ? 0.6 : 0.3),
+                            blurRadius: isCritical ? 14 : 8,
+                            spreadRadius: isCritical ? 3 : 1,
+                          ),
+                        ],
                       ),
                       child: Row(
                         mainAxisSize: MainAxisSize.min,
                         children: [
-                          Icon(_beacon.severity.icon, color: SojornColors.basicWhite, size: 14),
+                          Icon(_beacon.severity.icon,
+                            color: isLow ? severityColor : SojornColors.basicWhite,
+                            size: isCritical ? 16 : 13),
                           const SizedBox(width: 4),
-                          Text(_beacon.severity.label,
-                            style: const TextStyle(color: SojornColors.basicWhite, fontWeight: FontWeight.bold, fontSize: 11)),
+                          Text(
+                            isCritical ? '⚠ ${_beacon.severity.label.toUpperCase()}' : _beacon.severity.label,
+                            style: TextStyle(
+                              color: isLow ? severityColor : SojornColors.basicWhite,
+                              fontWeight: FontWeight.bold,
+                              fontSize: isCritical ? 12 : 10,
+                              letterSpacing: isCritical ? 0.5 : 0,
+                            ),
+                          ),
                         ],
                       ),
                     ),
@@ -258,6 +287,33 @@ class _BeaconDetailScreenState extends ConsumerState<BeaconDetailScreen>
     final verCount = _beacon.verificationCount;
     final isVerified = verCount >= 3;
 
+    // Determine state: verified → awaiting → expired
+    final Color statusColor;
+    final String statusText;
+    final IconData statusIcon;
+    final String subText;
+    final Color borderColor;
+
+    if (isVerified) {
+      statusColor = const Color(0xFF4CAF50);
+      statusText = 'Verified by community';
+      statusIcon = Icons.verified;
+      subText = '$verCount / 3 neighbors confirmed this report';
+      borderColor = const Color(0xFF4CAF50).withValues(alpha: 0.3);
+    } else if (_isExpired) {
+      statusColor = SojornColors.textDisabled;
+      statusText = 'Verification expired';
+      statusIcon = Icons.timer_off_outlined;
+      subText = 'Only $verCount / 3 verifications received before the 4-hour window closed';
+      borderColor = SojornColors.textDisabled.withValues(alpha: 0.2);
+    } else {
+      statusColor = SojornColors.nsfwWarningIcon;
+      statusText = 'Awaiting verification';
+      statusIcon = Icons.pending;
+      subText = '$verCount / 3 neighbors confirmed this report';
+      borderColor = AppTheme.navyBlue.withValues(alpha: 0.08);
+    }
+
     return Padding(
       padding: const EdgeInsets.fromLTRB(20, 20, 20, 0),
       child: Column(
@@ -271,23 +327,20 @@ class _BeaconDetailScreenState extends ConsumerState<BeaconDetailScreen>
             decoration: BoxDecoration(
               color: AppTheme.scaffoldBg,
               borderRadius: BorderRadius.circular(12),
-              border: Border.all(color: isVerified ? const Color(0xFF4CAF50).withValues(alpha: 0.3) : AppTheme.navyBlue.withValues(alpha: 0.08)),
+              border: Border.all(color: borderColor),
             ),
             child: Row(
               children: [
-                Icon(isVerified ? Icons.verified : Icons.pending,
-                  color: isVerified ? const Color(0xFF4CAF50) : SojornColors.nsfwWarningIcon, size: 28),
+                Icon(statusIcon, color: statusColor, size: 28),
                 const SizedBox(width: 12),
                 Expanded(
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Text(isVerified ? 'Verified by community' : 'Awaiting verification',
-                        style: TextStyle(
-                          color: isVerified ? const Color(0xFF4CAF50) : SojornColors.nsfwWarningIcon,
-                          fontSize: 14, fontWeight: FontWeight.w600)),
+                      Text(statusText,
+                        style: TextStyle(color: statusColor, fontSize: 14, fontWeight: FontWeight.w600)),
                       const SizedBox(height: 2),
-                      Text('$verCount / 3 neighbors confirmed this report',
+                      Text(subText,
                         style: TextStyle(color: SojornColors.textDisabled, fontSize: 12)),
                     ],
                   ),
@@ -296,17 +349,17 @@ class _BeaconDetailScreenState extends ConsumerState<BeaconDetailScreen>
             ),
           ),
           const SizedBox(height: 10),
-          // Verification progress bar
           ClipRRect(
             borderRadius: BorderRadius.circular(4),
             child: LinearProgressIndicator(
               value: (verCount / 3).clamp(0.0, 1.0),
               minHeight: 4,
               backgroundColor: AppTheme.navyBlue.withValues(alpha: 0.08),
-              valueColor: AlwaysStoppedAnimation<Color>(isVerified ? const Color(0xFF4CAF50) : SojornColors.nsfwWarningIcon),
+              valueColor: AlwaysStoppedAnimation<Color>(statusColor),
             ),
           ),
-          if (!isVerified) ...[
+          // Only show countdown when still active (not expired, not verified)
+          if (!isVerified && !_isExpired) ...[
             const SizedBox(height: 8),
             _buildExpiryCountdown(),
           ],
@@ -320,18 +373,7 @@ class _BeaconDetailScreenState extends ConsumerState<BeaconDetailScreen>
     final now = DateTime.now();
     final remaining = expiry.difference(now);
 
-    if (remaining.isNegative) {
-      return Row(
-        children: [
-          Icon(Icons.timer_off_outlined, size: 12, color: SojornColors.textDisabled),
-          const SizedBox(width: 4),
-          Expanded(
-            child: Text('This report expired — not enough community verifications',
-              style: TextStyle(color: SojornColors.textDisabled, fontSize: 11)),
-          ),
-        ],
-      );
-    }
+    if (remaining.isNegative) return const SizedBox.shrink();
 
     final hours = remaining.inHours;
     final minutes = remaining.inMinutes % 60;
@@ -349,50 +391,113 @@ class _BeaconDetailScreenState extends ConsumerState<BeaconDetailScreen>
     );
   }
 
-  Widget _buildActionButtons(Color severityColor) {
-    return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 20),
-      child: Column(
+  /// Compact urgency row shown directly above the vouch button.
+  Widget _buildVouchUrgencyBanner() {
+    final isVerified = _beacon.verificationCount >= 3;
+    if (isVerified || _isExpired) return const SizedBox.shrink();
+
+    final expiry = _beacon.createdAt.add(const Duration(hours: 4));
+    final remaining = expiry.difference(DateTime.now());
+    if (remaining.isNegative) return const SizedBox.shrink();
+
+    final hours = remaining.inHours;
+    final minutes = remaining.inMinutes % 60;
+    final timeStr = hours > 0 ? '${hours}h ${minutes}m' : '${minutes}m';
+
+    // Pick urgency color: red if under 30 min, orange otherwise
+    final isUrgent = remaining.inMinutes < 30;
+    final urgencyColor = isUrgent ? SojornColors.destructive : SojornColors.nsfwWarningIcon;
+
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+      decoration: BoxDecoration(
+        color: urgencyColor.withValues(alpha: 0.08),
+        borderRadius: BorderRadius.circular(10),
+        border: Border.all(color: urgencyColor.withValues(alpha: 0.25)),
+      ),
+      child: Row(
         children: [
-          // "I see this too" button — primary action
-          SizedBox(
-            width: double.infinity,
-            height: 50,
-            child: ElevatedButton.icon(
-              onPressed: _isVouching ? null : _vouchBeacon,
-              icon: _isVouching
-                  ? const SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2, color: SojornColors.basicWhite))
-                  : const Icon(Icons.visibility, size: 20),
-              label: Text(_isVouching ? 'Confirming...' : 'I see this too',
-                style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 15)),
-              style: ElevatedButton.styleFrom(
-                backgroundColor: const Color(0xFF388E3C),
-                foregroundColor: SojornColors.basicWhite,
-                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-                disabledBackgroundColor: const Color(0xFF4CAF50).withValues(alpha: 0.3),
-              ),
-            ),
-          ),
-          const SizedBox(height: 10),
-          // False alarm / report button — secondary action
-          SizedBox(
-            width: double.infinity,
-            height: 44,
-            child: OutlinedButton.icon(
-              onPressed: _isReporting ? null : _reportBeacon,
-              icon: _isReporting
-                  ? SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2, color: SojornColors.destructive))
-                  : Icon(Icons.flag, size: 18, color: SojornColors.destructive.withValues(alpha: 0.7)),
-              label: Text(_isReporting ? 'Reporting...' : 'False alarm / Report',
-                style: TextStyle(color: SojornColors.destructive.withValues(alpha: 0.7), fontSize: 13)),
-              style: OutlinedButton.styleFrom(
-                side: BorderSide(color: SojornColors.destructive.withValues(alpha: 0.3)),
-                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-              ),
+          Icon(Icons.timer_outlined, size: 14, color: urgencyColor),
+          const SizedBox(width: 7),
+          Expanded(
+            child: Text(
+              'Needs verification in $timeStr or it expires',
+              style: TextStyle(color: urgencyColor, fontSize: 12, fontWeight: FontWeight.w600),
             ),
           ),
         ],
       ),
+    );
+  }
+
+  Widget _buildActionButtons(Color severityColor) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 20),
+      child: _isExpired
+          ? Container(
+              width: double.infinity,
+              padding: const EdgeInsets.symmetric(vertical: 16),
+              decoration: BoxDecoration(
+                color: SojornColors.textDisabled.withValues(alpha: 0.07),
+                borderRadius: BorderRadius.circular(12),
+                border: Border.all(color: SojornColors.textDisabled.withValues(alpha: 0.2)),
+              ),
+              child: Column(
+                children: [
+                  Icon(Icons.timer_off_outlined, size: 22, color: SojornColors.textDisabled),
+                  const SizedBox(height: 6),
+                  Text('This report has expired',
+                    style: TextStyle(color: SojornColors.textDisabled, fontSize: 14, fontWeight: FontWeight.w600)),
+                  const SizedBox(height: 2),
+                  Text('Not enough community verifications within 4 hours',
+                    style: TextStyle(color: SojornColors.textDisabled, fontSize: 11)),
+                ],
+              ),
+            )
+          : Column(
+              children: [
+                // Urgency CTA — show expiry time right above the verify button
+                _buildVouchUrgencyBanner(),
+                const SizedBox(height: 8),
+                // "I see this too" button — primary action
+                SizedBox(
+                  width: double.infinity,
+                  height: 50,
+                  child: ElevatedButton.icon(
+                    onPressed: _isVouching ? null : _vouchBeacon,
+                    icon: _isVouching
+                        ? const SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2, color: SojornColors.basicWhite))
+                        : const Icon(Icons.visibility, size: 20),
+                    label: Text(_isVouching ? 'Confirming...' : 'I see this too',
+                      style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 15)),
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: const Color(0xFF388E3C),
+                      foregroundColor: SojornColors.basicWhite,
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                      disabledBackgroundColor: const Color(0xFF4CAF50).withValues(alpha: 0.3),
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 10),
+                // False alarm / report button — secondary action
+                SizedBox(
+                  width: double.infinity,
+                  height: 44,
+                  child: OutlinedButton.icon(
+                    onPressed: _isReporting ? null : _reportBeacon,
+                    icon: _isReporting
+                        ? SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2, color: SojornColors.destructive))
+                        : Icon(Icons.flag, size: 18, color: SojornColors.destructive.withValues(alpha: 0.7)),
+                    label: Text(_isReporting ? 'Reporting...' : 'False alarm / Report',
+                      style: TextStyle(color: SojornColors.destructive.withValues(alpha: 0.7), fontSize: 13)),
+                    style: OutlinedButton.styleFrom(
+                      side: BorderSide(color: SojornColors.destructive.withValues(alpha: 0.3)),
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                    ),
+                  ),
+                ),
+              ],
+            ),
     );
   }
 

@@ -166,6 +166,10 @@ class Beacon {
   final int radius; // area of effect in meters
   final int verificationCount; // "I see this too" vouches
 
+  // Official/government source fields
+  final bool isOfficial;
+  final String? officialSource;
+
   Beacon({
     required this.id,
     required this.body,
@@ -190,6 +194,8 @@ class Beacon {
     this.incidentStatus = BeaconIncidentStatus.active,
     this.radius = 500,
     this.verificationCount = 0,
+    this.isOfficial = false,
+    this.officialSource,
   });
 
   /// Parse double from various types
@@ -236,6 +242,8 @@ class Beacon {
       incidentStatus: BeaconIncidentStatus.fromString(json['incident_status'] as String? ?? 'active'),
       radius: _parseInt(json['radius'] ?? 500),
       verificationCount: _parseInt(json['verification_count'] ?? 0),
+      isOfficial: json['is_official'] as bool? ?? false,
+      officialSource: json['official_source'] as String?,
     );
   }
 
@@ -307,6 +315,8 @@ class Beacon {
       'incident_status': incidentStatus.value,
       'radius': radius,
       'verification_count': verificationCount,
+      'is_official': isOfficial,
+      if (officialSource != null) 'official_source': officialSource,
       if (groupId != null) 'group_id': groupId,
     };
   }

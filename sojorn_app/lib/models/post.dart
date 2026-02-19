@@ -85,6 +85,10 @@ class Post {
   final int? vouchCount;
   final int? reportCount;
 
+  // Official/government source fields
+  final bool? isOfficial;
+  final String? officialSource;
+
   final double? latitude;
   final double? longitude;
   final double? distanceMeters;
@@ -159,6 +163,8 @@ class Post {
     this.verificationCount,
     this.vouchCount,
     this.reportCount,
+    this.isOfficial,
+    this.officialSource,
     this.latitude,
     this.longitude,
     this.distanceMeters,
@@ -316,6 +322,8 @@ class Post {
       verificationCount: _parseInt(json['verification_count']),
       vouchCount: _parseInt(json['vouch_count']),
       reportCount: _parseInt(json['report_count']),
+      isOfficial: json['is_official'] as bool?,
+      officialSource: json['official_source'] as String?,
       latitude: _parseLatitude(json),
       longitude: _parseLongitude(json),
       distanceMeters: _parseDouble(json['distance_meters']),
@@ -511,6 +519,8 @@ extension PostBeaconExtension on Post {
       incidentStatus: BeaconIncidentStatus.fromString(incidentStatus ?? 'active'),
       radius: radius ?? 500,
       verificationCount: verificationCount ?? 0,
+      isOfficial: isOfficial ?? false,
+      officialSource: officialSource,
     );
   }
 }
