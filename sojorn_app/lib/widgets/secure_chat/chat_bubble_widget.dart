@@ -397,12 +397,12 @@ class _ChatBubbleWidgetState extends State<ChatBubbleWidget>
                   ...attachments.images.map(
                     (url) => Padding(
                       padding: const EdgeInsets.only(bottom: 8),
-                      child: GestureDetector(
-                        onTap: () => _showImageFullscreen(context, url),
-                        child: ClipRRect(
-                          borderRadius: BorderRadius.circular(12),
-                          child: ConstrainedBox(
-                            constraints: const BoxConstraints(maxHeight: 200),
+                      child: ClipRRect(
+                        borderRadius: BorderRadius.circular(12),
+                        child: AspectRatio(
+                          aspectRatio: 4 / 5, // portrait cap — never taller than 4:5
+                          child: GestureDetector(
+                            onTap: () => _showImageFullscreen(context, url),
                             child: SignedMediaImage(
                               url: url,
                               width: double.infinity,
