@@ -408,7 +408,7 @@ class _ThreadedConversationScreenState extends ConsumerState<ThreadedConversatio
                           reactionCounts: _reactionCountsFor(parentPost),
                           myReactions: _myReactionsFor(parentPost),
                           onToggleReaction: (emoji) => _toggleReaction(parentPost.id, emoji),
-                          onAddReaction: () => _openReactionPicker(parentPost.id),
+                          onAddReaction: (pos) => _openReactionPicker(parentPost.id, pos),
                           mode: ReactionsDisplayMode.compact,
                           padding: EdgeInsets.zero,
                         ),
@@ -637,7 +637,7 @@ class _ThreadedConversationScreenState extends ConsumerState<ThreadedConversatio
           myReactions: _myReactionsFor(post),
           reactionUsers: _reactionUsersFor(post),
           onToggleReaction: (emoji) => _toggleReaction(post.id, emoji),
-          onAddReaction: () => _openReactionPicker(post.id),
+          onAddReaction: (pos) => _openReactionPicker(post.id, pos),
           mode: ReactionsDisplayMode.full,
         ),
         const SizedBox(height: 16),
@@ -982,7 +982,7 @@ class _ThreadedConversationScreenState extends ConsumerState<ThreadedConversatio
                           reactionCounts: _reactionCountsFor(post),
                           myReactions: _myReactionsFor(post),
                           onToggleReaction: (emoji) => _toggleReaction(post.id, emoji),
-                          onAddReaction: () => _openReactionPicker(post.id),
+                          onAddReaction: (pos) => _openReactionPicker(post.id, pos),
                           mode: ReactionsDisplayMode.compact,
                           padding: EdgeInsets.zero,
                         ),
@@ -1064,21 +1064,70 @@ class _ThreadedConversationScreenState extends ConsumerState<ThreadedConversatio
     return null;
   }
 
-  Future<void> _openReactionPicker(String postId) async {
-  final post = _findPostById(postId);
-  if (post == null) return;
-  
-  showDialog(
-    context: context,
-    builder: (context) => ReactionPicker(
-      onReactionSelected: (emoji) {
-        _toggleReaction(postId, emoji);
-      },
-      reactionCounts: _reactionCountsFor(post),
-      myReactions: _myReactionsFor(post),
-    ),
-  );
-}
+  Future<void> _openReactionPicker(String postId, Offset tapPosition) async {
+    const quickEmojis = ['❤️', '👍', '😂', '😮', '😢', '😡', '🎉', '🔥'];
+    final screenSize = MediaQuery.of(context).size;
+    final myReactions = _myReactionsByPost[postId] ?? <String>{};
+
+    const pillWidth = 320.0;
+    const pillHeight = 52.0;
+    double left = tapPosition.dx - pillWidth / 2;
+    double top = tapPosition.dy - pillHeight - 12;
+    left = left.clamp(8.0, screenSize.width - pillWidth - 8);
+    top = top.clamp(8.0, screenSize.height - pillHeight - 8);
+
+    showDialog<void>(
+      context: context,
+      barrierColor: Colors.black12,
+      builder: (ctx) => GestureDetector(
+        behavior: HitTestBehavior.opaque,
+        onTap: () => Navigator.pop(ctx),
+        child: Stack(
+          children: [
+            Positioned(
+              left: left,
+              top: top,
+              child: GestureDetector(
+                onTap: () {},
+                child: Material(
+                  elevation: 10,
+                  borderRadius: BorderRadius.circular(32),
+                  color: AppTheme.cardSurface,
+                  child: Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: quickEmojis.map((emoji) {
+                        final isActive = myReactions.contains(emoji);
+                        return GestureDetector(
+                          onTap: () {
+                            Navigator.pop(ctx);
+                            _toggleReaction(postId, emoji);
+                          },
+                          child: AnimatedContainer(
+                            duration: const Duration(milliseconds: 120),
+                            margin: const EdgeInsets.symmetric(horizontal: 2),
+                            padding: const EdgeInsets.all(4),
+                            decoration: isActive
+                                ? BoxDecoration(
+                                    color: AppTheme.brightNavy.withValues(alpha: 0.15),
+                                    borderRadius: BorderRadius.circular(12),
+                                  )
+                                : null,
+                            child: Text(emoji, style: const TextStyle(fontSize: 26)),
+                          ),
+                        );
+                      }).toList(),
+                    ),
+                  ),
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
 
   void _seedReactionState(FocusContext focusContext) {
     _seedReactionsForPost(focusContext.targetPost);

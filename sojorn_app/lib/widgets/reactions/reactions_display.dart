@@ -23,7 +23,7 @@ class ReactionsDisplay extends StatelessWidget {
   final Set<String> myReactions;
   final Map<String, List<String>>? reactionUsers;
   final Function(String)? onToggleReaction;
-  final VoidCallback? onAddReaction;
+  final Function(Offset)? onAddReaction;
   final ReactionsDisplayMode mode;
   final EdgeInsets? padding;
 
@@ -58,7 +58,7 @@ class ReactionsDisplay extends StatelessWidget {
         if (reactionCounts.isNotEmpty) _buildTopReactionChip(),
         if (onAddReaction != null) ...[
           if (reactionCounts.isNotEmpty) const SizedBox(width: 8),
-          _ReactionAddButton(onTap: onAddReaction!),
+          _ReactionAddButton(onTapAt: onAddReaction!),
         ],
       ],
     );
@@ -81,7 +81,7 @@ class ReactionsDisplay extends StatelessWidget {
       isSelected: myReactions.contains(displayEmoji),
       tooltipNames: reactionUsers?[displayEmoji],
       onTap: () => onToggleReaction?.call(displayEmoji!),
-      onLongPress: onAddReaction,
+      onLongPressAt: onAddReaction,
     );
   }
 
@@ -97,7 +97,7 @@ class ReactionsDisplay extends StatelessWidget {
         crossAxisAlignment: WrapCrossAlignment.center,
         children: [
           if (onAddReaction != null)
-            _ReactionAddButton(onTap: onAddReaction!),
+            _ReactionAddButton(onTapAt: onAddReaction!),
           ...sortedEntries.map((entry) {
             return _ReactionChip(
               reactionId: entry.key,
@@ -105,7 +105,7 @@ class ReactionsDisplay extends StatelessWidget {
               isSelected: myReactions.contains(entry.key),
               tooltipNames: reactionUsers?[entry.key],
               onTap: () => onToggleReaction?.call(entry.key),
-              onLongPress: onAddReaction,
+              onLongPressAt: onAddReaction,
             );
           }),
         ],
@@ -120,14 +120,14 @@ class _ReactionChip extends StatefulWidget {
   final bool isSelected;
   final List<String>? tooltipNames;
   final VoidCallback onTap;
-  final VoidCallback? onLongPress;
+  final Function(Offset)? onLongPressAt;
 
   const _ReactionChip({
     required this.reactionId,
     required this.count,
     required this.isSelected,
     required this.onTap,
-    this.onLongPress,
+    this.onLongPressAt,
     this.tooltipNames,
   });
 
@@ -150,7 +150,9 @@ class _ReactionChipState extends State<_ReactionChip> {
     
     final chip = GestureDetector(
       onTap: _handleTap,
-      onLongPress: widget.onLongPress,
+      onLongPressStart: widget.onLongPressAt != null
+          ? (d) => widget.onLongPressAt!(d.globalPosition)
+          : null,
       child: AnimatedContainer(
         duration: const Duration(milliseconds: 150),
         height: 44,
@@ -208,14 +210,14 @@ class _ReactionChipState extends State<_ReactionChip> {
 }
 
 class _ReactionAddButton extends StatelessWidget {
-  final VoidCallback onTap;
+  final Function(Offset) onTapAt;
 
-  const _ReactionAddButton({required this.onTap});
+  const _ReactionAddButton({required this.onTapAt});
 
   @override
   Widget build(BuildContext context) {
     return GestureDetector(
-      onTap: onTap,
+      onTapUp: (d) => onTapAt(d.globalPosition),
       child: Container(
         height: 44,
         padding: const EdgeInsets.symmetric(horizontal: 10),
