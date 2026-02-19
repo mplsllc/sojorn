@@ -807,6 +807,75 @@ class ApiService {
   }
 
 
+  Future<List<Post>> fetchOfficialCameras({
+    required double lat,
+    required double long,
+    int radius = 16000,
+  }) async {
+    try {
+      final data = await _callGoApi(
+        '/beacons/cameras',
+        method: 'GET',
+        queryParams: {
+          'lat': lat.toString(),
+          'long': long.toString(),
+          'radius': radius.toString(),
+        },
+      );
+      return (data['beacons'] as List)
+          .map((json) => Post.fromJson(json))
+          .toList();
+    } catch (e) {
+      return [];
+    }
+  }
+
+  Future<List<Post>> fetchOfficialSigns({
+    required double lat,
+    required double long,
+    int radius = 16000,
+  }) async {
+    try {
+      final data = await _callGoApi(
+        '/beacons/signs',
+        method: 'GET',
+        queryParams: {
+          'lat': lat.toString(),
+          'long': long.toString(),
+          'radius': radius.toString(),
+        },
+      );
+      return (data['beacons'] as List)
+          .map((json) => Post.fromJson(json))
+          .toList();
+    } catch (e) {
+      return [];
+    }
+  }
+
+  Future<List<Post>> fetchOfficialWeatherStations({
+    required double lat,
+    required double long,
+    int radius = 16000,
+  }) async {
+    try {
+      final data = await _callGoApi(
+        '/beacons/weather',
+        method: 'GET',
+        queryParams: {
+          'lat': lat.toString(),
+          'long': long.toString(),
+          'radius': radius.toString(),
+        },
+      );
+      return (data['beacons'] as List)
+          .map((json) => Post.fromJson(json))
+          .toList();
+    } catch (e) {
+      return [];
+    }
+  }
+
   Future<List<Post>> fetchOfficialAlerts({
     required double lat,
     required double long,

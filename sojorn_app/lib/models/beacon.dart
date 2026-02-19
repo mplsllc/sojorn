@@ -56,6 +56,9 @@ enum BeaconType {
   hazard('hazard', 'Road Hazard', 'Physical danger (Debris, Ice, Floods)', Icons.report_problem, Color(0xFFFFC107), BeaconMode.geoAlert),
   fire('fire', 'Fire', 'Report fires or smoke', Icons.local_fire_department, Color(0xFFF44336), BeaconMode.geoAlert),
   safety('safety', 'Safety Alert', 'Events (Fights, Gunshots, Active threats)', Icons.shield, Color(0xFFF44336), BeaconMode.geoAlert),
+  camera('camera', 'Traffic Camera', 'Live MN DOT traffic camera feed', Icons.videocam, Color(0xFF26C6DA), BeaconMode.geoAlert),
+  sign('sign', 'Road Sign', 'MN DOT electronic road sign', Icons.signpost, Color(0xFFFFAB00), BeaconMode.geoAlert),
+  weatherStation('weather_station', 'Weather Station', 'MN DOT road weather sensor', Icons.cloud, Color(0xFF42A5F5), BeaconMode.geoAlert),
 
   // ── Discussion (rendered on the Neighborhood Board) ───────────────────
   community('community', 'Community Event', 'Helpful (Food drives, Meetups)', Icons.volunteer_activism, Color(0xFF009688), BeaconMode.discussion),
@@ -170,6 +173,9 @@ class Beacon {
   final bool isOfficial;
   final String? officialSource;
 
+  // Camera-specific: HLS m3u8 stream URL
+  final String? streamUrl;
+
   Beacon({
     required this.id,
     required this.body,
@@ -196,6 +202,7 @@ class Beacon {
     this.verificationCount = 0,
     this.isOfficial = false,
     this.officialSource,
+    this.streamUrl,
   });
 
   /// Parse double from various types
@@ -244,6 +251,7 @@ class Beacon {
       verificationCount: _parseInt(json['verification_count'] ?? 0),
       isOfficial: json['is_official'] as bool? ?? false,
       officialSource: json['official_source'] as String?,
+      streamUrl: json['video_url'] as String?,
     );
   }
 
@@ -317,6 +325,7 @@ class Beacon {
       'verification_count': verificationCount,
       'is_official': isOfficial,
       if (officialSource != null) 'official_source': officialSource,
+      if (streamUrl != null) 'video_url': streamUrl,
       if (groupId != null) 'group_id': groupId,
     };
   }

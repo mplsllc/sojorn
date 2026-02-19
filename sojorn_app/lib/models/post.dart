@@ -521,6 +521,7 @@ extension PostBeaconExtension on Post {
       verificationCount: verificationCount ?? 0,
       isOfficial: isOfficial ?? false,
       officialSource: officialSource,
+      streamUrl: videoUrl,
     );
   }
 }

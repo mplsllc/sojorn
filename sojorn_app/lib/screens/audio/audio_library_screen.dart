@@ -3,6 +3,7 @@ import 'dart:io';
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:path_provider/path_provider.dart';
 import 'package:video_player/video_player.dart';
 
 import '../../config/api_config.dart';
@@ -116,19 +117,32 @@ class _AudioLibraryScreenState extends ConsumerState<AudioLibraryScreen>
   }
 
   Future<void> _pickDeviceAudio() async {
+    // withData: true ensures bytes are available for Android content:// URIs
+    // where file.path is null (modern Android scoped storage).
     final result = await FilePicker.platform.pickFiles(
       type: FileType.audio,
       allowMultiple: false,
+      withData: true,
     );
-    if (result != null && result.files.isNotEmpty && mounted) {
-      final file = result.files.first;
-      final path = file.path;
-      if (path != null) {
-        Navigator.of(context).pop(AudioTrack(
-          path: path,
-          title: file.name,
-        ));
+    if (result == null || result.files.isEmpty || !mounted) return;
+
+    final file = result.files.first;
+    var path = file.path;
+
+    // On Android, path is null for content:// URIs — copy bytes to a temp file.
+    if (path == null && file.bytes != null) {
+      try {
+        final dir = await getTemporaryDirectory();
+        final tmp = File('${dir.path}/${file.name}');
+        await tmp.writeAsBytes(file.bytes!);
+        path = tmp.path;
+      } catch (_) {
+        return;
       }
+    }
+
+    if (path != null && mounted) {
+      Navigator.of(context).pop(AudioTrack(path: path, title: file.name));
     }
   }
 

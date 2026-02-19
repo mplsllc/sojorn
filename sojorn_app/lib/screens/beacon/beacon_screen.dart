@@ -21,6 +21,7 @@ import '../../services/local_intel_service.dart';
 import '../../services/capsule_security_service.dart';
 import '../../widgets/safety/active_alerts_ticker.dart';
 import 'beacon_detail_screen.dart';
+import 'camera_viewer_sheet.dart';
 import 'create_beacon_sheet.dart';
 import 'create_board_post_sheet.dart';
 import 'board_entry_detail_screen.dart';
@@ -32,6 +33,7 @@ import '../../theme/tokens.dart';
 import '../../theme/app_theme.dart';
 import '../../widgets/media/sojorn_avatar.dart';
 import '../../widgets/neighborhood/neighborhood_picker_sheet.dart';
+import 'package:url_launcher/url_launcher.dart';
 
 enum BeaconTab { map, board, search, groups }
 enum NeighborhoodHubTab { feed, chat, forum, members }
@@ -63,6 +65,9 @@ class BeaconScreenState extends ConsumerState<BeaconScreen> with TickerProviderS
 
   List<Post> _beacons = [];
   List<Post> _officialPosts = []; // MN511 government alerts
+  List<Beacon> _cameraPosts = []; // MN511 traffic cameras
+  List<Beacon> _signPosts = []; // MN511 DMS road signs
+  List<Beacon> _weatherPosts = []; // MN511 RWIS weather stations
   List<Beacon> _beaconModels = [];
   bool _isLoading = false;
   bool _isLoadingLocation = false;
@@ -343,15 +348,36 @@ class BeaconScreenState extends ConsumerState<BeaconScreen> with TickerProviderS
           long: target.longitude,
           radius: 16000,
         ),
+        apiService.fetchOfficialCameras(
+          lat: target.latitude,
+          long: target.longitude,
+          radius: 16000,
+        ),
+        apiService.fetchOfficialSigns(
+          lat: target.latitude,
+          long: target.longitude,
+          radius: 16000,
+        ),
+        apiService.fetchOfficialWeatherStations(
+          lat: target.latitude,
+          long: target.longitude,
+          radius: 16000,
+        ),
       ]);
       final beacons = results[0];
       final official = results[1];
-      debugPrint('[Beacon] fetched ${beacons.length} user beacons + ${official.length} official alerts');
+      final cameras = results[2];
+      final signs = results[3];
+      final weather = results[4];
+      debugPrint('[Beacon] fetched ${beacons.length} user beacons + ${official.length} official alerts + ${cameras.length} cameras + ${signs.length} signs + ${weather.length} weather');
       if (mounted) {
         setState(() {
           _beacons = beacons.where((p) => p.isBeaconPost).toList()
             ..sort((a, b) => (a.distanceMeters ?? 0).compareTo(b.distanceMeters ?? 0));
           _officialPosts = official.where((p) => p.isBeaconPost).toList();
+          _cameraPosts = cameras.where((p) => p.isBeaconPost).map((p) => p.toBeacon()).toList();
+          _signPosts = signs.where((p) => p.isBeaconPost).map((p) => p.toBeacon()).toList();
+          _weatherPosts = weather.where((p) => p.isBeaconPost).map((p) => p.toBeacon()).toList();
           _beaconModels = [..._beacons, ..._officialPosts].map((p) => p.toBeacon()).toList();
           _isLoading = false;
         });
@@ -801,7 +827,15 @@ class BeaconScreenState extends ConsumerState<BeaconScreen> with TickerProviderS
 
   // ─── Map tab (map + overlay + draggable sheet) ────────────────────────
   Widget _buildMapTab() {
-    final screenH = MediaQuery.of(context).size.height;
+    return LayoutBuilder(builder: (context, constraints) {
+      // Use actual container height (excludes AppBar + NavBar) so FAB and pill
+      // align correctly with the DraggableScrollableSheet fraction.
+      final screenH = constraints.maxHeight;
+      return _buildMapStack(screenH);
+    });
+  }
+
+  Widget _buildMapStack(double screenH) {
     return Stack(
       children: [
         _buildMap(),
@@ -2512,6 +2546,15 @@ class BeaconScreenState extends ConsumerState<BeaconScreen> with TickerProviderS
             builder: _buildClusterWidget,
           ),
         ),
+        // Camera markers — shown only when zoomed in enough (≥ 12)
+        if (_currentZoom >= 12.0 && _cameraPosts.isNotEmpty)
+          MarkerLayer(markers: _buildCameraMarkers()),
+        // DMS sign markers — zoom ≥ 11
+        if (_currentZoom >= 11.0 && _signPosts.isNotEmpty)
+          MarkerLayer(markers: _buildSignMarkers()),
+        // RWIS weather station markers — zoom ≥ 10
+        if (_currentZoom >= 10.0 && _weatherPosts.isNotEmpty)
+          MarkerLayer(markers: _buildWeatherMarkers()),
         // User location marker (not clustered)
         if (_locationPermissionGranted && _userLocation != null)
           MarkerLayer(markers: [_createUserLocationMarker()]),
@@ -2613,6 +2656,109 @@ class BeaconScreenState extends ConsumerState<BeaconScreen> with TickerProviderS
           ),
         ),
       ),
+    );
+  }
+
+  // ─── Camera marker layer ──────────────────────────────────────────────
+  List<Marker> _buildCameraMarkers() {
+    return _cameraPosts.map((cam) {
+      if (cam.beaconLat == null || cam.beaconLong == null) return null;
+      return Marker(
+        key: ValueKey('camera:${cam.id}'),
+        point: LatLng(cam.beaconLat!, cam.beaconLong!),
+        width: 28,
+        height: 28,
+        child: GestureDetector(
+          onTap: () => _showCameraSheet(cam),
+          child: Container(
+            decoration: BoxDecoration(
+              color: const Color(0xFF0097A7),
+              shape: BoxShape.circle,
+              boxShadow: [BoxShadow(color: Colors.black26, blurRadius: 4, offset: const Offset(0, 2))],
+            ),
+            child: const Icon(Icons.videocam, color: Colors.white, size: 16),
+          ),
+        ),
+      );
+    }).whereType<Marker>().toList();
+  }
+
+  void _showCameraSheet(Beacon cam) {
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: Colors.transparent,
+      isScrollControlled: true,
+      useSafeArea: true,
+      builder: (ctx) => CameraViewerSheet(camera: cam),
+    );
+  }
+
+  // ─── Sign marker layer ────────────────────────────────────────────────
+  List<Marker> _buildSignMarkers() {
+    return _signPosts.map((sign) {
+      if (sign.beaconLat == null || sign.beaconLong == null) return null;
+      return Marker(
+        key: ValueKey('sign:${sign.id}'),
+        point: LatLng(sign.beaconLat!, sign.beaconLong!),
+        width: 28,
+        height: 28,
+        child: GestureDetector(
+          onTap: () => _showSignSheet(sign),
+          child: Container(
+            decoration: BoxDecoration(
+              color: const Color(0xFFFFAB00),
+              shape: BoxShape.circle,
+              boxShadow: [BoxShadow(color: Colors.black26, blurRadius: 4, offset: const Offset(0, 2))],
+            ),
+            child: const Icon(Icons.signpost, color: Colors.white, size: 16),
+          ),
+        ),
+      );
+    }).whereType<Marker>().toList();
+  }
+
+  void _showSignSheet(Beacon sign) {
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: Colors.transparent,
+      isScrollControlled: true,
+      useSafeArea: true,
+      builder: (ctx) => _SignDetailSheet(sign: sign),
+    );
+  }
+
+  // ─── Weather station marker layer ─────────────────────────────────────
+  List<Marker> _buildWeatherMarkers() {
+    return _weatherPosts.map((wx) {
+      if (wx.beaconLat == null || wx.beaconLong == null) return null;
+      final color = wx.severity.color;
+      return Marker(
+        key: ValueKey('weather:${wx.id}'),
+        point: LatLng(wx.beaconLat!, wx.beaconLong!),
+        width: 28,
+        height: 28,
+        child: GestureDetector(
+          onTap: () => _showWeatherSheet(wx),
+          child: Container(
+            decoration: BoxDecoration(
+              color: color,
+              shape: BoxShape.circle,
+              boxShadow: [BoxShadow(color: Colors.black26, blurRadius: 4, offset: const Offset(0, 2))],
+            ),
+            child: const Icon(Icons.cloud, color: Colors.white, size: 16),
+          ),
+        ),
+      );
+    }).whereType<Marker>().toList();
+  }
+
+  void _showWeatherSheet(Beacon wx) {
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: Colors.transparent,
+      isScrollControlled: true,
+      useSafeArea: true,
+      builder: (ctx) => _WeatherDetailSheet(wx: wx),
     );
   }
 
@@ -3105,6 +3251,178 @@ class _CreateCapsuleInlineState extends State<_CreateCapsuleInline> {
                     ]),
             ),
           ),
+        ],
+      ),
+    );
+  }
+}
+
+// ─── DMS Sign detail sheet ────────────────────────────────────────────
+class _SignDetailSheet extends StatelessWidget {
+  final Beacon sign;
+  const _SignDetailSheet({required this.sign});
+
+  static const _amber = Color(0xFFFFAB00);
+
+  @override
+  Widget build(BuildContext context) {
+    final bottomPad = MediaQuery.of(context).padding.bottom;
+    return Container(
+      decoration: const BoxDecoration(
+        color: Color(0xFF0A1628),
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      padding: EdgeInsets.only(bottom: bottomPad + 16, left: 16, right: 16),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Padding(
+            padding: const EdgeInsets.symmetric(vertical: 10),
+            child: Container(
+              width: 36, height: 4,
+              decoration: BoxDecoration(
+                color: Colors.white.withValues(alpha: 0.2),
+                borderRadius: BorderRadius.circular(2),
+              ),
+            ),
+          ),
+          Row(
+            children: [
+              Container(
+                padding: const EdgeInsets.all(8),
+                decoration: BoxDecoration(color: _amber.withValues(alpha: 0.2), shape: BoxShape.circle),
+                child: const Icon(Icons.signpost, color: _amber, size: 20),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const Text('Road Sign', style: TextStyle(color: Colors.white, fontWeight: FontWeight.w700, fontSize: 15)),
+                    Text('MN DOT Electronic Sign', style: TextStyle(color: Colors.white.withValues(alpha: 0.45), fontSize: 11)),
+                  ],
+                ),
+              ),
+              IconButton(
+                onPressed: () => Navigator.pop(context),
+                icon: Icon(Icons.close, color: Colors.white.withValues(alpha: 0.4), size: 20),
+                padding: EdgeInsets.zero,
+                constraints: const BoxConstraints(minWidth: 36, minHeight: 36),
+              ),
+            ],
+          ),
+          const SizedBox(height: 12),
+          Divider(height: 1, color: Colors.white.withValues(alpha: 0.08)),
+          const SizedBox(height: 16),
+          if (sign.imageUrl != null && sign.imageUrl!.isNotEmpty) ...[
+            ClipRRect(
+              borderRadius: BorderRadius.circular(10),
+              child: Image.network(
+                sign.imageUrl!,
+                fit: BoxFit.contain,
+                height: 140,
+                errorBuilder: (_, __, ___) => const SizedBox.shrink(),
+              ),
+            ),
+            const SizedBox(height: 14),
+          ],
+          Container(
+            width: double.infinity,
+            padding: const EdgeInsets.all(14),
+            decoration: BoxDecoration(
+              color: Colors.white.withValues(alpha: 0.05),
+              borderRadius: BorderRadius.circular(10),
+              border: Border.all(color: _amber.withValues(alpha: 0.2)),
+            ),
+            child: Text(sign.body, style: const TextStyle(color: Colors.white, fontSize: 14)),
+          ),
+          const SizedBox(height: 8),
+          Text(sign.getTimeAgo(), style: TextStyle(color: Colors.white.withValues(alpha: 0.35), fontSize: 11)),
+        ],
+      ),
+    );
+  }
+}
+
+// ─── RWIS Weather station detail sheet ───────────────────────────────
+class _WeatherDetailSheet extends StatelessWidget {
+  final Beacon wx;
+  const _WeatherDetailSheet({required this.wx});
+
+  @override
+  Widget build(BuildContext context) {
+    final bottomPad = MediaQuery.of(context).padding.bottom;
+    final severityColor = wx.severity.color;
+    return Container(
+      decoration: const BoxDecoration(
+        color: Color(0xFF0A1628),
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      padding: EdgeInsets.only(bottom: bottomPad + 16, left: 16, right: 16),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Padding(
+            padding: const EdgeInsets.symmetric(vertical: 10),
+            child: Container(
+              width: 36, height: 4,
+              decoration: BoxDecoration(
+                color: Colors.white.withValues(alpha: 0.2),
+                borderRadius: BorderRadius.circular(2),
+              ),
+            ),
+          ),
+          Row(
+            children: [
+              Container(
+                padding: const EdgeInsets.all(8),
+                decoration: BoxDecoration(color: severityColor.withValues(alpha: 0.2), shape: BoxShape.circle),
+                child: Icon(Icons.cloud, color: severityColor, size: 20),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const Text('Weather Station', style: TextStyle(color: Colors.white, fontWeight: FontWeight.w700, fontSize: 15)),
+                    Text('MN DOT RWIS Sensor', style: TextStyle(color: Colors.white.withValues(alpha: 0.45), fontSize: 11)),
+                  ],
+                ),
+              ),
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                decoration: BoxDecoration(
+                  color: severityColor.withValues(alpha: 0.2),
+                  borderRadius: BorderRadius.circular(6),
+                  border: Border.all(color: severityColor.withValues(alpha: 0.4)),
+                ),
+                child: Text(wx.severity.label.toUpperCase(),
+                  style: TextStyle(color: severityColor, fontSize: 10, fontWeight: FontWeight.w800, letterSpacing: 0.6)),
+              ),
+              const SizedBox(width: 4),
+              IconButton(
+                onPressed: () => Navigator.pop(context),
+                icon: Icon(Icons.close, color: Colors.white.withValues(alpha: 0.4), size: 20),
+                padding: EdgeInsets.zero,
+                constraints: const BoxConstraints(minWidth: 36, minHeight: 36),
+              ),
+            ],
+          ),
+          const SizedBox(height: 12),
+          Divider(height: 1, color: Colors.white.withValues(alpha: 0.08)),
+          const SizedBox(height: 16),
+          Container(
+            width: double.infinity,
+            padding: const EdgeInsets.all(14),
+            decoration: BoxDecoration(
+              color: Colors.white.withValues(alpha: 0.05),
+              borderRadius: BorderRadius.circular(10),
+              border: Border.all(color: severityColor.withValues(alpha: 0.2)),
+            ),
+            child: Text(wx.body, style: const TextStyle(color: Colors.white, fontSize: 14, height: 1.5)),
+          ),
+          const SizedBox(height: 8),
+          Text(wx.getTimeAgo(), style: TextStyle(color: Colors.white.withValues(alpha: 0.35), fontSize: 11)),
         ],
       ),
     );

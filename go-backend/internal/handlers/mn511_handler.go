@@ -307,6 +307,290 @@ func min(a, b int) int {
 	return b
 }
 
+// ─── GeoJSON helper ───────────────────────────────────────────────────────
+
+// mn511GeoFeature represents a generic GeoJSON Point feature returned by the
+// MN511 API's signs and weather-station endpoints.
+type mn511GeoFeature struct {
+	ID       string `json:"id"`
+	Geometry struct {
+		Coordinates []float64 `json:"coordinates"` // [lon, lat]
+	} `json:"geometry"`
+	Properties json.RawMessage `json:"properties"`
+}
+
+type mn511GeoFC struct {
+	OK       bool              `json:"ok"`
+	Count    int               `json:"count"`
+	Type     string            `json:"type"`
+	Features []mn511GeoFeature `json:"features"`
+}
+
+// ─── Signs (DMS / Electronic Road Signs) ─────────────────────────────────
+
+type mn511SignProps struct {
+	URI             string `json:"uri"`
+	Title           string `json:"title"`
+	CityReference   string `json:"cityReference"`
+	RouteDesignator string `json:"routeDesignator"`
+	SignStatus      string `json:"signStatus"` // DISPLAYING_MESSAGE etc.
+	Views           []struct {
+		ImageURL string `json:"imageUrl"`
+		Category string `json:"category"`
+	} `json:"views"`
+}
+
+// GetOfficialSigns fetches MN DOT electronic road signs (DMS) within the
+// given bbox and returns them in the beacon JSON shape with beacon_type "sign".
+func (h *PostHandler) GetOfficialSigns(c *gin.Context) {
+	lat := utils.GetQueryFloat(c, "lat", 0)
+	long := utils.GetQueryFloat(c, "long", 0)
+	radius := utils.GetQueryFloat(c, "radius", 16000)
+
+	if lat == 0 || long == 0 {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "lat and long are required"})
+		return
+	}
+
+	latDelta := (radius / 1000.0) / 111.0
+	lonDelta := (radius / 1000.0) / (111.0 * math.Cos(lat*math.Pi/180.0))
+	bbox := fmt.Sprintf("%.6f,%.6f,%.6f,%.6f", long-lonDelta, lat-latDelta, long+lonDelta, lat+latDelta)
+
+	apiURL := fmt.Sprintf("%s/api/signs?bbox=%s", mn511BaseURL, bbox)
+	client := &http.Client{Timeout: 8 * time.Second}
+	resp, err := client.Get(apiURL)
+	if err != nil {
+		c.JSON(http.StatusOK, gin.H{"beacons": []gin.H{}})
+		return
+	}
+	defer resp.Body.Close()
+
+	body, _ := io.ReadAll(resp.Body)
+	var fc mn511GeoFC
+	if err := json.Unmarshal(body, &fc); err != nil {
+		c.JSON(http.StatusOK, gin.H{"beacons": []gin.H{}})
+		return
+	}
+
+	results := make([]gin.H, 0, len(fc.Features))
+	for _, f := range fc.Features {
+		if len(f.Geometry.Coordinates) < 2 {
+			continue
+		}
+		fLon := f.Geometry.Coordinates[0]
+		fLat := f.Geometry.Coordinates[1]
+
+		var props mn511SignProps
+		if err := json.Unmarshal(f.Properties, &props); err != nil {
+			continue
+		}
+
+		// Only show signs that are actively displaying a message
+		if props.SignStatus != "DISPLAYING_MESSAGE" {
+			continue
+		}
+
+		// Use the first view's GIF image
+		var imageURL string
+		if len(props.Views) > 0 {
+			imageURL = props.Views[0].ImageURL
+		}
+
+		displayTitle := props.Title
+		if props.RouteDesignator != "" && displayTitle == "" {
+			displayTitle = props.RouteDesignator
+		}
+
+		dist := haversineMeters(lat, long, fLat, fLon)
+
+		createdAt := time.Now().UTC().Format(time.RFC3339)
+		item := gin.H{
+			"id":         f.ID,
+			"body":       displayTitle,
+			"created_at": createdAt,
+
+			"is_beacon":          true,
+			"is_active_beacon":   true,
+			"beacon_type":        "sign",
+			"severity":           "low",
+			"incident_status":    "active",
+			"confidence_score":   1.0,
+			"verification_count": 0,
+			"vouch_count":        0,
+			"report_count":       0,
+			"status_color":       "green",
+
+			"beacon_lat":      fLat,
+			"beacon_long":     fLon,
+			"distance_meters": dist,
+			"radius":          50,
+
+			"author_id":           "00000000-0000-0000-0000-000000000511",
+			"author_handle":       "@mn511",
+			"author_display_name": "MN 511",
+			"is_official":         true,
+			"official_source":     "MN 511",
+
+			"image_url": imageURL, // GIF of the sign display
+			"tags":      []string{},
+		}
+		results = append(results, item)
+	}
+
+	log.Info().Int("count", len(results)).Msg("mn511 signs: returned")
+	c.JSON(http.StatusOK, gin.H{"beacons": results})
+}
+
+// ─── Weather Stations (RWIS) ─────────────────────────────────────────────
+
+type mn511WeatherField struct {
+	FieldName    string `json:"fieldName"`
+	DisplayValue string `json:"displayValue"`
+	InAlertState bool   `json:"inAlertState"`
+	IsTopField   bool   `json:"isTopField"`
+}
+
+type mn511WeatherProps struct {
+	URI             string                       `json:"uri"`
+	Title           string                       `json:"title"`
+	Status          string                       `json:"status"` // FREEZING, NORMAL, etc.
+	RouteDesignator string                       `json:"routeDesignator"`
+	WeatherFields   map[string]mn511WeatherField `json:"weatherFields"`
+}
+
+// GetOfficialWeatherStations fetches MN DOT RWIS weather sensor stations and
+// returns them in the beacon JSON shape with beacon_type "weather_station".
+func (h *PostHandler) GetOfficialWeatherStations(c *gin.Context) {
+	lat := utils.GetQueryFloat(c, "lat", 0)
+	long := utils.GetQueryFloat(c, "long", 0)
+	radius := utils.GetQueryFloat(c, "radius", 16000)
+
+	if lat == 0 || long == 0 {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "lat and long are required"})
+		return
+	}
+
+	latDelta := (radius / 1000.0) / 111.0
+	lonDelta := (radius / 1000.0) / (111.0 * math.Cos(lat*math.Pi/180.0))
+	bbox := fmt.Sprintf("%.6f,%.6f,%.6f,%.6f", long-lonDelta, lat-latDelta, long+lonDelta, lat+latDelta)
+
+	apiURL := fmt.Sprintf("%s/api/weather-stations?bbox=%s", mn511BaseURL, bbox)
+	client := &http.Client{Timeout: 8 * time.Second}
+	resp, err := client.Get(apiURL)
+	if err != nil {
+		c.JSON(http.StatusOK, gin.H{"beacons": []gin.H{}})
+		return
+	}
+	defer resp.Body.Close()
+
+	body, _ := io.ReadAll(resp.Body)
+	var fc mn511GeoFC
+	if err := json.Unmarshal(body, &fc); err != nil {
+		c.JSON(http.StatusOK, gin.H{"beacons": []gin.H{}})
+		return
+	}
+
+	results := make([]gin.H, 0, len(fc.Features))
+	for _, f := range fc.Features {
+		if len(f.Geometry.Coordinates) < 2 {
+			continue
+		}
+		fLon := f.Geometry.Coordinates[0]
+		fLat := f.Geometry.Coordinates[1]
+
+		var props mn511WeatherProps
+		if err := json.Unmarshal(f.Properties, &props); err != nil {
+			continue
+		}
+
+		// Build a concise summary from top weather fields
+		summary := mn511WeatherSummary(props)
+
+		dist := haversineMeters(lat, long, fLat, fLon)
+		createdAt := time.Now().UTC().Format(time.RFC3339)
+
+		item := gin.H{
+			"id":         f.ID,
+			"body":       summary,
+			"created_at": createdAt,
+
+			"is_beacon":          true,
+			"is_active_beacon":   true,
+			"beacon_type":        "weather_station",
+			"severity":           mn511WeatherSeverity(props.Status),
+			"incident_status":    "active",
+			"confidence_score":   1.0,
+			"verification_count": 0,
+			"vouch_count":        0,
+			"report_count":       0,
+			"status_color":       "green",
+
+			"beacon_lat":      fLat,
+			"beacon_long":     fLon,
+			"distance_meters": dist,
+			"radius":          200,
+
+			"author_id":           "00000000-0000-0000-0000-000000000511",
+			"author_handle":       "@mn511",
+			"author_display_name": "MN 511",
+			"is_official":         true,
+			"official_source":     "MN 511",
+
+			"image_url": nil,
+			"tags":      []string{},
+		}
+		results = append(results, item)
+	}
+
+	log.Info().Int("count", len(results)).Msg("mn511 weather: returned")
+	c.JSON(http.StatusOK, gin.H{"beacons": results})
+}
+
+// mn511WeatherSummary builds a concise human-readable summary from top fields.
+func mn511WeatherSummary(props mn511WeatherProps) string {
+	title := props.Title
+	if props.RouteDesignator != "" {
+		title = props.RouteDesignator + " — " + props.Title
+	}
+
+	fields := props.WeatherFields
+	parts := []string{title}
+
+	if f, ok := fields["TEMP_AIR_TEMPERATURE"]; ok && f.DisplayValue != "" {
+		parts = append(parts, f.DisplayValue)
+	}
+	if f, ok := fields["PRECIP_SITUATION"]; ok && f.DisplayValue != "" && f.DisplayValue != "No Report" {
+		parts = append(parts, f.DisplayValue)
+	}
+	if f, ok := fields["IA_SURFACE_SITUATION"]; ok && f.DisplayValue != "" && f.DisplayValue != "No Report" {
+		parts = append(parts, "Road: "+f.DisplayValue)
+	} else if f, ok := fields["PAVEMENT_SURFACE_STATUS"]; ok && f.DisplayValue != "" && f.DisplayValue != "Error" {
+		parts = append(parts, "Road: "+f.DisplayValue)
+	}
+
+	result := parts[0]
+	for i := 1; i < len(parts); i++ {
+		if i == 1 {
+			result += " | " + parts[i]
+		} else {
+			result += " · " + parts[i]
+		}
+	}
+	return result
+}
+
+// mn511WeatherSeverity maps RWIS status to Sojorn severity.
+func mn511WeatherSeverity(status string) string {
+	switch status {
+	case "FREEZING", "ICY":
+		return "high"
+	case "SNOWING", "WET", "SLIPPERY":
+		return "medium"
+	default:
+		return "low"
+	}
+}
+
 // mn511SeverityToString maps MN511 1–10 severity to Sojorn severity strings.
 func mn511SeverityToString(s int) string {
 	switch {

@@ -416,7 +416,6 @@ class _HomeShellState extends ConsumerState<HomeShell> with WidgetsBindingObserv
         ),
       ),
       actions: [
-        if (isBeacon) _buildBeaconCreateButton(),
         IconButton(
           constraints: const BoxConstraints(minWidth: 48, minHeight: 48),
           padding: const EdgeInsets.all(12),

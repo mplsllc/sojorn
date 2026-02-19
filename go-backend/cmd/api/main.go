@@ -359,6 +359,8 @@ func main() {
 			authorized.GET("/beacons/nearby", postHandler.GetNearbyBeacons)
 			authorized.GET("/beacons/official", postHandler.GetOfficialAlerts)
 			authorized.GET("/beacons/cameras", postHandler.GetOfficialCameras)
+			authorized.GET("/beacons/signs", postHandler.GetOfficialSigns)
+			authorized.GET("/beacons/weather", postHandler.GetOfficialWeatherStations)
 			authorized.POST("/beacons/:id/vouch", postHandler.VouchBeacon)
 			authorized.POST("/beacons/:id/report", postHandler.ReportBeacon)
 			authorized.DELETE("/beacons/:id/vouch", postHandler.RemoveBeaconVote)

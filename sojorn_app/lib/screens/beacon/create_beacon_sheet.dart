@@ -181,6 +181,10 @@ class _CreateBeaconSheetState extends ConsumerState<CreateBeaconSheet> {
         return 'Date, time, location, what to expect or bring?';
       case BeaconType.resource:
         return 'What are you offering or looking for? How to pick up?';
+      case BeaconType.camera:
+      case BeaconType.sign:
+      case BeaconType.weatherStation:
+        return '';
     }
   }
 

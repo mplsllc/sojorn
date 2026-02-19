@@ -138,10 +138,30 @@ class _SignedMediaImageState extends ConsumerState<SignedMediaImage> {
     return widget.loadingBuilder?.call(context) ?? const SizedBox.shrink();
   }
 
+  static bool _isVideoUrl(String url) {
+    final lower = url.toLowerCase().split('?').first;
+    return lower.endsWith('.mp4') ||
+        lower.endsWith('.mov') ||
+        lower.endsWith('.webm') ||
+        lower.endsWith('.m4v') ||
+        lower.endsWith('.avi');
+  }
+
   @override
   Widget build(BuildContext context) {
     if (_resolvedUrl == null) {
       return _buildLoading(context);
+    }
+
+    // Video files cannot be decoded by Image.network — return a neutral placeholder.
+    // The call site (PostMedia) already overlays a play button, so we just need a
+    // dark background to fill the slot without spamming ImageCodecException errors.
+    if (_isVideoUrl(_resolvedUrl!)) {
+      return Container(
+        width: widget.width,
+        height: widget.height,
+        color: const Color(0xFF1A1A2E),
+      );
     }
 
     return Image.network(

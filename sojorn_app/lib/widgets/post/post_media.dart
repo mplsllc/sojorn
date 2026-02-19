@@ -47,16 +47,19 @@ class PostMedia extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    // Determine which URL to display as the cover
-    final String? displayUrl = (post?.imageUrl?.isNotEmpty == true)
-        ? post!.imageUrl
-        : (post?.thumbnailUrl?.isNotEmpty == true)
-            ? post!.thumbnailUrl
-            : null;
+    // Determine which URL to display as the cover.
+    // For video posts, prefer thumbnailUrl (poster frame) over imageUrl (which
+    // may be the .mp4 itself) so we never feed a video file to SignedMediaImage.
+    final bool isVideo = post?.hasVideoContent == true;
+    final String? displayUrl = (isVideo && post?.thumbnailUrl?.isNotEmpty == true)
+        ? post!.thumbnailUrl
+        : (post?.imageUrl?.isNotEmpty == true)
+            ? post!.imageUrl
+            : (post?.thumbnailUrl?.isNotEmpty == true)
+                ? post!.thumbnailUrl
+                : null;
 
     if (displayUrl != null) {
-      final bool isVideo = post?.hasVideoContent == true;
-      
       return Padding(
         padding: const EdgeInsets.only(top: AppTheme.spacingSm),
         child: Column(
