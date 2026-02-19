@@ -30,7 +30,8 @@ type Post struct {
 	IsActiveBeacon bool       `json:"is_active_beacon" db:"is_active_beacon"`
 	Severity       string     `json:"severity" db:"severity"`
 	IncidentStatus string     `json:"incident_status" db:"incident_status"`
-	Radius         int        `json:"radius" db:"radius"`
+	Radius          int     `json:"radius" db:"radius"`
+	DistanceMeters  float64 `json:"distance_meters,omitempty"`
 	GroupID        *uuid.UUID `json:"group_id,omitempty" db:"group_id"`
 	AllowChain     bool       `json:"allow_chain" db:"allow_chain"`
 	ChainParentID  *uuid.UUID `json:"chain_parent_id" db:"chain_parent_id"`

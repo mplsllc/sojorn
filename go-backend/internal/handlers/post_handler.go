@@ -306,6 +306,7 @@ func (h *PostHandler) GetNearbyBeacons(c *gin.Context) {
 			"severity":            b.Severity,
 			"incident_status":     b.IncidentStatus,
 			"radius":              b.Radius,
+			"distance_meters":     b.DistanceMeters,
 			"vouch_count":         b.LikeCount,    // mapped from vouch subquery
 			"report_count":        b.CommentCount, // mapped from report subquery
 			"verification_count":  b.LikeCount,    // vouches = verification

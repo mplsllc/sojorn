@@ -17,9 +17,12 @@ class ActiveAlertsTicker extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    // Filter to geo-alerts only, sorted by severity then recency
-    final geoAlerts = alerts
-        .where((a) => a.beaconType.isGeoAlert && a.incidentStatus == BeaconIncidentStatus.active)
+    // High priority ticker: critical + high severity geo-alerts only
+    final highPriority = alerts
+        .where((a) =>
+            a.beaconType.isGeoAlert &&
+            a.incidentStatus == BeaconIncidentStatus.active &&
+            (a.severity == BeaconSeverity.critical || a.severity == BeaconSeverity.high))
         .toList()
       ..sort((a, b) {
         final sevCmp = b.severity.index.compareTo(a.severity.index);
@@ -27,40 +30,84 @@ class ActiveAlertsTicker extends StatelessWidget {
         return b.createdAt.compareTo(a.createdAt);
       });
 
-    if (geoAlerts.isEmpty) {
-      return SizedBox(
-        height: 64,
-        child: Center(
+    // All active geo-alerts count for badge
+    final totalActive = alerts
+        .where((a) => a.beaconType.isGeoAlert && a.incidentStatus == BeaconIncidentStatus.active)
+        .length;
+
+    if (highPriority.isEmpty) {
+      // No high-priority alerts — show compact all-clear or just total count
+      if (totalActive == 0) {
+        return Padding(
+          padding: const EdgeInsets.fromLTRB(16, 6, 16, 4),
           child: Row(
             mainAxisSize: MainAxisSize.min,
             children: [
-              Icon(Icons.shield, color: AppTheme.brightNavy.withValues(alpha: 0.3), size: 20),
-              const SizedBox(width: 8),
-              Text(
-                'All clear — no active alerts',
-                style: TextStyle(color: AppTheme.navyBlue.withValues(alpha: 0.4), fontSize: 13),
+              Container(
+                width: 28, height: 28,
+                decoration: BoxDecoration(
+                  color: const Color(0xFF4CAF50).withValues(alpha: 0.12),
+                  shape: BoxShape.circle,
+                ),
+                child: Icon(Icons.shield, size: 16, color: const Color(0xFF4CAF50)),
               ),
+              const SizedBox(width: 10),
+              Text('All clear — no active alerts nearby',
+                style: TextStyle(color: const Color(0xFF4CAF50), fontSize: 13, fontWeight: FontWeight.w600)),
+            ],
+          ),
+        );
+      }
+      // Only medium/low alerts — don't show ticker, let the list handle it
+      return const SizedBox.shrink();
+    }
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Padding(
+          padding: const EdgeInsets.fromLTRB(16, 6, 16, 6),
+          child: Row(
+            children: [
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                decoration: BoxDecoration(
+                  color: SojornColors.destructive.withValues(alpha: 0.12),
+                  borderRadius: BorderRadius.circular(10),
+                ),
+                child: Row(mainAxisSize: MainAxisSize.min, children: [
+                  Icon(Icons.warning_rounded, size: 12, color: SojornColors.destructive),
+                  const SizedBox(width: 4),
+                  Text('HIGH PRIORITY',
+                    style: TextStyle(color: SojornColors.destructive, fontSize: 10, fontWeight: FontWeight.w800, letterSpacing: 0.5)),
+                ]),
+              ),
+              const SizedBox(width: 8),
+              if (totalActive > highPriority.length)
+                Text('+${totalActive - highPriority.length} more',
+                  style: TextStyle(color: SojornColors.textDisabled, fontSize: 11)),
             ],
           ),
         ),
-      );
-    }
-
-    return SizedBox(
-      height: 72,
-      child: ListView.separated(
-        scrollDirection: Axis.horizontal,
-        padding: const EdgeInsets.symmetric(horizontal: 16),
-        itemCount: geoAlerts.length,
-        separatorBuilder: (_, __) => const SizedBox(width: 8),
-        itemBuilder: (context, index) {
-          final alert = geoAlerts[index];
-          return _AlertCard(
-            alert: alert,
-            onTap: () => onAlertTap?.call(alert),
-          );
-        },
-      ),
+        SizedBox(
+          height: 72,
+          child: ListView.separated(
+            scrollDirection: Axis.horizontal,
+            padding: const EdgeInsets.symmetric(horizontal: 16),
+            itemCount: highPriority.length,
+            separatorBuilder: (_, __) => const SizedBox(width: 8),
+            itemBuilder: (context, index) {
+              final alert = highPriority[index];
+              return _AlertCard(
+                alert: alert,
+                onTap: () => onAlertTap?.call(alert),
+              );
+            },
+          ),
+        ),
+        const SizedBox(height: 4),
+      ],
     );
   }
 }

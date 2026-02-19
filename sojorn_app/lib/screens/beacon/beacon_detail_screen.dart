@@ -71,7 +71,7 @@ class _BeaconDetailScreenState extends ConsumerState<BeaconDetailScreen>
                   _buildIncidentInfo(severityColor),
                   _buildMetaRow(),
                   _buildVerificationSection(severityColor),
-                  const SizedBox(height: 24),
+                  const SizedBox(height: 12),
                   _buildActionButtons(severityColor),
                   const SizedBox(height: 40),
                 ],
@@ -211,25 +211,6 @@ class _BeaconDetailScreenState extends ConsumerState<BeaconDetailScreen>
                   ],
                 ),
               ),
-              // Incident status chip
-              Container(
-                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                decoration: BoxDecoration(
-                  color: _beacon.incidentStatus == BeaconIncidentStatus.active
-                      ? const Color(0xFF4CAF50).withValues(alpha: 0.2)
-                      : SojornColors.textDisabled.withValues(alpha: 0.2),
-                  borderRadius: BorderRadius.circular(8),
-                  border: Border.all(
-                    color: _beacon.incidentStatus == BeaconIncidentStatus.active
-                        ? const Color(0xFF4CAF50).withValues(alpha: 0.5)
-                        : SojornColors.textDisabled.withValues(alpha: 0.3),
-                  ),
-                ),
-                child: Text(_beacon.incidentStatus.label,
-                  style: TextStyle(
-                    color: _beacon.incidentStatus == BeaconIncidentStatus.active ? const Color(0xFF4CAF50) : SojornColors.textDisabled,
-                    fontSize: 11, fontWeight: FontWeight.w600)),
-              ),
             ],
           ),
           const SizedBox(height: 16),
@@ -325,8 +306,46 @@ class _BeaconDetailScreenState extends ConsumerState<BeaconDetailScreen>
               valueColor: AlwaysStoppedAnimation<Color>(isVerified ? const Color(0xFF4CAF50) : SojornColors.nsfwWarningIcon),
             ),
           ),
+          if (!isVerified) ...[
+            const SizedBox(height: 8),
+            _buildExpiryCountdown(),
+          ],
         ],
       ),
+    );
+  }
+
+  Widget _buildExpiryCountdown() {
+    final expiry = _beacon.createdAt.add(const Duration(hours: 4));
+    final now = DateTime.now();
+    final remaining = expiry.difference(now);
+
+    if (remaining.isNegative) {
+      return Row(
+        children: [
+          Icon(Icons.timer_off_outlined, size: 12, color: SojornColors.textDisabled),
+          const SizedBox(width: 4),
+          Expanded(
+            child: Text('This report expired — not enough community verifications',
+              style: TextStyle(color: SojornColors.textDisabled, fontSize: 11)),
+          ),
+        ],
+      );
+    }
+
+    final hours = remaining.inHours;
+    final minutes = remaining.inMinutes % 60;
+    final timeStr = hours > 0 ? '${hours}h ${minutes}m' : '${minutes}m';
+
+    return Row(
+      children: [
+        Icon(Icons.timer_outlined, size: 12, color: SojornColors.nsfwWarningIcon),
+        const SizedBox(width: 4),
+        Expanded(
+          child: Text('Expires in $timeStr if not verified by the community',
+            style: TextStyle(color: SojornColors.nsfwWarningIcon, fontSize: 11)),
+        ),
+      ],
     );
   }
 

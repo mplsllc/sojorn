@@ -107,9 +107,10 @@ class _CreateBeaconSheetState extends ConsumerState<CreateBeaconSheet> {
   Future<void> _submit() async {
     final description = _descriptionController.text.trim();
 
-    if (description.isEmpty) {
+    if (description.length < 15) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Please describe what you see.')),
+        const SnackBar(content: Text(
+            'Please add more detail — describe what you see, where, and if it\'s still happening (at least 15 characters).')),
       );
       return;
     }
@@ -151,6 +152,35 @@ class _CreateBeaconSheetState extends ConsumerState<CreateBeaconSheet> {
       }
     } finally {
       if (mounted) setState(() => _isSubmitting = false);
+    }
+  }
+
+  String get _hintText {
+    switch (_selectedType) {
+      case BeaconType.suspiciousActivity:
+        return 'What are they doing? Still happening? Which direction?';
+      case BeaconType.officialPresence:
+        return 'How many units? On which street? Any visible activity?';
+      case BeaconType.checkpoint:
+        return 'Which direction is traffic stopped? Stationary or moving through?';
+      case BeaconType.taskForce:
+        return 'How many units or vehicles? Any visible activity?';
+      case BeaconType.hazard:
+        return 'What hazard? Which lane or direction is blocked?';
+      case BeaconType.fire:
+        return 'Smoke or active fire? Which side of the structure?';
+      case BeaconType.safety:
+        return 'Describe what happened. Anyone still in the area?';
+      case BeaconType.community:
+        return 'What\'s happening? When, where, who\'s welcome?';
+      case BeaconType.lostPet:
+        return 'Breed, color, name, collar? Where and when last seen?';
+      case BeaconType.question:
+        return 'What would you like your neighbors to know or answer?';
+      case BeaconType.event:
+        return 'Date, time, location, what to expect or bring?';
+      case BeaconType.resource:
+        return 'What are you offering or looking for? How to pick up?';
     }
   }
 
@@ -302,7 +332,7 @@ class _CreateBeaconSheetState extends ConsumerState<CreateBeaconSheet> {
                 controller: _descriptionController,
                 style: TextStyle(color: SojornColors.postContent, fontSize: 14),
                 decoration: InputDecoration(
-                  hintText: 'Describe what you see...',
+                  hintText: _hintText,
                   hintStyle: TextStyle(color: SojornColors.textDisabled),
                   filled: true,
                   fillColor: AppTheme.scaffoldBg,

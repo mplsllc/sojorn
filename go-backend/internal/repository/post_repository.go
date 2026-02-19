@@ -573,9 +573,10 @@ func (r *PostRepository) GetNearbyBeacons(ctx context.Context, lat float64, long
 			COALESCE(p.incident_status, 'active') as incident_status,
 			COALESCE(p.radius, 500) as radius,
 			COALESCE((SELECT COUNT(*) FROM beacon_votes bv WHERE bv.beacon_id = p.id AND bv.vote_type = 'vouch'), 0) as vouch_count,
-			COALESCE((SELECT COUNT(*) FROM beacon_votes bv WHERE bv.beacon_id = p.id AND bv.vote_type = 'report'), 0) as report_count
+			COALESCE((SELECT COUNT(*) FROM beacon_votes bv WHERE bv.beacon_id = p.id AND bv.vote_type = 'report'), 0) as report_count,
+			ST_Distance(p.location::geography, ST_SetSRID(ST_Point($2, $1), 4326)::geography) AS distance_meters
 		FROM public.posts p
-		WHERE p.is_beacon = true 
+		WHERE p.is_beacon = true
 		  AND ST_DWithin(p.location, ST_SetSRID(ST_Point($2, $1), 4326)::geography, $3)
 		  AND p.status = 'active'
 		  AND COALESCE(p.incident_status, 'active') = 'active'
@@ -595,7 +596,7 @@ func (r *PostRepository) GetNearbyBeacons(ctx context.Context, lat float64, long
 			&p.ID, &p.CategoryID, &p.Body, &p.ImageURL, &p.Tags, &p.CreatedAt,
 			&p.BeaconType, &p.Confidence, &p.IsActiveBeacon, &p.Lat, &p.Long,
 			&p.Severity, &p.IncidentStatus, &p.Radius,
-			&vouchCount, &reportCount,
+			&vouchCount, &reportCount, &p.DistanceMeters,
 		)
 		if err != nil {
 			return nil, err

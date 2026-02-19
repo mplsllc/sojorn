@@ -317,7 +317,8 @@ class BeaconScreenState extends ConsumerState<BeaconScreen> with TickerProviderS
       debugPrint('[Beacon] fetched ${beacons.length} beacons');
       if (mounted) {
         setState(() {
-          _beacons = beacons.where((p) => p.isBeaconPost).toList();
+          _beacons = beacons.where((p) => p.isBeaconPost).toList()
+            ..sort((a, b) => (a.distanceMeters ?? 0).compareTo(b.distanceMeters ?? 0));
           _beaconModels = _beacons.map((p) => p.toBeacon()).toList();
           _isLoading = false;
         });
@@ -784,24 +785,27 @@ class BeaconScreenState extends ConsumerState<BeaconScreen> with TickerProviderS
                   SliverToBoxAdapter(
                     child: ActiveAlertsTicker(alerts: _beaconModels, onAlertTap: _onBeaconModelTap),
                   ),
-                  SliverToBoxAdapter(
-                    child: Padding(
-                      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-                      child: Row(
-                        children: [
-                          Expanded(child: Divider(color: AppTheme.navyBlue.withValues(alpha: 0.1))),
-                          Padding(
-                            padding: const EdgeInsets.symmetric(horizontal: 12),
-                            child: Text('ALL INCIDENTS', style: TextStyle(
-                              color: AppTheme.navyBlue.withValues(alpha: 0.35),
-                              fontSize: 10, fontWeight: FontWeight.w700, letterSpacing: 1,
-                            )),
-                          ),
-                          Expanded(child: Divider(color: AppTheme.navyBlue.withValues(alpha: 0.1))),
-                        ],
+                  if (_beacons.isNotEmpty)
+                    SliverToBoxAdapter(
+                      child: Padding(
+                        padding: const EdgeInsets.fromLTRB(16, 8, 16, 4),
+                        child: Row(
+                          children: [
+                            Text('${_beacons.length} ACTIVE INCIDENT${_beacons.length == 1 ? '' : 'S'}',
+                              style: TextStyle(
+                                color: AppTheme.navyBlue.withValues(alpha: 0.45),
+                                fontSize: 10, fontWeight: FontWeight.w700, letterSpacing: 1,
+                              )),
+                            const Spacer(),
+                            // Sort by proximity hint
+                            Icon(Icons.location_on, size: 11, color: SojornColors.textDisabled),
+                            const SizedBox(width: 3),
+                            Text('nearest first',
+                              style: TextStyle(color: SojornColors.textDisabled, fontSize: 10)),
+                          ],
+                        ),
                       ),
                     ),
-                  ),
                   if (_beacons.isEmpty)
                     SliverToBoxAdapter(
                       child: Padding(
@@ -865,7 +869,7 @@ class BeaconScreenState extends ConsumerState<BeaconScreen> with TickerProviderS
                         childCount: _beacons.length,
                       ),
                     ),
-                  const SliverToBoxAdapter(child: SizedBox(height: 16)),
+                  SliverToBoxAdapter(child: SizedBox(height: MediaQuery.of(context).padding.bottom + 16)),
                 ],
               ),
             );
@@ -886,9 +890,9 @@ class BeaconScreenState extends ConsumerState<BeaconScreen> with TickerProviderS
             Container(
               padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
               decoration: BoxDecoration(
-                color: SojornColors.basicWhite.withValues(alpha: 0.85),
+                color: SojornColors.basicWhite.withValues(alpha: 0.96),
                 borderRadius: BorderRadius.circular(20),
-                boxShadow: [BoxShadow(color: SojornColors.basicBlack.withValues(alpha: 0.1), blurRadius: 6)],
+                boxShadow: [BoxShadow(color: SojornColors.basicBlack.withValues(alpha: 0.18), blurRadius: 8)],
               ),
               child: Row(
                 mainAxisSize: MainAxisSize.min,
@@ -2101,6 +2105,12 @@ class BeaconScreenState extends ConsumerState<BeaconScreen> with TickerProviderS
   }
 
   Widget _buildDragHandle() {
+    final geoAlerts = _beaconModels.where((b) => b.beaconType.isGeoAlert).toList();
+    final critCount = geoAlerts.where((b) => b.severity == BeaconSeverity.critical).length;
+    final highCount = geoAlerts.where((b) => b.severity == BeaconSeverity.high).length;
+    final medCount  = geoAlerts.where((b) => b.severity == BeaconSeverity.medium).length;
+    final lowCount  = geoAlerts.where((b) => b.severity == BeaconSeverity.low).length;
+
     return GestureDetector(
       onTap: () {
         final currentSize = _sheetController.size;
@@ -2111,9 +2121,10 @@ class BeaconScreenState extends ConsumerState<BeaconScreen> with TickerProviderS
         }
       },
       child: Container(
-        padding: const EdgeInsets.fromLTRB(20, 12, 20, 8),
+        padding: const EdgeInsets.fromLTRB(20, 12, 20, 10),
         child: Column(
           children: [
+            // Drag pill
             Container(
               width: 40, height: 4,
               decoration: BoxDecoration(
@@ -2121,31 +2132,79 @@ class BeaconScreenState extends ConsumerState<BeaconScreen> with TickerProviderS
                 borderRadius: BorderRadius.circular(2),
               ),
             ),
-            const SizedBox(height: 8),
+            const SizedBox(height: 10),
             Row(
               children: [
-                Icon(Icons.radar, color: AppTheme.brightNavy.withValues(alpha: 0.6), size: 16),
+                Icon(Icons.radar, color: AppTheme.brightNavy, size: 18),
                 const SizedBox(width: 6),
                 Text(
                   'RADAR',
                   style: TextStyle(
-                    color: AppTheme.navyBlue.withValues(alpha: 0.5),
-                    fontSize: 10,
-                    fontWeight: FontWeight.w700,
+                    color: AppTheme.navyBlue,
+                    fontSize: 13,
+                    fontWeight: FontWeight.w800,
                     letterSpacing: 1.5,
                   ),
                 ),
+                const SizedBox(width: 10),
+                // Severity breakdown dots
+                if (geoAlerts.isEmpty)
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                    decoration: BoxDecoration(
+                      color: const Color(0xFF4CAF50).withValues(alpha: 0.12),
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                    child: Row(mainAxisSize: MainAxisSize.min, children: [
+                      Icon(Icons.shield, size: 12, color: const Color(0xFF4CAF50)),
+                      const SizedBox(width: 4),
+                      Text('All clear', style: TextStyle(color: const Color(0xFF4CAF50), fontSize: 11, fontWeight: FontWeight.w600)),
+                    ]),
+                  )
+                else
+                  Row(children: [
+                    if (critCount > 0) _severityDot(SojornColors.destructive, critCount),
+                    if (critCount > 0 && highCount > 0) const SizedBox(width: 4),
+                    if (highCount > 0) _severityDot(const Color(0xFFFF5722), highCount),
+                    if ((critCount > 0 || highCount > 0) && medCount > 0) const SizedBox(width: 4),
+                    if (medCount > 0) _severityDot(const Color(0xFFFFC107), medCount),
+                    if ((critCount > 0 || highCount > 0 || medCount > 0) && lowCount > 0) const SizedBox(width: 4),
+                    if (lowCount > 0) _severityDot(const Color(0xFF4CAF50), lowCount),
+                  ]),
                 const Spacer(),
-                Text(
-                  '${_beaconModels.where((b) => b.beaconType.isGeoAlert).length} alerts',
-                  style: TextStyle(color: AppTheme.navyBlue.withValues(alpha: 0.4), fontSize: 11),
-                ),
-                Icon(Icons.keyboard_arrow_up, color: AppTheme.navyBlue.withValues(alpha: 0.3), size: 18),
+                if (geoAlerts.isNotEmpty)
+                  GestureDetector(
+                    onTap: () => _sheetController.animateTo(0.85,
+                        duration: const Duration(milliseconds: 300), curve: Curves.easeOut),
+                    child: Row(mainAxisSize: MainAxisSize.min, children: [
+                      Text('See all',
+                        style: TextStyle(color: AppTheme.brightNavy, fontSize: 12, fontWeight: FontWeight.w600)),
+                      Icon(Icons.keyboard_arrow_up, color: AppTheme.brightNavy, size: 16),
+                    ]),
+                  )
+                else
+                  Icon(Icons.keyboard_arrow_up, color: AppTheme.navyBlue.withValues(alpha: 0.3), size: 18),
               ],
             ),
           ],
         ),
       ),
+    );
+  }
+
+  Widget _severityDot(Color color, int count) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 3),
+      decoration: BoxDecoration(
+        color: color.withValues(alpha: 0.15),
+        borderRadius: BorderRadius.circular(10),
+      ),
+      child: Row(mainAxisSize: MainAxisSize.min, children: [
+        Container(width: 6, height: 6,
+          decoration: BoxDecoration(color: color, shape: BoxShape.circle)),
+        const SizedBox(width: 4),
+        Text('$count', style: TextStyle(color: color, fontSize: 11, fontWeight: FontWeight.w700)),
+      ]),
     );
   }
 
