@@ -64,6 +64,8 @@ class ApiService {
     Object? body,
     bool requireSignature = false,
   }) async {
+    final sanitized = _sanitizePath(path);
+    if (kDebugMode) debugPrint('[API] → $method $sanitized');
     try {
       var uri = Uri.parse('${ApiConfig.baseUrl}$path')
           .replace(queryParameters: queryParams);
@@ -87,32 +89,31 @@ class ApiService {
 
       // INTERCEPTOR: Handle 401
       if (response.statusCode == 401) {
-        if (kDebugMode) print('[API] Auth error at ${_sanitizePath(path)}');
+        if (kDebugMode) debugPrint('[API] 401 $sanitized — refreshing session');
         final refreshed = await _authService.refreshSession();
         if (refreshed) {
-          // Update token header and RETRY
           headers = await _authHeaders();
           headers['Content-Type'] = 'application/json';
-          if (kDebugMode) print('[API] Retrying request to ${_sanitizePath(path)}');
+          if (kDebugMode) debugPrint('[API] retrying $sanitized');
           response = await _performRequest(method, uri, headers, body);
         } else {
-          // Refresh failed, assume session died.
           throw Exception('Session Expired');
         }
       }
 
       if (response.statusCode >= 400) {
-        if (kDebugMode) print('[API] Error ${response.statusCode} at ${_sanitizePath(path)}');
+        if (kDebugMode) debugPrint('[API] ✗ ${response.statusCode} $sanitized  body=${response.body.length > 200 ? response.body.substring(0, 200) : response.body}');
         throw Exception(
             'Go API error (${response.statusCode}): ${response.body}');
       }
 
+      if (kDebugMode) debugPrint('[API] ✓ ${response.statusCode} $sanitized');
       if (response.body.isEmpty) return {};
       final data = jsonDecode(response.body);
       if (data is Map<String, dynamic>) return data;
       return {'data': data};
     } catch (e) {
-      if (kDebugMode) print('[API] Call failed: ${_sanitizePath(path)} - $e');
+      if (kDebugMode) debugPrint('[API] ✗ EXCEPTION $sanitized — $e');
       rethrow;
     }
   }

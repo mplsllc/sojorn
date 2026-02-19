@@ -11,7 +11,7 @@ import '../../../theme/app_theme.dart';
 import '../../../theme/tokens.dart';
 import 'quip_video_item.dart';
 import '../../home/home_shell.dart';
-import '../../../widgets/reactions/reaction_picker.dart';
+import '../../../widgets/reactions/anchored_reaction_popup.dart';
 import '../../../widgets/video_comments_sheet.dart';
 
 class Quip {
@@ -471,99 +471,12 @@ class _QuipsFeedScreenState extends ConsumerState<QuipsFeedScreen>
   }
 
   void _openReactionPicker(Quip quip, Offset tapPosition) {
-    const quickEmojis = ['❤️', '👍', '😂', '😮', '😢', '😡', '🎉', '🔥'];
-    final screenSize = MediaQuery.of(context).size;
-
-    // Position the pill to the left of the tap point, vertically centered on it
-    // Pill is ~320px wide × 52px tall; keep it within screen bounds
-    const pillWidth = 320.0;
-    const pillHeight = 52.0;
-    double left = tapPosition.dx - pillWidth - 8;
-    double top = tapPosition.dy - pillHeight / 2;
-    left = left.clamp(8.0, screenSize.width - pillWidth - 8);
-    top = top.clamp(8.0, screenSize.height - pillHeight - 8);
-
-    showDialog<void>(
+    showAnchoredReactionPicker(
       context: context,
-      barrierColor: Colors.transparent,
-      builder: (ctx) => GestureDetector(
-        behavior: HitTestBehavior.opaque,
-        onTap: () => Navigator.pop(ctx),
-        child: Stack(
-          children: [
-            Positioned(
-              left: left,
-              top: top,
-              child: GestureDetector(
-                onTap: () {}, // prevent dismiss when tapping inside pill
-                child: Material(
-                  elevation: 12,
-                  borderRadius: BorderRadius.circular(32),
-                  color: AppTheme.cardSurface,
-                  child: Padding(
-                    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
-                    child: Row(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        ...quickEmojis.map((emoji) {
-                          final isActive = (_myReactions[quip.id] ?? quip.myReactions).contains(emoji);
-                          return GestureDetector(
-                            onTap: () {
-                              Navigator.pop(ctx);
-                              _toggleReaction(quip, emoji);
-                            },
-                            child: AnimatedContainer(
-                              duration: const Duration(milliseconds: 120),
-                              margin: const EdgeInsets.symmetric(horizontal: 2),
-                              padding: const EdgeInsets.all(4),
-                              decoration: isActive
-                                  ? BoxDecoration(
-                                      color: AppTheme.brightNavy.withValues(alpha: 0.15),
-                                      borderRadius: BorderRadius.circular(12),
-                                    )
-                                  : null,
-                              child: Text(emoji, style: const TextStyle(fontSize: 26)),
-                            ),
-                          );
-                        }),
-                        const SizedBox(width: 4),
-                        GestureDetector(
-                          onTap: () {
-                            Navigator.pop(ctx);
-                            _openFullReactionPicker(quip);
-                          },
-                          child: Container(
-                            width: 36,
-                            height: 36,
-                            decoration: BoxDecoration(
-                              color: AppTheme.navyBlue.withValues(alpha: 0.08),
-                              borderRadius: BorderRadius.circular(18),
-                            ),
-                            child: Icon(Icons.add, size: 18, color: AppTheme.navyBlue),
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                ),
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
-  void _openFullReactionPicker(Quip quip) {
-    showModalBottomSheet(
-      context: context,
-      isScrollControlled: true,
-      backgroundColor: Colors.transparent,
-      builder: (_) => ReactionPicker(
-        onReactionSelected: (emoji) => _toggleReaction(quip, emoji),
-        reactionCounts: _reactionCounts[quip.id] ?? quip.reactions,
-        myReactions: _myReactions[quip.id] ?? quip.myReactions,
-      ),
+      tapPosition: tapPosition,
+      myReactions: _myReactions[quip.id] ?? quip.myReactions,
+      reactionCounts: _reactionCounts[quip.id] ?? quip.reactions,
+      onReaction: (emoji) => _toggleReaction(quip, emoji),
     );
   }
 

@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
+import '../../services/api_service.dart';
 import '../../services/key_vault_service.dart';
 import '../../services/simple_e2ee_service.dart';
 import '../../theme/app_theme.dart';
@@ -22,6 +23,8 @@ class _EncryptionHubScreenState extends State<EncryptionHubScreen> {
   VaultStatus? _status;
   bool _loading = true;
   bool _syncing = false;
+  int _encryptedConvCount = 0;
+  int _encryptedCapsuleCount = 0;
 
   @override
   void initState() {
@@ -32,8 +35,23 @@ class _EncryptionHubScreenState extends State<EncryptionHubScreen> {
   Future<void> _loadStatus() async {
     setState(() => _loading = true);
     try {
-      final status = await KeyVaultService.instance.getVaultStatus();
-      if (mounted) setState(() { _status = status; _loading = false; });
+      final results = await Future.wait<dynamic>([
+        KeyVaultService.instance.getVaultStatus(),
+        ApiService.instance.getConversations(),
+        ApiService.instance.fetchMyGroups(),
+      ]);
+      final status = results[0] as VaultStatus;
+      final convs = results[1] as List<dynamic>;
+      final groups = results[2] as List<Map<String, dynamic>>;
+      final encryptedCapsules = groups.where((g) => g['is_encrypted'] == true).length;
+      if (mounted) {
+        setState(() {
+          _status = status;
+          _encryptedConvCount = convs.length;
+          _encryptedCapsuleCount = encryptedCapsules;
+          _loading = false;
+        });
+      }
     } catch (e) {
       if (mounted) setState(() => _loading = false);
     }
@@ -114,7 +132,9 @@ class _EncryptionHubScreenState extends State<EncryptionHubScreen> {
                 padding: const EdgeInsets.all(16),
                 children: [
                   _buildStatusCard(),
-                  const SizedBox(height: 20),
+                  const SizedBox(height: 16),
+                  _buildStatsCard(),
+                  const SizedBox(height: 16),
                   _buildKeysCard(),
                   const SizedBox(height: 16),
                   _buildSyncCard(),
@@ -174,6 +194,72 @@ class _EncryptionHubScreenState extends State<EncryptionHubScreen> {
               ],
             ),
           ),
+        ],
+      ),
+    );
+  }
+
+  // ── Stats Card ─────────────────────────────────────────────────────
+
+  Widget _buildStatsCard() {
+    const accent = Color(0xFF4CAF50);
+    return Card(
+      color: AppTheme.cardSurface,
+      elevation: 0,
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+      child: Padding(
+        padding: const EdgeInsets.all(20),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(children: [
+              Icon(Icons.lock, color: accent, size: 20),
+              const SizedBox(width: 10),
+              Text('What\'s Protected', style: GoogleFonts.literata(
+                fontWeight: FontWeight.w600, color: AppTheme.navyBlue, fontSize: 16)),
+            ]),
+            const SizedBox(height: 16),
+            Row(
+              children: [
+                Expanded(child: _statTile(
+                  icon: Icons.chat_bubble_outline,
+                  value: '$_encryptedConvCount',
+                  label: 'Encrypted\nConversations',
+                  color: AppTheme.brightNavy,
+                )),
+                const SizedBox(width: 12),
+                Expanded(child: _statTile(
+                  icon: Icons.lock_outline,
+                  value: '$_encryptedCapsuleCount',
+                  label: 'Encrypted\nCapsules',
+                  color: const Color(0xFF7B52AB),
+                )),
+              ],
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _statTile({required IconData icon, required String value, required String label, required Color color}) {
+    return Container(
+      padding: const EdgeInsets.symmetric(vertical: 14, horizontal: 12),
+      decoration: BoxDecoration(
+        color: color.withValues(alpha: 0.08),
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: color.withValues(alpha: 0.2)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Icon(icon, color: color, size: 20),
+          const SizedBox(height: 8),
+          Text(value, style: GoogleFonts.literata(
+            fontSize: 26, fontWeight: FontWeight.w700, color: color)),
+          const SizedBox(height: 2),
+          Text(label, style: GoogleFonts.inter(
+            fontSize: 11, color: AppTheme.textSecondary, height: 1.3)),
         ],
       ),
     );

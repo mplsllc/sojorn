@@ -116,6 +116,8 @@ class _CreateBeaconSheetState extends ConsumerState<CreateBeaconSheet> {
 
     setState(() => _isSubmitting = true);
 
+    debugPrint('[Beacon] submit — type=${_selectedType.value} severity=${_selectedSeverity.value} lat=${widget.centerLat.toStringAsFixed(4)} long=${widget.centerLong.toStringAsFixed(4)} hasImage=${_uploadedImageUrl != null}');
+
     try {
       final apiService = ref.read(apiServiceProvider);
 
@@ -135,11 +137,13 @@ class _CreateBeaconSheetState extends ConsumerState<CreateBeaconSheet> {
         imageUrl: _uploadedImageUrl,
       );
 
+      debugPrint('[Beacon] created id=${post.id}');
       if (mounted) {
         widget.onBeaconCreated(post);
         Navigator.of(context).pop();
       }
     } catch (e) {
+      debugPrint('[Beacon] ✗ create failed: $e');
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(content: Text('Could not create the report: $e')),

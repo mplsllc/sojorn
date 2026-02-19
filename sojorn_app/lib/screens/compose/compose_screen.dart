@@ -512,6 +512,7 @@ class _ComposeScreenState extends ConsumerState<ComposeScreen> {
 
       final apiService = ref.read(apiServiceProvider);
 
+      debugPrint('[Compose] publish — visibility=$_visibility chain=${widget.chainParentPost?.id} hasImage=${imageUrl != null} ttl=$_ttlHoursOverride');
       await apiService.publishPost(
         body: _bodyController.text.trim(),
         bodyFormat: 'plain',
@@ -523,6 +524,7 @@ class _ComposeScreenState extends ConsumerState<ComposeScreen> {
         visibility: _visibility,
         audioOverlayUrl: _selectedAudioTrack?.path,
       );
+      debugPrint('[Compose] ✓ published');
 
       if (mounted && !_popped) {
         _popped = true;
@@ -531,6 +533,7 @@ class _ComposeScreenState extends ConsumerState<ComposeScreen> {
         return; // Skip finally setState — widget is being disposed
       }
     } catch (e) {
+      debugPrint('[Compose] ✗ publish failed: $e');
       if (!mounted || _popped) return;
       final msg = e.toString().replaceAll('Exception: ', '');
       // Server-side blocklist catch (422 with blocked content message)

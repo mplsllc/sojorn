@@ -204,6 +204,7 @@ class BeaconScreenState extends ConsumerState<BeaconScreen> with TickerProviderS
 
   Future<void> _detectNeighborhood(double lat, double lng) async {
     if (_isDetectingNeighborhood) return;
+    debugPrint('[Beacon] detectNeighborhood lat=${lat.toStringAsFixed(4)} lng=${lng.toStringAsFixed(4)}');
     setState(() => _isDetectingNeighborhood = true);
     try {
       final data = await ApiService.instance.detectNeighborhood(lat: lat, long: lng);
@@ -218,9 +219,12 @@ class BeaconScreenState extends ConsumerState<BeaconScreen> with TickerProviderS
         if (hood != null) {
           final name = hood['name'] as String? ?? '';
           final city = hood['city'] as String? ?? '';
+          debugPrint('[Beacon] neighborhood detected: $name, $city');
           if (name.isNotEmpty) {
             setState(() => _locationName = city.isNotEmpty ? '$name, $city' : name);
           }
+        } else {
+          debugPrint('[Beacon] neighborhood: none returned for lat=$lat lng=$lng');
         }
         // If user has no home neighborhood yet, show the picker
         if (!_homeNeighborhoodChecked) {
@@ -299,6 +303,7 @@ class BeaconScreenState extends ConsumerState<BeaconScreen> with TickerProviderS
 
   Future<void> _loadBeacons({LatLng? center}) async {
     final target = center ?? _userLocation ?? _mapCenter;
+    debugPrint('[Beacon] loadBeacons lat=${target.latitude.toStringAsFixed(4)} lng=${target.longitude.toStringAsFixed(4)} radius=16000');
     setState(() => _isLoading = true);
     try {
       final apiService = ref.read(apiServiceProvider);
@@ -307,6 +312,7 @@ class BeaconScreenState extends ConsumerState<BeaconScreen> with TickerProviderS
         long: target.longitude,
         radius: 16000,
       );
+      debugPrint('[Beacon] fetched ${beacons.length} beacons');
       if (mounted) {
         setState(() {
           _beacons = beacons.where((p) => p.isBeaconPost).toList();
@@ -315,6 +321,7 @@ class BeaconScreenState extends ConsumerState<BeaconScreen> with TickerProviderS
         });
       }
     } catch (e) {
+      debugPrint('[Beacon] ✗ loadBeacons failed: $e');
       if (mounted) setState(() => _isLoading = false);
     }
   }

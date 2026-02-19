@@ -15,7 +15,7 @@ import '../theme/app_theme.dart';
 import '../theme/tokens.dart';
 import '../widgets/media/signed_media_image.dart';
 import '../widgets/reactions/reactions_display.dart';
-import '../widgets/reactions/reaction_picker.dart';
+import '../widgets/reactions/anchored_reaction_popup.dart';
 import '../widgets/composer/composer_bar.dart';
 import '../widgets/modals/sanctuary_sheet.dart';
 import '../widgets/sojorn_snackbar.dart';
@@ -798,69 +798,12 @@ class _CommentTile extends StatelessWidget {
   }
 
   void _showReactionPicker(BuildContext context, Offset tapPosition) {
-    const quickEmojis = ['❤️', '👍', '😂', '😮', '😢', '😡', '🎉', '🔥'];
-    final screenSize = MediaQuery.of(context).size;
-    final Set<String> mine = node.post.myReactions?.toSet() ?? {};
-
-    const pillWidth = 320.0;
-    const pillHeight = 52.0;
-    double left = tapPosition.dx - pillWidth / 2;
-    double top = tapPosition.dy - pillHeight - 12;
-    left = left.clamp(8.0, screenSize.width - pillWidth - 8);
-    top = top.clamp(8.0, screenSize.height - pillHeight - 8);
-
-    showDialog<void>(
+    showAnchoredReactionPicker(
       context: context,
-      barrierColor: Colors.black12,
-      builder: (ctx) => GestureDetector(
-        behavior: HitTestBehavior.opaque,
-        onTap: () => Navigator.pop(ctx),
-        child: Stack(
-          children: [
-            Positioned(
-              left: left,
-              top: top,
-              child: GestureDetector(
-                onTap: () {},
-                child: Material(
-                  elevation: 10,
-                  borderRadius: BorderRadius.circular(32),
-                  color: AppTheme.cardSurface,
-                  child: Padding(
-                    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
-                    child: Row(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        ...quickEmojis.map((emoji) {
-                          final isActive = mine.contains(emoji);
-                          return GestureDetector(
-                            onTap: () {
-                              Navigator.pop(ctx);
-                              onReaction(emoji);
-                            },
-                            child: AnimatedContainer(
-                              duration: const Duration(milliseconds: 120),
-                              margin: const EdgeInsets.symmetric(horizontal: 2),
-                              padding: const EdgeInsets.all(4),
-                              decoration: isActive
-                                  ? BoxDecoration(
-                                      color: AppTheme.brightNavy.withValues(alpha: 0.15),
-                                      borderRadius: BorderRadius.circular(12),
-                                    )
-                                  : null,
-                              child: Text(emoji, style: const TextStyle(fontSize: 26)),
-                            ),
-                          );
-                        }),
-                      ],
-                    ),
-                  ),
-                ),
-              ),
-            ),
-          ],
-        ),
-      ),
+      tapPosition: tapPosition,
+      myReactions: node.post.myReactions?.toSet() ?? {},
+      reactionCounts: node.post.reactions,
+      onReaction: onReaction,
     );
   }
 }

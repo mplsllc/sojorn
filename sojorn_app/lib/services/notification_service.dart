@@ -150,6 +150,16 @@ class UnreadBadge {
       totalCount: json['total_count'] ?? 0,
     );
   }
+
+  @override
+  bool operator ==(Object other) =>
+      other is UnreadBadge &&
+      other.notificationCount == notificationCount &&
+      other.messageCount == messageCount &&
+      other.totalCount == totalCount;
+
+  @override
+  int get hashCode => Object.hash(notificationCount, messageCount, totalCount);
 }
 
 class NotificationService {
@@ -364,8 +374,11 @@ class NotificationService {
         '/notifications/badge',
         method: 'GET',
       );
-      _currentBadge = UnreadBadge.fromJson(response);
-      _badgeController.add(_currentBadge);
+      final newBadge = UnreadBadge.fromJson(response);
+      if (newBadge != _currentBadge) {
+        _currentBadge = newBadge;
+        _badgeController.add(_currentBadge);
+      }
     } catch (e) {
       debugPrint('[FCM] Failed to refresh badge count: $e');
     }

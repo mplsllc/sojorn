@@ -8,7 +8,7 @@ import '../../providers/api_provider.dart';
 import '../../theme/app_theme.dart';
 import '../../theme/tokens.dart';
 import '../sojorn_snackbar.dart';
-import '../reactions/reaction_picker.dart';
+import '../reactions/anchored_reaction_popup.dart';
 import '../reactions/reactions_display.dart';
 
 /// Post actions with a vibrant, clear, and energetic design.
@@ -120,115 +120,13 @@ class _PostActionsState extends ConsumerState<PostActions> {
     }
   }
 
-  /// Discord-style quick picker: 8 common emojis in a floating pill.
-  /// Positions the pill above/near the tap point. Tap "+" to open the full picker.
   void _showReactionPicker(Offset tapPosition) {
-    const quickEmojis = ['❤️', '👍', '😂', '😮', '😢', '😡', '🎉', '🔥'];
-    final screenSize = MediaQuery.of(context).size;
-
-    const pillWidth = 320.0;
-    const pillHeight = 52.0;
-    // Position pill above and centered on the tap point
-    double left = tapPosition.dx - pillWidth / 2;
-    double top = tapPosition.dy - pillHeight - 12;
-    left = left.clamp(8.0, screenSize.width - pillWidth - 8);
-    top = top.clamp(8.0, screenSize.height - pillHeight - 8);
-
-    showDialog<void>(
+    showAnchoredReactionPicker(
       context: context,
-      barrierColor: Colors.black12,
-      builder: (ctx) => GestureDetector(
-        behavior: HitTestBehavior.opaque,
-        onTap: () => Navigator.pop(ctx),
-        child: Stack(
-          children: [
-            Positioned(
-              left: left,
-              top: top,
-              child: GestureDetector(
-                onTap: () {}, // prevent dismiss when tapping inside pill
-                child: Material(
-                  elevation: 10,
-                  borderRadius: BorderRadius.circular(32),
-                  color: AppTheme.cardSurface,
-                  child: Padding(
-                    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
-                    child: Row(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        ...quickEmojis.map((emoji) {
-                          final isActive = _myReactions.contains(emoji);
-                          return GestureDetector(
-                            onTap: () {
-                              Navigator.pop(ctx);
-                              _toggleReaction(emoji);
-                            },
-                            child: AnimatedContainer(
-                              duration: const Duration(milliseconds: 120),
-                              margin: const EdgeInsets.symmetric(horizontal: 2),
-                              padding: const EdgeInsets.all(4),
-                              decoration: isActive
-                                  ? BoxDecoration(
-                                      color: AppTheme.brightNavy.withValues(alpha: 0.15),
-                                      borderRadius: BorderRadius.circular(12),
-                                    )
-                                  : null,
-                              child: Text(emoji,
-                                  style: const TextStyle(fontSize: 26)),
-                            ),
-                          );
-                        }),
-                        const SizedBox(width: 4),
-                        GestureDetector(
-                          onTap: () {
-                            Navigator.pop(ctx);
-                            _showFullReactionPicker();
-                          },
-                          child: Container(
-                            width: 36,
-                            height: 36,
-                            decoration: BoxDecoration(
-                              color: AppTheme.navyBlue.withValues(alpha: 0.08),
-                              borderRadius: BorderRadius.circular(18),
-                            ),
-                            child: Icon(Icons.add, size: 18, color: AppTheme.navyBlue),
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                ),
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
-  /// Full tabbed/searchable picker — opened via the "+" button.
-  void _showFullReactionPicker() {
-    final existingReactions = _reactionCounts.entries.toList()
-      ..sort((a, b) => b.value.compareTo(a.value));
-
-    final allReactions = [
-      ...existingReactions.map((e) => e.key),
-      '❤️', '👍', '😂', '😮', '😢', '😡',
-      '🎉', '🔥', '👏', '🙏', '💯', '🤔',
-      '😍', '🤣', '😊', '👌', '🙌', '💪',
-      '🎯', '⭐', '✨', '🌟', '💫', '☀️',
-    ];
-
-    showModalBottomSheet(
-      context: context,
-      isScrollControlled: true,
-      backgroundColor: Colors.transparent,
-      builder: (_) => ReactionPicker(
-        onReactionSelected: _toggleReaction,
-        reactions: allReactions,
-        reactionCounts: _reactionCounts,
-        myReactions: _myReactions,
-      ),
+      tapPosition: tapPosition,
+      myReactions: _myReactions,
+      reactionCounts: _reactionCounts,
+      onReaction: _toggleReaction,
     );
   }
 

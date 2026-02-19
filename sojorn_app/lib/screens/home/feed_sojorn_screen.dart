@@ -56,6 +56,7 @@ class _FeedsojornScreenState extends ConsumerState<FeedsojornScreen> {
   Future<void> _loadPosts({bool refresh = false}) async {
     if (_isLoading) return;
 
+    debugPrint('[Feed/Sojorn] load — refresh=$refresh offset=${refresh ? 0 : _posts.length}');
     _setStateIfMounted(() {
       _isLoading = true;
       _error = null;
@@ -73,6 +74,7 @@ class _FeedsojornScreenState extends ConsumerState<FeedsojornScreen> {
         limit: 20,
         offset: refresh ? 0 : _posts.length,
       );
+      debugPrint('[Feed/Sojorn] fetched ${posts.length} posts');
 
       final hasSponsored = posts.any((post) => post.isSponsored);
       List<Post> batchItems = posts;
@@ -113,9 +115,7 @@ class _FeedsojornScreenState extends ConsumerState<FeedsojornScreen> {
   }
 
   void _onPageChanged(int page) {
-    setState(() {
-      _currentPage = page;
-    });
+    _currentPage = page;
     // Load more when approaching the end
     if (page >= _feedItems.length - 3 && _hasMore && !_isLoading) {
       _loadPosts();

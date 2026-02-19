@@ -80,7 +80,7 @@ class _UnifiedProfileScreenState extends ConsumerState<UnifiedProfileScreen>
 
   late TabController _tabController;
   int _activeTab = 0;
-  bool _isGridView = true; // default grid for own profile; toggled by user
+  bool _isGridView = false; // default list view; toggled by user
 
   List<Post> _posts = [];
   bool _isPostsLoading = false;
@@ -923,8 +923,10 @@ class _UnifiedProfileScreenState extends ConsumerState<UnifiedProfileScreen>
   }
 
   Widget _buildSliverAppBar(Profile profile) {
+    final topPad = MediaQuery.of(context).padding.top;
+    final hasBanner = (profile.coverUrl ?? '').isNotEmpty;
     return SliverAppBar(
-      expandedHeight: _isOwnProfile ? 212 : 200,
+      expandedHeight: topPad + (hasBanner ? 210.0 : 152.0),
       pinned: true,
       toolbarHeight: 0,
       collapsedHeight: 0,
@@ -1510,13 +1512,34 @@ class _ProfileHeader extends StatelessWidget {
   Widget build(BuildContext context) {
     const avatarRadius = 40.0;
     final flag = getCountryFlag(profile.originCountry ?? 'US');
-    return Container(
-      decoration: BoxDecoration(gradient: _generateGradient(profile.handle)),
-      child: SafeArea(
-        bottom: false,
-        child: Padding(
-          padding: const EdgeInsets.fromLTRB(16, 4, 8, 12),
-          child: Column(
+    final hasBanner = (profile.coverUrl ?? '').isNotEmpty;
+    return Stack(
+      fit: StackFit.expand,
+      children: [
+        // Background: banner image or gradient
+        if (hasBanner)
+          SignedMediaImage(url: profile.coverUrl!, fit: BoxFit.cover)
+        else
+          Container(decoration: BoxDecoration(gradient: _generateGradient(profile.handle))),
+        // Dark gradient overlay for text readability over banner
+        if (hasBanner)
+          Container(
+            decoration: BoxDecoration(
+              gradient: LinearGradient(
+                begin: Alignment.topCenter,
+                end: Alignment.bottomCenter,
+                colors: [
+                  Colors.black.withValues(alpha: 0.35),
+                  Colors.black.withValues(alpha: 0.70),
+                ],
+              ),
+            ),
+          ),
+        SafeArea(
+          bottom: false,
+          child: Padding(
+            padding: const EdgeInsets.fromLTRB(16, 4, 8, 8),
+            child: Column(
             mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
@@ -1622,6 +1645,7 @@ class _ProfileHeader extends StatelessWidget {
           ),
         ),
       ),
+      ],
     );
   }
 

@@ -42,6 +42,7 @@ class _FeedPersonalScreenState extends ConsumerState<FeedPersonalScreen> {
   Future<void> _loadPosts({bool refresh = false}) async {
     if (_isLoading) return;
 
+    debugPrint('[Feed/Personal] load — refresh=$refresh offset=${refresh ? 0 : _posts.length} filter=${_currentFilter.typeValue}');
     _setStateIfMounted(() {
       _isLoading = true;
       _error = null;
@@ -58,6 +59,7 @@ class _FeedPersonalScreenState extends ConsumerState<FeedPersonalScreen> {
         offset: refresh ? 0 : _posts.length,
         filterType: _currentFilter.typeValue,
       );
+      debugPrint('[Feed/Personal] fetched ${posts.length} posts');
 
       _setStateIfMounted(() {
         if (refresh) {
@@ -68,6 +70,7 @@ class _FeedPersonalScreenState extends ConsumerState<FeedPersonalScreen> {
         _hasMore = posts.length == 50;
       });
     } catch (e) {
+      debugPrint('[Feed/Personal] ✗ load failed: $e');
       _setStateIfMounted(() {
         _error = e.toString().replaceAll('Exception: ', '');
       });

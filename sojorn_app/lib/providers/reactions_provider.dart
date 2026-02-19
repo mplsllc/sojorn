@@ -23,11 +23,13 @@ class ReactionPackage {
 /// Priority: CDN index.json → local assets → hardcoded emoji.
 final reactionPackageProvider = FutureProvider<ReactionPackage>((ref) async {
   // 1. Try CDN
+  debugPrint('[Reactions] fetching CDN: $_cdnBase/index.json');
   try {
     final response = await http
         .get(Uri.parse('$_cdnBase/index.json'))
         .timeout(const Duration(seconds: 5));
 
+    debugPrint('[Reactions] CDN status=${response.statusCode}');
     if (response.statusCode == 200) {
       final data = jsonDecode(response.body) as Map<String, dynamic>;
       final tabsRaw =
@@ -55,14 +57,19 @@ final reactionPackageProvider = FutureProvider<ReactionPackage>((ref) async {
 
       // Only return CDN result if we got actual image tabs (not just emoji)
       if (tabOrder.length > 1) {
+        debugPrint('[Reactions] CDN loaded — tabs: ${tabOrder.join(', ')}');
         return ReactionPackage(
           tabOrder: tabOrder,
           reactionSets: reactionSets,
           folderCredits: folderCredits,
         );
+      } else {
+        debugPrint('[Reactions] CDN returned no image tabs — falling back');
       }
     }
-  } catch (_) {}
+  } catch (e) {
+    debugPrint('[Reactions] ✗ CDN fetch failed: $e');
+  }
 
   // 2. Fallback: local assets
   try {
