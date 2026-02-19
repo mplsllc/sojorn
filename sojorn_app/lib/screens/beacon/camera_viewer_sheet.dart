@@ -6,6 +6,7 @@ import 'package:video_player/video_player.dart';
 
 import '../../models/beacon.dart';
 import '../../theme/app_theme.dart';
+import '../../theme/tokens.dart';
 import 'camera_player.dart';
 
 const _teal = Color(0xFF0097A7);
@@ -53,7 +54,7 @@ class _CameraViewerSheetState extends State<CameraViewerSheet> {
         allowMuting: true,
         showControls: true,
         aspectRatio: _vpc!.value.aspectRatio > 0 ? _vpc!.value.aspectRatio : 16 / 9,
-        placeholder: _darkPlaceholder,
+        placeholder: _videoPlaceholder,
         materialProgressColors: ChewieProgressColors(
           playedColor: _teal,
           handleColor: _teal,
@@ -74,9 +75,9 @@ class _CameraViewerSheetState extends State<CameraViewerSheet> {
     }
   }
 
-  Widget get _darkPlaceholder => Container(
-    color: const Color(0xFF0A1628),
-    child: const Center(child: CircularProgressIndicator(color: _teal)),
+  Widget get _videoPlaceholder => const ColoredBox(
+    color: Color(0xFF0A1628),
+    child: Center(child: CircularProgressIndicator(color: _teal)),
   );
 
   @override
@@ -105,9 +106,9 @@ class _CameraViewerSheetState extends State<CameraViewerSheet> {
       maxChildSize: 0.98,
       expand: false,
       builder: (ctx, _) => Container(
-        decoration: const BoxDecoration(
-          color: Color(0xFF0A1628),
-          borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+        decoration: BoxDecoration(
+          color: AppTheme.cardSurface,
+          borderRadius: const BorderRadius.vertical(top: Radius.circular(20)),
         ),
         child: Column(
           children: [
@@ -118,7 +119,7 @@ class _CameraViewerSheetState extends State<CameraViewerSheet> {
                 child: Container(
                   width: 36, height: 4,
                   decoration: BoxDecoration(
-                    color: Colors.white.withValues(alpha: 0.2),
+                    color: AppTheme.navyBlue.withValues(alpha: 0.12),
                     borderRadius: BorderRadius.circular(2),
                   ),
                 ),
@@ -131,12 +132,12 @@ class _CameraViewerSheetState extends State<CameraViewerSheet> {
               child: Row(
                 children: [
                   Container(
-                    padding: const EdgeInsets.all(7),
+                    padding: const EdgeInsets.all(8),
                     decoration: BoxDecoration(
-                      color: _teal.withValues(alpha: 0.2),
-                      shape: BoxShape.circle,
+                      color: _teal.withValues(alpha: 0.12),
+                      borderRadius: BorderRadius.circular(10),
                     ),
-                    child: const Icon(Icons.videocam, color: _teal, size: 18),
+                    child: const Icon(Icons.videocam, color: _teal, size: 20),
                   ),
                   const SizedBox(width: 10),
                   Expanded(
@@ -144,22 +145,23 @@ class _CameraViewerSheetState extends State<CameraViewerSheet> {
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
                         Text(cam.body,
-                          style: const TextStyle(
-                            color: Colors.white,
+                          style: TextStyle(
+                            color: AppTheme.navyBlue,
                             fontWeight: FontWeight.w700,
                             fontSize: 14,
                           ),
                           maxLines: 2,
                           overflow: TextOverflow.ellipsis,
                         ),
-                        const SizedBox(height: 1),
+                        const SizedBox(height: 2),
                         Row(children: [
                           Container(
-                            margin: const EdgeInsets.only(right: 5),
+                            margin: const EdgeInsets.only(right: 6),
                             padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
                             decoration: BoxDecoration(
-                              color: _teal.withValues(alpha: 0.2),
+                              color: _teal.withValues(alpha: 0.12),
                               borderRadius: BorderRadius.circular(4),
+                              border: Border.all(color: _teal.withValues(alpha: 0.3)),
                             ),
                             child: const Text('LIVE', style: TextStyle(
                               color: _teal, fontSize: 10, fontWeight: FontWeight.w800,
@@ -167,7 +169,7 @@ class _CameraViewerSheetState extends State<CameraViewerSheet> {
                             )),
                           ),
                           Text('MN DOT Traffic Camera',
-                            style: TextStyle(color: Colors.white.withValues(alpha: 0.5), fontSize: 11)),
+                            style: TextStyle(color: SojornColors.textDisabled, fontSize: 11)),
                         ]),
                       ],
                     ),
@@ -178,7 +180,7 @@ class _CameraViewerSheetState extends State<CameraViewerSheet> {
                       IconButton(
                         onPressed: _openInBrowser,
                         icon: Icon(Icons.open_in_new,
-                            color: Colors.white.withValues(alpha: 0.5), size: 18),
+                            color: AppTheme.navyBlue.withValues(alpha: 0.45), size: 18),
                         tooltip: 'Open in browser',
                         padding: EdgeInsets.zero,
                         constraints: const BoxConstraints(minWidth: 36, minHeight: 36),
@@ -186,7 +188,7 @@ class _CameraViewerSheetState extends State<CameraViewerSheet> {
                       IconButton(
                         onPressed: () => Navigator.pop(context),
                         icon: Icon(Icons.close,
-                            color: Colors.white.withValues(alpha: 0.4), size: 20),
+                            color: AppTheme.navyBlue.withValues(alpha: 0.35), size: 20),
                         padding: EdgeInsets.zero,
                         constraints: const BoxConstraints(minWidth: 36, minHeight: 36),
                       ),
@@ -197,13 +199,17 @@ class _CameraViewerSheetState extends State<CameraViewerSheet> {
             ),
 
             // ── divider ─────────────────────────────────────────
-            Divider(height: 1, color: Colors.white.withValues(alpha: 0.08)),
+            Divider(height: 1, color: AppTheme.navyBlue.withValues(alpha: 0.08)),
 
-            // ── video area ───────────────────────────────────────
+            // ── video canvas (always dark) ────────────────────────
             Expanded(
-              child: Padding(
-                padding: EdgeInsets.only(bottom: bottomPad),
-                child: _buildVideoArea(),
+              child: ClipRRect(
+                borderRadius: const BorderRadius.vertical(bottom: Radius.circular(20)),
+                child: Container(
+                  color: const Color(0xFF0A1628),
+                  padding: EdgeInsets.only(bottom: bottomPad),
+                  child: _buildVideoArea(),
+                ),
               ),
             ),
           ],
@@ -213,8 +219,7 @@ class _CameraViewerSheetState extends State<CameraViewerSheet> {
   }
 
   Widget _buildVideoArea() {
-    // Loading state
-    if (_loading) return _darkPlaceholder;
+    if (_loading) return _videoPlaceholder;
 
     // Web: use inline HLS.js player
     if (kIsWeb) {
@@ -227,10 +232,7 @@ class _CameraViewerSheetState extends State<CameraViewerSheet> {
 
     // Native: use Chewie player
     if (!_error && _chewie != null) {
-      return ClipRRect(
-        borderRadius: const BorderRadius.vertical(bottom: Radius.circular(20)),
-        child: Chewie(controller: _chewie!),
-      );
+      return Chewie(controller: _chewie!);
     }
 
     return _buildFallback();

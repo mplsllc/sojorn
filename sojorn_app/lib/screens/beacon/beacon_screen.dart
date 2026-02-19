@@ -3268,9 +3268,9 @@ class _SignDetailSheet extends StatelessWidget {
   Widget build(BuildContext context) {
     final bottomPad = MediaQuery.of(context).padding.bottom;
     return Container(
-      decoration: const BoxDecoration(
-        color: Color(0xFF0A1628),
-        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      decoration: BoxDecoration(
+        color: AppTheme.cardSurface,
+        borderRadius: const BorderRadius.vertical(top: Radius.circular(20)),
       ),
       padding: EdgeInsets.only(bottom: bottomPad + 16, left: 16, right: 16),
       child: Column(
@@ -3281,7 +3281,7 @@ class _SignDetailSheet extends StatelessWidget {
             child: Container(
               width: 36, height: 4,
               decoration: BoxDecoration(
-                color: Colors.white.withValues(alpha: 0.2),
+                color: AppTheme.navyBlue.withValues(alpha: 0.12),
                 borderRadius: BorderRadius.circular(2),
               ),
             ),
@@ -3290,7 +3290,10 @@ class _SignDetailSheet extends StatelessWidget {
             children: [
               Container(
                 padding: const EdgeInsets.all(8),
-                decoration: BoxDecoration(color: _amber.withValues(alpha: 0.2), shape: BoxShape.circle),
+                decoration: BoxDecoration(
+                  color: _amber.withValues(alpha: 0.12),
+                  borderRadius: BorderRadius.circular(10),
+                ),
                 child: const Icon(Icons.signpost, color: _amber, size: 20),
               ),
               const SizedBox(width: 12),
@@ -3298,21 +3301,23 @@ class _SignDetailSheet extends StatelessWidget {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    const Text('Road Sign', style: TextStyle(color: Colors.white, fontWeight: FontWeight.w700, fontSize: 15)),
-                    Text('MN DOT Electronic Sign', style: TextStyle(color: Colors.white.withValues(alpha: 0.45), fontSize: 11)),
+                    Text('Road Sign',
+                      style: TextStyle(color: AppTheme.navyBlue, fontWeight: FontWeight.w700, fontSize: 15)),
+                    Text('MN DOT Electronic Sign',
+                      style: TextStyle(color: SojornColors.textDisabled, fontSize: 11)),
                   ],
                 ),
               ),
               IconButton(
                 onPressed: () => Navigator.pop(context),
-                icon: Icon(Icons.close, color: Colors.white.withValues(alpha: 0.4), size: 20),
+                icon: Icon(Icons.close, color: AppTheme.navyBlue.withValues(alpha: 0.35), size: 20),
                 padding: EdgeInsets.zero,
                 constraints: const BoxConstraints(minWidth: 36, minHeight: 36),
               ),
             ],
           ),
           const SizedBox(height: 12),
-          Divider(height: 1, color: Colors.white.withValues(alpha: 0.08)),
+          Divider(height: 1, color: AppTheme.navyBlue.withValues(alpha: 0.08)),
           const SizedBox(height: 16),
           if (sign.imageUrl != null && sign.imageUrl!.isNotEmpty) ...[
             ClipRRect(
@@ -3330,14 +3335,16 @@ class _SignDetailSheet extends StatelessWidget {
             width: double.infinity,
             padding: const EdgeInsets.all(14),
             decoration: BoxDecoration(
-              color: Colors.white.withValues(alpha: 0.05),
+              color: AppTheme.scaffoldBg,
               borderRadius: BorderRadius.circular(10),
-              border: Border.all(color: _amber.withValues(alpha: 0.2)),
+              border: Border.all(color: AppTheme.navyBlue.withValues(alpha: 0.08)),
             ),
-            child: Text(sign.body, style: const TextStyle(color: Colors.white, fontSize: 14)),
+            child: Text(sign.body,
+              style: TextStyle(color: SojornColors.postContent, fontSize: 14)),
           ),
           const SizedBox(height: 8),
-          Text(sign.getTimeAgo(), style: TextStyle(color: Colors.white.withValues(alpha: 0.35), fontSize: 11)),
+          Text(sign.getTimeAgo(),
+            style: TextStyle(color: SojornColors.textDisabled, fontSize: 11)),
         ],
       ),
     );
@@ -3354,9 +3361,9 @@ class _WeatherDetailSheet extends StatelessWidget {
     final bottomPad = MediaQuery.of(context).padding.bottom;
     final severityColor = wx.severity.color;
     return Container(
-      decoration: const BoxDecoration(
-        color: Color(0xFF0A1628),
-        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      decoration: BoxDecoration(
+        color: AppTheme.cardSurface,
+        borderRadius: const BorderRadius.vertical(top: Radius.circular(20)),
       ),
       padding: EdgeInsets.only(bottom: bottomPad + 16, left: 16, right: 16),
       child: Column(
@@ -3367,7 +3374,7 @@ class _WeatherDetailSheet extends StatelessWidget {
             child: Container(
               width: 36, height: 4,
               decoration: BoxDecoration(
-                color: Colors.white.withValues(alpha: 0.2),
+                color: AppTheme.navyBlue.withValues(alpha: 0.12),
                 borderRadius: BorderRadius.circular(2),
               ),
             ),
@@ -3376,7 +3383,10 @@ class _WeatherDetailSheet extends StatelessWidget {
             children: [
               Container(
                 padding: const EdgeInsets.all(8),
-                decoration: BoxDecoration(color: severityColor.withValues(alpha: 0.2), shape: BoxShape.circle),
+                decoration: BoxDecoration(
+                  color: severityColor.withValues(alpha: 0.12),
+                  borderRadius: BorderRadius.circular(10),
+                ),
                 child: Icon(Icons.cloud, color: severityColor, size: 20),
               ),
               const SizedBox(width: 12),
@@ -3384,17 +3394,19 @@ class _WeatherDetailSheet extends StatelessWidget {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    const Text('Weather Station', style: TextStyle(color: Colors.white, fontWeight: FontWeight.w700, fontSize: 15)),
-                    Text('MN DOT RWIS Sensor', style: TextStyle(color: Colors.white.withValues(alpha: 0.45), fontSize: 11)),
+                    Text('Weather Station',
+                      style: TextStyle(color: AppTheme.navyBlue, fontWeight: FontWeight.w700, fontSize: 15)),
+                    Text('MN DOT RWIS Sensor',
+                      style: TextStyle(color: SojornColors.textDisabled, fontSize: 11)),
                   ],
                 ),
               ),
               Container(
                 padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
                 decoration: BoxDecoration(
-                  color: severityColor.withValues(alpha: 0.2),
+                  color: severityColor.withValues(alpha: 0.12),
                   borderRadius: BorderRadius.circular(6),
-                  border: Border.all(color: severityColor.withValues(alpha: 0.4)),
+                  border: Border.all(color: severityColor.withValues(alpha: 0.35)),
                 ),
                 child: Text(wx.severity.label.toUpperCase(),
                   style: TextStyle(color: severityColor, fontSize: 10, fontWeight: FontWeight.w800, letterSpacing: 0.6)),
@@ -3402,27 +3414,29 @@ class _WeatherDetailSheet extends StatelessWidget {
               const SizedBox(width: 4),
               IconButton(
                 onPressed: () => Navigator.pop(context),
-                icon: Icon(Icons.close, color: Colors.white.withValues(alpha: 0.4), size: 20),
+                icon: Icon(Icons.close, color: AppTheme.navyBlue.withValues(alpha: 0.35), size: 20),
                 padding: EdgeInsets.zero,
                 constraints: const BoxConstraints(minWidth: 36, minHeight: 36),
               ),
             ],
           ),
           const SizedBox(height: 12),
-          Divider(height: 1, color: Colors.white.withValues(alpha: 0.08)),
+          Divider(height: 1, color: AppTheme.navyBlue.withValues(alpha: 0.08)),
           const SizedBox(height: 16),
           Container(
             width: double.infinity,
             padding: const EdgeInsets.all(14),
             decoration: BoxDecoration(
-              color: Colors.white.withValues(alpha: 0.05),
+              color: AppTheme.scaffoldBg,
               borderRadius: BorderRadius.circular(10),
-              border: Border.all(color: severityColor.withValues(alpha: 0.2)),
+              border: Border.all(color: AppTheme.navyBlue.withValues(alpha: 0.08)),
             ),
-            child: Text(wx.body, style: const TextStyle(color: Colors.white, fontSize: 14, height: 1.5)),
+            child: Text(wx.body,
+              style: TextStyle(color: SojornColors.postContent, fontSize: 14, height: 1.5)),
           ),
           const SizedBox(height: 8),
-          Text(wx.getTimeAgo(), style: TextStyle(color: Colors.white.withValues(alpha: 0.35), fontSize: 11)),
+          Text(wx.getTimeAgo(),
+            style: TextStyle(color: SojornColors.textDisabled, fontSize: 11)),
         ],
       ),
     );
