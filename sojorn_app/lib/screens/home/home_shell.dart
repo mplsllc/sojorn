@@ -254,7 +254,10 @@ class _HomeShellState extends ConsumerState<HomeShell> with WidgetsBindingObserv
             },
             onBeaconTap: () {
               setState(() => _isRadialMenuVisible = false);
-              widget.navigationShell.goBranch(2); // Navigate to beacon tab (index 2)
+              widget.navigationShell.goBranch(2);
+              WidgetsBinding.instance.addPostFrameCallback((_) {
+                BeaconScreen.globalKey.currentState?.onCreateAction();
+              });
             },
                 ),
               ],

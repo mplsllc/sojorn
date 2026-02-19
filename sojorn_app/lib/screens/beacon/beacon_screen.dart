@@ -384,7 +384,7 @@ class BeaconScreenState extends ConsumerState<BeaconScreen> with TickerProviderS
         centerLat: _mapCenter.latitude,
         centerLong: _mapCenter.longitude,
         onBeaconCreated: (post) {
-          setState(() => _beacons.add(post));
+          if (post.isBeaconPost) setState(() => _beacons.add(post));
           _loadBeacons();
         },
       ),
@@ -2241,7 +2241,7 @@ class BeaconScreenState extends ConsumerState<BeaconScreen> with TickerProviderS
           markers: [
             // Only geo-alert beacons on the map (not discussions)
             ..._beacons
-                .where((p) => p.beaconType?.isGeoAlert ?? false)
+                .where((p) => p.isBeaconPost && (p.beaconType?.isGeoAlert ?? false))
                 .map((beacon) => _createMarker(beacon)),
             if (_locationPermissionGranted && _userLocation != null)
               _createUserLocationMarker(),
