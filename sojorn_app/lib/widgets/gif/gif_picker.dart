@@ -205,7 +205,7 @@ class _MemeTabState extends State<_MemeTab>
     try {
       final results = <_GifItem>[];
       if (query.isEmpty) {
-        // Load from three subreddits in parallel
+        // Load from three gif-centric subreddits in parallel
         final futures = _defaultSubreddits.map(_fetchSubreddit);
         final lists = await Future.wait(futures);
         for (final list in lists) {
@@ -213,8 +213,8 @@ class _MemeTabState extends State<_MemeTab>
         }
         results.shuffle();
       } else {
-        // Try the query as a subreddit name
-        results.addAll(await _fetchSubreddit(query));
+        // Keyword search across gif-centric subreddits (not treating query as subreddit)
+        results.addAll(await _searchGifSubreddits(query));
       }
 
       if (mounted) {
@@ -226,6 +226,40 @@ class _MemeTabState extends State<_MemeTab>
     } catch (_) {
       if (mounted) setState(() { _loading = false; _hasError = true; });
     }
+  }
+
+  /// Searches Reddit's search API across gif-centric subreddits for the given keyword.
+  Future<List<_GifItem>> _searchGifSubreddits(String query) async {
+    final subreddit = _defaultSubreddits.join('+');
+    final uri = Uri.parse(
+        'https://www.reddit.com/r/$subreddit/search.json'
+        '?q=${Uri.encodeComponent(query)}&sort=top&restrict_sr=1&limit=25&type=link');
+    final resp = await http
+        .get(uri, headers: {'User-Agent': 'SojornApp/1.0'})
+        .timeout(const Duration(seconds: 10));
+    if (resp.statusCode != 200) return [];
+    final data = jsonDecode(resp.body) as Map<String, dynamic>;
+    final children =
+        ((data['data'] as Map<String, dynamic>)['children'] as List?) ?? [];
+    return children
+        .cast<Map<String, dynamic>>()
+        .map((c) => c['data'] as Map<String, dynamic>)
+        .where((post) {
+          final url = post['url'] as String? ?? '';
+          return !url.startsWith('https://v.redd.it/') &&
+              !url.endsWith('.mp4') &&
+              (url.endsWith('.gif') ||
+                  url.startsWith('https://i.redd.it/') ||
+                  url.startsWith('https://preview.redd.it/') ||
+                  url.startsWith('https://i.imgur.com/') ||
+                  url.startsWith('https://media.giphy.com/')) &&
+              post['over_18'] != true;
+        })
+        .map((post) => _GifItem(
+              url: post['url'] as String,
+              title: post['title'] as String? ?? '',
+            ))
+        .toList();
   }
 
   Future<List<_GifItem>> _fetchSubreddit(String subreddit) async {
@@ -263,7 +297,7 @@ class _MemeTabState extends State<_MemeTab>
       children: [
         _SearchBar(
           ctrl: widget.searchCtrl,
-          hint: 'Search GIFs…',
+          hint: 'Search reactions (e.g. happy, facepalm)…',
         ),
         Expanded(child: _GifGrid(
           gifs: _gifs,
@@ -271,7 +305,7 @@ class _MemeTabState extends State<_MemeTab>
           hasError: _hasError,
           emptyMessage: _loadedQuery.isEmpty
               ? 'No GIFs found'
-              : 'No GIFs in r/${widget.searchCtrl.text.trim()}',
+              : 'No GIFs found for "${widget.searchCtrl.text.trim()}"',
           onSelected: widget.onSelected,
           onRetry: () => _fetch(_loadedQuery),
         )),
@@ -335,27 +369,81 @@ class _RetroTabState extends State<_RetroTab>
     _loadedQuery = query;
 
     try {
-      final uri = Uri.parse(
-          'https://gifcities.org/search?q=${Uri.encodeComponent(query)}&page_size=60&offset=0');
-      final resp = await http.get(
-        uri,
-        headers: {'Accept': 'text/html,*/*'},
-      ).timeout(const Duration(seconds: 10));
-
-      final matches = _gifUrlRegex.allMatches(resp.body);
-      final unique = <String>{};
-      final gifs = <_GifItem>[];
-      for (final m in matches) {
-        final url = m.group(0)!;
-        if (unique.add(url)) {
-          gifs.add(_GifItem(url: url, title: ''));
-        }
-      }
-
+      final gifs = await _fetchGifCities(query);
       if (mounted) setState(() { _gifs = gifs; _loading = false; });
     } catch (_) {
       if (mounted) setState(() { _loading = false; _hasError = true; });
     }
+  }
+
+  /// Fetches retro GIFs from GifCities. Tries the JSON API first, falls back
+  /// to HTML scraping with the blob URL regex.
+  Future<List<_GifItem>> _fetchGifCities(String query) async {
+    // ── 1. JSON API ──────────────────────────────────────────────────────────
+    try {
+      final jsonUri = Uri.parse(
+          'https://gifcities.org/api/gifs?q=${Uri.encodeComponent(query)}&limit=60');
+      final jsonResp = await http
+          .get(jsonUri, headers: {
+            'Accept': 'application/json',
+            'User-Agent': 'SojornApp/1.0',
+          })
+          .timeout(const Duration(seconds: 8));
+
+      if (jsonResp.statusCode == 200) {
+        final decoded = jsonDecode(jsonResp.body);
+        List? items;
+        if (decoded is List) {
+          items = decoded;
+        } else if (decoded is Map) {
+          items = decoded['items'] as List? ??
+              decoded['results'] as List? ??
+              decoded['data'] as List? ??
+              decoded['gifs'] as List?;
+        }
+        if (items != null && items.isNotEmpty) {
+          final unique = <String>{};
+          final result = <_GifItem>[];
+          for (final item in items) {
+            if (item is! Map) continue;
+            final url = item['url'] as String? ??
+                item['image_url'] as String? ??
+                item['src'] as String? ?? '';
+            if (url.isNotEmpty && unique.add(url)) {
+              result.add(_GifItem(url: url, title: ''));
+            }
+          }
+          if (result.isNotEmpty) return result;
+        }
+      }
+    } catch (_) {}
+
+    // ── 2. HTML scraping fallback ─────────────────────────────────────────
+    for (final pageUrl in [
+      'https://gifcities.org/?q=${Uri.encodeComponent(query)}',
+      'https://gifcities.org/search?q=${Uri.encodeComponent(query)}&page_size=60&offset=0',
+    ]) {
+      try {
+        final resp = await http
+            .get(Uri.parse(pageUrl), headers: {
+              'Accept': 'text/html,*/*',
+              'User-Agent': 'Mozilla/5.0 (compatible; SojornApp/1.0)',
+            })
+            .timeout(const Duration(seconds: 10));
+        final matches = _gifUrlRegex.allMatches(resp.body);
+        if (matches.isNotEmpty) {
+          final unique = <String>{};
+          final result = <_GifItem>[];
+          for (final m in matches) {
+            final url = m.group(0)!;
+            if (unique.add(url)) result.add(_GifItem(url: url, title: ''));
+          }
+          if (result.isNotEmpty) return result;
+        }
+      } catch (_) {}
+    }
+
+    return [];
   }
 
   @override

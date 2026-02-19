@@ -247,6 +247,22 @@ class _ClustersScreenState extends ConsumerState<ClustersScreen>
           _SectionHeader(title: 'Discover Communities'),
           const SizedBox(height: 10),
 
+          // ── Suggested for You (personalized, category-agnostic) ──
+          if (_suggestedGroups.isNotEmpty) ...[
+            const _SectionHeader(title: 'Suggested for You'),
+            const SizedBox(height: 8),
+            ..._suggestedGroups.take(3).map((sg) => GroupCard(
+              group: sg.group,
+              onTap: () => _navigateToGroup(sg.group),
+              showReason: true,
+              reason: sg.reason,
+            )),
+            const SizedBox(height: 20),
+            _SectionHeader(title: 'Browse Communities',
+                count: _discoverGroups.length > 0 ? _discoverGroups.length : null),
+            const SizedBox(height: 10),
+          ],
+
           // Category chips (horizontal scroll)
           SizedBox(
             height: 36,
@@ -272,7 +288,7 @@ class _ClustersScreenState extends ConsumerState<ClustersScreen>
                   selected: selected,
                   onSelected: (_) {
                     setState(() => _selectedCategory = value);
-                    _loadSuggestedGroups();
+                    _loadDiscover(); // category-filtered browse
                   },
                   selectedColor: AppTheme.navyBlue,
                   backgroundColor: AppTheme.navyBlue.withValues(alpha: 0.06),
@@ -288,10 +304,10 @@ class _ClustersScreenState extends ConsumerState<ClustersScreen>
           ),
           const SizedBox(height: 12),
 
-          // Discover results
-          if (_isSuggestedLoading)
+          // Discover results — category-filtered public groups
+          if (_isDiscoverLoading)
             const SkeletonGroupList(count: 4)
-          else if (_suggestedGroups.isEmpty)
+          else if (_discoverGroups.isEmpty)
             _EmptyDiscoverState(
               onCreateGroup: () => _showCreateSheet(context),
             )
@@ -299,13 +315,12 @@ class _ClustersScreenState extends ConsumerState<ClustersScreen>
             Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                const SizedBox(height: 8),
-                ..._suggestedGroups.map((suggested) {
+                const SizedBox(height: 4),
+                ..._discoverGroups.map((g) {
+                  final group = group_models.Group.fromJson(g);
                   return GroupCard(
-                    group: suggested.group,
-                    onTap: () => _navigateToGroup(suggested.group),
-                    showReason: true,
-                    reason: suggested.reason,
+                    group: group,
+                    onTap: () => _navigateToGroup(group),
                   );
                 }),
                 const SizedBox(height: 20),
