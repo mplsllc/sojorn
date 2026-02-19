@@ -5,6 +5,7 @@ import '../../services/auth_service.dart';
 import 'package:timeago/timeago.dart' as timeago;
 import '../../models/notification.dart';
 import '../../providers/api_provider.dart';
+import '../../routes/app_routes.dart';
 import '../../theme/app_theme.dart';
 import '../../theme/tokens.dart';
 import '../../widgets/media/signed_media_image.dart';
@@ -13,8 +14,8 @@ import '../profile/viewable_profile_screen.dart';
 import '../post/post_detail_screen.dart';
 import 'package:go_router/go_router.dart';
 import '../../services/notification_service.dart';
-import '../../providers/notification_provider.dart';
 import '../home/full_screen_shell.dart';
+import 'activity_log_screen.dart';
 
 /// Notifications screen showing user activity
 class NotificationsScreen extends ConsumerStatefulWidget {
@@ -30,10 +31,10 @@ class _NotificationsScreenState extends ConsumerState<NotificationsScreen> {
   bool _hasMore = true;
   String? _error;
   int _activeTabIndex = 0; // 0 = Active, 1 = Archived
-  String _filter = 'all'; // 'all','unread','likes','comments','follows','archived'
+  String _filter = 'all'; // 'all','unread','likes','comments','follows','groups','archived'
   final Set<String> _locallyArchivedIds = {};
   StreamSubscription<AuthState>? _authSub;
-  TabController? _tabController;
+  Timer? _pollTimer;
 
   @override
   void initState() {
@@ -44,48 +45,30 @@ class _NotificationsScreenState extends ConsumerState<NotificationsScreen> {
         if (event.event == AuthChangeEvent.signedIn ||
             event.event == AuthChangeEvent.tokenRefreshed) {
           _loadNotifications();
+          _startPolling();
         }
       });
     } else {
       _loadNotifications();
+      _startPolling();
     }
   }
 
   @override
   void dispose() {
     _authSub?.cancel();
-    _tabController?.dispose();
+    _pollTimer?.cancel();
     NotificationService.instance.refreshBadge();
     super.dispose();
   }
 
-  void _subscribeToNotifications() {
-    // Migrate to Go WebSockets or Polling
-  }
-
-  Future<void> _handleNewNotification(Map<String, dynamic> record) async {
-    // Fetch the full notification with actor and post data
-    try {
-      final apiService = ref.read(apiServiceProvider);
-      final notifications = await apiService.getNotifications(limit: 1, offset: 0);
-
-      if (notifications.isNotEmpty && mounted) {
-        final newNotification = notifications.first;
-        if (_activeTabIndex != 1 && // If not in Archived tab
-            (newNotification.archivedAt != null ||
-                _locallyArchivedIds.contains(newNotification.id))) {
-          return;
-        }
-        // Only add if not already in the list
-        if (!_notifications.any((n) => n.id == newNotification.id)) {
-          setState(() {
-            _notifications.insert(0, newNotification);
-          });
-        }
+  void _startPolling() {
+    _pollTimer?.cancel();
+    _pollTimer = Timer.periodic(const Duration(seconds: 60), (_) {
+      if (mounted && !_isLoading) {
+        _loadNotifications(refresh: true, silent: true);
       }
-    } catch (e) {
-      // Silently fail - we'll get it on next refresh
-    }
+    });
   }
 
   List<AppNotification> get _filteredNotifications {
@@ -93,11 +76,31 @@ class _NotificationsScreenState extends ConsumerState<NotificationsScreen> {
       case 'unread':
         return _notifications.where((n) => !n.isRead).toList();
       case 'likes':
-        return _notifications.where((n) => n.type == NotificationType.like || n.type == NotificationType.quip_reaction).toList();
+        return _notifications
+            .where((n) =>
+                n.type == NotificationType.like ||
+                n.type == NotificationType.quip_reaction ||
+                n.type == NotificationType.group_like)
+            .toList();
       case 'comments':
-        return _notifications.where((n) => n.type == NotificationType.comment || n.type == NotificationType.reply || n.type == NotificationType.mention).toList();
+        return _notifications
+            .where((n) =>
+                n.type == NotificationType.comment ||
+                n.type == NotificationType.reply ||
+                n.type == NotificationType.mention ||
+                n.type == NotificationType.group_comment ||
+                n.type == NotificationType.group_thread ||
+                n.type == NotificationType.group_reply)
+            .toList();
       case 'follows':
-        return _notifications.where((n) => n.type == NotificationType.follow || n.type == NotificationType.follow_accepted || n.type == NotificationType.follow_request).toList();
+        return _notifications
+            .where((n) =>
+                n.type == NotificationType.follow ||
+                n.type == NotificationType.follow_accepted ||
+                n.type == NotificationType.follow_request)
+            .toList();
+      case 'groups':
+        return _notifications.where((n) => n.isGroupNotification).toList();
       default:
         return _notifications;
     }
@@ -119,82 +122,78 @@ class _NotificationsScreenState extends ConsumerState<NotificationsScreen> {
     }
   }
 
-  Future<void> _loadNotifications({bool refresh = false}) async {
+  Future<void> _loadNotifications({bool refresh = false, bool silent = false}) async {
     if (_isLoading) return;
-
-    // Ensure we have a valid session before loading
     if (!AuthService.instance.isAuthenticated) return;
 
-    setState(() {
-      _isLoading = true;
-      _error = null;
-      if (refresh) {
-        _notifications = [];
-        _hasMore = true;
-      }
-    });
+    if (!silent) {
+      setState(() {
+        _isLoading = true;
+        _error = null;
+        if (refresh) {
+          _notifications = [];
+          _hasMore = true;
+        }
+      });
+    } else if (refresh) {
+      // Silent refresh — don't show loader, but do reset state
+      _notifications = [];
+      _hasMore = true;
+    }
 
     try {
       final apiService = ref.read(apiServiceProvider);
       final showArchived = _activeTabIndex == 1;
       final notifications = await apiService.getNotifications(
         limit: 20,
-        offset: refresh ? 0 : _notifications.length,
+        offset: refresh || silent ? 0 : _notifications.length,
         includeArchived: showArchived,
       );
 
       if (mounted) {
-        // Backend handles active vs archived filtering
         final filtered = notifications
             .where((item) => !_locallyArchivedIds.contains(item.id))
             .toList();
 
         setState(() {
-          if (refresh) {
+          if (refresh || silent) {
             _notifications = filtered;
           } else {
             _notifications.addAll(filtered);
           }
           _hasMore = notifications.length == 20;
+          if (!silent) _isLoading = false;
         });
       }
     } catch (e) {
-      if (mounted) {
+      if (mounted && !silent) {
         setState(() {
           _error = e.toString().replaceAll('Exception: ', '');
+          _isLoading = false;
         });
       }
     } finally {
-      if (mounted) {
-        setState(() {
-          _isLoading = false;
-        });
+      if (mounted && !silent && _isLoading) {
+        setState(() => _isLoading = false);
       }
     }
   }
 
   Future<void> _markAsRead(AppNotification notification) async {
     if (notification.isRead) return;
-
     try {
       final apiService = ref.read(apiServiceProvider);
       await apiService.markNotificationsAsRead([notification.id]);
-
       if (mounted) {
         setState(() {
-          final index =
-              _notifications.indexWhere((item) => item.id == notification.id);
+          final index = _notifications.indexWhere((item) => item.id == notification.id);
           if (index != -1) {
             _notifications[index] = notification.copyWith(isRead: true);
           }
         });
-        
-        // Clear the badge count on the bell icon immediately
         NotificationService.instance.refreshBadge();
       }
-    } catch (e) {
-      // Silently fail - not critical
-    }
+    } catch (_) {}
   }
 
   Future<void> _archiveAllNotifications() async {
@@ -202,7 +201,7 @@ class _NotificationsScreenState extends ConsumerState<NotificationsScreen> {
       context: context,
       builder: (context) => AlertDialog(
         title: const Text('Archive All'),
-        content: const Text('Are you sure you want to move all notifications to your archive?'),
+        content: const Text('Move all notifications to your archive?'),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(context, false),
@@ -215,35 +214,27 @@ class _NotificationsScreenState extends ConsumerState<NotificationsScreen> {
         ],
       ),
     );
-
     if (confirmed != true) return;
 
     try {
       final apiService = ref.read(apiServiceProvider);
       await apiService.archiveAllNotifications();
-
       if (mounted) {
         setState(() {
           _locallyArchivedIds.addAll(_notifications.map((n) => n.id));
           _notifications = [];
           _hasMore = false;
         });
-
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('Notifications moved to archive'),
-            duration: Duration(seconds: 2),
-          ),
+          const SnackBar(content: Text('Notifications archived'), duration: Duration(seconds: 2)),
         );
-        
-        // Clear the badge count on the bell icon immediately
         NotificationService.instance.refreshBadge();
       }
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text('Failed to archive notifications: ${e.toString().replaceAll('Exception: ', '')}'),
+            content: Text('Failed to archive: ${e.toString().replaceAll('Exception: ', '')}'),
             backgroundColor: AppTheme.error,
           ),
         );
@@ -252,10 +243,8 @@ class _NotificationsScreenState extends ConsumerState<NotificationsScreen> {
   }
 
   Future<void> _approveFollowRequest(AppNotification notification) async {
-    final requesterId =
-        notification.followerIdFromMetadata ?? notification.actor?.id;
+    final requesterId = notification.followerIdFromMetadata ?? notification.actor?.id;
     if (requesterId == null) return;
-
     try {
       final apiService = ref.read(apiServiceProvider);
       await apiService.acceptFollowRequest(requesterId);
@@ -264,7 +253,7 @@ class _NotificationsScreenState extends ConsumerState<NotificationsScreen> {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text('Failed to approve request: ${e.toString().replaceAll('Exception: ', '')}'),
+            content: Text('Failed to approve: ${e.toString().replaceAll('Exception: ', '')}'),
             backgroundColor: AppTheme.error,
           ),
         );
@@ -273,10 +262,8 @@ class _NotificationsScreenState extends ConsumerState<NotificationsScreen> {
   }
 
   Future<void> _rejectFollowRequest(AppNotification notification) async {
-    final requesterId =
-        notification.followerIdFromMetadata ?? notification.actor?.id;
+    final requesterId = notification.followerIdFromMetadata ?? notification.actor?.id;
     if (requesterId == null) return;
-
     try {
       final apiService = ref.read(apiServiceProvider);
       await apiService.rejectFollowRequest(requesterId);
@@ -285,7 +272,7 @@ class _NotificationsScreenState extends ConsumerState<NotificationsScreen> {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text('Failed to delete request: ${e.toString().replaceAll('Exception: ', '')}'),
+            content: Text('Failed to delete: ${e.toString().replaceAll('Exception: ', '')}'),
             backgroundColor: AppTheme.error,
           ),
         );
@@ -294,21 +281,15 @@ class _NotificationsScreenState extends ConsumerState<NotificationsScreen> {
   }
 
   void _handleNotificationTap(AppNotification notification) async {
-    // Only mark as read, do NOT archive automatically on tap. 
-    // This allows the user to see the notification again later if they don't archive it.
     await _markAsRead(notification);
 
-    // Navigate based on notification type
     switch (notification.type) {
       case NotificationType.follow:
       case NotificationType.follow_accepted:
-        // Navigate to the follower's profile
         if (notification.actor != null) {
-          Navigator.of(context).push(
-            MaterialPageRoute(
-              builder: (_) => UnifiedProfileScreen(handle: notification.actor!.handle),
-            ),
-          );
+          Navigator.of(context).push(MaterialPageRoute(
+            builder: (_) => UnifiedProfileScreen(handle: notification.actor!.handle),
+          ));
         }
         break;
 
@@ -316,17 +297,16 @@ class _NotificationsScreenState extends ConsumerState<NotificationsScreen> {
       case NotificationType.comment:
       case NotificationType.reply:
       case NotificationType.mention:
-        // Fetch the post and navigate to post detail
+      case NotificationType.save:
+      case NotificationType.share:
+      case NotificationType.beacon_vouch:
         if (notification.postId != null) {
           try {
             final apiService = ref.read(apiServiceProvider);
             final post = await apiService.getPostById(notification.postId!);
-
             if (mounted) {
               Navigator.of(context, rootNavigator: true).push(
-                MaterialPageRoute(
-                  builder: (_) => PostDetailScreen(post: post),
-                ),
+                MaterialPageRoute(builder: (_) => PostDetailScreen(post: post)),
               );
             }
           } catch (e) {
@@ -341,16 +321,40 @@ class _NotificationsScreenState extends ConsumerState<NotificationsScreen> {
           }
         }
         break;
+
       case NotificationType.message:
-        // For messages, navigate to chat screen
         if (notification.metadata?['conversation_id'] != null) {
           context.push('/secure-chat/${notification.metadata!['conversation_id']}');
         } else {
           context.push('/secure-chat');
         }
         break;
-      case NotificationType.follow_request:
+
+      case NotificationType.group_post:
+      case NotificationType.group_comment:
+      case NotificationType.group_like:
+      case NotificationType.group_invite:
+      case NotificationType.group_thread:
+      case NotificationType.group_reply:
+        context.push(AppRoutes.clusters);
         break;
+
+      case NotificationType.nsfw_warning:
+      case NotificationType.content_removed:
+        // Navigate to post if available, otherwise show info dialog
+        if (notification.postId != null) {
+          try {
+            final apiService = ref.read(apiServiceProvider);
+            final post = await apiService.getPostById(notification.postId!);
+            if (mounted) {
+              Navigator.of(context, rootNavigator: true).push(
+                MaterialPageRoute(builder: (_) => PostDetailScreen(post: post)),
+              );
+            }
+          } catch (_) {}
+        }
+        break;
+
       default:
         break;
     }
@@ -360,14 +364,11 @@ class _NotificationsScreenState extends ConsumerState<NotificationsScreen> {
     try {
       final apiService = ref.read(apiServiceProvider);
       await apiService.archiveNotifications([notification.id]);
-
       if (mounted) {
         setState(() {
           _locallyArchivedIds.add(notification.id);
           _notifications.removeWhere((n) => n.id == notification.id);
         });
-        
-        // Update badge count
         NotificationService.instance.refreshBadge();
       }
       return true;
@@ -384,13 +385,68 @@ class _NotificationsScreenState extends ConsumerState<NotificationsScreen> {
     }
   }
 
+  // ─── Date section helpers ─────────────────────────────────────────────────
+
+  bool _sameSection(DateTime a, DateTime b) {
+    final now = DateTime.now();
+    final today = DateTime(now.year, now.month, now.day);
+    final yesterday = today.subtract(const Duration(days: 1));
+    final weekAgo = today.subtract(const Duration(days: 7));
+
+    String sectionFor(DateTime d) {
+      final date = DateTime(d.year, d.month, d.day);
+      if (!date.isBefore(today)) return 'today';
+      if (!date.isBefore(yesterday)) return 'yesterday';
+      if (!date.isBefore(weekAgo)) return 'this_week';
+      return 'earlier';
+    }
+
+    return sectionFor(a) == sectionFor(b);
+  }
+
+  Widget _buildDateHeader(DateTime dt) {
+    final now = DateTime.now();
+    final today = DateTime(now.year, now.month, now.day);
+    final yesterday = today.subtract(const Duration(days: 1));
+    final weekAgo = today.subtract(const Duration(days: 7));
+    final date = DateTime(dt.year, dt.month, dt.day);
+
+    String label;
+    if (!date.isBefore(today)) {
+      label = 'Today';
+    } else if (!date.isBefore(yesterday)) {
+      label = 'Yesterday';
+    } else if (!date.isBefore(weekAgo)) {
+      label = 'This Week';
+    } else {
+      label = 'Earlier';
+    }
+
+    return Container(
+      padding: const EdgeInsets.fromLTRB(16, 14, 16, 6),
+      color: AppTheme.scaffoldBg,
+      width: double.infinity,
+      child: Text(
+        label,
+        style: TextStyle(
+          fontSize: 12,
+          fontWeight: FontWeight.w700,
+          color: AppTheme.navyText.withValues(alpha: 0.45),
+          letterSpacing: 0.8,
+        ),
+      ),
+    );
+  }
+
+  // ─── Build ────────────────────────────────────────────────────────────────
+
   @override
   Widget build(BuildContext context) {
     final canArchiveAll = _filter != 'archived' && _notifications.isNotEmpty;
     final displayed = _filteredNotifications;
 
     return FullScreenShell(
-      titleText: 'Activity',
+      titleText: 'Notifications',
       body: Column(
         children: [
           _buildFilterRow(canArchiveAll),
@@ -406,7 +462,7 @@ class _NotificationsScreenState extends ConsumerState<NotificationsScreen> {
                         onRefresh: () => _loadNotifications(refresh: true),
                         child: ListView.builder(
                           itemCount: displayed.length + (_hasMore ? 1 : 0),
-                          padding: const EdgeInsets.symmetric(vertical: 4),
+                          padding: const EdgeInsets.only(bottom: 24),
                           itemBuilder: (context, index) {
                             if (index == displayed.length) {
                               if (!_isLoading) _loadNotifications();
@@ -415,47 +471,63 @@ class _NotificationsScreenState extends ConsumerState<NotificationsScreen> {
                                 child: Center(child: CircularProgressIndicator()),
                               );
                             }
+
                             final notification = displayed[index];
-                            if (_filter != 'archived') {
-                              return Dismissible(
-                                key: Key('notif_${notification.id}'),
-                                direction: DismissDirection.endToStart,
-                                onDismissed: (_) => _archiveNotification(notification),
-                                background: Container(
-                                  alignment: Alignment.centerRight,
-                                  padding: const EdgeInsets.only(right: 20),
-                                  color: AppTheme.royalPurple.withValues(alpha: 0.8),
-                                  child: const Row(
-                                    mainAxisAlignment: MainAxisAlignment.end,
-                                    children: [
-                                      Text('Archive',
-                                          style: TextStyle(color: SojornColors.basicWhite, fontWeight: FontWeight.bold)),
-                                      SizedBox(width: 8),
-                                      Icon(Icons.archive, color: SojornColors.basicWhite),
-                                    ],
-                                  ),
-                                ),
-                                child: _NotificationItem(
-                                  notification: notification,
-                                  onTap: notification.type == NotificationType.follow_request
-                                      ? null
-                                      : () => _handleNotificationTap(notification),
-                                  onApprove: notification.type == NotificationType.follow_request
-                                      ? () => _approveFollowRequest(notification)
-                                      : null,
-                                  onReject: notification.type == NotificationType.follow_request
-                                      ? () => _rejectFollowRequest(notification)
-                                      : null,
-                                ),
-                              );
-                            } else {
-                              return _NotificationItem(
-                                notification: notification,
-                                onTap: notification.type == NotificationType.follow_request
-                                    ? null
-                                    : () => _handleNotificationTap(notification),
+                            final prev = index > 0 ? displayed[index - 1] : null;
+                            final showHeader = prev == null ||
+                                !_sameSection(prev.createdAt, notification.createdAt);
+
+                            final item = _filter != 'archived'
+                                ? Dismissible(
+                                    key: Key('notif_${notification.id}'),
+                                    direction: DismissDirection.endToStart,
+                                    onDismissed: (_) => _archiveNotification(notification),
+                                    background: Container(
+                                      alignment: Alignment.centerRight,
+                                      padding: const EdgeInsets.only(right: 20),
+                                      color: AppTheme.royalPurple.withValues(alpha: 0.8),
+                                      child: const Row(
+                                        mainAxisAlignment: MainAxisAlignment.end,
+                                        children: [
+                                          Text('Archive',
+                                              style: TextStyle(
+                                                  color: SojornColors.basicWhite,
+                                                  fontWeight: FontWeight.bold)),
+                                          SizedBox(width: 8),
+                                          Icon(Icons.archive, color: SojornColors.basicWhite),
+                                        ],
+                                      ),
+                                    ),
+                                    child: _NotificationItem(
+                                      notification: notification,
+                                      onTap: notification.type == NotificationType.follow_request
+                                          ? null
+                                          : () => _handleNotificationTap(notification),
+                                      onApprove: notification.type == NotificationType.follow_request
+                                          ? () => _approveFollowRequest(notification)
+                                          : null,
+                                      onReject: notification.type == NotificationType.follow_request
+                                          ? () => _rejectFollowRequest(notification)
+                                          : null,
+                                    ),
+                                  )
+                                : _NotificationItem(
+                                    notification: notification,
+                                    onTap: notification.type == NotificationType.follow_request
+                                        ? null
+                                        : () => _handleNotificationTap(notification),
+                                  );
+
+                            if (showHeader) {
+                              return Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  _buildDateHeader(notification.createdAt),
+                                  item,
+                                ],
                               );
                             }
+                            return item;
                           },
                         ),
                       ),
@@ -471,6 +543,7 @@ class _NotificationsScreenState extends ConsumerState<NotificationsScreen> {
       ('unread', 'Unread'),
       ('likes', 'Likes'),
       ('comments', 'Comments'),
+      ('groups', 'Groups'),
       ('follows', 'Follows'),
       ('archived', 'Archived'),
     ];
@@ -499,7 +572,6 @@ class _NotificationsScreenState extends ConsumerState<NotificationsScreen> {
                     onSelected: (_) => _setFilter(value),
                     backgroundColor: AppTheme.cardSurface,
                     selectedColor: AppTheme.brightNavy,
-                    checkmarkColor: Colors.white,
                     showCheckmark: false,
                     side: BorderSide(
                         color: isSelected
@@ -512,26 +584,52 @@ class _NotificationsScreenState extends ConsumerState<NotificationsScreen> {
               }).toList(),
             ),
           ),
-          if (canArchiveAll)
-            Align(
-              alignment: Alignment.centerRight,
-              child: Padding(
-                padding: const EdgeInsets.only(right: 8, bottom: 2),
-                child: TextButton(
-                  onPressed: _archiveAllNotifications,
-                  child: Text('Archive All',
+          Padding(
+            padding: const EdgeInsets.fromLTRB(8, 0, 8, 4),
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                TextButton.icon(
+                  onPressed: () => Navigator.of(context).push(MaterialPageRoute(
+                    builder: (_) => const ActivityLogScreen(),
+                  )),
+                  icon: Icon(Icons.history, size: 15,
+                      color: AppTheme.egyptianBlue.withValues(alpha: 0.7)),
+                  label: Text('My Activity',
                       style: AppTheme.textTheme.labelMedium?.copyWith(
-                          color: AppTheme.egyptianBlue, fontWeight: FontWeight.w600)),
+                          color: AppTheme.egyptianBlue.withValues(alpha: 0.8),
+                          fontWeight: FontWeight.w500)),
+                  style: TextButton.styleFrom(
+                    padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                    tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                    minimumSize: Size.zero,
+                  ),
                 ),
-              ),
+                if (canArchiveAll)
+                  TextButton(
+                    onPressed: _archiveAllNotifications,
+                    style: TextButton.styleFrom(
+                      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                      tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                      minimumSize: Size.zero,
+                    ),
+                    child: Text('Archive All',
+                        style: AppTheme.textTheme.labelMedium?.copyWith(
+                            color: AppTheme.egyptianBlue, fontWeight: FontWeight.w600)),
+                  ),
+              ],
             ),
+          ),
         ],
       ),
     );
   }
 }
 
-/// Individual notification item widget
+// ─────────────────────────────────────────────────────────────────────────────
+// Individual notification item
+// ─────────────────────────────────────────────────────────────────────────────
+
 class _NotificationItem extends StatelessWidget {
   final AppNotification notification;
   final VoidCallback? onTap;
@@ -555,14 +653,20 @@ class _NotificationItem extends StatelessWidget {
       );
     }
 
+    // System/moderation notifications get a different layout (no actor avatar)
+    if (notification.type == NotificationType.nsfw_warning ||
+        notification.type == NotificationType.content_removed) {
+      return _SystemNotificationItem(notification: notification, onTap: onTap);
+    }
+
     return InkWell(
       onTap: onTap,
       child: Container(
         padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
         decoration: BoxDecoration(
           color: notification.isRead
-            ? SojornColors.transparent
-            : AppTheme.royalPurple.withValues(alpha: 0.04),
+              ? SojornColors.transparent
+              : AppTheme.royalPurple.withValues(alpha: 0.04),
           border: Border(
             bottom: BorderSide(
               color: AppTheme.egyptianBlue.withValues(alpha: 0.12),
@@ -587,7 +691,9 @@ class _NotificationItem extends StatelessWidget {
                       height: 1.3,
                     ),
                   ),
-                  if (notification.postBody != null && notification.postImageUrl == null) ...[
+                  if (notification.postBody != null &&
+                      notification.postBody!.isNotEmpty &&
+                      notification.postImageUrl == null) ...[
                     const SizedBox(height: 2),
                     Text(
                       notification.postBody!,
@@ -597,6 +703,11 @@ class _NotificationItem extends StatelessWidget {
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
                     ),
+                  ],
+                  // Group name pill for group notifications
+                  if (notification.isGroupNotification) ...[
+                    const SizedBox(height: 3),
+                    _GroupPill(groupName: notification.metadata?['group_name'] as String? ?? 'Group'),
                   ],
                   const SizedBox(height: 3),
                   Text(
@@ -644,12 +755,14 @@ class _NotificationItem extends StatelessWidget {
     final avatarUrl = actor?.avatarUrl;
     final displayName = actor?.displayName ?? '?';
 
-    // Type badge config
     final (IconData badgeIcon, Color badgeColor) = switch (notification.type) {
       NotificationType.like => (Icons.favorite, const Color(0xFFE53935)),
       NotificationType.quip_reaction => (Icons.favorite, const Color(0xFFE53935)),
+      NotificationType.group_like => (Icons.favorite, const Color(0xFFE53935)),
       NotificationType.comment => (Icons.chat_bubble, AppTheme.egyptianBlue),
+      NotificationType.group_comment => (Icons.chat_bubble, AppTheme.egyptianBlue),
       NotificationType.reply => (Icons.reply, AppTheme.royalPurple),
+      NotificationType.group_reply => (Icons.reply, AppTheme.royalPurple),
       NotificationType.mention => (Icons.alternate_email, AppTheme.brightNavy),
       NotificationType.follow => (Icons.person_add, AppTheme.ksuPurple),
       NotificationType.follow_request => (Icons.person_add, AppTheme.ksuPurple),
@@ -657,6 +770,11 @@ class _NotificationItem extends StatelessWidget {
       NotificationType.save => (Icons.bookmark, AppTheme.ksuPurple),
       NotificationType.message => (Icons.message, AppTheme.egyptianBlue),
       NotificationType.share => (Icons.share, AppTheme.brightNavy),
+      NotificationType.beacon_vouch => (Icons.location_on, const Color(0xFFF57C00)),
+      NotificationType.beacon_report => (Icons.flag, AppTheme.error),
+      NotificationType.group_post => (Icons.post_add, AppTheme.brightNavy),
+      NotificationType.group_invite => (Icons.group_add, AppTheme.ksuPurple),
+      NotificationType.group_thread => (Icons.forum_outlined, AppTheme.egyptianBlue),
       _ => (Icons.notifications, AppTheme.egyptianBlue),
     };
 
@@ -671,7 +789,6 @@ class _NotificationItem extends StatelessWidget {
             avatarUrl: avatarUrl,
             size: 44,
           ),
-          // Type badge in bottom-right corner
           Positioned(
             right: -2,
             bottom: -2,
@@ -691,6 +808,116 @@ class _NotificationItem extends StatelessWidget {
     );
   }
 }
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Small group name pill shown on group notifications
+// ─────────────────────────────────────────────────────────────────────────────
+
+class _GroupPill extends StatelessWidget {
+  final String groupName;
+  const _GroupPill({required this.groupName});
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Icon(Icons.group, size: 11, color: AppTheme.egyptianBlue.withValues(alpha: 0.55)),
+        const SizedBox(width: 3),
+        Text(
+          groupName,
+          style: TextStyle(
+            fontSize: 11,
+            color: AppTheme.egyptianBlue.withValues(alpha: 0.65),
+            fontWeight: FontWeight.w500,
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// System / moderation notification (no actor, just icon + message)
+// ─────────────────────────────────────────────────────────────────────────────
+
+class _SystemNotificationItem extends StatelessWidget {
+  final AppNotification notification;
+  final VoidCallback? onTap;
+
+  const _SystemNotificationItem({required this.notification, this.onTap});
+
+  @override
+  Widget build(BuildContext context) {
+    final isWarning = notification.type == NotificationType.nsfw_warning;
+    final iconColor = isWarning ? const Color(0xFFF57C00) : AppTheme.error;
+    final icon = isWarning ? Icons.visibility_off_outlined : Icons.remove_circle_outline;
+
+    return InkWell(
+      onTap: onTap,
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+        decoration: BoxDecoration(
+          color: iconColor.withValues(alpha: 0.04),
+          border: Border(
+            bottom: BorderSide(
+              color: AppTheme.egyptianBlue.withValues(alpha: 0.12),
+              width: 1,
+            ),
+          ),
+        ),
+        child: Row(
+          crossAxisAlignment: CrossAxisAlignment.center,
+          children: [
+            Container(
+              width: 44,
+              height: 44,
+              decoration: BoxDecoration(
+                color: iconColor.withValues(alpha: 0.12),
+                shape: BoxShape.circle,
+              ),
+              child: Icon(icon, size: 22, color: iconColor),
+            ),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    notification.message,
+                    style: AppTheme.textTheme.bodyMedium?.copyWith(
+                      fontWeight: notification.isRead ? FontWeight.w400 : FontWeight.w600,
+                      fontSize: 14,
+                      height: 1.3,
+                    ),
+                  ),
+                  const SizedBox(height: 3),
+                  Text(
+                    timeago.format(notification.createdAt, locale: 'en_short'),
+                    style: AppTheme.textTheme.labelSmall?.copyWith(
+                      color: AppTheme.egyptianBlue.withValues(alpha: 0.6),
+                      fontSize: 11,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            if (!notification.isRead)
+              Container(
+                width: 8,
+                height: 8,
+                decoration: BoxDecoration(color: iconColor, shape: BoxShape.circle),
+              ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Follow request item
+// ─────────────────────────────────────────────────────────────────────────────
 
 class _FollowRequestItem extends StatelessWidget {
   final AppNotification notification;
@@ -714,8 +941,8 @@ class _FollowRequestItem extends StatelessWidget {
       padding: const EdgeInsets.all(AppTheme.spacingMd),
       decoration: BoxDecoration(
         color: notification.isRead
-          ? SojornColors.transparent
-          : AppTheme.royalPurple.withValues(alpha: 0.05),
+            ? SojornColors.transparent
+            : AppTheme.royalPurple.withValues(alpha: 0.05),
         border: Border(
           bottom: BorderSide(
             color: AppTheme.egyptianBlue.withValues(alpha: 0.15),
@@ -726,11 +953,7 @@ class _FollowRequestItem extends StatelessWidget {
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          SojornAvatar(
-            displayName: displayName,
-            avatarUrl: avatarUrl,
-            size: 40,
-          ),
+          SojornAvatar(displayName: displayName, avatarUrl: avatarUrl, size: 40),
           const SizedBox(width: AppTheme.spacingMd),
           Expanded(
             child: Column(
@@ -739,32 +962,28 @@ class _FollowRequestItem extends StatelessWidget {
                 Text(
                   displayName,
                   style: AppTheme.textTheme.bodyMedium?.copyWith(
-                    fontWeight: notification.isRead
-                      ? FontWeight.w400
-                      : FontWeight.w600,
+                    fontWeight: notification.isRead ? FontWeight.w400 : FontWeight.w600,
                   ),
                 ),
                 if (handle != null && handle.isNotEmpty) ...[
                   const SizedBox(height: 2),
-                  Text(
-                    '@$handle',
-                    style: AppTheme.textTheme.labelSmall?.copyWith(
-                      color: AppTheme.navyText.withValues(alpha: 0.7),
-                    ),
-                  ),
+                  Text('@$handle',
+                      style: AppTheme.textTheme.labelSmall
+                          ?.copyWith(color: AppTheme.navyText.withValues(alpha: 0.7))),
                 ],
                 const SizedBox(height: AppTheme.spacingXs),
-                Text(
-                  'requested to follow you',
-                  style: AppTheme.textTheme.bodySmall?.copyWith(
-                    color: AppTheme.navyText.withValues(alpha: 0.8),
-                  ),
-                ),
+                Text('requested to follow you',
+                    style: AppTheme.textTheme.bodySmall
+                        ?.copyWith(color: AppTheme.navyText.withValues(alpha: 0.8))),
                 const SizedBox(height: AppTheme.spacingSm),
                 Row(
                   children: [
                     TextButton(
                       onPressed: onReject,
+                      style: TextButton.styleFrom(
+                        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                        tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                      ),
                       child: const Text('Delete'),
                     ),
                     const SizedBox(width: AppTheme.spacingSm),
@@ -773,15 +992,16 @@ class _FollowRequestItem extends StatelessWidget {
                       style: ElevatedButton.styleFrom(
                         backgroundColor: AppTheme.royalPurple,
                         foregroundColor: AppTheme.white,
+                        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
+                        tapTargetSize: MaterialTapTargetSize.shrinkWrap,
                       ),
                       child: const Text('Confirm'),
                     ),
                     const Spacer(),
                     Text(
                       timeago.format(notification.createdAt, locale: 'en_short'),
-                      style: AppTheme.textTheme.labelSmall?.copyWith(
-                        color: AppTheme.egyptianBlue.withValues(alpha: 0.7),
-                      ),
+                      style: AppTheme.textTheme.labelSmall
+                          ?.copyWith(color: AppTheme.egyptianBlue.withValues(alpha: 0.7)),
                     ),
                   ],
                 ),
@@ -794,14 +1014,15 @@ class _FollowRequestItem extends StatelessWidget {
   }
 }
 
+// ─────────────────────────────────────────────────────────────────────────────
+// Error / empty states
+// ─────────────────────────────────────────────────────────────────────────────
+
 class _ErrorState extends StatelessWidget {
   final String message;
   final VoidCallback onRetry;
 
-  const _ErrorState({
-    required this.message,
-    required this.onRetry,
-  });
+  const _ErrorState({required this.message, required this.onRetry});
 
   @override
   Widget build(BuildContext context) {
@@ -809,18 +1030,13 @@ class _ErrorState extends StatelessWidget {
       child: Column(
         mainAxisAlignment: MainAxisAlignment.center,
         children: [
-          Text(
-            message,
-            style: AppTheme.bodyMedium.copyWith(
-              color: AppTheme.error,
-            ),
-            textAlign: TextAlign.center,
-          ),
+          Icon(Icons.error_outline, size: 56, color: AppTheme.error.withValues(alpha: 0.5)),
+          const SizedBox(height: 12),
+          Text(message,
+              style: AppTheme.bodyMedium.copyWith(color: AppTheme.error),
+              textAlign: TextAlign.center),
           const SizedBox(height: AppTheme.spacingMd),
-          TextButton(
-            onPressed: onRetry,
-            child: const Text('Retry'),
-          ),
+          TextButton(onPressed: onRetry, child: const Text('Retry')),
         ],
       ),
     );
@@ -838,23 +1054,15 @@ class _EmptyState extends StatelessWidget {
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            Icon(
-              Icons.notifications_none,
-              size: 80,
-              color: AppTheme.egyptianBlue.withValues(alpha: 0.3),
-            ),
+            Icon(Icons.notifications_none,
+                size: 80, color: AppTheme.egyptianBlue.withValues(alpha: 0.3)),
             const SizedBox(height: AppTheme.spacingLg),
-            Text(
-              'No notifications yet',
-              style: AppTheme.headlineSmall,
-              textAlign: TextAlign.center,
-            ),
+            Text('No notifications yet', style: AppTheme.headlineSmall, textAlign: TextAlign.center),
             const SizedBox(height: AppTheme.spacingMd),
             Text(
-              "You'll see notifications here when someone appreciates your posts, chains them, or follows you.",
-              style: AppTheme.textTheme.bodyMedium?.copyWith(
-                color: AppTheme.navyText.withValues(alpha: 0.7),
-              ),
+              "You'll see likes, comments, follows, group activity, and more here.",
+              style: AppTheme.textTheme.bodyMedium
+                  ?.copyWith(color: AppTheme.navyText.withValues(alpha: 0.7)),
               textAlign: TextAlign.center,
             ),
           ],

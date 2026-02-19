@@ -1507,6 +1507,20 @@ class ApiService {
     );
   }
 
+  /// Fetches the user's own activity log (posts, comments, follows, group activity)
+  Future<List<Map<String, dynamic>>> getActivityLog({
+    int limit = 30,
+    int offset = 0,
+  }) async {
+    final data = await callGoApi(
+      '/users/me/activity',
+      method: 'GET',
+      queryParams: {'limit': '$limit', 'offset': '$offset'},
+    );
+    final list = data['activities'] as List? ?? [];
+    return list.map((e) => Map<String, dynamic>.from(e as Map)).toList();
+  }
+
   // =========================================================================
   // Post Actions (Missing Methods)
   // =========================================================================

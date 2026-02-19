@@ -24,6 +24,14 @@ const (
 	NotificationTypeQuipReaction   = "quip_reaction"
 	NotificationTypeNSFWWarning    = "nsfw_warning"
 	NotificationTypeContentRemoved = "content_removed"
+
+	// Group / Capsule notifications
+	NotificationTypeGroupPost    = "group_post"
+	NotificationTypeGroupComment = "group_comment"
+	NotificationTypeGroupLike    = "group_like"
+	NotificationTypeGroupInvite  = "group_invite"
+	NotificationTypeGroupThread  = "group_thread"
+	NotificationTypeGroupReply   = "group_reply"
 )
 
 // NotificationPriority constants

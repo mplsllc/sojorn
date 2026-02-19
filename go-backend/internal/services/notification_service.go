@@ -206,6 +206,140 @@ func (s *NotificationService) NotifyBeaconReport(ctx context.Context, beaconAuth
 	})
 }
 
+// NotifyGroupPost notifies all group members (except the author) when someone posts in a group
+func (s *NotificationService) NotifyGroupPost(ctx context.Context, actorID, postID, groupID, groupName string, memberIDs []string) error {
+	actorUUID := uuid.MustParse(actorID)
+	for _, memberID := range memberIDs {
+		memberUUID := uuid.MustParse(memberID)
+		if memberUUID == actorUUID {
+			continue // Don't notify self
+		}
+		err := s.sendNotification(ctx, models.PushNotificationRequest{
+			UserID:   memberUUID,
+			Type:     models.NotificationTypeGroupPost,
+			ActorID:  actorUUID,
+			PostID:   uuidPtr(postID),
+			PostType: "group",
+			GroupKey: fmt.Sprintf("group_post:%s", groupID),
+			Priority: models.PriorityNormal,
+			Metadata: map[string]interface{}{
+				"group_id":   groupID,
+				"group_name": groupName,
+			},
+		})
+		if err != nil {
+			log.Warn().Err(err).Str("member_id", memberID).Msg("Failed to send group post notification")
+		}
+	}
+	return nil
+}
+
+// NotifyGroupComment notifies the post author when someone comments on their group post
+func (s *NotificationService) NotifyGroupComment(ctx context.Context, postAuthorID, actorID, postID, groupID, groupName string) error {
+	if postAuthorID == actorID {
+		return nil
+	}
+	return s.sendNotification(ctx, models.PushNotificationRequest{
+		UserID:   uuid.MustParse(postAuthorID),
+		Type:     models.NotificationTypeGroupComment,
+		ActorID:  uuid.MustParse(actorID),
+		PostID:   uuidPtr(postID),
+		PostType: "group",
+		GroupKey: fmt.Sprintf("group_comment:%s", postID),
+		Priority: models.PriorityNormal,
+		Metadata: map[string]interface{}{
+			"group_id":   groupID,
+			"group_name": groupName,
+		},
+	})
+}
+
+// NotifyGroupLike notifies the post author when someone likes their group post
+func (s *NotificationService) NotifyGroupLike(ctx context.Context, postAuthorID, actorID, postID, groupID, groupName string) error {
+	if postAuthorID == actorID {
+		return nil
+	}
+	return s.sendNotification(ctx, models.PushNotificationRequest{
+		UserID:   uuid.MustParse(postAuthorID),
+		Type:     models.NotificationTypeGroupLike,
+		ActorID:  uuid.MustParse(actorID),
+		PostID:   uuidPtr(postID),
+		PostType: "group",
+		GroupKey: fmt.Sprintf("group_like:%s", postID),
+		Priority: models.PriorityNormal,
+		Metadata: map[string]interface{}{
+			"group_id":   groupID,
+			"group_name": groupName,
+		},
+	})
+}
+
+// NotifyGroupInvite notifies a user when they are added to a group
+func (s *NotificationService) NotifyGroupInvite(ctx context.Context, invitedUserID, actorID, groupID, groupName string) error {
+	if invitedUserID == actorID {
+		return nil
+	}
+	return s.sendNotification(ctx, models.PushNotificationRequest{
+		UserID:   uuid.MustParse(invitedUserID),
+		Type:     models.NotificationTypeGroupInvite,
+		ActorID:  uuid.MustParse(actorID),
+		PostType: "group",
+		Priority: models.PriorityNormal,
+		Metadata: map[string]interface{}{
+			"group_id":   groupID,
+			"group_name": groupName,
+		},
+	})
+}
+
+// NotifyGroupThread notifies all group members when a new forum thread is created
+func (s *NotificationService) NotifyGroupThread(ctx context.Context, actorID, threadID, groupID, groupName string, memberIDs []string) error {
+	actorUUID := uuid.MustParse(actorID)
+	for _, memberID := range memberIDs {
+		memberUUID := uuid.MustParse(memberID)
+		if memberUUID == actorUUID {
+			continue
+		}
+		err := s.sendNotification(ctx, models.PushNotificationRequest{
+			UserID:   memberUUID,
+			Type:     models.NotificationTypeGroupThread,
+			ActorID:  actorUUID,
+			PostID:   uuidPtr(threadID),
+			PostType: "group",
+			GroupKey: fmt.Sprintf("group_thread:%s", groupID),
+			Priority: models.PriorityNormal,
+			Metadata: map[string]interface{}{
+				"group_id":   groupID,
+				"group_name": groupName,
+			},
+		})
+		if err != nil {
+			log.Warn().Err(err).Str("member_id", memberID).Msg("Failed to send group thread notification")
+		}
+	}
+	return nil
+}
+
+// NotifyGroupReply notifies the thread author when someone replies to their forum thread
+func (s *NotificationService) NotifyGroupReply(ctx context.Context, threadAuthorID, actorID, threadID, groupID, groupName string) error {
+	if threadAuthorID == actorID {
+		return nil
+	}
+	return s.sendNotification(ctx, models.PushNotificationRequest{
+		UserID:   uuid.MustParse(threadAuthorID),
+		Type:     models.NotificationTypeGroupReply,
+		ActorID:  uuid.MustParse(actorID),
+		PostID:   uuidPtr(threadID),
+		PostType: "group",
+		GroupKey: fmt.Sprintf("group_reply:%s", threadID),
+		Priority: models.PriorityNormal,
+		Metadata: map[string]interface{}{
+			"group_id":   groupID,
+			"group_name": groupName,
+		},
+	})
+}
+
 // NotifyNSFWWarning sends a warning when a post is auto-labeled as NSFW
 func (s *NotificationService) NotifyNSFWWarning(ctx context.Context, authorID string, postID string) error {
 	authorUUID := uuid.MustParse(authorID)
@@ -428,6 +562,78 @@ func (s *NotificationService) buildPushPayload(req models.PushNotificationReques
 			body = fmt.Sprintf("%s reacted to your quip", actorName)
 		}
 
+	case models.NotificationTypeGroupPost:
+		groupName := getString(req.Metadata, "group_name")
+		title = fmt.Sprintf("%s posted", actorName)
+		if groupName != "" {
+			body = fmt.Sprintf("%s shared a new post in %s", actorName, groupName)
+		} else {
+			body = fmt.Sprintf("%s shared a new post in your group", actorName)
+		}
+		if groupID := getString(req.Metadata, "group_id"); groupID != "" {
+			data["group_id"] = groupID
+		}
+
+	case models.NotificationTypeGroupComment:
+		groupName := getString(req.Metadata, "group_name")
+		title = fmt.Sprintf("%s 💬", actorName)
+		if groupName != "" {
+			body = fmt.Sprintf("%s commented on your post in %s", actorName, groupName)
+		} else {
+			body = fmt.Sprintf("%s commented on your group post", actorName)
+		}
+		if groupID := getString(req.Metadata, "group_id"); groupID != "" {
+			data["group_id"] = groupID
+		}
+
+	case models.NotificationTypeGroupLike:
+		groupName := getString(req.Metadata, "group_name")
+		title = fmt.Sprintf("%s ❤️", actorName)
+		if groupName != "" {
+			body = fmt.Sprintf("%s liked your post in %s", actorName, groupName)
+		} else {
+			body = fmt.Sprintf("%s liked your group post", actorName)
+		}
+		if groupID := getString(req.Metadata, "group_id"); groupID != "" {
+			data["group_id"] = groupID
+		}
+
+	case models.NotificationTypeGroupInvite:
+		groupName := getString(req.Metadata, "group_name")
+		title = "Added to Group"
+		if groupName != "" {
+			body = fmt.Sprintf("%s added you to %s", actorName, groupName)
+		} else {
+			body = fmt.Sprintf("%s added you to a group", actorName)
+		}
+		if groupID := getString(req.Metadata, "group_id"); groupID != "" {
+			data["group_id"] = groupID
+		}
+
+	case models.NotificationTypeGroupThread:
+		groupName := getString(req.Metadata, "group_name")
+		title = fmt.Sprintf("%s started a thread", actorName)
+		if groupName != "" {
+			body = fmt.Sprintf("%s started a new discussion in %s", actorName, groupName)
+		} else {
+			body = fmt.Sprintf("%s started a new discussion in your group", actorName)
+		}
+		if groupID := getString(req.Metadata, "group_id"); groupID != "" {
+			data["group_id"] = groupID
+		}
+
+	case models.NotificationTypeGroupReply:
+		groupName := getString(req.Metadata, "group_name")
+		title = fmt.Sprintf("%s replied 💬", actorName)
+		if groupName != "" {
+			body = fmt.Sprintf("%s replied to your thread in %s", actorName, groupName)
+		} else {
+			body = fmt.Sprintf("%s replied to your forum thread", actorName)
+		}
+		if groupID := getString(req.Metadata, "group_id"); groupID != "" {
+			data["group_id"] = groupID
+		}
+
 	case models.NotificationTypeNSFWWarning:
 		title = "Content Labeled as Sensitive"
 		body = "Your post was automatically labeled as NSFW. Please label sensitive content when posting to avoid further action."
@@ -456,6 +662,10 @@ func (s *NotificationService) getNavigationTarget(notifType, postType string) st
 		return "beacon_map"
 	case models.NotificationTypeQuipReaction:
 		return "quip_feed"
+	case models.NotificationTypeGroupPost, models.NotificationTypeGroupComment,
+		models.NotificationTypeGroupLike, models.NotificationTypeGroupInvite,
+		models.NotificationTypeGroupThread, models.NotificationTypeGroupReply:
+		return "group"
 	default:
 		switch postType {
 		case "beacon":

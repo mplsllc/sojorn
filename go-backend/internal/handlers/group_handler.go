@@ -1,6 +1,7 @@
 package handlers
 
 import (
+	"context"
 	"fmt"
 	"net/http"
 	"strconv"
@@ -9,14 +10,16 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgxpool"
+	"gitlab.com/patrickbritton3/sojorn/go-backend/internal/services"
 )
 
 type GroupHandler struct {
-	pool *pgxpool.Pool
+	pool     *pgxpool.Pool
+	notifSvc *services.NotificationService
 }
 
-func NewGroupHandler(pool *pgxpool.Pool) *GroupHandler {
-	return &GroupHandler{pool: pool}
+func NewGroupHandler(pool *pgxpool.Pool, notifSvc *services.NotificationService) *GroupHandler {
+	return &GroupHandler{pool: pool, notifSvc: notifSvc}
 }
 
 // ═══════════════════════════════════════════════════════════════════════
@@ -149,11 +152,33 @@ func (h *GroupHandler) CreateGroupPost(c *gin.Context) {
 		"body": req.Body, "image_url": req.ImageURL,
 		"like_count": 0, "comment_count": 0, "created_at": createdAt,
 	}})
+
+	// Notify all group members in background
+	if h.notifSvc != nil {
+		go func() {
+			bgCtx := context.Background()
+			var groupName string
+			h.pool.QueryRow(bgCtx, `SELECT name FROM groups WHERE id = $1`, groupID).Scan(&groupName)
+			rows, err := h.pool.Query(bgCtx, `SELECT user_id FROM group_members WHERE group_id = $1`, groupID)
+			if err != nil {
+				return
+			}
+			defer rows.Close()
+			var memberIDs []string
+			for rows.Next() {
+				var uid uuid.UUID
+				if err := rows.Scan(&uid); err == nil {
+					memberIDs = append(memberIDs, uid.String())
+				}
+			}
+			h.notifSvc.NotifyGroupPost(bgCtx, userID.String(), postID.String(), groupID.String(), groupName, memberIDs)
+		}()
+	}
 }
 
 // ToggleGroupPostLike toggles a like on a group post
 func (h *GroupHandler) ToggleGroupPostLike(c *gin.Context) {
-	userID, _, _, ok := h.requireMembership(c)
+	userID, groupID, _, ok := h.requireMembership(c)
 	if !ok {
 		return
 	}
@@ -178,6 +203,20 @@ func (h *GroupHandler) ToggleGroupPostLike(c *gin.Context) {
 		h.pool.Exec(ctx, `INSERT INTO group_post_likes (group_post_id, user_id) VALUES ($1, $2) ON CONFLICT DO NOTHING`, postID, userID)
 		h.pool.Exec(ctx, `UPDATE group_posts SET like_count = like_count + 1 WHERE id = $1`, postID)
 		c.JSON(http.StatusOK, gin.H{"liked": true})
+
+		// Notify post author
+		if h.notifSvc != nil {
+			go func() {
+				bgCtx := context.Background()
+				var authorID uuid.UUID
+				var groupName string
+				h.pool.QueryRow(bgCtx, `
+					SELECT gp.author_id, COALESCE(g.name, '') FROM group_posts gp
+					JOIN groups g ON g.id = gp.group_id
+					WHERE gp.id = $1`, postID).Scan(&authorID, &groupName)
+				h.notifSvc.NotifyGroupLike(bgCtx, authorID.String(), userID.String(), postID.String(), groupID.String(), groupName)
+			}()
+		}
 	}
 }
 
@@ -268,6 +307,20 @@ func (h *GroupHandler) CreateGroupPostComment(c *gin.Context) {
 		"id": commentID, "post_id": postID, "author_id": userID,
 		"body": req.Body, "created_at": createdAt,
 	}})
+
+	// Notify post author
+	if h.notifSvc != nil {
+		go func() {
+			bgCtx := context.Background()
+			var authorID, groupID uuid.UUID
+			var groupName string
+			h.pool.QueryRow(bgCtx, `
+				SELECT gp.author_id, gp.group_id, COALESCE(g.name, '') FROM group_posts gp
+				JOIN groups g ON g.id = gp.group_id
+				WHERE gp.id = $1`, postID).Scan(&authorID, &groupID, &groupName)
+			h.notifSvc.NotifyGroupComment(bgCtx, authorID.String(), userID.String(), postID.String(), groupID.String(), groupName)
+		}()
+	}
 }
 
 // ═══════════════════════════════════════════════════════════════════════
@@ -453,6 +506,28 @@ func (h *GroupHandler) CreateGroupThread(c *gin.Context) {
 		"title": req.Title, "body": req.Body, "category": req.Category,
 		"reply_count": 0, "created_at": createdAt,
 	}})
+
+	// Notify all group members about the new thread
+	if h.notifSvc != nil {
+		go func() {
+			bgCtx := context.Background()
+			var groupName string
+			h.pool.QueryRow(bgCtx, `SELECT name FROM groups WHERE id = $1`, groupID).Scan(&groupName)
+			rows, err := h.pool.Query(bgCtx, `SELECT user_id FROM group_members WHERE group_id = $1`, groupID)
+			if err != nil {
+				return
+			}
+			defer rows.Close()
+			var memberIDs []string
+			for rows.Next() {
+				var uid uuid.UUID
+				if err := rows.Scan(&uid); err == nil {
+					memberIDs = append(memberIDs, uid.String())
+				}
+			}
+			h.notifSvc.NotifyGroupThread(bgCtx, userID.String(), threadID.String(), groupID.String(), groupName, memberIDs)
+		}()
+	}
 }
 
 // GetGroupThread returns a single thread with its replies
@@ -591,6 +666,20 @@ func (h *GroupHandler) CreateGroupThreadReply(c *gin.Context) {
 		"id": replyID, "thread_id": threadID, "author_id": userID,
 		"body": req.Body, "created_at": createdAt,
 	}})
+
+	// Notify thread author
+	if h.notifSvc != nil {
+		go func() {
+			bgCtx := context.Background()
+			var threadAuthorID, groupID uuid.UUID
+			var groupName string
+			h.pool.QueryRow(bgCtx, `
+				SELECT t.author_id, t.group_id, COALESCE(g.name, '') FROM group_forum_threads t
+				JOIN groups g ON g.id = t.group_id
+				WHERE t.id = $1`, threadID).Scan(&threadAuthorID, &groupID, &groupName)
+			h.notifSvc.NotifyGroupReply(bgCtx, threadAuthorID.String(), userID.String(), threadID.String(), groupID.String(), groupName)
+		}()
+	}
 }
 
 // ═══════════════════════════════════════════════════════════════════════
@@ -807,7 +896,7 @@ func (h *GroupHandler) DeleteGroup(c *gin.Context) {
 
 // InviteToGroup adds a member to a non-encrypted group
 func (h *GroupHandler) InviteToGroup(c *gin.Context) {
-	_, groupID, role, ok := h.requireMembership(c)
+	inviterID, groupID, role, ok := h.requireMembership(c)
 	if !ok {
 		return
 	}
@@ -852,6 +941,16 @@ func (h *GroupHandler) InviteToGroup(c *gin.Context) {
 	h.pool.Exec(ctx, `UPDATE groups SET member_count = (SELECT COUNT(*) FROM group_members WHERE group_id = $1) WHERE id = $1`, groupID)
 
 	c.JSON(http.StatusOK, gin.H{"status": "invited"})
+
+	// Notify invited user
+	if h.notifSvc != nil {
+		go func() {
+			bgCtx := context.Background()
+			var groupName string
+			h.pool.QueryRow(bgCtx, `SELECT name FROM groups WHERE id = $1`, groupID).Scan(&groupName)
+			h.notifSvc.NotifyGroupInvite(bgCtx, inviteeID.String(), inviterID.String(), groupID.String(), groupName)
+		}()
+	}
 }
 
 // SearchUsersForInvite searches for users by handle to invite

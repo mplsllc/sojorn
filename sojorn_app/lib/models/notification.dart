@@ -15,6 +15,16 @@ enum NotificationType {
   beacon_report,    // Someone reported your beacon
   share,            // Someone shared your post
   quip_reaction,    // Someone reacted to your quip
+  // Group / Capsule notifications
+  group_post,       // Someone posted in your group
+  group_comment,    // Someone commented on your group post
+  group_like,       // Someone liked your group post
+  group_invite,     // You were added to a group
+  group_thread,     // Someone started a forum thread in your group
+  group_reply,      // Someone replied to your forum thread
+  // System / moderation
+  nsfw_warning,     // Your post was labeled NSFW
+  content_removed,  // Your content was removed
 }
 
 /// Notification model
@@ -170,6 +180,54 @@ class AppNotification {
         return '$actorName$others shared your post';
       case NotificationType.quip_reaction:
         return '$actorName$others reacted to your quip';
+      case NotificationType.group_post:
+        final groupName = metadata?['group_name'] as String?;
+        return groupName != null
+            ? '$actorName posted in $groupName'
+            : '$actorName posted in your group';
+      case NotificationType.group_comment:
+        final groupName = metadata?['group_name'] as String?;
+        return groupName != null
+            ? '$actorName commented on your post in $groupName'
+            : '$actorName commented on your group post';
+      case NotificationType.group_like:
+        final groupName = metadata?['group_name'] as String?;
+        return groupName != null
+            ? '$actorName$others liked your post in $groupName'
+            : '$actorName$others liked your group post';
+      case NotificationType.group_invite:
+        final groupName = metadata?['group_name'] as String?;
+        return groupName != null
+            ? '$actorName added you to $groupName'
+            : '$actorName added you to a group';
+      case NotificationType.group_thread:
+        final groupName = metadata?['group_name'] as String?;
+        return groupName != null
+            ? '$actorName started a discussion in $groupName'
+            : '$actorName started a new discussion in your group';
+      case NotificationType.group_reply:
+        final groupName = metadata?['group_name'] as String?;
+        return groupName != null
+            ? '$actorName replied to your thread in $groupName'
+            : '$actorName replied to your forum thread';
+      case NotificationType.nsfw_warning:
+        return 'Your post was labeled as sensitive content';
+      case NotificationType.content_removed:
+        return 'Your post was removed for violating community guidelines';
     }
   }
+
+  /// Group ID from metadata (for group notification navigation)
+  String? get groupIdFromMetadata {
+    final value = metadata?['group_id'];
+    return value is String ? value : null;
+  }
+
+  /// Whether this notification is group-related
+  bool get isGroupNotification => type == NotificationType.group_post ||
+      type == NotificationType.group_comment ||
+      type == NotificationType.group_like ||
+      type == NotificationType.group_invite ||
+      type == NotificationType.group_thread ||
+      type == NotificationType.group_reply;
 }

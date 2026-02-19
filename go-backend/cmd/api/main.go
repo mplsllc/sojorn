@@ -196,7 +196,7 @@ func main() {
 	capsuleEscrowHandler := handlers.NewCapsuleEscrowHandler(dbPool)
 
 	// Group feature handler (posts, chat, forum, members)
-	groupHandler := handlers.NewGroupHandler(dbPool)
+	groupHandler := handlers.NewGroupHandler(dbPool, notificationService)
 
 	// Neighborhood board handler (standalone message board)
 	boardHandler := handlers.NewBoardHandler(dbPool, contentFilter, moderationService)
@@ -432,7 +432,7 @@ func main() {
 			authorized.GET("/users/suggested", followHandler.GetSuggestedUsers)
 
 			// Notifications
-			notificationHandler := handlers.NewNotificationHandler(notifRepo, notificationService)
+			notificationHandler := handlers.NewNotificationHandler(notifRepo, notificationService, dbPool)
 			authorized.GET("/notifications", notificationHandler.GetNotifications)
 			authorized.GET("/notifications/unread", notificationHandler.GetUnreadCount)
 			authorized.GET("/notifications/badge", notificationHandler.GetBadgeCount)
@@ -447,6 +447,9 @@ func main() {
 			authorized.POST("/notifications/device", notificationHandler.RegisterDevice)
 			authorized.DELETE("/notifications/device", notificationHandler.UnregisterDevice)
 			authorized.DELETE("/notifications/devices", notificationHandler.UnregisterAllDevices)
+
+			// Activity Log (user's own actions)
+			authorized.GET("/users/me/activity", notificationHandler.GetActivityLog)
 
 			// Safe domains (for external link warnings in app)
 			authorized.GET("/safe-domains", postHandler.GetSafeDomains)
