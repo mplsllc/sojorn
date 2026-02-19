@@ -294,6 +294,7 @@ func (h *PostHandler) GetNearbyBeacons(c *gin.Context) {
 			"id":                  b.ID,
 			"body":                b.Body,
 			"author_id":           b.AuthorID,
+			"is_beacon":           true,
 			"beacon_type":         b.BeaconType,
 			"confidence_score":    b.Confidence,
 			"is_active_beacon":    b.IsActiveBeacon,

@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"net/http"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/gin-gonic/gin"
@@ -395,6 +396,10 @@ func (h *CapsuleHandler) CreateCapsule(c *gin.Context) {
 		RETURNING id, created_at
 	`, req.Name, req.Description, req.PublicKey, settings).Scan(&groupID, &createdAt)
 	if err != nil {
+		if strings.Contains(err.Error(), "duplicate") || strings.Contains(err.Error(), "unique") {
+			c.JSON(http.StatusConflict, gin.H{"error": "A group with this name already exists"})
+			return
+		}
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to create capsule"})
 		return
 	}

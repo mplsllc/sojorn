@@ -56,6 +56,7 @@ class BeaconScreenState extends ConsumerState<BeaconScreen> with TickerProviderS
   final MapController _mapController = MapController();
   final DraggableScrollableController _sheetController = DraggableScrollableController();
   final LocalIntelService _intelService = LocalIntelService();
+  Timer? _beaconLoadDebounce;
   late final TabController _tabController;
 
   List<Post> _beacons = [];
@@ -135,6 +136,7 @@ class BeaconScreenState extends ConsumerState<BeaconScreen> with TickerProviderS
     _tabController.dispose();
     _searchController.dispose();
     _searchDebounce?.cancel();
+    _beaconLoadDebounce?.cancel();
     super.dispose();
   }
 
@@ -360,7 +362,12 @@ class BeaconScreenState extends ConsumerState<BeaconScreen> with TickerProviderS
   void _onMapPositionChanged(MapCamera camera, bool hasGesture) {
     _mapCenter = camera.center;
     _currentZoom = camera.zoom;
-    if (hasGesture) _loadBeacons(center: _mapCenter);
+    if (hasGesture) {
+      _beaconLoadDebounce?.cancel();
+      _beaconLoadDebounce = Timer(const Duration(milliseconds: 600), () {
+        _loadBeacons(center: _mapCenter);
+      });
+    }
   }
 
   void _onMarkerTap(Post post) {
