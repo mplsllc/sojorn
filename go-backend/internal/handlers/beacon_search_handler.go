@@ -76,13 +76,13 @@ func (h *BeaconSearchHandler) searchBeacons(c *gin.Context, userID uuid.UUID, qu
 	var rows_result []gin.H
 	ctx := c.Request.Context()
 
+	// Beacons are anonymous by policy — we do NOT join profiles.
+	// author_id is never returned; handle/display_name are always "Anonymous".
 	baseQuery := `
 		SELECT p.id, LEFT(p.body, 200) as body, p.category,
 		       p.latitude, p.longitude, p.created_at,
-		       COALESCE(p.image_url, '') as image_url,
-		       pr.handle, pr.display_name, COALESCE(pr.avatar_url, '')
+		       COALESCE(p.image_url, '') as image_url
 		FROM posts p
-		JOIN profiles pr ON p.author_id = pr.id
 		WHERE p.is_beacon = TRUE AND p.deleted_at IS NULL
 	`
 	args := []any{}
@@ -121,18 +121,18 @@ func (h *BeaconSearchHandler) searchBeacons(c *gin.Context, userID uuid.UUID, qu
 
 	for rows.Next() {
 		var id uuid.UUID
-		var body, category, imageURL, handle, displayName, avatarURL string
+		var body, category, imageURL string
 		var eLat, eLong float64
 		var createdAt time.Time
-		if err := rows.Scan(&id, &body, &category, &eLat, &eLong, &createdAt,
-			&imageURL, &handle, &displayName, &avatarURL); err != nil {
+		if err := rows.Scan(&id, &body, &category, &eLat, &eLong, &createdAt, &imageURL); err != nil {
 			continue
 		}
 		rows_result = append(rows_result, gin.H{
 			"id": id, "body": body, "category": category,
 			"lat": eLat, "long": eLong, "created_at": createdAt,
 			"image_url": imageURL, "result_type": "beacon",
-			"author_handle": handle, "author_display_name": displayName, "author_avatar_url": avatarURL,
+			// Beacons are always anonymous — identity fields are never returned.
+			"author_handle": "Anonymous", "author_display_name": "Anonymous", "author_avatar_url": "",
 		})
 	}
 	if rows_result == nil {

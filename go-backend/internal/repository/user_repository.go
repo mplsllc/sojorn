@@ -1480,6 +1480,8 @@ func (r *UserRepository) CascadePurgeUser(ctx context.Context, userID string) er
 		`DELETE FROM public.trust_state WHERE user_id = $1::uuid`,
 		// Username claims
 		`DELETE FROM public.username_claim_requests WHERE user_id = $1::uuid`,
+		// AI moderation log (content snippets from public posts; must be purged with user)
+		`DELETE FROM public.ai_moderation_log WHERE author_id = $1::uuid`,
 		// Profile & user (last)
 		`DELETE FROM public.profiles WHERE id = $1::uuid`,
 		`DELETE FROM public.users WHERE id = $1::uuid`,

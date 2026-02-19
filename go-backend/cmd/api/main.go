@@ -90,6 +90,20 @@ func main() {
 		MaxAge:           12 * time.Hour,
 	}))
 
+	// Sojorn is a private community — instruct all crawlers not to index any content.
+	r.GET("/robots.txt", func(c *gin.Context) {
+		c.Data(http.StatusOK, "text/plain; charset=utf-8", []byte(
+			"User-agent: *\nDisallow: /\n",
+		))
+	})
+
+	// Attach X-Robots-Tag to every API response so crawlers that ignore robots.txt
+	// also receive an explicit noindex directive.
+	r.Use(func(c *gin.Context) {
+		c.Header("X-Robots-Tag", "noindex, nofollow, noarchive, nosnippet")
+		c.Next()
+	})
+
 	r.NoRoute(func(c *gin.Context) {
 		log.Debug().Msgf("No route found for %s %s", c.Request.Method, c.Request.URL.Path)
 		c.JSON(404, gin.H{"error": "route not found", "path": c.Request.URL.Path, "method": c.Request.Method})

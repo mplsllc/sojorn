@@ -291,9 +291,10 @@ func (h *PostHandler) GetNearbyBeacons(c *gin.Context) {
 	results := make([]gin.H, 0, len(beacons))
 	for _, b := range beacons {
 		item := gin.H{
-			"id":                  b.ID,
-			"body":                b.Body,
-			"author_id":           b.AuthorID,
+			"id":       b.ID,
+			"body":     b.Body,
+			// author_id is intentionally omitted — beacons are anonymous by policy.
+			// The internal author_id is stored only for abuse prevention and is never exposed.
 			"is_beacon":           true,
 			"beacon_type":         b.BeaconType,
 			"confidence_score":    b.Confidence,

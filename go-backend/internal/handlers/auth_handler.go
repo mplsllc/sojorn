@@ -86,6 +86,22 @@ func (h *AuthHandler) Register(c *gin.Context) {
 		return
 	}
 
+	// Age gate: reject under-16s at registration so no data is ever stored for minors.
+	if req.BirthYear > 0 && req.BirthMonth >= 1 && req.BirthMonth <= 12 {
+		now := time.Now()
+		age := now.Year() - req.BirthYear
+		if int(now.Month()) < req.BirthMonth {
+			age--
+		}
+		if age < 16 {
+			c.JSON(http.StatusForbidden, gin.H{
+				"error": "You must be at least 16 years old to create an account on Sojorn.",
+				"code":  "age_restricted",
+			})
+			return
+		}
+	}
+
 	// Validate handle against reserved names and inappropriate content
 	handleCheck := services.ValidateUsernameWithDB(c.Request.Context(), h.repo.Pool(), req.Handle)
 	if handleCheck.Violation != services.UsernameOK {

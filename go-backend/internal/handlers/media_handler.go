@@ -105,11 +105,14 @@ func (h *MediaHandler) Upload(c *gin.Context) {
 		return
 	}
 
-	// Strip metadata (EXIF/GPS from images, all metadata from videos)
+	// Strip metadata (EXIF/GPS from images, all metadata from videos).
+	// Privacy policy guarantees metadata removal — treat failure as a hard error,
+	// never fall back to uploading raw bytes that may contain GPS coordinates.
 	cleanBytes, stripErr := stripMetadata(rawBytes, mediaType, ext)
 	if stripErr != nil {
-		log.Warn().Err(stripErr).Str("type", mediaType).Msg("metadata strip failed, uploading original")
-		cleanBytes = rawBytes
+		log.Error().Err(stripErr).Str("type", mediaType).Msg("metadata strip failed — upload rejected to protect user privacy")
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Media processing failed. Please try again."})
+		return
 	}
 
 	var publicURL string

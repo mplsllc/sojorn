@@ -8,7 +8,9 @@ class FirebaseWebConfig {
     storageBucket: 'sojorn-a7a78.firebasestorage.app',
     messagingSenderId: '486753572104',
     appId: '1:486753572104:web:d3e6ab825d1e008f9fc8bd',
-    measurementId: 'G-702W5531Z3',
+    // measurementId intentionally omitted — Sojorn does not use Firebase Analytics.
+    // Adding firebase_analytics package + measurementId would enable behavioral tracking,
+    // which violates our privacy policy.
   );
 
   // IMPORTANT: Web push notifications require a VAPID key.
