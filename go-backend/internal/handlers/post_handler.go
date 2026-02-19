@@ -3,6 +3,7 @@ package handlers
 import (
 	"context"
 	"fmt"
+	"math"
 	"net/http"
 	"strings"
 	"time"
@@ -321,13 +322,21 @@ func (h *PostHandler) GetNearbyBeacons(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{"beacons": results})
 }
 
-// CreateBeacon creates an anonymous beacon pin on the map.
-// The author_id is stored for abuse tracking but NEVER exposed in responses.
+// fuzzyCoord rounds a coordinate to 2 decimal places (~1.1 km precision).
+// This ensures no exact location is ever stored for an anonymous beacon.
+func fuzzyCoord(v float64) float64 {
+	return math.Round(v*100) / 100
+}
+
+// CreateBeacon creates a fully anonymous beacon pin on the map.
+// author_id is NEVER stored — beacons are untraceable by design.
+// Coordinates are fuzzed to ~1 km precision before storage.
 // AI moderation runs for text + images — flagged beacons stay visible but go to admin review.
 // Does NOT create a feed post.
 func (h *PostHandler) CreateBeacon(c *gin.Context) {
+	// userID is used only for rate-limiting and AI-moderation context — never stored on the beacon.
 	userIDStr, _ := c.Get("user_id")
-	userID, _ := uuid.Parse(userIDStr.(string))
+	_, _ = uuid.Parse(userIDStr.(string))
 
 	var req struct {
 		Body       string  `json:"body" binding:"required"`
@@ -361,11 +370,12 @@ func (h *PostHandler) CreateBeacon(c *gin.Context) {
 	}
 
 	beaconType := req.BeaconType
-	lat := req.Lat
-	long := req.Long
+	// Fuzz coordinates to ~1.1 km precision — no exact location stored for anonymous beacons.
+	lat := fuzzyCoord(req.Lat)
+	long := fuzzyCoord(req.Long)
 
 	post := &models.Post{
-		AuthorID:       userID,
+		// AuthorID intentionally omitted — beacons are fully anonymous, no user linkage stored.
 		Body:           req.Body,
 		Status:         "active",
 		BodyFormat:     "plain",

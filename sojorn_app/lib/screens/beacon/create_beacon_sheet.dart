@@ -1,7 +1,9 @@
 import 'dart:io';
 import 'package:flutter/material.dart';
+import 'package:flutter_map/flutter_map.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:image_picker/image_picker.dart';
+import 'package:latlong2/latlong.dart';
 import '../../models/beacon.dart';
 import '../../models/post.dart';
 import '../../providers/api_provider.dart';
@@ -36,6 +38,12 @@ class _CreateBeaconSheetState extends ConsumerState<CreateBeaconSheet> {
   File? _selectedImage;
   String? _uploadedImageUrl;
 
+  // User-chosen beacon location — defaults to map centre, updated by tapping the mini-map.
+  // Stored as-is here; the server fuzzes to ~1 km before storage.
+  late double _pickedLat;
+  late double _pickedLong;
+  late final MapController _mapController;
+
   final List<BeaconType> _types = [
     // Geo-Alerts (map)
     BeaconType.suspiciousActivity,
@@ -54,8 +62,17 @@ class _CreateBeaconSheetState extends ConsumerState<CreateBeaconSheet> {
   ];
 
   @override
+  void initState() {
+    super.initState();
+    _pickedLat = widget.centerLat;
+    _pickedLong = widget.centerLong;
+    _mapController = MapController();
+  }
+
+  @override
   void dispose() {
     _descriptionController.dispose();
+    _mapController.dispose();
     super.dispose();
   }
 
@@ -117,23 +134,23 @@ class _CreateBeaconSheetState extends ConsumerState<CreateBeaconSheet> {
 
     setState(() => _isSubmitting = true);
 
-    debugPrint('[Beacon] submit — type=${_selectedType.value} severity=${_selectedSeverity.value} lat=${widget.centerLat.toStringAsFixed(4)} long=${widget.centerLong.toStringAsFixed(4)} hasImage=${_uploadedImageUrl != null}');
+    debugPrint('[Beacon] submit — type=${_selectedType.value} severity=${_selectedSeverity.value} lat=~${_pickedLat.toStringAsFixed(2)} long=~${_pickedLong.toStringAsFixed(2)} hasImage=${_uploadedImageUrl != null}');
 
     try {
       final apiService = ref.read(apiServiceProvider);
 
       final body = _buildBeaconBody(
         description: description,
-        lat: widget.centerLat,
-        long: widget.centerLong,
+        lat: _pickedLat,
+        long: _pickedLong,
         type: _selectedType,
       );
 
       final post = await apiService.createBeacon(
         body: body,
         beaconType: _selectedType.value,
-        lat: widget.centerLat,
-        long: widget.centerLong,
+        lat: _pickedLat,
+        long: _pickedLong,
         severity: _selectedSeverity.value,
         imageUrl: _uploadedImageUrl,
       );
@@ -246,10 +263,51 @@ class _CreateBeaconSheetState extends ConsumerState<CreateBeaconSheet> {
                   ),
                 ],
               ),
-              const SizedBox(height: 4),
-              Text('Near ${widget.centerLat.toStringAsFixed(4)}, ${widget.centerLong.toStringAsFixed(4)}',
-                style: TextStyle(color: SojornColors.textDisabled, fontSize: 12)),
-              const SizedBox(height: 20),
+              const SizedBox(height: 8),
+
+              // Mini map — user taps to move the beacon pin.
+              // Coordinates are shown fuzzed (~1 km) so users know what precision is shared.
+              ClipRRect(
+                borderRadius: BorderRadius.circular(12),
+                child: SizedBox(
+                  height: 150,
+                  child: FlutterMap(
+                    mapController: _mapController,
+                    options: MapOptions(
+                      initialCenter: LatLng(_pickedLat, _pickedLong),
+                      initialZoom: 14,
+                      onTap: (_, point) {
+                        setState(() {
+                          _pickedLat = point.latitude;
+                          _pickedLong = point.longitude;
+                        });
+                      },
+                    ),
+                    children: [
+                      TileLayer(
+                        urlTemplate: 'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
+                        userAgentPackageName: 'com.mpls.sojorn',
+                      ),
+                      MarkerLayer(
+                        markers: [
+                          Marker(
+                            point: LatLng(_pickedLat, _pickedLong),
+                            width: 36,
+                            height: 36,
+                            child: Icon(Icons.location_pin, color: AppTheme.brightNavy, size: 36),
+                          ),
+                        ],
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+              const SizedBox(height: 6),
+              Text(
+                'Tap map to move pin  •  ~${_pickedLat.toStringAsFixed(2)}, ~${_pickedLong.toStringAsFixed(2)}',
+                style: TextStyle(color: SojornColors.textDisabled, fontSize: 11),
+              ),
+              const SizedBox(height: 16),
 
               // Incident type — horizontal scroll chips
               Text('What\'s happening?',

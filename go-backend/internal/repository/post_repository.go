@@ -24,32 +24,14 @@ func (r *PostRepository) Pool() *pgxpool.Pool {
 }
 
 func (r *PostRepository) CreatePost(ctx context.Context, post *models.Post) error {
-	// Calculate confidence score if it's a beacon — trust-tier gating
-	if post.IsBeacon {
-		var harmonyScore int
-		var tier string
-		err := r.pool.QueryRow(ctx,
-			"SELECT COALESCE(harmony_score, 50), COALESCE(tier, 'new') FROM public.trust_state WHERE user_id = $1::uuid",
-			post.AuthorID,
-		).Scan(&harmonyScore, &tier)
-		if err == nil {
-			switch tier {
-			case "established":
-				// Established users: reports go live instantly as verified
-				post.Confidence = 0.95
-			case "trusted":
-				// Trusted users: reports appear as high-confidence
-				post.Confidence = 0.8
-			default:
-				// New users: reports start unverified, need 3 community vouches
-				post.Confidence = float64(harmonyScore) / 200.0 // max 0.5 for new users
-				if post.Confidence > 0.5 {
-					post.Confidence = 0.5
-				}
-			}
-		} else {
-			post.Confidence = 0.3 // Unknown user — unverified
-		}
+	// Beacons are fully anonymous — author_id is never stored.
+	// Confidence is set by the handler; community vouches drive it up from 0.3.
+	// Non-beacon posts retain author_id for all standard operations.
+
+	// authorIDArg is nil for beacons so the DB column stores NULL.
+	var authorIDArg interface{}
+	if !post.IsBeacon {
+		authorIDArg = post.AuthorID
 	}
 
 	query := `
@@ -79,7 +61,7 @@ func (r *PostRepository) CreatePost(ctx context.Context, post *models.Post) erro
 	defer tx.Rollback(ctx)
 
 	err = tx.QueryRow(ctx, query,
-		post.AuthorID, post.CategoryID, post.Body, post.Status, post.ToneLabel, post.CISScore,
+		authorIDArg, post.CategoryID, post.Body, post.Status, post.ToneLabel, post.CISScore,
 		post.ImageURL, post.VideoURL, post.ThumbnailURL, post.DurationMS, post.BodyFormat, post.BackgroundID, post.Tags,
 		post.IsBeacon, post.BeaconType, post.Lat, post.Long, post.Confidence,
 		post.IsActiveBeacon, post.AllowChain, post.ChainParentID, post.Visibility, post.ExpiresAt,
