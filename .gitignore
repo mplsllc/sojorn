@@ -24,6 +24,9 @@ authorized_keys
 *.pgp
 *.asc
 
+# Firebase
+.firebaserc
+
 # Platform / Auth Secrets
 firebase-auth-*.json
 *service-account*.json
@@ -48,12 +51,15 @@ supabase/functions/**/.env
 Thumbs.db
 desktop.ini
 
-# IDE
+# IDE & AI tools
 .vscode/*
 !.vscode/extensions.json
 !.vscode/launch.json
 !.vscode/tasks.json
 .idea/
+.windsurf/
+.claude/
+.cursor/
 *.swp
 *.swo
 *~
