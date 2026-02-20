@@ -1,0 +1,71 @@
+---
+interface Props {
+  title: string;
+  description?: string;
+}
+
+const { title, description = 'Sojorn — The Vibrant Social Network' } = Astro.props;
+---
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>{title}</title>
+  <meta name="description" content={description}>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <link href="https://fonts.googleapis.com/css2?family=Literata:opsz,wght@7..72,400;600;700&family=Outfit:wght@300;400;600;700&display=swap" rel="stylesheet">
+  <script is:inline>
+    tailwind.config = {
+      theme: {
+        extend: {
+          colors: {
+            egyptianBlue: '#1034A6',
+            queenPink: '#E8CCD7',
+            navyText: '#0A2351',
+          },
+          fontFamily: {
+            sans: ['Outfit', 'sans-serif'],
+            serif: ['Literata', 'serif'],
+          }
+        }
+      }
+    }
+  </script>
+  <style>
+    body { font-family: 'Outfit', sans-serif; }
+    .glass-card {
+      background: rgba(255, 255, 255, 0.7);
+      backdrop-filter: blur(12px);
+      border: 1px solid rgba(255, 255, 255, 0.5);
+    }
+  </style>
+</head>
+<body class="bg-gray-50 text-navyText min-h-screen flex flex-col">
+  <nav class="w-full py-6 px-8 flex justify-between items-center bg-white border-b border-gray-200">
+    <a href="/" class="flex items-center gap-3">
+      <img src="/leaf.png" alt="Sojorn Leaf" class="h-12 w-auto">
+      <span class="text-5xl font-serif font-bold tracking-tight text-egyptianBlue">sojorn</span>
+    </a>
+    <div class="flex items-center gap-6">
+      <a href="/privacy" class="text-sm font-semibold hover:text-egyptianBlue transition">Privacy</a>
+      <a href="/terms" class="text-sm font-semibold hover:text-egyptianBlue transition">Terms</a>
+      <a href="mailto:contact@sojorn.net" class="text-sm font-semibold hover:text-egyptianBlue transition">Contact</a>
+    </div>
+  </nav>
+
+  <main class="flex-grow">
+    <slot />
+  </main>
+
+  <footer class="py-8 bg-white border-t border-gray-200 text-center text-gray-500 text-sm">
+    <div class="flex justify-center gap-6 mb-4">
+      <a href="/privacy" class="hover:text-egyptianBlue">Privacy</a>
+      <a href="/terms" class="hover:text-egyptianBlue">Terms</a>
+      <a href="/delete-account" class="hover:text-egyptianBlue">Delete Account</a>
+    </div>
+    &copy; 2026 <a href="https://mp.ls" target="_blank" class="hover:text-egyptianBlue transition">MP.LS LLC</a>. All rights reserved.
+  </footer>
+</body>
+</html>

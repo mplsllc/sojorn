@@ -1,0 +1,128 @@
+---
+import Layout from '../../layouts/Layout.astro';
+---
+
+<Layout title="Clear Your Data - Sojorn" description="Request data clearing without deleting your account">
+  <div class="max-w-xl mx-auto px-6 py-16">
+    <h1 class="text-3xl font-bold mb-2 text-egyptianBlue">Clear Your Data</h1>
+    <p class="mb-8 text-gray-600">Request deletion of some or all of your content without closing your account. Your profile and login will remain active.</p>
+
+    <div class="bg-white rounded-2xl shadow-lg p-8">
+      <form id="clearForm" class="space-y-5">
+        <input type="hidden" name="request_type" value="clear_data">
+
+        <div>
+          <label for="email" class="block text-sm font-semibold mb-1">Email Address</label>
+          <input type="email" id="email" name="email" required placeholder="The email you signed up with"
+            class="w-full px-4 py-3 rounded-lg border border-gray-300 focus:outline-none focus:ring-2 focus:ring-egyptianBlue/50 focus:border-egyptianBlue text-sm">
+        </div>
+
+        <div>
+          <label for="handle" class="block text-sm font-semibold mb-1">Account Handle</label>
+          <input type="text" id="handle" name="handle" required placeholder="@yourhandle"
+            class="w-full px-4 py-3 rounded-lg border border-gray-300 focus:outline-none focus:ring-2 focus:ring-egyptianBlue/50 focus:border-egyptianBlue text-sm">
+        </div>
+
+        <div>
+          <label class="block text-sm font-semibold mb-2">What would you like cleared?</label>
+          <div class="space-y-2">
+            <label class="flex items-center gap-2 text-sm">
+              <input type="checkbox" name="clear_posts" value="true" class="rounded border-gray-300 text-egyptianBlue focus:ring-egyptianBlue">
+              Posts and Quips
+            </label>
+            <label class="flex items-center gap-2 text-sm">
+              <input type="checkbox" name="clear_messages" value="true" class="rounded border-gray-300 text-egyptianBlue focus:ring-egyptianBlue">
+              Messages and conversations
+            </label>
+            <label class="flex items-center gap-2 text-sm">
+              <input type="checkbox" name="clear_media" value="true" class="rounded border-gray-300 text-egyptianBlue focus:ring-egyptianBlue">
+              Uploaded photos, videos, and audio
+            </label>
+            <label class="flex items-center gap-2 text-sm">
+              <input type="checkbox" name="clear_activity" value="true" class="rounded border-gray-300 text-egyptianBlue focus:ring-egyptianBlue">
+              Likes, reactions, and comments
+            </label>
+            <label class="flex items-center gap-2 text-sm">
+              <input type="checkbox" name="clear_all" value="true" class="rounded border-gray-300 text-egyptianBlue focus:ring-egyptianBlue">
+              <strong>All of the above</strong>
+            </label>
+          </div>
+        </div>
+
+        <div>
+          <label for="details" class="block text-sm font-semibold mb-1">Additional details (optional)</label>
+          <textarea id="details" name="details" rows="3" placeholder="Any specifics about what you'd like removed"
+            class="w-full px-4 py-3 rounded-lg border border-gray-300 focus:outline-none focus:ring-2 focus:ring-egyptianBlue/50 focus:border-egyptianBlue text-sm resize-none"></textarea>
+        </div>
+
+        <div class="bg-blue-50 border border-blue-200 rounded-lg p-4 text-sm text-blue-800">
+          <strong>Note:</strong> Your account, profile, and login will remain active. Only the selected content will be removed. This action cannot be undone.
+        </div>
+
+        <button type="submit" id="submitBtn"
+          class="w-full px-6 py-3 bg-egyptianBlue text-white font-bold rounded-lg shadow-lg hover:bg-blue-800 transition text-sm">
+          Submit Data Clearing Request
+        </button>
+
+        <p id="formMsg" class="text-sm hidden"></p>
+      </form>
+
+      <div id="successState" class="hidden text-center py-8">
+        <div class="text-4xl mb-4">&#x2705;</div>
+        <h2 class="text-xl font-bold text-egyptianBlue mb-2">Request Submitted</h2>
+        <p class="text-gray-600">We've received your data clearing request. You'll receive a confirmation email when it's been processed.</p>
+      </div>
+    </div>
+  </div>
+
+  <script is:inline>
+    // "All of the above" toggles all checkboxes
+    document.querySelector('[name="clear_all"]').addEventListener('change', (e) => {
+      document.querySelectorAll('[name^="clear_"]').forEach(cb => { cb.checked = e.target.checked; });
+    });
+
+    document.getElementById('clearForm').addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const btn = document.getElementById('submitBtn');
+      const msg = document.getElementById('formMsg');
+
+      const checkboxes = document.querySelectorAll('[name^="clear_"]:checked');
+      if (checkboxes.length === 0) {
+        msg.textContent = 'Please select at least one type of data to clear.';
+        msg.className = 'text-sm text-red-500';
+        return;
+      }
+
+      const clearTypes = Array.from(checkboxes).map(cb => cb.name).filter(n => n !== 'clear_all');
+
+      btn.disabled = true;
+      btn.textContent = 'Submitting...';
+      try {
+        const res = await fetch('/api/data-request', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            email: document.getElementById('email').value,
+            handle: document.getElementById('handle').value,
+            details: document.getElementById('details').value,
+            request_type: 'clear_data',
+            clear_types: clearTypes,
+          }),
+        });
+        const data = await res.json();
+        if (res.ok) {
+          document.getElementById('clearForm').classList.add('hidden');
+          document.getElementById('successState').classList.remove('hidden');
+        } else {
+          msg.textContent = data.error || 'Something went wrong. Please try again.';
+          msg.className = 'text-sm text-red-500';
+        }
+      } catch {
+        msg.textContent = 'Connection error. Please try again later.';
+        msg.className = 'text-sm text-red-500';
+      }
+      btn.disabled = false;
+      btn.textContent = 'Submit Data Clearing Request';
+    });
+  </script>
+</Layout>

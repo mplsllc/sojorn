@@ -1,0 +1,90 @@
+---
+import Layout from '../layouts/Layout.astro';
+---
+
+<Layout title="Delete Account - Sojorn" description="Request account deletion">
+  <div class="max-w-xl mx-auto px-6 py-16">
+    <h1 class="text-3xl font-bold mb-2 text-egyptianBlue">Delete Your Account</h1>
+    <p class="mb-8 text-gray-600">Submit this form to request permanent deletion of your Sojorn account and all associated data. We will process your request within 14 days.</p>
+
+    <div class="bg-white rounded-2xl shadow-lg p-8">
+      <form id="deleteForm" class="space-y-5">
+        <input type="hidden" name="request_type" value="delete_account">
+
+        <div>
+          <label for="email" class="block text-sm font-semibold mb-1">Email Address</label>
+          <input type="email" id="email" name="email" required placeholder="The email you signed up with"
+            class="w-full px-4 py-3 rounded-lg border border-gray-300 focus:outline-none focus:ring-2 focus:ring-egyptianBlue/50 focus:border-egyptianBlue text-sm">
+        </div>
+
+        <div>
+          <label for="handle" class="block text-sm font-semibold mb-1">Account Handle</label>
+          <input type="text" id="handle" name="handle" required placeholder="@yourhandle"
+            class="w-full px-4 py-3 rounded-lg border border-gray-300 focus:outline-none focus:ring-2 focus:ring-egyptianBlue/50 focus:border-egyptianBlue text-sm">
+        </div>
+
+        <div>
+          <label for="details" class="block text-sm font-semibold mb-1">Reason (optional)</label>
+          <textarea id="details" name="details" rows="3" placeholder="Let us know why you're leaving (optional)"
+            class="w-full px-4 py-3 rounded-lg border border-gray-300 focus:outline-none focus:ring-2 focus:ring-egyptianBlue/50 focus:border-egyptianBlue text-sm resize-none"></textarea>
+        </div>
+
+        <div class="bg-amber-50 border border-amber-200 rounded-lg p-4 text-sm text-amber-800">
+          <strong>Important:</strong> Account deletion is permanent. All your posts, messages, media, and profile data will be permanently removed and cannot be recovered.
+        </div>
+
+        <button type="submit" id="submitBtn"
+          class="w-full px-6 py-3 bg-red-600 text-white font-bold rounded-lg shadow-lg hover:bg-red-700 transition text-sm">
+          Request Account Deletion
+        </button>
+
+        <p id="formMsg" class="text-sm hidden"></p>
+      </form>
+
+      <div id="successState" class="hidden text-center py-8">
+        <div class="text-4xl mb-4">&#x2705;</div>
+        <h2 class="text-xl font-bold text-egyptianBlue mb-2">Request Submitted</h2>
+        <p class="text-gray-600">We've received your account deletion request. You'll receive a confirmation email shortly. Your account will be permanently deleted within 14 days.</p>
+      </div>
+    </div>
+
+    <p class="mt-6 text-sm text-gray-500 text-center">
+      You can also delete your account directly from the app under <strong>Settings &gt; Delete Account</strong>.
+    </p>
+  </div>
+
+  <script is:inline>
+    document.getElementById('deleteForm').addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const btn = document.getElementById('submitBtn');
+      const msg = document.getElementById('formMsg');
+      btn.disabled = true;
+      btn.textContent = 'Submitting...';
+      try {
+        const res = await fetch('/api/data-request', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            email: document.getElementById('email').value,
+            handle: document.getElementById('handle').value,
+            details: document.getElementById('details').value,
+            request_type: 'delete_account',
+          }),
+        });
+        const data = await res.json();
+        if (res.ok) {
+          document.getElementById('deleteForm').classList.add('hidden');
+          document.getElementById('successState').classList.remove('hidden');
+        } else {
+          msg.textContent = data.error || 'Something went wrong. Please try again.';
+          msg.className = 'text-sm text-red-500';
+        }
+      } catch {
+        msg.textContent = 'Connection error. Please try again later.';
+        msg.className = 'text-sm text-red-500';
+      }
+      btn.disabled = false;
+      btn.textContent = 'Request Account Deletion';
+    });
+  </script>
+</Layout>
