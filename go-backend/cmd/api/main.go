@@ -199,6 +199,7 @@ func main() {
 	officialAccountsService.StartScheduler()
 	defer officialAccountsService.StopScheduler()
 
+	icedHandler := handlers.NewIcedHandler(cfg.IcedAPIBase)
 	moderationHandler := handlers.NewModerationHandler(moderationService, openRouterService, localAIService)
 
 	adminHandler := handlers.NewAdminHandler(dbPool, moderationService, appealService, emailService, openRouterService, azureOpenAIService, officialAccountsService, linkPreviewService, localAIService, cfg.JWTSecret, s3Client, cfg.R2MediaBucket, cfg.R2VideoBucket, cfg.R2ImgDomain, cfg.R2VidDomain)
@@ -375,6 +376,7 @@ func main() {
 			authorized.GET("/beacons/cameras", postHandler.GetOfficialCameras)
 			authorized.GET("/beacons/signs", postHandler.GetOfficialSigns)
 			authorized.GET("/beacons/weather", postHandler.GetOfficialWeatherStations)
+			authorized.GET("/beacons/iced", icedHandler.GetIcedAlerts)
 			authorized.POST("/beacons/:id/vouch", postHandler.VouchBeacon)
 			authorized.POST("/beacons/:id/report", postHandler.ReportBeacon)
 			authorized.DELETE("/beacons/:id/vouch", postHandler.RemoveBeaconVote)

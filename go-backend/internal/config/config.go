@@ -44,6 +44,7 @@ type Config struct {
 	AzureOpenAIEndpoint     string
 	AzureOpenAIAPIVersion   string
 	FunkwhaleBase           string // e.g. "http://localhost:5001" — empty means not yet deployed
+	IcedAPIBase             string // IcedCoffee public-safety API base URL
 }
 
 func LoadConfig() *Config {
@@ -94,6 +95,7 @@ func LoadConfig() *Config {
 		AzureOpenAIEndpoint:     getEnv("AZURE_OPENAI_ENDPOINT", ""),
 		AzureOpenAIAPIVersion:   getEnv("AZURE_OPENAI_API_VERSION", "2024-02-15-preview"),
 		FunkwhaleBase:           getEnv("FUNKWHALE_BASE", ""),
+		IcedAPIBase:             getEnv("ICED_API_BASE", "http://127.0.0.1:8089"),
 	}
 }
 

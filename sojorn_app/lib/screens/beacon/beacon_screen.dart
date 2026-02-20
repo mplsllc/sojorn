@@ -363,18 +363,24 @@ class BeaconScreenState extends ConsumerState<BeaconScreen> with TickerProviderS
           long: target.longitude,
           radius: 16000,
         ),
+        apiService.fetchIcedAlerts(
+          lat: target.latitude,
+          long: target.longitude,
+          radius: 16000,
+        ),
       ]);
       final beacons = results[0];
       final official = results[1];
       final cameras = results[2];
       final signs = results[3];
       final weather = results[4];
-      debugPrint('[Beacon] fetched ${beacons.length} user beacons + ${official.length} official alerts + ${cameras.length} cameras + ${signs.length} signs + ${weather.length} weather');
+      final iced = results[5];
+      debugPrint('[Beacon] fetched ${beacons.length} user beacons + ${official.length} official alerts + ${cameras.length} cameras + ${signs.length} signs + ${weather.length} weather + ${iced.length} iced');
       if (mounted) {
         setState(() {
           _beacons = beacons.where((p) => p.isBeaconPost).toList()
             ..sort((a, b) => (a.distanceMeters ?? 0).compareTo(b.distanceMeters ?? 0));
-          _officialPosts = official.where((p) => p.isBeaconPost).toList();
+          _officialPosts = [...official, ...iced].where((p) => p.isBeaconPost).toList();
           _cameraPosts = cameras.where((p) => p.isBeaconPost).map((p) => p.toBeacon()).toList();
           _signPosts = signs.where((p) => p.isBeaconPost).map((p) => p.toBeacon()).toList();
           _weatherPosts = weather.where((p) => p.isBeaconPost).map((p) => p.toBeacon()).toList();

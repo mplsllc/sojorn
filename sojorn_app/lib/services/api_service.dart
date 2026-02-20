@@ -899,6 +899,29 @@ class ApiService {
     }
   }
 
+  Future<List<Post>> fetchIcedAlerts({
+    required double lat,
+    required double long,
+    int radius = 16000,
+  }) async {
+    try {
+      final data = await _callGoApi(
+        '/beacons/iced',
+        method: 'GET',
+        queryParams: {
+          'lat': lat.toString(),
+          'long': long.toString(),
+          'radius': radius.toString(),
+        },
+      );
+      return (data['beacons'] as List)
+          .map((json) => Post.fromJson(json))
+          .toList();
+    } catch (e) {
+      return [];
+    }
+  }
+
   // =========================================================================
   // Beacon Ecosystem Search (beacons, board, public groups — never private)
   // =========================================================================
