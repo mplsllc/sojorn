@@ -30,23 +30,6 @@ class ApiService {
   static ApiService get instance =>
       _instance ??= ApiService(AuthService.instance);
 
-  /// Generic caller for specialized edge endpoints. Handles response parsing
-  /// and normalization across different response formats.
-  Future<Map<String, dynamic>> _callFunction(
-    String functionName, {
-    String method = 'POST',
-    Map<String, dynamic>? queryParams,
-    Object? body,
-  }) async {
-    // Proxy through Go API to avoid CORS issues and Mixed Content
-    return await _callGoApi(
-      '/functions/$functionName',
-      method: method.toUpperCase(),
-      queryParams: queryParams?.map((k, v) => MapEntry(k, v.toString())),
-      body: body,
-    );
-  }
-
   /// Generic function caller for the new Go API on the VPS.
   /// Includes Retry-on-401 logic (Session Manager)
   Future<Map<String, dynamic>> callGoApi(String path,
@@ -697,18 +680,6 @@ class ApiService {
     );
   }
 
-  Future<void> updateAllPostVisibility(String visibility) async {
-    // Legacy function proxy for bulk update
-    await _callFunction(
-      'manage-post',
-      method: 'POST',
-      body: {
-        'action': 'bulk_update_privacy',
-        'visibility': visibility,
-      },
-    );
-  }
-
   Future<void> pinPost(String postId) async {
     await _callGoApi(
       '/posts/$postId/pin',
@@ -1155,10 +1126,6 @@ class ApiService {
     });
   }
 
-  Future<void> deleteGroup(String groupId) async {
-    await _callGoApi('/capsules/$groupId', method: 'DELETE');
-  }
-
   Future<void> inviteToGroup(String groupId, {required String userId}) async {
     await _callGoApi('/capsules/$groupId/invite-member', body: {'user_id': userId});
   }
@@ -1237,11 +1204,6 @@ class ApiService {
       // Fallback or empty if API not yet ready
       return [];
     }
-  }
-
-  Future<Map<String, dynamic>> getConversationById(
-      String conversationId) async {
-    return {};
   }
 
   Future<String> getOrCreateConversation(String otherUserId) async {
@@ -1643,38 +1605,6 @@ class ApiService {
     await _callGoApi('/backup/$backupId', method: 'DELETE');
   }
 
-  /// Get sync code for device pairing
-  Future<Map<String, dynamic>> generateSyncCode({
-    required String deviceName,
-    required String deviceFingerprint,
-  }) async {
-    return await _callGoApi(
-      '/backup/sync/generate-code',
-      method: 'POST',
-      body: {
-        'device_name': deviceName,
-        'device_fingerprint': deviceFingerprint,
-      },
-    );
-  }
-
-  /// Verify sync code
-  Future<Map<String, dynamic>> verifySyncCode({
-    required String code,
-    required String deviceName,
-    required String deviceFingerprint,
-  }) async {
-    return await _callGoApi(
-      '/backup/sync/verify-code',
-      method: 'POST',
-      body: {
-        'code': code,
-        'device_name': deviceName,
-        'device_fingerprint': deviceFingerprint,
-      },
-    );
-  }
-
   // Follow System
   // =========================================================================
 
@@ -1685,7 +1615,7 @@ class ApiService {
 
   /// Unfollow a user
   Future<void> unfollowUser(String targetUserId) async {
-    await _callGoApi('/users/$targetUserId/unfollow', method: 'POST');
+    await _callGoApi('/users/$targetUserId/follow', method: 'DELETE');
   }
 
   /// Check if current user follows target user
@@ -1808,13 +1738,4 @@ class ApiService {
     return requests.map((r) => JoinRequest.fromJson(r)).toList();
   }
 
-  /// Approve a join request (admin only)
-  Future<void> approveJoinRequest(String groupId, String requestId) async {
-    await _callGoApi('/groups/$groupId/requests/$requestId/approve', method: 'POST');
-  }
-
-  /// Reject a join request (admin only)
-  Future<void> rejectJoinRequest(String groupId, String requestId) async {
-    await _callGoApi('/groups/$groupId/requests/$requestId/reject', method: 'POST');
-  }
 }

@@ -363,11 +363,6 @@ class ApiClient {
     return this.request<any>(`/api/v1/admin/storage/objects?${qs}`);
   }
 
-  async getStorageObject(bucket: string, key: string) {
-    const qs = new URLSearchParams({ bucket, key });
-    return this.request<any>(`/api/v1/admin/storage/object?${qs}`);
-  }
-
   async deleteStorageObject(bucket: string, key: string) {
     return this.request<any>('/api/v1/admin/storage/object', {
       method: 'DELETE',
@@ -528,10 +523,6 @@ class ApiClient {
     return this.request<any>('/api/v1/admin/official-accounts');
   }
 
-  async getOfficialAccount(id: string) {
-    return this.request<any>(`/api/v1/admin/official-accounts/${id}`);
-  }
-
   async upsertOfficialAccount(data: any) {
     return this.request<any>('/api/v1/admin/official-accounts', {
       method: 'POST',
@@ -659,10 +650,6 @@ class ApiClient {
     return this.request<any>(`/api/v1/admin/groups?${qs}`);
   }
 
-  async getGroup(id: string) {
-    return this.request<any>(`/api/v1/admin/groups/${id}`);
-  }
-
   async deleteGroup(id: string) {
     return this.request<any>(`/api/v1/admin/groups/${id}`, { method: 'DELETE' });
   }
@@ -682,13 +669,6 @@ class ApiClient {
 
   async repairQuip(postId: string) {
     return this.request<any>(`/api/v1/admin/quips/${postId}/repair`, { method: 'POST' });
-  }
-
-  async setPostThumbnail(postId: string, thumbnailUrl: string) {
-    return this.request<any>(`/api/v1/admin/posts/${postId}/thumbnail`, {
-      method: 'PATCH',
-      body: JSON.stringify({ thumbnail_url: thumbnailUrl }),
-    });
   }
 
   // Feed scores

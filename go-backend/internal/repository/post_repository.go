@@ -158,13 +158,37 @@ func (r *PostRepository) GetFeed(ctx context.Context, userID string, categorySlu
 		LEFT JOIN public.categories c ON p.category_id = c.id
 		WHERE p.deleted_at IS NULL AND p.status = 'active'
 		  AND COALESCE(p.is_beacon, FALSE) = FALSE
-		  AND COALESCE(p.visibility, 'public') != 'neighborhood'
 		  AND (
-		      p.author_id = CASE WHEN $4::text != '' THEN $4::text::uuid ELSE NULL END -- My own posts
-		      OR pr.is_private = FALSE -- Public profiles
-		      OR EXISTS (
-		          SELECT 1 FROM public.follows f 
-		          WHERE f.follower_id = CASE WHEN $4::text != '' THEN $4::text::uuid ELSE NULL END AND f.following_id = p.author_id AND f.status = 'accepted'
+		      -- Author always sees their own posts
+		      p.author_id = CASE WHEN $4::text != '' THEN $4::text::uuid ELSE NULL END
+		      OR (
+		          -- Profile-level privacy: private profiles require accepted follow
+		          (pr.is_private = FALSE OR EXISTS (
+		              SELECT 1 FROM public.follows f
+		              WHERE f.follower_id = CASE WHEN $4::text != '' THEN $4::text::uuid ELSE NULL END
+		                AND f.following_id = p.author_id AND f.status = 'accepted'
+		          ))
+		          AND
+		          -- Post-level visibility
+		          (
+		              COALESCE(p.visibility, 'public') = 'public'
+		              OR (p.visibility = 'followers' AND EXISTS (
+		                  SELECT 1 FROM public.follows f2
+		                  WHERE f2.follower_id = CASE WHEN $4::text != '' THEN $4::text::uuid ELSE NULL END
+		                    AND f2.following_id = p.author_id AND f2.status = 'accepted'
+		              ))
+		              OR (p.visibility = 'circle' AND EXISTS (
+		                  SELECT 1 FROM public.circle_members cm
+		                  WHERE cm.user_id = p.author_id
+		                    AND cm.member_id = CASE WHEN $4::text != '' THEN $4::text::uuid ELSE NULL END
+		              ))
+		              OR (p.visibility = 'neighborhood' AND EXISTS (
+		                  SELECT 1 FROM public.profiles viewer_pr
+		                  WHERE viewer_pr.id = CASE WHEN $4::text != '' THEN $4::text::uuid ELSE NULL END
+		                    AND viewer_pr.home_neighborhood_id IS NOT NULL
+		                    AND viewer_pr.home_neighborhood_id = pr.home_neighborhood_id
+		              ))
+		          )
 		      )
 		  )
 		  AND NOT public.has_block_between(p.author_id, CASE WHEN $4::text != '' THEN $4::text::uuid ELSE NULL END)
@@ -272,11 +296,36 @@ func (r *PostRepository) GetPostsByAuthor(ctx context.Context, authorID string, 
 		WHERE p.author_id = $1::uuid AND p.deleted_at IS NULL AND p.status = 'active'
 		  AND p.is_beacon = FALSE
 		  AND (
-		      p.author_id = CASE WHEN $4 != '' THEN $4::uuid ELSE NULL END -- Viewer is author
-		      OR pr.is_private = FALSE -- Public profile
-		      OR EXISTS (
-		          SELECT 1 FROM public.follows f 
-		          WHERE f.follower_id = CASE WHEN $4 != '' THEN $4::uuid ELSE NULL END AND f.following_id = p.author_id AND f.status = 'accepted'
+		      -- Author always sees their own posts
+		      p.author_id = CASE WHEN $4 != '' THEN $4::uuid ELSE NULL END
+		      OR (
+		          -- Profile-level privacy: private profiles require accepted follow
+		          (pr.is_private = FALSE OR EXISTS (
+		              SELECT 1 FROM public.follows f
+		              WHERE f.follower_id = CASE WHEN $4 != '' THEN $4::uuid ELSE NULL END
+		                AND f.following_id = p.author_id AND f.status = 'accepted'
+		          ))
+		          AND
+		          -- Post-level visibility
+		          (
+		              COALESCE(p.visibility, 'public') = 'public'
+		              OR (p.visibility = 'followers' AND EXISTS (
+		                  SELECT 1 FROM public.follows f2
+		                  WHERE f2.follower_id = CASE WHEN $4 != '' THEN $4::uuid ELSE NULL END
+		                    AND f2.following_id = p.author_id AND f2.status = 'accepted'
+		              ))
+		              OR (p.visibility = 'circle' AND EXISTS (
+		                  SELECT 1 FROM public.circle_members cm
+		                  WHERE cm.user_id = p.author_id
+		                    AND cm.member_id = CASE WHEN $4 != '' THEN $4::uuid ELSE NULL END
+		              ))
+		              OR (p.visibility = 'neighborhood' AND EXISTS (
+		                  SELECT 1 FROM public.profiles viewer_pr
+		                  WHERE viewer_pr.id = CASE WHEN $4 != '' THEN $4::uuid ELSE NULL END
+		                    AND viewer_pr.home_neighborhood_id IS NOT NULL
+		                    AND viewer_pr.home_neighborhood_id = pr.home_neighborhood_id
+		              ))
+		          )
 		      )
 		  )
 		  AND ($5 = FALSE OR p.chain_parent_id IS NOT NULL)
@@ -353,11 +402,36 @@ func (r *PostRepository) GetPostByID(ctx context.Context, postID string, userID 
 		LEFT JOIN public.post_metrics m ON p.id = m.post_id
 		WHERE p.id = $1::uuid AND p.deleted_at IS NULL
 		  AND (
+		      -- Author always sees their own posts
 		      p.author_id = CASE WHEN $2 != '' THEN $2::uuid ELSE NULL END
-		      OR pr.is_private = FALSE
-		      OR EXISTS (
-		          SELECT 1 FROM public.follows f 
-		          WHERE f.follower_id = CASE WHEN $2 != '' THEN $2::uuid ELSE NULL END AND f.following_id = p.author_id AND f.status = 'accepted'
+		      OR (
+		          -- Profile-level privacy: private profiles require accepted follow
+		          (pr.is_private = FALSE OR EXISTS (
+		              SELECT 1 FROM public.follows f
+		              WHERE f.follower_id = CASE WHEN $2 != '' THEN $2::uuid ELSE NULL END
+		                AND f.following_id = p.author_id AND f.status = 'accepted'
+		          ))
+		          AND
+		          -- Post-level visibility
+		          (
+		              COALESCE(p.visibility, 'public') = 'public'
+		              OR (p.visibility = 'followers' AND EXISTS (
+		                  SELECT 1 FROM public.follows f2
+		                  WHERE f2.follower_id = CASE WHEN $2 != '' THEN $2::uuid ELSE NULL END
+		                    AND f2.following_id = p.author_id AND f2.status = 'accepted'
+		              ))
+		              OR (p.visibility = 'circle' AND EXISTS (
+		                  SELECT 1 FROM public.circle_members cm
+		                  WHERE cm.user_id = p.author_id
+		                    AND cm.member_id = CASE WHEN $2 != '' THEN $2::uuid ELSE NULL END
+		              ))
+		              OR (p.visibility = 'neighborhood' AND EXISTS (
+		                  SELECT 1 FROM public.profiles viewer_pr
+		                  WHERE viewer_pr.id = CASE WHEN $2 != '' THEN $2::uuid ELSE NULL END
+		                    AND viewer_pr.home_neighborhood_id IS NOT NULL
+		                    AND viewer_pr.home_neighborhood_id = pr.home_neighborhood_id
+		              ))
+		          )
 		      )
 		  )
 		  AND NOT public.has_block_between(p.author_id, CASE WHEN $2 != '' THEN $2::uuid ELSE NULL END)
@@ -847,11 +921,36 @@ func (r *PostRepository) SearchPosts(ctx context.Context, query string, viewerID
 		  AND p.deleted_at IS NULL AND p.status = 'active'
 		  AND COALESCE(p.is_nsfw, FALSE) = FALSE
 		  AND (
+		      -- Author always sees their own posts
 		      p.author_id = CASE WHEN $3 != '' THEN $3::uuid ELSE NULL END
-		      OR pr.is_private = FALSE
-		      OR EXISTS (
-		          SELECT 1 FROM public.follows f 
-		          WHERE f.follower_id = CASE WHEN $3 != '' THEN $3::uuid ELSE NULL END AND f.following_id = p.author_id AND f.status = 'accepted'
+		      OR (
+		          -- Profile-level privacy: private profiles require accepted follow
+		          (pr.is_private = FALSE OR EXISTS (
+		              SELECT 1 FROM public.follows f
+		              WHERE f.follower_id = CASE WHEN $3 != '' THEN $3::uuid ELSE NULL END
+		                AND f.following_id = p.author_id AND f.status = 'accepted'
+		          ))
+		          AND
+		          -- Post-level visibility (only_me excluded — never appears in search)
+		          (
+		              COALESCE(p.visibility, 'public') = 'public'
+		              OR (p.visibility = 'followers' AND EXISTS (
+		                  SELECT 1 FROM public.follows f2
+		                  WHERE f2.follower_id = CASE WHEN $3 != '' THEN $3::uuid ELSE NULL END
+		                    AND f2.following_id = p.author_id AND f2.status = 'accepted'
+		              ))
+		              OR (p.visibility = 'circle' AND EXISTS (
+		                  SELECT 1 FROM public.circle_members cm
+		                  WHERE cm.user_id = p.author_id
+		                    AND cm.member_id = CASE WHEN $3 != '' THEN $3::uuid ELSE NULL END
+		              ))
+		              OR (p.visibility = 'neighborhood' AND EXISTS (
+		                  SELECT 1 FROM public.profiles viewer_pr
+		                  WHERE viewer_pr.id = CASE WHEN $3 != '' THEN $3::uuid ELSE NULL END
+		                    AND viewer_pr.home_neighborhood_id IS NOT NULL
+		                    AND viewer_pr.home_neighborhood_id = pr.home_neighborhood_id
+		              ))
+		          )
 		      )
 		  )
 		ORDER BY similarity(p.body, $1) DESC, p.created_at DESC

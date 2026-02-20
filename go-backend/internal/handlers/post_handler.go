@@ -622,7 +622,7 @@ func (h *PostHandler) CreatePost(c *gin.Context) {
 		AllowChain:     allowChain,
 		Visibility: func() string {
 			switch req.Visibility {
-			case "neighborhood", "followers", "only_me":
+			case "neighborhood", "followers", "only_me", "circle":
 				return req.Visibility
 			default:
 				return "public"

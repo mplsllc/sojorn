@@ -300,9 +300,6 @@ func main() {
 			auth.POST("/reset-password", authHandler.ResetPassword)
 		}
 
-		// Image proxy — public (no auth needed so CachedNetworkImage can fetch without Bearer token)
-		v1.GET("/image-proxy", mediaHandler.ImageProxy)
-
 		authorized := v1.Group("")
 		authorized.Use(middleware.AuthMiddleware(cfg.JWTSecret, dbPool))
 		{
@@ -327,7 +324,6 @@ func main() {
 				users.POST("/:id/accept", userHandler.AcceptFollowRequest)
 				users.DELETE("/:id/reject", userHandler.RejectFollowRequest)
 				users.GET("/requests", userHandler.GetPendingFollowRequests)
-				users.POST("/requests", userHandler.GetPendingFollowRequests)
 				users.GET("/:id/posts", postHandler.GetProfilePosts)
 				users.GET("/:id/saved", userHandler.GetSavedPosts)
 				users.GET("/me/liked", userHandler.GetLikedPosts)
@@ -442,7 +438,6 @@ func main() {
 
 			// Follow System (unique routes only — followers/following covered by users group above)
 			followHandler := handlers.NewFollowHandler(dbPool)
-			authorized.POST("/users/:id/unfollow", followHandler.UnfollowUser)
 			authorized.GET("/users/:id/is-following", followHandler.IsFollowing)
 			authorized.GET("/users/:id/mutual-followers", followHandler.GetMutualFollowers)
 			authorized.GET("/users/suggested", followHandler.GetSuggestedUsers)
@@ -544,17 +539,10 @@ func main() {
 			capsules := authorized.Group("/capsules")
 			{
 				capsules.GET("/mine", capsuleHandler.ListMyGroups)
-				capsules.GET("/public", capsuleHandler.ListPublicClusters)
 				capsules.GET("/discover", capsuleHandler.DiscoverGroups)
 				capsules.POST("", capsuleHandler.CreateCapsule)
-				capsules.POST("/group", capsuleHandler.CreateGroup)
-				capsules.POST("/:id/join", capsuleHandler.JoinGroup)
 				capsules.GET("/:id", capsuleHandler.GetCapsule)
-				capsules.POST("/:id/entries", capsuleHandler.PostCapsuleEntry)
-				capsules.GET("/:id/entries", capsuleHandler.GetCapsuleEntries)
-				capsules.POST("/:id/invite", capsuleHandler.InviteToCapsule)
 				capsules.POST("/:id/rotate-keys", capsuleHandler.RotateKeys)
-				capsules.POST("/:id/entries/:entryId/report", capsuleHandler.ReportCapsuleEntry)
 
 				// Group features (posts, chat, forum, members)
 				capsules.GET("/:id/posts", groupHandler.ListGroupPosts)

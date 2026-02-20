@@ -16,54 +16,6 @@ func NewFollowHandler(db *pgxpool.Pool) *FollowHandler {
 	return &FollowHandler{db: db}
 }
 
-// FollowUser — POST /users/:userId/follow
-func (h *FollowHandler) FollowUser(c *gin.Context) {
-	userID := c.GetString("user_id")
-	targetUserID := c.Param("id")
-
-	if userID == "" {
-		c.JSON(http.StatusUnauthorized, gin.H{"error": "unauthorized"})
-		return
-	}
-	if userID == targetUserID {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "cannot follow yourself"})
-		return
-	}
-
-	_, err := h.db.Exec(context.Background(), `
-		INSERT INTO follows (follower_id, following_id)
-		VALUES ($1, $2)
-		ON CONFLICT (follower_id, following_id) DO NOTHING
-	`, userID, targetUserID)
-	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to follow user"})
-		return
-	}
-
-	c.JSON(http.StatusOK, gin.H{"message": "followed"})
-}
-
-// UnfollowUser — POST /users/:userId/unfollow
-func (h *FollowHandler) UnfollowUser(c *gin.Context) {
-	userID := c.GetString("user_id")
-	targetUserID := c.Param("id")
-
-	if userID == "" {
-		c.JSON(http.StatusUnauthorized, gin.H{"error": "unauthorized"})
-		return
-	}
-
-	_, err := h.db.Exec(context.Background(), `
-		DELETE FROM follows WHERE follower_id = $1 AND following_id = $2
-	`, userID, targetUserID)
-	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to unfollow user"})
-		return
-	}
-
-	c.JSON(http.StatusOK, gin.H{"message": "unfollowed"})
-}
-
 // IsFollowing — GET /users/:userId/is-following
 func (h *FollowHandler) IsFollowing(c *gin.Context) {
 	userID := c.GetString("user_id")

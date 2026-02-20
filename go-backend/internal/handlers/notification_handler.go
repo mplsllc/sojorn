@@ -517,14 +517,4 @@ func (h *NotificationHandler) GetActivityLog(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{"activities": activities})
 }
 
-// GetActivityLogItem returns context about a specific notification's linked content
-// GET /api/v1/users/me/activity?type=...&entity_id=...
-// (reuses GetActivityLog with filtering — already handled by client-side display)
-
-// RecentActivity returns a compact summary for the profile page (last 5 actions)
-// GET /api/v1/users/me/recent-activity
-func (h *NotificationHandler) RecentActivity(c *gin.Context) {
-	c.Request.URL.RawQuery = "limit=5&offset=0"
-	h.GetActivityLog(c)
-}
 
