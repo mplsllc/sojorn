@@ -30,9 +30,10 @@ type PostHandler struct {
 	linkPreviewService  *services.LinkPreviewService
 	localAIService      *services.LocalAIService
 	videoProcessor      *services.VideoProcessor
+	contentModerator    *services.ContentModerator
 }
 
-func NewPostHandler(postRepo *repository.PostRepository, userRepo *repository.UserRepository, feedService *services.FeedService, assetService *services.AssetService, notificationService *services.NotificationService, moderationService *services.ModerationService, contentFilter *services.ContentFilter, openRouterService *services.OpenRouterService, linkPreviewService *services.LinkPreviewService, localAIService *services.LocalAIService, s3Client *s3.Client, videoBucket, vidDomain string) *PostHandler {
+func NewPostHandler(postRepo *repository.PostRepository, userRepo *repository.UserRepository, feedService *services.FeedService, assetService *services.AssetService, notificationService *services.NotificationService, moderationService *services.ModerationService, contentFilter *services.ContentFilter, openRouterService *services.OpenRouterService, linkPreviewService *services.LinkPreviewService, localAIService *services.LocalAIService, s3Client *s3.Client, videoBucket, vidDomain string, contentModerator *services.ContentModerator) *PostHandler {
 	return &PostHandler{
 		postRepo:            postRepo,
 		userRepo:            userRepo,
@@ -45,6 +46,7 @@ func NewPostHandler(postRepo *repository.PostRepository, userRepo *repository.Us
 		linkPreviewService:  linkPreviewService,
 		localAIService:      localAIService,
 		videoProcessor:      services.NewVideoProcessor(s3Client, videoBucket, vidDomain),
+		contentModerator:    contentModerator,
 	}
 }
 
@@ -132,63 +134,26 @@ func (h *PostHandler) CreateComment(c *gin.Context) {
 	tone := "neutral"
 	cis := 0.8
 
-	// AI Moderation — runs whichever engine the admin selected in ai_moderation_config
+	// AI Moderation — cascade through all admin-enabled engines
 	var cachedScores *services.ThreePoisonsScore
 	var cachedReason string
 	commentStatus := "active"
 	ctx := c.Request.Context()
 
-	{
-		selectedEngine := ""
-		if h.openRouterService != nil {
-			cfg, cfgErr := h.openRouterService.GetModerationConfig(ctx, "text")
-			if cfgErr == nil && cfg != nil && cfg.Enabled && len(cfg.Engines) > 0 {
-				selectedEngine = cfg.Engines[0]
-			}
+	if h.contentModerator != nil {
+		modResult := h.contentModerator.ModerateText(ctx, "text", req.Body)
+		cachedScores = modResult.Scores
+		cachedReason = modResult.Reason
+
+		switch modResult.Action {
+		case "flag":
+			commentStatus = "removed"
+		case "nsfw":
+			commentStatus = "pending_moderation"
 		}
 
-		switch selectedEngine {
-		case "local_ai":
-			if h.localAIService != nil && req.Body != "" {
-				localResult, localErr := h.localAIService.ModerateText(ctx, req.Body)
-				if localErr != nil {
-					log.Debug().Err(localErr).Msg("Local AI moderation unavailable for comment")
-				} else if localResult != nil && !localResult.Allowed {
-					commentStatus = "removed"
-					log.Warn().Str("reason", localResult.Reason).Msg("Comment flagged by local AI")
-				}
-			}
-		case "openai":
-			if h.moderationService != nil {
-				scores, reason, modErr := h.moderationService.AnalyzeContent(ctx, req.Body, []string{})
-				if modErr == nil {
-					cachedScores = scores
-					cachedReason = reason
-					cis = (scores.Hate + scores.Greed + scores.Delusion) / 3.0
-					cis = 1.0 - cis
-					tone = reason
-					if reason != "" {
-						commentStatus = "pending_moderation"
-					}
-				}
-			}
-		case "openrouter":
-			if h.openRouterService != nil && req.Body != "" {
-				textResult, textErr := h.openRouterService.ModerateText(ctx, req.Body)
-				if textErr == nil && textResult != nil {
-					if textResult.Action == "flag" {
-						commentStatus = "removed"
-					} else if textResult.Action == "nsfw" {
-						commentStatus = "pending_moderation"
-					}
-					if textResult.Hate > 0 || textResult.Greed > 0 || textResult.Delusion > 0 {
-						orCis := 1.0 - (textResult.Hate+textResult.Greed+textResult.Delusion)/3.0
-						cis = orCis
-					}
-				}
-			}
-		default:
-			log.Debug().Msg("No moderation engine configured in admin settings")
+		if cachedScores != nil {
+			cis = 1.0 - (cachedScores.Hate+cachedScores.Greed+cachedScores.Delusion)/3.0
 		}
 	}
 
@@ -395,63 +360,24 @@ func (h *PostHandler) CreateBeacon(c *gin.Context) {
 		ImageURL:       req.ImageURL,
 	}
 
-	// AI Moderation — text + image. Flagged beacons stay active but get flagged for admin review.
+	// AI Moderation — text cascade (local AI → OpenAI → OpenRouter with beacon_text config).
 	modFlagged := false
-	if h.moderationService != nil {
-		mediaURLs := []string{}
-		if req.ImageURL != nil && *req.ImageURL != "" {
-			mediaURLs = append(mediaURLs, *req.ImageURL)
-		}
-		scores, reason, err := h.moderationService.AnalyzeContent(c.Request.Context(), req.Body, mediaURLs)
-		if err == nil && reason != "" {
-			modFlagged = true
-			cis := 1.0 - (scores.Hate+scores.Greed+scores.Delusion)/3.0
-			post.CISScore = &cis
-			post.ToneLabel = &reason
-			log.Warn().Str("reason", reason).Float64("cis", cis).Msg("Beacon flagged by moderation — stays active for admin review")
-		}
-	}
-	// Local AI moderation (llama-guard, on-server, free, fast)
-	if h.localAIService != nil && req.Body != "" {
-		localResult, localErr := h.localAIService.ModerateText(c.Request.Context(), req.Body)
-		if localErr != nil {
-			log.Debug().Err(localErr).Msg("Local AI moderation unavailable for beacon, falling through")
-		} else if localResult != nil && !localResult.Allowed {
+	if h.contentModerator != nil {
+		modResult := h.contentModerator.ModerateText(c.Request.Context(), "beacon_text", req.Body)
+		switch modResult.Action {
+		case "flag":
 			post.Status = "removed"
 			modFlagged = true
-			log.Warn().Str("reason", localResult.Reason).Msg("Beacon flagged by local AI")
-		}
-	}
-	if h.openRouterService != nil {
-		// Try beacon-specific config first, fall back to generic
-		textResult, textErr := h.openRouterService.ModerateWithType(c.Request.Context(), "beacon_text", req.Body, nil)
-		if textResult == nil || textErr != nil {
-			textResult, _ = h.openRouterService.ModerateText(c.Request.Context(), req.Body)
-		}
-		if textResult != nil {
-			if textResult.Action == "flag" {
-				post.Status = "removed"
-				modFlagged = true
-				log.Warn().Msg("Beacon removed by OpenRouter — not allowed content")
-			} else if textResult.Action == "nsfw" {
-				post.IsNSFW = true
-				modFlagged = true
+			if modResult.Scores != nil {
+				cis := 1.0 - (modResult.Scores.Hate+modResult.Scores.Greed+modResult.Scores.Delusion)/3.0
+				post.CISScore = &cis
 			}
-		}
-		if req.ImageURL != nil && *req.ImageURL != "" && post.Status == "active" {
-			imgResult, imgErr := h.openRouterService.ModerateWithType(c.Request.Context(), "beacon_image", "", []string{*req.ImageURL})
-			if imgResult == nil || imgErr != nil {
-				imgResult, _ = h.openRouterService.ModerateImage(c.Request.Context(), *req.ImageURL)
-			}
-			if imgResult != nil {
-				if imgResult.Action == "flag" {
-					post.Status = "removed"
-					modFlagged = true
-				} else if imgResult.Action == "nsfw" {
-					post.IsNSFW = true
-					modFlagged = true
-				}
-			}
+			post.ToneLabel = &modResult.Reason
+			log.Warn().Str("reason", modResult.Reason).Str("engine", modResult.Engine).Msg("Beacon flagged — removed")
+		case "nsfw":
+			post.IsNSFW = true
+			modFlagged = true
+			log.Info().Str("reason", modResult.Reason).Msg("Beacon marked NSFW")
 		}
 	}
 
@@ -649,179 +575,32 @@ func (h *PostHandler) CreatePost(c *gin.Context) {
 		}
 	}
 
-	// 5. AI Moderation — runs whichever engine the admin selected in ai_moderation_config
+	// 5. AI Moderation — cascade through all admin-enabled engines (local AI → OpenAI → OpenRouter)
 	userSelfLabeledNSFW := req.IsNSFW
 	orDecision := ""
 	var cachedScores *services.ThreePoisonsScore
 	var cachedReason string
 	ctx := c.Request.Context()
 
-	{
-		// Read admin-selected engine from ai_moderation_config
-		selectedEngine := "" // empty = no AI moderation configured
-		if h.openRouterService != nil {
-			cfg, cfgErr := h.openRouterService.GetModerationConfig(ctx, "text")
-			if cfgErr == nil && cfg != nil && cfg.Enabled && len(cfg.Engines) > 0 {
-				selectedEngine = cfg.Engines[0]
+	if h.contentModerator != nil {
+		modResult := h.contentModerator.ModerateText(ctx, "text", req.Body)
+		cachedScores = modResult.Scores
+		cachedReason = modResult.Reason
+		orDecision = modResult.Action
+
+		switch modResult.Action {
+		case "flag":
+			post.Status = "removed"
+		case "nsfw":
+			post.IsNSFW = true
+			if modResult.NSFWReason != "" {
+				post.NSFWReason = modResult.NSFWReason
 			}
 		}
 
-		switch selectedEngine {
-		case "local_ai":
-			if h.localAIService != nil && req.Body != "" {
-				localResult, localErr := h.localAIService.ModerateText(ctx, req.Body)
-				if localErr != nil {
-					log.Debug().Err(localErr).Msg("Local AI moderation unavailable")
-				} else if localResult != nil && !localResult.Allowed {
-					post.Status = "removed"
-					log.Warn().Str("reason", localResult.Reason).Str("severity", localResult.Severity).Msg("Post flagged by local AI")
-				}
-			}
-
-		case "openai":
-			if h.moderationService != nil {
-				mediaURLs := []string{}
-				if req.ImageURL != nil && *req.ImageURL != "" {
-					mediaURLs = append(mediaURLs, *req.ImageURL)
-				}
-				if req.VideoURL != nil && *req.VideoURL != "" {
-					mediaURLs = append(mediaURLs, *req.VideoURL)
-				}
-				if req.Thumbnail != nil && *req.Thumbnail != "" {
-					mediaURLs = append(mediaURLs, *req.Thumbnail)
-				}
-				scores, reason, err := h.moderationService.AnalyzeContent(ctx, req.Body, mediaURLs)
-				if err == nil {
-					cachedScores = scores
-					cachedReason = reason
-					cis = (scores.Hate + scores.Greed + scores.Delusion) / 3.0
-					cis = 1.0 - cis
-					post.CISScore = &cis
-					post.ToneLabel = &reason
-					if reason != "" {
-						post.Status = "pending_moderation"
-					}
-				}
-			}
-
-		case "google":
-			if h.moderationService != nil && h.moderationService.HasGoogleVision() {
-				mediaURLs := []string{}
-				if req.ImageURL != nil && *req.ImageURL != "" {
-					mediaURLs = append(mediaURLs, *req.ImageURL)
-				}
-				if req.Thumbnail != nil && *req.Thumbnail != "" {
-					mediaURLs = append(mediaURLs, *req.Thumbnail)
-				}
-				if len(mediaURLs) > 0 {
-					scores, err := h.moderationService.AnalyzeMediaWithGoogleVision(ctx, mediaURLs)
-					if err != nil {
-						log.Warn().Err(err).Msg("Google Vision moderation failed")
-					} else {
-						cachedScores = scores
-						cis = (scores.Hate + scores.Greed + scores.Delusion) / 3.0
-						cis = 1.0 - cis
-						post.CISScore = &cis
-						if scores.Hate > 0.5 || scores.Delusion > 0.5 {
-							cachedReason = "Google Vision flagged image content"
-							post.Status = "removed"
-							log.Warn().Float64("hate", scores.Hate).Float64("delusion", scores.Delusion).Msg("Post flagged by Google Vision")
-						} else if scores.Hate > 0.25 || scores.Delusion > 0.25 {
-							post.IsNSFW = true
-							post.NSFWReason = "Google Vision detected potentially sensitive image content"
-						}
-					}
-				}
-			}
-
-		case "openrouter":
-			if h.openRouterService != nil {
-				// Text moderation
-				if req.Body != "" {
-					textResult, textErr := h.openRouterService.ModerateText(ctx, req.Body)
-					if textErr == nil && textResult != nil {
-						log.Info().Str("action", textResult.Action).Msg("OpenRouter text moderation")
-						if textResult.Action == "flag" {
-							orDecision = "flag"
-							post.Status = "removed"
-						} else if textResult.Action == "nsfw" {
-							orDecision = "nsfw"
-							post.IsNSFW = true
-							if textResult.NSFWReason != "" {
-								post.NSFWReason = textResult.NSFWReason
-							}
-						}
-						if textResult.Hate > 0 || textResult.Greed > 0 || textResult.Delusion > 0 {
-							orCis := 1.0 - (textResult.Hate+textResult.Greed+textResult.Delusion)/3.0
-							post.CISScore = &orCis
-						}
-					}
-				}
-				// Image moderation (only if text didn't already flag)
-				if post.Status != "removed" && req.ImageURL != nil && *req.ImageURL != "" {
-					imgResult, imgErr := h.openRouterService.ModerateImage(ctx, *req.ImageURL)
-					if imgErr == nil && imgResult != nil {
-						log.Info().Str("action", imgResult.Action).Msg("OpenRouter image moderation")
-						if imgResult.Action == "flag" {
-							orDecision = "flag"
-							post.Status = "removed"
-						} else if imgResult.Action == "nsfw" && orDecision != "flag" {
-							orDecision = "nsfw"
-							post.IsNSFW = true
-							if imgResult.NSFWReason != "" {
-								post.NSFWReason = imgResult.NSFWReason
-							}
-						}
-					}
-				}
-				// Enhanced video moderation with frame extraction
-				if post.Status != "removed" && req.VideoURL != nil && *req.VideoURL != "" {
-					// First check thumbnail moderation
-					if req.Thumbnail != nil && *req.Thumbnail != "" {
-						vidResult, vidErr := h.openRouterService.ModerateImage(ctx, *req.Thumbnail)
-						if vidErr == nil && vidResult != nil {
-							log.Info().Str("action", vidResult.Action).Msg("OpenRouter video thumbnail moderation")
-							if vidResult.Action == "flag" {
-								orDecision = "flag"
-								post.Status = "removed"
-							} else if vidResult.Action == "nsfw" && orDecision != "flag" {
-								orDecision = "nsfw"
-								post.IsNSFW = true
-								if vidResult.NSFWReason != "" {
-									post.NSFWReason = vidResult.NSFWReason
-								}
-							}
-						}
-					}
-
-					// Extract and analyze video frames for deeper moderation
-					if post.Status != "removed" && h.videoProcessor != nil {
-						frameURLs, err := h.videoProcessor.ExtractFrames(ctx, *req.VideoURL, 3)
-						if err == nil && len(frameURLs) > 0 {
-							// Analyze extracted frames with Azure OpenAI Vision
-							if h.moderationService != nil {
-								_, frameReason, frameErr := h.moderationService.AnalyzeContent(ctx, "Video frame analysis", frameURLs)
-								if frameErr == nil && frameReason != "" {
-									log.Info().Str("reason", frameReason).Msg("Video frame analysis completed")
-									if strings.Contains(strings.ToLower(frameReason), "flag") || strings.Contains(strings.ToLower(frameReason), "remove") {
-										orDecision = "flag"
-										post.Status = "removed"
-									} else if strings.Contains(strings.ToLower(frameReason), "nsfw") && orDecision != "flag" {
-										orDecision = "nsfw"
-										post.IsNSFW = true
-										post.NSFWReason = "Video content flagged by frame analysis"
-									}
-								}
-							}
-						} else {
-							log.Debug().Err(err).Msg("Failed to extract video frames for moderation")
-						}
-					}
-				}
-			}
-
-		default:
-			log.Debug().Msg("No moderation engine configured in admin settings")
+		if cachedScores != nil {
+			cis = 1.0 - (cachedScores.Hate+cachedScores.Greed+cachedScores.Delusion)/3.0
+			post.CISScore = &cis
 		}
 	}
 

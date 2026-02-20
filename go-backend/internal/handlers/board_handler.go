@@ -18,6 +18,7 @@ type BoardHandler struct {
 	pool              *pgxpool.Pool
 	contentFilter     *services.ContentFilter
 	moderationService *services.ModerationService
+	contentModerator  *services.ContentModerator
 }
 
 func NewBoardHandler(pool *pgxpool.Pool, opts ...interface{}) *BoardHandler {
@@ -28,6 +29,8 @@ func NewBoardHandler(pool *pgxpool.Pool, opts ...interface{}) *BoardHandler {
 			h.contentFilter = v
 		case *services.ModerationService:
 			h.moderationService = v
+		case *services.ContentModerator:
+			h.contentModerator = v
 		}
 	}
 	return h
@@ -567,35 +570,54 @@ func (h *BoardHandler) isNeighborhoodAdmin(c *gin.Context, userID uuid.UUID, lat
 	return exists
 }
 
-// aiModerateEntry runs AI moderation on a board entry asynchronously.
+// aiModerateEntry runs AI moderation on a board entry asynchronously using the
+// shared content moderation cascade (local AI → OpenAI → OpenRouter).
 // If flagged, it sets ai_flagged = true and hides the entry.
 func (h *BoardHandler) aiModerateEntry(entryID uuid.UUID, body string, authorID uuid.UUID) {
-	if h.moderationService == nil {
+	if h.contentModerator == nil && h.moderationService == nil {
 		return
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
 
-	score, reason, err := h.moderationService.AnalyzeContent(ctx, body, nil)
-	if err != nil {
-		log.Printf("[BoardAI] moderation error for entry %s: %v", entryID, err)
-		return
+	var decision, reason, engine string
+	var scores *services.ThreePoisonsScore
+
+	if h.contentModerator != nil {
+		result := h.contentModerator.ModerateText(ctx, "text", body)
+		decision = result.Action
+		reason = result.Reason
+		engine = result.Engine
+		scores = result.Scores
+	} else {
+		// Legacy fallback: OpenAI only
+		s, r, err := h.moderationService.AnalyzeContent(ctx, body, nil)
+		if err != nil {
+			log.Printf("[BoardAI] moderation error for entry %s: %v", entryID, err)
+			return
+		}
+		scores = s
+		if r != "" {
+			decision = "flag"
+			reason = r
+			engine = "openai"
+		} else {
+			decision = "clean"
+		}
 	}
 
 	// Always log AI decision for audit
-	decision := "clean"
-	if reason != "" {
-		decision = "flag"
-	}
-	rawScore, _ := json.Marshal(score)
-
-	h.moderationService.LogAIDecision(ctx, "board_entry", entryID, authorID, body, score, rawScore, decision, reason, "", nil)
-
-	if reason == "" {
-		return // clean
+	if h.moderationService != nil {
+		rawScore, _ := json.Marshal(scores)
+		h.moderationService.LogAIDecision(ctx, "board_entry", entryID, authorID, body, scores, rawScore, decision, reason, engine, nil)
 	}
 
-	log.Printf("[BoardAI] entry %s flagged: %s", entryID, reason)
+	if decision == "clean" || decision == "nsfw" {
+		// NSFW board entries stay visible but could be blurred (future)
+		return
+	}
+
+	log.Printf("[BoardAI] entry %s flagged by %s: %s", entryID, engine, reason)
 
 	_, _ = h.pool.Exec(ctx, `
 		UPDATE board_entries
@@ -604,41 +626,56 @@ func (h *BoardHandler) aiModerateEntry(entryID uuid.UUID, body string, authorID 
 		WHERE id = $2
 	`, reason, entryID)
 
-	// Log audit trail
 	_, _ = h.pool.Exec(ctx, `
 		INSERT INTO board_moderation_actions (entry_id, moderator_id, action, reason, ai_engine, ai_reason)
-		VALUES ($1, $2, 'remove', $3, 'auto', $3)
-	`, entryID, authorID, "AI flagged: "+reason)
+		VALUES ($1, $2, 'remove', $3, $4, $3)
+	`, entryID, authorID, "AI flagged: "+reason, engine)
 }
 
-// aiModerateReply runs AI moderation on a board reply asynchronously.
+// aiModerateReply runs AI moderation on a board reply asynchronously using the
+// shared content moderation cascade.
 func (h *BoardHandler) aiModerateReply(replyID uuid.UUID, body string, authorID uuid.UUID) {
-	if h.moderationService == nil {
+	if h.contentModerator == nil && h.moderationService == nil {
 		return
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
 
-	score, reason, err := h.moderationService.AnalyzeContent(ctx, body, nil)
-	if err != nil {
-		log.Printf("[BoardAI] moderation error for reply %s: %v", replyID, err)
+	var decision, reason, engine string
+	var scores *services.ThreePoisonsScore
+
+	if h.contentModerator != nil {
+		result := h.contentModerator.ModerateText(ctx, "text", body)
+		decision = result.Action
+		reason = result.Reason
+		engine = result.Engine
+		scores = result.Scores
+	} else {
+		s, r, err := h.moderationService.AnalyzeContent(ctx, body, nil)
+		if err != nil {
+			log.Printf("[BoardAI] moderation error for reply %s: %v", replyID, err)
+			return
+		}
+		scores = s
+		if r != "" {
+			decision = "flag"
+			reason = r
+			engine = "openai"
+		} else {
+			decision = "clean"
+		}
+	}
+
+	if h.moderationService != nil {
+		rawScore, _ := json.Marshal(scores)
+		h.moderationService.LogAIDecision(ctx, "board_reply", replyID, authorID, body, scores, rawScore, decision, reason, engine, nil)
+	}
+
+	if decision == "clean" || decision == "nsfw" {
 		return
 	}
 
-	// Always log AI decision for audit
-	decision := "clean"
-	if reason != "" {
-		decision = "flag"
-	}
-	rawScore, _ := json.Marshal(score)
-
-	h.moderationService.LogAIDecision(ctx, "board_reply", replyID, authorID, body, score, rawScore, decision, reason, "", nil)
-
-	if reason == "" {
-		return // clean
-	}
-
-	log.Printf("[BoardAI] reply %s flagged: %s", replyID, reason)
+	log.Printf("[BoardAI] reply %s flagged by %s: %s", replyID, engine, reason)
 
 	_, _ = h.pool.Exec(ctx, `
 		UPDATE board_replies
@@ -647,9 +684,8 @@ func (h *BoardHandler) aiModerateReply(replyID uuid.UUID, body string, authorID 
 		WHERE id = $2
 	`, reason, replyID)
 
-	// Log audit trail
 	_, _ = h.pool.Exec(ctx, `
 		INSERT INTO board_moderation_actions (reply_id, moderator_id, action, reason, ai_engine, ai_reason)
-		VALUES ($1, $2, 'remove', $3, 'auto', $3)
-	`, replyID, authorID, "AI flagged: "+reason)
+		VALUES ($1, $2, 'remove', $3, $4, $3)
+	`, replyID, authorID, "AI flagged: "+reason, engine)
 }

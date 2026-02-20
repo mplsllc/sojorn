@@ -1,9 +1,26 @@
 import type { APIRoute } from 'astro';
+import { verifySolution } from 'altcha-lib';
 
 export const POST: APIRoute = async ({ request }) => {
   try {
     const body = await request.json();
-    const { email, handle, request_type, details, clear_types } = body;
+    const { email, handle, request_type, details, clear_types, altcha_token } = body;
+
+    // Verify ALTCHA proof-of-work token
+    const hmacKey = process.env.ALTCHA_SECRET || process.env.JWT_SECRET || 'dev-secret';
+    if (!altcha_token) {
+      return new Response(JSON.stringify({ error: 'Security verification required.' }), {
+        status: 400,
+        headers: { 'Content-Type': 'application/json' },
+      });
+    }
+    const ok = await verifySolution(altcha_token, hmacKey);
+    if (!ok) {
+      return new Response(JSON.stringify({ error: 'Security verification failed. Please try again.' }), {
+        status: 403,
+        headers: { 'Content-Type': 'application/json' },
+      });
+    }
 
     if (!email || !handle || !request_type) {
       return new Response(JSON.stringify({ error: 'Email, handle, and request type are required.' }), {

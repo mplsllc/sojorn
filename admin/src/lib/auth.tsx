@@ -7,7 +7,7 @@ interface AuthContextType {
   isAuthenticated: boolean;
   isLoading: boolean;
   user: any | null;
-  login: (email: string, password: string, turnstileToken?: string) => Promise<void>;
+  login: (email: string, password: string, altchaToken?: string) => Promise<void>;
   logout: () => void;
 }
 
@@ -42,8 +42,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
   }, []);
 
-  const login = async (email: string, password: string, turnstileToken?: string) => {
-    const data = await api.login(email, password, turnstileToken);
+  const login = async (email: string, password: string, altchaToken?: string) => {
+    const data = await api.login(email, password, altchaToken);
     setIsAuthenticated(true);
     setUser(data.user);
   };

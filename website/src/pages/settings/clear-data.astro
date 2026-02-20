@@ -59,8 +59,10 @@ import Layout from '../../layouts/Layout.astro';
           <strong>Note:</strong> Your account, profile, and login will remain active. Only the selected content will be removed. This action cannot be undone.
         </div>
 
-        <button type="submit" id="submitBtn"
-          class="w-full px-6 py-3 bg-egyptianBlue text-white font-bold rounded-lg shadow-lg hover:bg-blue-800 transition text-sm">
+        <div id="altchaContainer"></div>
+
+        <button type="submit" id="submitBtn" disabled
+          class="w-full px-6 py-3 bg-egyptianBlue text-white font-bold rounded-lg shadow-lg hover:bg-blue-800 transition text-sm disabled:opacity-50 disabled:cursor-not-allowed">
           Submit Data Clearing Request
         </button>
 
@@ -75,7 +77,29 @@ import Layout from '../../layouts/Layout.astro';
     </div>
   </div>
 
+  <script is:inline src="https://cdn.jsdelivr.net/npm/altcha@2.3.0/dist/altcha.min.js" defer></script>
   <script is:inline>
+    let altchaToken = '';
+
+    window.addEventListener('DOMContentLoaded', () => {
+      const container = document.getElementById('altchaContainer');
+      const widget = document.createElement('altcha-widget');
+      widget.setAttribute('challengeurl', '/api/altcha-challenge');
+      widget.setAttribute('hidefooter', '');
+      widget.setAttribute('hidelogo', '');
+      container.appendChild(widget);
+
+      widget.addEventListener('statechange', (e) => {
+        if (e.detail && e.detail.state === 'verified' && e.detail.payload) {
+          altchaToken = e.detail.payload;
+          document.getElementById('submitBtn').disabled = false;
+        } else {
+          altchaToken = '';
+          document.getElementById('submitBtn').disabled = true;
+        }
+      });
+    });
+
     // "All of the above" toggles all checkboxes
     document.querySelector('[name="clear_all"]').addEventListener('change', (e) => {
       document.querySelectorAll('[name^="clear_"]').forEach(cb => { cb.checked = e.target.checked; });
@@ -85,6 +109,12 @@ import Layout from '../../layouts/Layout.astro';
       e.preventDefault();
       const btn = document.getElementById('submitBtn');
       const msg = document.getElementById('formMsg');
+
+      if (!altchaToken) {
+        msg.textContent = 'Please complete the security verification.';
+        msg.className = 'text-sm text-red-500';
+        return;
+      }
 
       const checkboxes = document.querySelectorAll('[name^="clear_"]:checked');
       if (checkboxes.length === 0) {
@@ -107,6 +137,7 @@ import Layout from '../../layouts/Layout.astro';
             details: document.getElementById('details').value,
             request_type: 'clear_data',
             clear_types: clearTypes,
+            altcha_token: altchaToken,
           }),
         });
         const data = await res.json();

@@ -183,8 +183,11 @@ func main() {
 	// Initialize link preview service (after S3 client setup)
 	linkPreviewService := services.NewLinkPreviewService(dbPool, s3Client, cfg.R2MediaBucket, cfg.R2ImgDomain)
 
+	// Shared content moderation cascade (local AI → OpenAI → OpenRouter)
+	contentModerator := services.NewContentModerator(localAIService, moderationService, openRouterService)
+
 	userHandler := handlers.NewUserHandler(userRepo, postRepo, notificationService, assetService)
-	postHandler := handlers.NewPostHandler(postRepo, userRepo, feedService, assetService, notificationService, moderationService, contentFilter, openRouterService, linkPreviewService, localAIService, s3Client, cfg.R2VideoBucket, cfg.R2VidDomain)
+	postHandler := handlers.NewPostHandler(postRepo, userRepo, feedService, assetService, notificationService, moderationService, contentFilter, openRouterService, linkPreviewService, localAIService, s3Client, cfg.R2VideoBucket, cfg.R2VidDomain, contentModerator)
 	chatHandler := handlers.NewChatHandler(chatRepo, notificationService, hub)
 	authHandler := handlers.NewAuthHandler(userRepo, cfg, emailService, sendPulseService)
 	categoryHandler := handlers.NewCategoryHandler(categoryRepo)
@@ -214,7 +217,7 @@ func main() {
 	groupHandler := handlers.NewGroupHandler(dbPool, notificationService)
 
 	// Neighborhood board handler (standalone message board)
-	boardHandler := handlers.NewBoardHandler(dbPool, contentFilter, moderationService)
+	boardHandler := handlers.NewBoardHandler(dbPool, contentFilter, moderationService, contentModerator)
 
 	// Beacon search handler (search beacons, board, public groups)
 	beaconSearchHandler := handlers.NewBeaconSearchHandler(dbPool)
