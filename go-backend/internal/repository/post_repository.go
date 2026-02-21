@@ -157,6 +157,7 @@ func (r *PostRepository) GetFeed(ctx context.Context, userID string, categorySlu
 		LEFT JOIN public.post_metrics m ON p.id = m.post_id
 		LEFT JOIN public.categories c ON p.category_id = c.id
 		WHERE p.deleted_at IS NULL AND p.status = 'active'
+		  AND p.chain_parent_id IS NULL
 		  AND COALESCE(p.is_beacon, FALSE) = FALSE
 		  AND (
 		      -- Author always sees their own posts
@@ -328,7 +329,7 @@ func (r *PostRepository) GetPostsByAuthor(ctx context.Context, authorID string, 
 		          )
 		      )
 		  )
-		  AND ($5 = FALSE OR p.chain_parent_id IS NOT NULL)
+		  AND (($5 = FALSE AND p.chain_parent_id IS NULL) OR ($5 = TRUE AND p.chain_parent_id IS NOT NULL))
 		  AND (
 		      COALESCE(p.is_nsfw, FALSE) = FALSE
 		      OR $6 = TRUE
