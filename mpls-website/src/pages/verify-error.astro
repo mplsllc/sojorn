@@ -1,0 +1,58 @@
+---
+import Layout from '../layouts/Layout.astro';
+
+const reason = Astro.url.searchParams.get('reason') || 'unknown';
+
+const messages: Record<string, { title: string; body: string }> = {
+  expired: {
+    title: 'Link Expired',
+    body: 'Your verification link has expired. Links are valid for 24 hours. Open the Sojorn app and request a new verification email from the login screen.',
+  },
+  invalid_token: {
+    title: 'Invalid Link',
+    body: 'This verification link is invalid. It may have already been used or the link was corrupted. Open the Sojorn app and request a new verification email.',
+  },
+  invalid: {
+    title: 'Invalid Link',
+    body: 'This verification link is invalid. It may have already been used or the link was corrupted. Open the Sojorn app and request a new verification email.',
+  },
+  server_error: {
+    title: 'Something Went Wrong',
+    body: 'We encountered an error on our end. Please try again in a few minutes. If the problem persists, contact us at contact@sojorn.net.',
+  },
+  unknown: {
+    title: 'Verification Failed',
+    body: 'Something went wrong verifying your email. Please try requesting a new verification email from the Sojorn app.',
+  },
+};
+
+const msg = messages[reason] || messages.unknown;
+---
+
+<Layout title="Verification Error | Sojorn">
+  <section class="min-h-[70vh] flex items-center justify-center px-6 py-20">
+    <div class="max-w-lg w-full text-center">
+      <div class="w-20 h-20 bg-red-100 rounded-full flex items-center justify-center mx-auto mb-8">
+        <svg class="w-10 h-10 text-red-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path>
+        </svg>
+      </div>
+
+      <h1 class="text-4xl font-bold text-zinc-900 mb-4">{msg.title}</h1>
+      <p class="text-lg text-zinc-600 mb-8 leading-relaxed">
+        {msg.body}
+      </p>
+
+      <div class="bg-zinc-50 border border-zinc-200 rounded-xl p-6 mb-8">
+        <p class="text-sm text-zinc-500">
+          Need help? Contact us at
+          <a href="mailto:contact@sojorn.net" class="text-brand-700 underline">contact@sojorn.net</a>
+        </p>
+      </div>
+
+      <a href="/sojorn" class="inline-flex items-center rounded-lg bg-brand-700 px-6 py-3 text-sm font-semibold text-white hover:bg-brand-800 transition-colors">
+        Back to Sojorn
+      </a>
+    </div>
+  </section>
+</Layout>

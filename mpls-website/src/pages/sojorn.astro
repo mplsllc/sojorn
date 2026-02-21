@@ -1,0 +1,305 @@
+---
+import Layout from '../layouts/Layout.astro';
+import NewsletterSignup from '../components/NewsletterSignup.svelte';
+---
+
+<Layout title="Sojorn | The Anti-Surveillance Social Network" description="Social media, de-weaponized. No tracking, no rage-bait algorithms, no data harvesting. Join the waitlist for early access.">
+
+	<!-- Hero Section with Newsletter Focus -->
+	<section class="relative overflow-hidden bg-gradient-to-br from-zinc-950 via-zinc-900 to-brand-950">
+		<div class="absolute inset-0 opacity-10">
+			<div class="absolute top-20 right-10 w-[500px] h-[500px] rounded-full bg-brand-500 blur-[120px]"></div>
+			<div class="absolute bottom-0 left-20 w-[300px] h-[300px] rounded-full bg-violet-500 blur-[100px]"></div>
+		</div>
+		
+		<div class="relative mx-auto max-w-6xl px-6 py-16 md:py-24 lg:py-32">
+			<div class="text-center mb-12">
+				<span class="inline-flex items-center rounded-full bg-brand-500/20 border border-brand-500/30 px-4 py-1.5 text-xs font-semibold text-brand-300 mb-6">
+					🚀 Coming Soon — Join the Waitlist
+				</span>
+				<h1 class="font-display text-4xl font-bold tracking-tight text-white sm:text-5xl md:text-6xl lg:text-7xl leading-[1.08] mb-6">
+					Social Media,<br /><span class="text-brand-400">Reclaimed.</span>
+				</h1>
+				<p class="text-xl text-zinc-300 leading-relaxed max-w-3xl mx-auto mb-8">
+					No tracking. No algorithms designed to make you angry. No data harvesting. Just you, your community, and your data — sovereign and secure.
+				</p>
+			</div>
+
+			<!-- Newsletter Signup - Primary Focus -->
+			<div class="max-w-2xl mx-auto">
+				<div class="rounded-3xl bg-white/10 backdrop-blur-lg border border-white/20 p-8 md:p-12 shadow-2xl">
+					<div class="text-center mb-8">
+						<h2 class="text-2xl md:text-3xl font-bold text-white mb-4">
+							Be First to Get Access
+						</h2>
+						<p class="text-zinc-300 text-lg">
+							Join <span class="text-brand-400 font-semibold">1,247+ people</span> already waiting for the social network that respects your privacy.
+						</p>
+					</div>
+					
+					<div class="bg-white rounded-2xl p-6 shadow-xl">
+						<NewsletterSignup client:load />
+					</div>
+
+					<div class="mt-6 text-center">
+						<p class="text-zinc-400 text-sm">
+							🔒 We respect your privacy. No spam, ever. Unsubscribe anytime.
+						</p>
+					</div>
+				</div>
+			</div>
+
+			<!-- Quick Value Props -->
+			<div class="mt-16 grid grid-cols-1 md:grid-cols-3 gap-6 max-w-4xl mx-auto">
+				<div class="text-center">
+					<div class="w-16 h-16 rounded-full bg-brand-500/20 border border-brand-500/30 flex items-center justify-center mx-auto mb-4">
+						<svg class="h-8 w-8 text-brand-400" fill="none" stroke="currentColor" stroke-width="1.5" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M16.5 10.5V6.75a4.5 4.5 0 1 0-9 0v3.75m-.75 11.25h10.5a2.25 2.25 0 0 0 2.25-2.25v-6.75a2.25 2.25 0 0 0-2.25-2.25H6.75a2.25 2.25 0 0 0-2.25 2.25v6.75a2.25 2.25 0 0 0 2.25 2.25Z" /></svg>
+					</div>
+					<h3 class="text-white font-semibold mb-2">End-to-End Encrypted</h3>
+					<p class="text-zinc-400 text-sm">Military-grade encryption for your private messages</p>
+				</div>
+				<div class="text-center">
+					<div class="w-16 h-16 rounded-full bg-violet-500/20 border border-violet-500/30 flex items-center justify-center mx-auto mb-4">
+						<svg class="h-8 w-8 text-violet-400" fill="none" stroke="currentColor" stroke-width="1.5" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M3.98 8.223A10.477 10.477 0 0 0 1.934 12C3.226 16.338 7.244 19.5 12 19.5c.993 0 1.953-.138 2.863-.395M6.228 6.228A10.451 10.451 0 0 1 12 4.5c4.756 0 8.773 3.162 10.065 7.498a10.522 10.522 0 0 1-4.293 5.774M6.228 6.228 3 3m3.228 3.228 3.65 3.65m7.894 7.894L21 21m-3.228-3.228-3.65-3.65m0 0a3 3 0 1 0-4.243-4.243m4.242 4.242L9.88 9.88" /></svg>
+					</div>
+					<h3 class="text-white font-semibold mb-2">Zero Tracking</h3>
+					<p class="text-zinc-400 text-sm">No pixels, no analytics, no behavioral profiling</p>
+				</div>
+				<div class="text-center">
+					<div class="w-16 h-16 rounded-full bg-emerald-500/20 border border-emerald-500/30 flex items-center justify-center mx-auto mb-4">
+						<svg class="h-8 w-8 text-emerald-400" fill="none" stroke="currentColor" stroke-width="1.5" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M9 12.75 11.25 15 15 9.75m-3-7.036A11.959 11.959 0 0 1 3.598 6 11.99 11.99 0 0 0 3 9.749c0 5.592 3.824 10.29 9 11.623 5.176-1.332 9-6.03 9-11.622 0-1.31-.21-2.571-.598-3.751h-.152c-3.196 0-6.1-1.248-8.25-3.285Z" /></svg>
+					</div>
+					<h3 class="text-white font-semibold mb-2">Your Data, Your Rules</h3>
+					<p class="text-zinc-400 text-sm">Complete data ownership with the right to vanish</p>
+				</div>
+			</div>
+		</div>
+	</section>
+
+	<!-- Three Pillars -->
+	<section id="pillars" class="py-20 md:py-28 bg-white">
+		<div class="mx-auto max-w-6xl px-6">
+			<div class="max-w-3xl mx-auto text-center mb-16">
+				<p class="text-sm font-semibold uppercase tracking-widest text-brand-600 mb-3">Three Experiences, One Platform</p>
+				<h2 class="font-display text-3xl font-bold text-zinc-900 sm:text-4xl">Not one feed — three distinct worlds.</h2>
+				<p class="mt-4 text-zinc-600 leading-relaxed">
+					Sojorn separates your social life, your entertainment, and your physical safety into three purpose-built experiences.
+				</p>
+			</div>
+
+			<!-- Pillar 1: Personal -->
+			<div class="mb-20">
+				<div class="lg:flex lg:items-center lg:gap-16">
+					<div class="lg:flex-1 order-2 lg:order-1">
+						<!-- App Screenshot Placeholder -->
+						<div class="relative mx-auto max-w-[260px]">
+							<div class="rounded-[2.5rem] border-[6px] border-zinc-200 bg-zinc-100 p-2 shadow-xl">
+								<div class="rounded-[2rem] bg-zinc-50 aspect-[9/19.5] flex items-center justify-center">
+									<div class="text-center px-6">
+										<div class="w-12 h-12 rounded-full bg-brand-100 flex items-center justify-center mx-auto mb-3">
+											<svg class="h-6 w-6 text-brand-600" fill="none" stroke="currentColor" stroke-width="1.5" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M15.75 6a3.75 3.75 0 11-7.5 0 3.75 3.75 0 017.5 0zM4.501 20.118a7.5 7.5 0 0114.998 0A17.933 17.933 0 0112 21.75c-2.676 0-5.216-.584-7.499-1.632z" /></svg>
+										</div>
+										<p class="text-zinc-400 text-xs font-mono">APP SCREENSHOT</p>
+										<p class="text-zinc-500 text-[10px] mt-1">Personal Feed</p>
+									</div>
+								</div>
+							</div>
+						</div>
+					</div>
+					<div class="lg:flex-1 order-1 lg:order-2 mb-10 lg:mb-0">
+						<span class="inline-flex items-center rounded-full bg-brand-100 px-3 py-1 text-xs font-semibold text-brand-800 mb-4">Pillar 1</span>
+						<h3 class="font-display text-2xl font-bold text-zinc-900 sm:text-3xl">Personal</h3>
+						<p class="text-brand-600 font-medium mt-1 mb-4">The Social Core</p>
+						<p class="text-zinc-600 leading-relaxed mb-6">
+							Stop doom-scrolling. Start connecting. The Personal tab is a curated sanctuary. It displays content strictly from the people and circles you explicitly follow.
+						</p>
+						<ul class="space-y-4">
+							<li class="flex gap-3">
+								<div class="flex-shrink-0 mt-1 h-5 w-5 rounded-full bg-brand-100 flex items-center justify-center">
+									<div class="h-2 w-2 rounded-full bg-brand-600"></div>
+								</div>
+								<div>
+									<p class="font-semibold text-zinc-900 text-sm">Human-First Feed</p>
+									<p class="text-sm text-zinc-500">Our algorithm works for you, not advertisers. It surfaces content from people you follow without optimizing for outrage, rage-bait, or addictive engagement loops.</p>
+								</div>
+							</li>
+							<li class="flex gap-3">
+								<div class="flex-shrink-0 mt-1 h-5 w-5 rounded-full bg-brand-100 flex items-center justify-center">
+									<div class="h-2 w-2 rounded-full bg-brand-600"></div>
+								</div>
+								<div>
+									<p class="font-semibold text-zinc-900 text-sm">Kinetic Threading</p>
+									<p class="text-sm text-zinc-500">A revolutionary conversation view that visualizes complex reply chains, making discussions readable and logical.</p>
+								</div>
+							</li>
+							<li class="flex gap-3">
+								<div class="flex-shrink-0 mt-1 h-5 w-5 rounded-full bg-brand-100 flex items-center justify-center">
+									<div class="h-2 w-2 rounded-full bg-brand-600"></div>
+								</div>
+								<div>
+									<p class="font-semibold text-zinc-900 text-sm">Chain Quotes</p>
+									<p class="text-sm text-zinc-500">Carry the context with you. Our quoting system preserves the history of a conversation, preventing out-of-context manipulation.</p>
+								</div>
+							</li>
+							<li class="flex gap-3">
+								<div class="flex-shrink-0 mt-1 h-5 w-5 rounded-full bg-brand-100 flex items-center justify-center">
+									<div class="h-2 w-2 rounded-full bg-brand-600"></div>
+								</div>
+								<div>
+									<p class="font-semibold text-zinc-900 text-sm">Expressive Reactions</p>
+									<p class="text-sm text-zinc-500">Move beyond the "Like." Use our custom animated reaction set (Dotto, Blue, Green themes) to express nuance.</p>
+								</div>
+							</li>
+						</ul>
+					</div>
+				</div>
+			</div>
+
+			<!-- Pillar 2: Quips -->
+			<div class="mb-20">
+				<div class="lg:flex lg:items-center lg:gap-16">
+					<div class="lg:flex-1 mb-10 lg:mb-0">
+						<span class="inline-flex items-center rounded-full bg-violet-100 px-3 py-1 text-xs font-semibold text-violet-800 mb-4">Pillar 2</span>
+						<h3 class="font-display text-2xl font-bold text-zinc-900 sm:text-3xl">Quips</h3>
+						<p class="text-violet-600 font-medium mt-1 mb-4">The Creative Studio</p>
+						<p class="text-zinc-600 leading-relaxed mb-6">
+							Creativity without the spy-ware. Quips offers a full-screen, immersive vertical video experience similar to the giants of the industry, but with one massive difference: we don't harvest your biometrics or behavioral data.
+						</p>
+						<ul class="space-y-4">
+							<li class="flex gap-3">
+								<div class="flex-shrink-0 mt-1 h-5 w-5 rounded-full bg-violet-100 flex items-center justify-center">
+									<div class="h-2 w-2 rounded-full bg-violet-600"></div>
+								</div>
+								<div>
+									<p class="font-semibold text-zinc-900 text-sm">Full Creative Suite</p>
+									<p class="text-sm text-zinc-500">Record, stitch, and edit videos directly in the app.</p>
+								</div>
+							</li>
+							<li class="flex gap-3">
+								<div class="flex-shrink-0 mt-1 h-5 w-5 rounded-full bg-violet-100 flex items-center justify-center">
+									<div class="h-2 w-2 rounded-full bg-violet-600"></div>
+								</div>
+								<div>
+									<p class="font-semibold text-zinc-900 text-sm">Smart Overlays</p>
+									<p class="text-sm text-zinc-500">Add text, filters, and metadata layers to tell your story.</p>
+								</div>
+							</li>
+							<li class="flex gap-3">
+								<div class="flex-shrink-0 mt-1 h-5 w-5 rounded-full bg-violet-100 flex items-center justify-center">
+									<div class="h-2 w-2 rounded-full bg-violet-600"></div>
+								</div>
+								<div>
+									<p class="font-semibold text-zinc-900 text-sm">Glassmorphic Interface</p>
+									<p class="text-sm text-zinc-500">A stunning, modern viewing experience that puts the content front and center.</p>
+								</div>
+							</li>
+						</ul>
+					</div>
+					<div class="lg:flex-1">
+						<!-- App Screenshot Placeholder -->
+						<div class="relative mx-auto max-w-[260px]">
+							<div class="rounded-[2.5rem] border-[6px] border-zinc-800 bg-zinc-900 p-2 shadow-xl">
+								<div class="rounded-[2rem] bg-gradient-to-br from-violet-950 to-zinc-950 aspect-[9/19.5] flex items-center justify-center">
+									<div class="text-center px-6">
+										<div class="w-12 h-12 rounded-full bg-violet-500/20 flex items-center justify-center mx-auto mb-3">
+											<svg class="h-6 w-6 text-violet-400" fill="none" stroke="currentColor" stroke-width="1.5" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="m15.75 10.5 4.72-4.72a.75.75 0 0 1 1.28.53v11.38a.75.75 0 0 1-1.28.53l-4.72-4.72M4.5 18.75h9a2.25 2.25 0 0 0 2.25-2.25v-9a2.25 2.25 0 0 0-2.25-2.25h-9A2.25 2.25 0 0 0 2.25 7.5v9a2.25 2.25 0 0 0 2.25 2.25Z" /></svg>
+										</div>
+										<p class="text-zinc-500 text-xs font-mono">APP SCREENSHOT</p>
+										<p class="text-zinc-600 text-[10px] mt-1">Quips Video Feed</p>
+									</div>
+								</div>
+							</div>
+						</div>
+					</div>
+				</div>
+			</div>
+
+			<!-- Pillar 3: Beacons -->
+			<div>
+				<div class="lg:flex lg:items-center lg:gap-16">
+					<div class="lg:flex-1 order-2 lg:order-1">
+						<!-- App Screenshot Placeholder -->
+						<div class="relative mx-auto max-w-[260px]">
+							<div class="rounded-[2.5rem] border-[6px] border-zinc-200 bg-zinc-100 p-2 shadow-xl">
+								<div class="rounded-[2rem] bg-gradient-to-br from-emerald-50 to-zinc-50 aspect-[9/19.5] flex items-center justify-center">
+									<div class="text-center px-6">
+										<div class="w-12 h-12 rounded-full bg-emerald-100 flex items-center justify-center mx-auto mb-3">
+											<svg class="h-6 w-6 text-emerald-600" fill="none" stroke="currentColor" stroke-width="1.5" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M15 10.5a3 3 0 1 1-6 0 3 3 0 0 1 6 0Z" /><path stroke-linecap="round" stroke-linejoin="round" d="M19.5 10.5c0 7.142-7.5 11.25-7.5 11.25S4.5 17.642 4.5 10.5a7.5 7.5 0 1 1 15 0Z" /></svg>
+										</div>
+										<p class="text-zinc-400 text-xs font-mono">APP SCREENSHOT</p>
+										<p class="text-zinc-500 text-[10px] mt-1">Beacons Map View</p>
+									</div>
+								</div>
+							</div>
+						</div>
+					</div>
+					<div class="lg:flex-1 order-1 lg:order-2 mb-10 lg:mb-0">
+						<span class="inline-flex items-center rounded-full bg-emerald-100 px-3 py-1 text-xs font-semibold text-emerald-800 mb-4">Pillar 3</span>
+						<h3 class="font-display text-2xl font-bold text-zinc-900 sm:text-3xl">Beacons</h3>
+						<p class="text-emerald-600 font-medium mt-1 mb-4">Local Intelligence</p>
+						<p class="text-zinc-600 leading-relaxed mb-6">
+							Know your neighborhood. Keep your anonymity. Beacons combine the utility of Citizen with the community aspect of Nextdoor, minus the surveillance and doxxing.
+						</p>
+						<ul class="space-y-4">
+							<li class="flex gap-3">
+								<div class="flex-shrink-0 mt-1 h-5 w-5 rounded-full bg-emerald-100 flex items-center justify-center">
+									<div class="h-2 w-2 rounded-full bg-emerald-600"></div>
+								</div>
+								<div>
+									<p class="font-semibold text-zinc-900 text-sm">Geo-Located Intel</p>
+									<p class="text-sm text-zinc-500">Drop a Beacon to report incidents, share local tips, or flag resources.</p>
+								</div>
+							</li>
+							<li class="flex gap-3">
+								<div class="flex-shrink-0 mt-1 h-5 w-5 rounded-full bg-emerald-100 flex items-center justify-center">
+									<div class="h-2 w-2 rounded-full bg-emerald-600"></div>
+								</div>
+								<div>
+									<p class="font-semibold text-zinc-900 text-sm">Total Anonymity</p>
+									<p class="text-sm text-zinc-500">Beacons are never attached to your public profile. No name, handle, or avatar is displayed. Keep your community safe without exposing your identity.</p>
+								</div>
+							</li>
+							<li class="flex gap-3">
+								<div class="flex-shrink-0 mt-1 h-5 w-5 rounded-full bg-emerald-100 flex items-center justify-center">
+									<div class="h-2 w-2 rounded-full bg-emerald-600"></div>
+								</div>
+								<div>
+									<p class="font-semibold text-zinc-900 text-sm">The Vouch System</p>
+									<p class="text-sm text-zinc-500">Fight misinformation with community consensus. Users "vouch" for the accuracy of a Beacon, elevating trusted intel while suppressing spam.</p>
+								</div>
+							</li>
+						</ul>
+					</div>
+				</div>
+			</div>
+		</div>
+	</section>
+
+	<!-- Secondary CTA Section -->
+	<section class="py-20 md:py-28 bg-gradient-to-br from-brand-900 via-brand-800 to-brand-700">
+		<div class="mx-auto max-w-4xl px-6 text-center">
+			<h2 class="font-display text-3xl font-bold text-white sm:text-4xl mb-6">Ready to Reclaim Your Social Life?</h2>
+			<p class="text-lg text-brand-200 max-w-2xl mx-auto mb-8">
+				Join the movement towards a social network that respects your privacy, values your time, and puts you in control.
+			</p>
+			
+			<!-- Newsletter Signup - Secondary -->
+			<div class="max-w-lg mx-auto">
+				<div class="bg-white rounded-2xl p-6 shadow-xl">
+					<NewsletterSignup client:load />
+				</div>
+			</div>
+			
+			<div class="mt-8 flex flex-wrap justify-center gap-4">
+				<a href="https://sojorn.net" target="_blank" rel="noopener noreferrer" class="inline-flex items-center gap-2 rounded-lg border border-white/30 px-6 py-3 text-sm font-semibold text-white hover:bg-white/10 transition-colors">
+					Learn more at sojorn.net
+					<svg class="h-4 w-4" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M13.5 6H5.25A2.25 2.25 0 003 8.25v10.5A2.25 2.25 0 005.25 21h10.5A2.25 2.25 0 0018 18.75V10.5m-10.5 6L21 3m0 0h-5.25M21 3v5.25" /></svg>
+				</a>
+				<a href="/" class="inline-flex items-center rounded-lg border border-white/30 px-6 py-3 text-sm font-semibold text-white hover:bg-white/10 transition-colors">
+					Back to MPLS
+				</a>
+			</div>
+		</div>
+	</section>
+
+</Layout>

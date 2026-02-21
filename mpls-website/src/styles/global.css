@@ -1,0 +1,116 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+	* {
+		box-sizing: border-box;
+	}
+
+	html {
+		scroll-behavior: smooth;
+		scroll-padding-top: 80px;
+	}
+
+	body {
+		margin: 0;
+		min-height: 100vh;
+		font-family: theme('fontFamily.sans');
+		-webkit-font-smoothing: antialiased;
+		-moz-osx-font-smoothing: grayscale;
+	}
+
+	a {
+		color: inherit;
+		text-decoration: none;
+	}
+
+	*:focus-visible {
+		outline: 2px solid theme('colors.brand.600');
+		outline-offset: 2px;
+	}
+
+	@media (prefers-reduced-motion: reduce) {
+		*,
+		*::before,
+		*::after {
+			animation-duration: 0.01ms !important;
+			animation-iteration-count: 1 !important;
+			transition-duration: 0.01ms !important;
+		}
+	}
+}
+
+@layer utilities {
+	.text-balance {
+		text-wrap: balance;
+	}
+}
+
+/* Scroll-triggered animations */
+.reveal {
+	opacity: 0;
+	transform: translateY(40px);
+	transition: opacity 0.8s cubic-bezier(0.16, 1, 0.3, 1),
+				transform 0.8s cubic-bezier(0.16, 1, 0.3, 1);
+}
+.reveal.from-left {
+	transform: translateX(-60px);
+}
+.reveal.from-right {
+	transform: translateX(60px);
+}
+.reveal.from-scale {
+	transform: scale(0.92);
+}
+.reveal.visible {
+	opacity: 1;
+	transform: translateY(0) translateX(0) scale(1);
+}
+.reveal.delay-1 { transition-delay: 0.1s; }
+.reveal.delay-2 { transition-delay: 0.2s; }
+.reveal.delay-3 { transition-delay: 0.3s; }
+.reveal.delay-4 { transition-delay: 0.4s; }
+.reveal.delay-5 { transition-delay: 0.5s; }
+
+/* Parallax image band */
+.parallax-bg {
+	background-attachment: fixed;
+	background-position: center;
+	background-size: cover;
+}
+@supports (-webkit-touch-callout: none) {
+	.parallax-bg {
+		background-attachment: scroll;
+	}
+}
+
+/* Horizontal scroll carousel */
+.culture-scroll {
+	display: flex;
+	gap: 1.5rem;
+	overflow-x: auto;
+	scroll-snap-type: x mandatory;
+	-webkit-overflow-scrolling: touch;
+	scroll-padding: 0 1.5rem;
+	padding-bottom: 1rem;
+}
+.culture-scroll::-webkit-scrollbar {
+	height: 6px;
+}
+.culture-scroll::-webkit-scrollbar-track {
+	background: rgba(255,255,255,0.1);
+	border-radius: 3px;
+}
+.culture-scroll::-webkit-scrollbar-thumb {
+	background: rgba(255,255,255,0.3);
+	border-radius: 3px;
+}
+.culture-scroll::-webkit-scrollbar-thumb:hover {
+	background: rgba(255,255,255,0.5);
+}
+.culture-card {
+	scroll-snap-align: start;
+	flex: 0 0 340px;
+	min-width: 0;
+}

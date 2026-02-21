@@ -1,0 +1,193 @@
+---
+import Layout from '../layouts/Layout.astro';
+import NewsletterSignup from '../components/NewsletterSignup.svelte';
+---
+
+<Layout>
+	<!-- Hero -->
+	<section class="relative overflow-hidden bg-gradient-to-br from-brand-900 via-brand-800 to-brand-700">
+		<div class="absolute inset-0 opacity-10">
+			<div class="absolute top-0 right-0 w-[600px] h-[600px] rounded-full bg-brand-400 blur-[128px]"></div>
+			<div class="absolute bottom-0 left-0 w-[400px] h-[400px] rounded-full bg-brand-300 blur-[96px]"></div>
+		</div>
+		<div class="relative mx-auto max-w-6xl px-6 pt-12 pb-16 md:pb-20 lg:pb-24">
+			<div class="max-w-3xl">
+				<h1 class="font-display text-4xl font-bold tracking-tight text-white sm:text-5xl md:text-6xl leading-[1.1]">
+					We build software that respects its users.
+				</h1>
+				<p class="mt-6 text-lg text-brand-200 leading-relaxed max-w-2xl">
+					MPLS is a software company that puts privacy, transparency, and user control first — because technology should serve people, not exploit them.
+				</p>
+				<div class="mt-10 flex flex-wrap gap-4">
+					<a href="#products" class="inline-flex items-center rounded-lg bg-white px-6 py-3 text-sm font-semibold text-brand-900 shadow-lg hover:bg-zinc-100 transition-colors">
+						See Our Products
+					</a>
+					<a href="#about" class="inline-flex items-center rounded-lg border border-white/30 px-6 py-3 text-sm font-semibold text-white hover:bg-white/10 transition-colors">
+						About MPLS
+					</a>
+				</div>
+			</div>
+		</div>
+	</section>
+
+	<!-- Mission -->
+	<section class="py-20 md:py-28 bg-white">
+		<div class="mx-auto max-w-6xl px-6">
+			<div class="max-w-3xl mx-auto text-center">
+				<p class="text-sm font-semibold uppercase tracking-widest text-brand-600 mb-3">Our Approach</p>
+				<h2 class="font-display text-3xl font-bold text-zinc-900 sm:text-4xl">Privacy is not a feature. It's the foundation.</h2>
+				<p class="mt-6 text-zinc-600 leading-relaxed text-lg">
+					Every product we build starts from the same principle: your data belongs to you. We don't sell it, we don't mine it, and we don't build business models around exploiting it.
+				</p>
+			</div>
+			<div class="mt-16 grid gap-8 md:grid-cols-3">
+				<div class="text-center">
+					<div class="flex h-14 w-14 items-center justify-center rounded-xl bg-brand-50 text-brand-700 mx-auto mb-4">
+						<svg class="h-7 w-7" fill="none" stroke="currentColor" stroke-width="1.5" viewBox="0 0 24 24">
+							<path stroke-linecap="round" stroke-linejoin="round" d="M9 12.75L11.25 15 15 9.75m-3-7.036A11.959 11.959 0 013.598 6 11.99 11.99 0 003 9.749c0 5.592 3.824 10.29 9 11.623 5.176-1.332 9-6.03 9-11.622 0-1.31-.21-2.571-.598-3.751h-.152c-3.196 0-6.1-1.248-8.25-3.285z" />
+						</svg>
+					</div>
+					<h3 class="text-lg font-semibold text-zinc-900 mb-2">Privacy by Default</h3>
+					<p class="text-sm text-zinc-500 leading-relaxed">End-to-end encryption, zero tracking, and no third-party data sharing. Built into every product from day one.</p>
+				</div>
+				<div class="text-center">
+					<div class="flex h-14 w-14 items-center justify-center rounded-xl bg-brand-50 text-brand-700 mx-auto mb-4">
+						<svg class="h-7 w-7" fill="none" stroke="currentColor" stroke-width="1.5" viewBox="0 0 24 24">
+							<path stroke-linecap="round" stroke-linejoin="round" d="M15.75 6a3.75 3.75 0 11-7.5 0 3.75 3.75 0 017.5 0zM4.501 20.118a7.5 7.5 0 0114.998 0A17.933 17.933 0 0112 21.75c-2.676 0-5.216-.584-7.499-1.632z" />
+						</svg>
+					</div>
+					<h3 class="text-lg font-semibold text-zinc-900 mb-2">User Sovereignty</h3>
+					<p class="text-sm text-zinc-500 leading-relaxed">You own your data, your content, and your identity. Delete your account and everything goes with you.</p>
+				</div>
+				<div class="text-center">
+					<div class="flex h-14 w-14 items-center justify-center rounded-xl bg-brand-50 text-brand-700 mx-auto mb-4">
+						<svg class="h-7 w-7" fill="none" stroke="currentColor" stroke-width="1.5" viewBox="0 0 24 24">
+							<path stroke-linecap="round" stroke-linejoin="round" d="M3.75 13.5l10.5-11.25L12 10.5h8.25L9.75 21.75 12 13.5H3.75z" />
+						</svg>
+					</div>
+					<h3 class="text-lg font-semibold text-zinc-900 mb-2">Built to Perform</h3>
+					<p class="text-sm text-zinc-500 leading-relaxed">Engineered with Go, Flutter, and modern infrastructure for speed and reliability at scale.</p>
+				</div>
+			</div>
+		</div>
+	</section>
+
+	<!-- Products -->
+	<section id="products" class="py-14 md:py-20 bg-zinc-50">
+		<div class="mx-auto max-w-6xl px-6">
+			<div class="text-center max-w-2xl mx-auto mb-16">
+				<p class="text-sm font-semibold uppercase tracking-widest text-brand-600 mb-2">Products</p>
+				<h2 class="font-display text-3xl font-bold text-zinc-900 sm:text-4xl">What we're building</h2>
+			</div>
+
+			<!-- Sojorn -->
+			<div class="rounded-2xl border border-zinc-200 bg-white p-8 md:p-12 lg:flex lg:items-center lg:gap-16">
+				<div class="lg:flex-1">
+					<span class="inline-flex items-center rounded-full bg-brand-100 px-3 py-1 text-xs font-semibold text-brand-800">Flagship Product</span>
+					<h3 class="mt-4 font-display text-2xl font-bold text-zinc-900 sm:text-3xl">Sojorn</h3>
+					<p class="mt-3 text-zinc-600 leading-relaxed">
+						A private social network designed to be the antithesis of surveillance capitalism. Sojorn gives people a space to connect without being tracked, profiled, or sold to advertisers.
+					</p>
+					<ul class="mt-6 space-y-3">
+						<li class="flex items-center gap-3 text-sm text-zinc-700">
+							<svg class="h-5 w-5 text-brand-600 flex-shrink-0" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M4.5 12.75l6 6 9-13.5" /></svg>
+							End-to-end encrypted messaging
+						</li>
+						<li class="flex items-center gap-3 text-sm text-zinc-700">
+							<svg class="h-5 w-5 text-brand-600 flex-shrink-0" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M4.5 12.75l6 6 9-13.5" /></svg>
+							No data sales, no rage-bait algorithms
+						</li>
+						<li class="flex items-center gap-3 text-sm text-zinc-700">
+							<svg class="h-5 w-5 text-brand-600 flex-shrink-0" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M4.5 12.75l6 6 9-13.5" /></svg>
+							Cross-platform — iOS, Android, and Web
+						</li>
+					</ul>
+					<div class="mt-8 flex flex-wrap gap-3">
+						<a href="/sojorn" class="inline-flex items-center rounded-lg bg-brand-700 px-6 py-3 text-sm font-semibold text-white hover:bg-brand-800 transition-colors">
+							Learn More
+						</a>
+						<a href="https://sojorn.net" target="_blank" rel="noopener noreferrer" class="inline-flex items-center rounded-lg border border-zinc-300 px-6 py-3 text-sm font-semibold text-zinc-700 hover:bg-zinc-50 transition-colors">
+							Visit sojorn.net
+							<svg class="ml-2 h-4 w-4" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M13.5 6H5.25A2.25 2.25 0 003 8.25v10.5A2.25 2.25 0 005.25 21h10.5A2.25 2.25 0 0018 18.75V10.5m-10.5 6L21 3m0 0h-5.25M21 3v5.25" /></svg>
+						</a>
+					</div>
+				</div>
+				<div class="mt-10 lg:mt-0 lg:flex-1">
+					<div class="rounded-xl bg-brand-900 p-10 text-center">
+						<img src="/img/sojornlogo.png" alt="Sojorn" class="mx-auto h-28 mb-6" />
+						<p class="text-brand-300 text-sm">Private social networking</p>
+						<div class="mt-8 grid grid-cols-2 gap-6 text-center">
+							<div>
+								<p class="text-2xl font-bold text-white">E2EE</p>
+								<p class="text-xs text-brand-300 mt-1">Encrypted</p>
+							</div>
+							<div>
+								<p class="text-2xl font-bold text-white">Zero</p>
+								<p class="text-xs text-brand-300 mt-1">Tracking</p>
+							</div>
+						</div>
+					</div>
+				</div>
+			</div>
+		</div>
+	</section>
+
+	<!-- About -->
+	<section id="about" class="py-14 md:py-20 bg-white">
+		<div class="mx-auto max-w-6xl px-6">
+			<div class="lg:flex lg:items-center lg:gap-16">
+				<div class="lg:flex-1">
+					<p class="text-sm font-semibold uppercase tracking-widest text-brand-600 mb-2">About</p>
+					<h2 class="font-display text-3xl font-bold text-zinc-900 sm:text-4xl">Made in Minnesota</h2>
+					<p class="mt-6 text-zinc-600 leading-relaxed">
+						MPLS LLC is a software company founded on the belief that technology should serve people — not the other way around. We build our own products, own our infrastructure, and answer to our users, not advertisers.
+					</p>
+					<p class="mt-4 text-zinc-600 leading-relaxed">
+						We're building the kind of software we want to exist in the world: private, performant, and principled.
+					</p>
+					<div class="mt-8 grid grid-cols-3 gap-6">
+						<div>
+							<p class="text-2xl font-bold text-brand-800">2026</p>
+							<p class="text-sm text-zinc-500 mt-1">Founded</p>
+						</div>
+						<div>
+							<p class="text-2xl font-bold text-brand-800">MPLS</p>
+							<p class="text-sm text-zinc-500 mt-1">Headquarters</p>
+						</div>
+						<div>
+							<p class="text-2xl font-bold text-brand-800">100%</p>
+							<p class="text-sm text-zinc-500 mt-1">Independent</p>
+						</div>
+					</div>
+				</div>
+				<div class="mt-12 lg:mt-0 lg:flex-1">
+					<div class="rounded-2xl border border-zinc-200 bg-zinc-50 p-8">
+						<div class="flex items-center gap-4 mb-6">
+							<div class="flex h-14 w-14 items-center justify-center rounded-full bg-brand-100 text-brand-800">
+								<span class="text-lg font-bold">PB</span>
+							</div>
+							<div>
+								<h3 class="text-lg font-semibold text-zinc-900">Patrick Britton</h3>
+								<p class="text-sm text-zinc-500">Founder</p>
+							</div>
+						</div>
+						<p class="text-sm text-zinc-600 leading-relaxed">
+							Full-stack engineer with a focus on Go, Flutter, and modern web infrastructure. Building products that prioritize user privacy and long-term sustainability over growth-at-all-costs.
+						</p>
+					</div>
+				</div>
+			</div>
+		</div>
+	</section>
+
+	<!-- Subscribe -->
+	<section id="contact" class="py-16 md:py-20 bg-brand-900">
+		<div class="mx-auto max-w-4xl px-6 text-center">
+			<h2 class="font-display text-2xl font-bold text-white sm:text-3xl mb-4">Stay Updated</h2>
+			<p class="text-brand-200 mb-8 max-w-2xl mx-auto">
+				Get the latest updates about our products and privacy-focused technology developments.
+			</p>
+			<NewsletterSignup client:load />
+		</div>
+	</section>
+</Layout>

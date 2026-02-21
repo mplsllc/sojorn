@@ -1,0 +1,389 @@
+---
+import NetworkLayout from '../layouts/NetworkLayout.astro';
+---
+
+<NetworkLayout title="mp.ls | Twin Cities Hub">
+	<div class="relative min-h-screen px-4 pb-14 pt-6 sm:px-6 lg:px-10">
+		<div class="pointer-events-none absolute left-1/2 top-0 h-[520px] w-[520px] -translate-x-1/2 rounded-full bg-[radial-gradient(circle,rgba(246,197,106,0.35),transparent_70%)] blur-3xl"></div>
+		<div class="pointer-events-none absolute right-6 top-28 h-40 w-40 rounded-full bg-[radial-gradient(circle,rgba(139,183,232,0.55),transparent_70%)] blur-2xl"></div>
+		<div class="mx-auto max-w-6xl">
+			<header class="mb-8 flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
+				<div>
+					<p class="text-xs font-semibold uppercase tracking-[0.35em] text-[#1f4f5c]">Minnesota Daily Hub</p>
+					<h1 class="mt-2 text-4xl font-bold tracking-tight text-[#1c1f2d] sm:text-5xl md:text-6xl">mp.ls</h1>
+					<p class="mt-2 max-w-xl text-base text-[#3b4252] sm:text-lg">
+						A front page for the Twin Cities with the stories, schedules, and local intel you want first thing in the morning.
+					</p>
+					<div class="mt-4 flex flex-wrap gap-2">
+						<a class="hub-chip" href="#today">Today</a>
+						<a class="hub-chip" href="#news">News</a>
+						<a class="hub-chip" href="#sports">Sports</a>
+						<a class="hub-chip" href="#events">Events</a>
+						<a class="hub-chip" href="#commute">Commute</a>
+						<a class="hub-chip" href="#network">Network</a>
+					</div>
+				</div>
+				<div class="hub-card w-full max-w-sm">
+					<p class="text-xs font-semibold uppercase tracking-[0.3em] text-[#5b5b4d]">Twin Cities Now</p>
+					<div class="mt-3 grid grid-cols-2 gap-3 text-sm text-[#2b3141]">
+						<div>
+							<p class="text-xs uppercase text-[#7b7b6e]">Weather</p>
+							<p class="text-lg font-semibold">32F Cloudy</p>
+							<p class="text-xs text-[#5b5b4d]">Feels like 27F</p>
+						</div>
+						<div>
+							<p class="text-xs uppercase text-[#7b7b6e]">Commute</p>
+							<p class="text-lg font-semibold">21 min</p>
+							<p class="text-xs text-[#5b5b4d]">I-94 East flow</p>
+						</div>
+						<div>
+							<p class="text-xs uppercase text-[#7b7b6e]">Air</p>
+							<p class="text-lg font-semibold">AQI 38</p>
+							<p class="text-xs text-[#5b5b4d]">Good</p>
+						</div>
+						<div>
+							<p class="text-xs uppercase text-[#7b7b6e]">Sun</p>
+							<p class="text-lg font-semibold">7:36a</p>
+							<p class="text-xs text-[#5b5b4d]">Set 4:55p</p>
+						</div>
+					</div>
+					<div class="mt-4 flex flex-wrap gap-2 text-xs">
+						<span class="hub-pill">Snow alert: none</span>
+						<span class="hub-pill">LRT: normal</span>
+						<span class="hub-pill">Mississippi: steady</span>
+					</div>
+				</div>
+			</header>
+
+			<section class="mb-6 grid gap-4 lg:grid-cols-[1.6fr_1fr]">
+				<div class="hub-card">
+					<p class="text-xs font-semibold uppercase tracking-[0.3em] text-[#5b5b4d]">Search Minnesota</p>
+					<form class="mt-3 flex w-full flex-col gap-3 sm:flex-row" action="https://duckduckgo.com/" method="get">
+						<input
+							class="w-full rounded-xl border border-transparent bg-white/90 px-4 py-3 text-sm text-[#1c1f2d] shadow-sm outline-none ring-1 ring-[#d6d6c7] transition focus:ring-2 focus:ring-[#f0b35c]"
+							name="q"
+							placeholder="Search Twin Cities, events, restaurants, neighborhoods"
+							type="search"
+						/>
+						<button class="rounded-xl bg-[#1f4f5c] px-5 py-3 text-sm font-semibold uppercase tracking-wider text-white shadow-md transition hover:-translate-y-0.5 hover:bg-[#173b45]" type="submit">
+							Search
+						</button>
+					</form>
+					<div class="mt-4 flex flex-wrap gap-2 text-xs">
+						<a class="hub-pill" href="https://www.minneapolis.org/" target="_blank" rel="noreferrer">Visit Minneapolis</a>
+						<a class="hub-pill" href="https://www.stpaul.gov/" target="_blank" rel="noreferrer">Saint Paul</a>
+						<a class="hub-pill" href="https://www.duluthmn.gov/" target="_blank" rel="noreferrer">Duluth</a>
+						<a class="hub-pill" href="https://www.rochestermn.gov/" target="_blank" rel="noreferrer">Rochester</a>
+						<a class="hub-pill" href="https://www.visitbemidji.com/" target="_blank" rel="noreferrer">Bemidji</a>
+					</div>
+				</div>
+				<div class="hub-card">
+					<p class="text-xs font-semibold uppercase tracking-[0.3em] text-[#5b5b4d]">Quick Switches</p>
+					<div class="mt-3 space-y-3 text-sm">
+						<a class="hub-link" href="https://patrick.mp.ls" target="_blank" rel="noreferrer">
+							<span class="font-semibold">patrick.mp.ls</span>
+							<span class="text-xs text-[#5b5b4d]">Portfolio, blog, dashboards</span>
+						</a>
+						<a class="hub-link" href="https://legacy.mp.ls" target="_blank" rel="noreferrer">
+							<span class="font-semibold">legacy.mp.ls</span>
+							<span class="text-xs text-[#5b5b4d]">1997 MPLS portal archive</span>
+						</a>
+						<a class="hub-link" href="https://www.mplslibrary.org/" target="_blank" rel="noreferrer">
+							<span class="font-semibold">Library</span>
+							<span class="text-xs text-[#5b5b4d]">Events, passes, digital media</span>
+						</a>
+						<a class="hub-link" href="https://www.exploreminnesota.com/" target="_blank" rel="noreferrer">
+							<span class="font-semibold">Explore MN</span>
+							<span class="text-xs text-[#5b5b4d]">Trips, parks, road ideas</span>
+						</a>
+					</div>
+				</div>
+			</section>
+
+			<section class="grid gap-4 lg:grid-cols-3">
+				<div id="news" class="hub-card lg:col-span-2">
+					<div class="flex items-center justify-between">
+						<p class="hub-title">Top stories</p>
+						<span class="text-xs uppercase tracking-widest text-[#7b7b6e]">Local first</span>
+					</div>
+					<div class="mt-4 grid gap-3 md:grid-cols-2">
+						<div class="hub-story">
+							<p class="text-xs uppercase text-[#7b7b6e]">City Hall</p>
+							<p class="text-sm font-semibold text-[#1c1f2d]">Council agenda: housing supply, street safety, zoning tweaks</p>
+							<p class="text-xs text-[#5b5b4d]">Minneapolis, 9:00a stream</p>
+						</div>
+						<div class="hub-story">
+							<p class="text-xs uppercase text-[#7b7b6e]">Business</p>
+							<p class="text-sm font-semibold text-[#1c1f2d]">North Loop openings: cafe, bike shop, co-op studio</p>
+							<p class="text-xs text-[#5b5b4d]">Opening week highlights</p>
+						</div>
+						<div class="hub-story">
+							<p class="text-xs uppercase text-[#7b7b6e]">Education</p>
+							<p class="text-sm font-semibold text-[#1c1f2d]">School choice fairs kick off across the metro</p>
+							<p class="text-xs text-[#5b5b4d]">Enrollment deadlines</p>
+						</div>
+						<div class="hub-story">
+							<p class="text-xs uppercase text-[#7b7b6e]">Health</p>
+							<p class="text-sm font-semibold text-[#1c1f2d]">Clinic expansions add new weekend hours</p>
+							<p class="text-xs text-[#5b5b4d]">Twin Cities providers</p>
+						</div>
+					</div>
+				</div>
+
+				<div id="sports" class="hub-card">
+					<p class="hub-title">Sports quick look</p>
+					<div class="mt-4 space-y-3 text-sm">
+						<div class="flex items-start justify-between">
+							<div>
+								<p class="font-semibold">Twins</p>
+								<p class="text-xs text-[#5b5b4d]">Spring training today</p>
+							</div>
+							<span class="text-xs text-[#7b7b6e]">1:05p</span>
+						</div>
+						<div class="flex items-start justify-between">
+							<div>
+								<p class="font-semibold">Wild</p>
+								<p class="text-xs text-[#5b5b4d]">vs Avalanche</p>
+							</div>
+							<span class="text-xs text-[#7b7b6e]">7:00p</span>
+						</div>
+						<div class="flex items-start justify-between">
+							<div>
+								<p class="font-semibold">Wolves</p>
+								<p class="text-xs text-[#5b5b4d]">@ Thunder</p>
+							</div>
+							<span class="text-xs text-[#7b7b6e]">8:30p</span>
+						</div>
+						<div class="flex items-start justify-between">
+							<div>
+								<p class="font-semibold">Loons</p>
+								<p class="text-xs text-[#5b5b4d]">Home opener</p>
+							</div>
+							<span class="text-xs text-[#7b7b6e]">Sat 2:30p</span>
+						</div>
+						<div class="flex items-start justify-between">
+							<div>
+								<p class="font-semibold">Lynx</p>
+								<p class="text-xs text-[#5b5b4d]">Draft watch</p>
+							</div>
+							<span class="text-xs text-[#7b7b6e]">Apr</span>
+						</div>
+					</div>
+					<div class="mt-4 flex flex-wrap gap-2 text-xs">
+						<span class="hub-pill">Scoreboard</span>
+						<span class="hub-pill">Tickets</span>
+						<span class="hub-pill">Podcasts</span>
+					</div>
+				</div>
+
+				<div id="events" class="hub-card">
+					<p class="hub-title">Tonight and weekend</p>
+					<div class="mt-4 space-y-3 text-sm">
+						<div>
+							<p class="font-semibold">First Avenue</p>
+							<p class="text-xs text-[#5b5b4d]">Indie night, doors 7:00p</p>
+						</div>
+						<div>
+							<p class="font-semibold">Northrop</p>
+							<p class="text-xs text-[#5b5b4d]">Modern dance residency</p>
+						</div>
+						<div>
+							<p class="font-semibold">CHS Field</p>
+							<p class="text-xs text-[#5b5b4d]">Saints promo night</p>
+						</div>
+						<div>
+							<p class="font-semibold">Bauhaus Brew Labs</p>
+							<p class="text-xs text-[#5b5b4d]">Trivia and food trucks</p>
+						</div>
+					</div>
+					<div class="mt-4 flex flex-wrap gap-2 text-xs">
+						<span class="hub-pill">Arts</span>
+						<span class="hub-pill">Festivals</span>
+						<span class="hub-pill">Family</span>
+					</div>
+				</div>
+
+				<div id="commute" class="hub-card">
+					<p class="hub-title">Commute and transit</p>
+					<div class="mt-4 space-y-3 text-sm">
+						<div class="flex items-start justify-between">
+							<div>
+								<p class="font-semibold">Metro Transit</p>
+								<p class="text-xs text-[#5b5b4d]">Blue, Green: normal</p>
+							</div>
+							<span class="text-xs text-[#7b7b6e]">Live</span>
+						</div>
+						<div class="flex items-start justify-between">
+							<div>
+								<p class="font-semibold">511MN</p>
+								<p class="text-xs text-[#5b5b4d]">I-35W cleanup near 36th</p>
+							</div>
+							<span class="text-xs text-[#7b7b6e]">Delay</span>
+						</div>
+						<div class="flex items-start justify-between">
+							<div>
+								<p class="font-semibold">Bike trails</p>
+								<p class="text-xs text-[#5b5b4d]">Midtown greenway clear</p>
+							</div>
+							<span class="text-xs text-[#7b7b6e]">Ok</span>
+						</div>
+					</div>
+					<div class="mt-4 flex flex-wrap gap-2 text-xs">
+						<a class="hub-pill" href="https://www.metrotransit.org/" target="_blank" rel="noreferrer">Metro Transit</a>
+						<a class="hub-pill" href="https://www.511mn.org/" target="_blank" rel="noreferrer">511MN</a>
+						<a class="hub-pill" href="https://www.bikemn.org/" target="_blank" rel="noreferrer">BikeMN</a>
+					</div>
+				</div>
+
+				<div id="today" class="hub-card lg:col-span-2">
+					<div class="flex items-center justify-between">
+						<p class="hub-title">City desk</p>
+						<span class="text-xs uppercase tracking-widest text-[#7b7b6e]">Twin Cities and beyond</span>
+					</div>
+					<div class="mt-4 grid gap-3 md:grid-cols-2">
+						<div class="hub-story">
+							<p class="text-xs uppercase text-[#7b7b6e]">Minneapolis</p>
+							<p class="text-sm font-semibold text-[#1c1f2d]">311, snow emergency map, utility updates</p>
+							<p class="text-xs text-[#5b5b4d]">City services and alerts</p>
+						</div>
+						<div class="hub-story">
+							<p class="text-xs uppercase text-[#7b7b6e]">Saint Paul</p>
+							<p class="text-sm font-semibold text-[#1c1f2d]">Trash and recycling pickup calendar</p>
+							<p class="text-xs text-[#5b5b4d]">Household services</p>
+						</div>
+						<div class="hub-story">
+							<p class="text-xs uppercase text-[#7b7b6e]">Duluth</p>
+							<p class="text-sm font-semibold text-[#1c1f2d]">Lakewalk conditions and port traffic</p>
+							<p class="text-xs text-[#5b5b4d]">North shore updates</p>
+						</div>
+						<div class="hub-story">
+							<p class="text-xs uppercase text-[#7b7b6e]">Rochester</p>
+							<p class="text-sm font-semibold text-[#1c1f2d]">Clinic travel times and downtown events</p>
+							<p class="text-xs text-[#5b5b4d]">Regional coverage</p>
+						</div>
+					</div>
+				</div>
+
+				<div id="network" class="hub-card">
+					<p class="hub-title">mp.ls network</p>
+					<div class="mt-4 space-y-3 text-sm">
+						<div class="hub-link">
+							<span class="font-semibold">patrick.mp.ls</span>
+							<span class="text-xs text-[#5b5b4d]">Portfolio, data dashboards, blog</span>
+						</div>
+						<div class="hub-link">
+							<span class="font-semibold">legacy.mp.ls</span>
+							<span class="text-xs text-[#5b5b4d]">Archive of the original MPLS portal</span>
+						</div>
+						<div class="hub-link">
+							<span class="font-semibold">mp.ls</span>
+							<span class="text-xs text-[#5b5b4d]">Twin Cities daily hub</span>
+						</div>
+					</div>
+					<div class="mt-4 flex flex-wrap gap-2 text-xs">
+						<span class="hub-pill">Local first</span>
+						<span class="hub-pill">No clutter</span>
+						<span class="hub-pill">Built in MN</span>
+					</div>
+				</div>
+			</section>
+
+			<footer class="mt-10 flex flex-col items-center justify-between gap-3 text-xs text-[#6b6b63] sm:flex-row">
+				<p class="font-mono uppercase tracking-widest">c 2025 mp.ls - Minnesota home on the internet</p>
+				<div class="flex flex-wrap gap-3 font-mono uppercase tracking-widest">
+					<a href="https://github.com/patbritton" target="_blank" rel="noreferrer">GitHub</a>
+					<a href="https://www.linkedin.com/in/patrick-britton-46780b6a/" target="_blank" rel="noreferrer">LinkedIn</a>
+				</div>
+			</footer>
+		</div>
+	</div>
+</NetworkLayout>
+
+<style is:global>
+	@import url('https://fonts.googleapis.com/css2?family=Fraunces:wght@600;700&family=Space+Grotesk:wght@400;500;600&display=swap');
+
+	:root {
+		--hub-ink: #1c1f2d;
+		--hub-slate: #3b4252;
+		--hub-cream: #f7f4ee;
+		--hub-card: rgba(255, 255, 255, 0.82);
+		--hub-border: rgba(15, 23, 42, 0.08);
+		--hub-shadow: 0 18px 45px rgba(24, 32, 48, 0.12);
+	}
+
+	body {
+		font-family: 'Space Grotesk', sans-serif;
+		color: var(--hub-ink);
+		background: linear-gradient(135deg, #f4f1e9 0%, #f7fbff 45%, #f0f4f8 100%);
+	}
+
+	h1,
+	.hub-title {
+		font-family: 'Fraunces', serif;
+	}
+
+	.hub-card {
+		border: 1px solid var(--hub-border);
+		border-radius: 22px;
+		background: var(--hub-card);
+		padding: 1.25rem;
+		box-shadow: var(--hub-shadow);
+		backdrop-filter: blur(14px);
+	}
+
+	.hub-title {
+		font-size: 1.25rem;
+		font-weight: 700;
+	}
+
+	.hub-chip {
+		border-radius: 999px;
+		border: 1px solid rgba(31, 79, 92, 0.2);
+		background: rgba(255, 255, 255, 0.8);
+		padding: 0.45rem 0.9rem;
+		font-size: 0.7rem;
+		letter-spacing: 0.25em;
+		text-transform: uppercase;
+		color: #1f4f5c;
+	}
+
+	.hub-pill {
+		border-radius: 999px;
+		background: rgba(31, 79, 92, 0.08);
+		padding: 0.35rem 0.8rem;
+		font-weight: 600;
+		color: #1f4f5c;
+	}
+
+	.hub-link {
+		display: flex;
+		flex-direction: column;
+		gap: 0.25rem;
+		border-radius: 16px;
+		border: 1px solid transparent;
+		padding: 0.6rem 0.75rem;
+		transition: transform 0.2s ease, border 0.2s ease, background 0.2s ease;
+	}
+
+	.hub-link:hover {
+		transform: translateY(-2px);
+		border-color: rgba(31, 79, 92, 0.2);
+		background: rgba(255, 255, 255, 0.6);
+	}
+
+	.hub-story {
+		border-radius: 18px;
+		border: 1px solid rgba(31, 79, 92, 0.08);
+		background: rgba(255, 255, 255, 0.6);
+		padding: 0.9rem;
+	}
+	@media (max-width: 640px) {
+		.hub-card {
+			padding: 1rem;
+		}
+
+		.hub-title {
+			font-size: 1.1rem;
+		}
+	}
+</style>

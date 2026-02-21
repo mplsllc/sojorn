@@ -1,0 +1,127 @@
+---
+import Layout from '../layouts/Layout.astro';
+---
+
+<Layout title="Privacy Policy | MPLS LLC" description="MPLS LLC privacy policy - how we handle your data with respect and transparency.">
+	<section class="bg-brand-900 py-16">
+		<div class="mx-auto max-w-4xl px-6 text-center">
+			<p class="text-sm font-semibold uppercase tracking-widest text-brand-300 mb-2">Legal</p>
+			<h1 class="font-display text-3xl font-bold text-white sm:text-4xl">Privacy &amp; Data Sovereignty</h1>
+			<p class="mt-3 text-brand-200">Last Updated: February 7, 2026</p>
+		</div>
+	</section>
+
+	<section class="py-16 bg-white">
+		<div class="mx-auto max-w-3xl px-6">
+			<p class="text-sm text-zinc-500 italic mb-10 text-center">
+				Profiting from surveillance is strictly against our principles. We reject the "attention economy" model.
+			</p>
+			<div class="space-y-8">
+				<div>
+					<h2 class="text-xl font-semibold text-zinc-900 mb-3">1. Data Sovereignty</h2>
+					<p class="text-zinc-600 leading-relaxed">We do not sell your data. We do not index your content on search engines. Sojorn is a private community designed to protect your posts and identity from the extractivist economy.</p>
+				</div>
+				<div>
+					<h2 class="text-xl font-semibold text-zinc-900 mb-3">2. Collection Limit</h2>
+					<p class="text-zinc-600 leading-relaxed">We collect only what is necessary to function: your email (for authentication and critical updates) and the content you explicitly create. We do not use third-party tracking pixels that follow you across the web.</p>
+				</div>
+				<div>
+					<h2 class="text-xl font-semibold text-zinc-900 mb-3">3. Media Sanitization</h2>
+					<p class="text-zinc-600 leading-relaxed mb-3">All photos and videos you upload are automatically stripped of metadata before they are stored. This includes:</p>
+					<ul class="list-disc pl-6 text-zinc-600 leading-relaxed space-y-1">
+						<li><strong>EXIF data</strong> — camera make/model, lens info, software version</li>
+						<li><strong>GPS coordinates</strong> — latitude, longitude, altitude</li>
+						<li><strong>Timestamps</strong> — original capture date and time</li>
+						<li><strong>Device identifiers</strong> — serial numbers or unique device tags</li>
+					</ul>
+					<p class="text-zinc-600 leading-relaxed mt-3">Images are re-encoded on your device before upload (stripping EXIF), and all media is processed again server-side via ffmpeg to guarantee no metadata survives. What you upload is pixels and audio — nothing else.</p>
+				</div>
+				<div>
+					<h2 class="text-xl font-semibold text-zinc-900 mb-3">4. Beacon Anonymity</h2>
+					<p class="text-zinc-600 leading-relaxed mb-3">Beacons (location-based community alerts) are <strong>fully anonymous</strong>. When you post a beacon:</p>
+					<ul class="list-disc pl-6 text-zinc-600 leading-relaxed space-y-1">
+						<li>Your identity is never attached to the beacon in any public-facing way.</li>
+						<li>Other users cannot see who posted it — no name, handle, or avatar is displayed.</li>
+						<li>Vouches and reports are tied to the beacon, not to any specific user.</li>
+						<li>Beacons do not appear on your profile.</li>
+					</ul>
+					<p class="text-zinc-600 leading-relaxed mt-3">We retain an internal record linking beacons to accounts solely for abuse prevention. This record is never exposed through the app or API and is permanently destroyed if you delete your account.</p>
+				</div>
+				<div>
+					<h2 class="text-xl font-semibold text-zinc-900 mb-3">5. Zero-Knowledge Encryption</h2>
+					<p class="text-zinc-600 leading-relaxed">Private messages are end-to-end encrypted (E2EE) using keys generated on your device. We have no way to decrypt or read your private conversations.</p>
+				</div>
+				<div>
+					<h2 class="text-xl font-semibold text-zinc-900 mb-3">6. Third-Party Services</h2>
+					<p class="text-zinc-600 leading-relaxed mb-3">We use a limited number of third-party services to operate Sojorn. None are used for advertising or behavioral tracking:</p>
+					<ul class="list-disc pl-6 text-zinc-600 leading-relaxed space-y-1">
+						<li><strong>SendPulse</strong> — transactional and newsletter email delivery</li>
+						<li><strong>Cloudflare</strong> — CDN, DDoS protection, media storage (R2), and bot verification (Turnstile)</li>
+						<li><strong>Firebase Cloud Messaging</strong> — push notifications to your device</li>
+						<li><strong>OpenAI</strong> — automated content moderation (post text only; never private messages)</li>
+					</ul>
+					<p class="text-zinc-600 leading-relaxed mt-3">Private messages are end-to-end encrypted and are never sent to any third party, including AI services.</p>
+				</div>
+				<div>
+					<h2 class="text-xl font-semibold text-zinc-900 mb-3">7. How We Use Your Data</h2>
+					<p class="text-zinc-600 leading-relaxed mb-3">We collect and use data to show you content you actually want to see and to sustain the platform. Here is exactly what that means — and what it doesn’t.</p>
+
+					<h3 class="text-lg font-semibold text-zinc-800 mt-6 mb-2">What we collect</h3>
+					<p class="text-zinc-600 leading-relaxed mb-3">Your preferences are <strong>categorical</strong> — broad interests you express through the content you engage with. Examples:</p>
+					<ul class="list-disc pl-6 text-zinc-600 leading-relaxed space-y-1 mb-3">
+						<li>You like baseball. You enjoy nature. You love rock music.</li>
+						<li>You follow photography categories. You skip politics.</li>
+					</ul>
+					<p class="text-zinc-600 leading-relaxed mb-3">This is the kind of data we use to personalize your feed and, in the future, to serve relevant advertisements.</p>
+
+					<h3 class="text-lg font-semibold text-zinc-800 mt-6 mb-2">What we never collect or use</h3>
+					<p class="text-zinc-600 leading-relaxed mb-3">We will never build a profile of <em>you as a person</em>. We don’t know or care about your age, your employer, your family, your real name, or your physical address. Your data describes <strong>a user</strong> — not a person. If you’re not logged in, we have no idea who you are. Your preferences are tied to your Sojorn profile, not to your IP address, cookies, or device fingerprint.</p>
+
+					<h3 class="text-lg font-semibold text-zinc-800 mt-6 mb-2">Advertising model</h3>
+					<p class="text-zinc-600 leading-relaxed mb-3">In the future, we may serve advertisements to sustain the platform. These ads will be matched to <em>categorical interests</em> (e.g. “users who like outdoor content”) and the <em>context of what you’re viewing</em> — never through tracking pixels, browser fingerprinting, or cross-app surveillance. We will never sell your personal data to advertisers.</p>
+
+					<h3 class="text-lg font-semibold text-zinc-800 mt-6 mb-2">IP address logging</h3>
+					<p class="text-zinc-600 leading-relaxed mb-3">We do log IP addresses strictly for <strong>security purposes</strong>: preventing abuse, enforcing bans, and protecting the community from bad actors. An IP address in our system is associated with a user account — not a real-world identity. We do not use IP addresses for advertising, analytics, or any form of behavioral profiling.</p>
+
+					<h3 class="text-lg font-semibold text-zinc-800 mt-6 mb-2">Your data, your choice</h3>
+					<p class="text-zinc-600 leading-relaxed">All preference and interest data is tied entirely to your Sojorn account. If you delete your account, that data is permanently destroyed along with it — no residual profiles, no shadow archives, no "we keep it for 90 days just in case." Gone is gone.</p>
+				</div>
+				<div>
+					<h2 class="text-xl font-semibold text-zinc-900 mb-3">8. Your Right to Vanish</h2>
+					<p class="text-zinc-600 leading-relaxed mb-3">You have full control over your account lifecycle from the Settings screen:</p>
+					<ul class="list-disc pl-6 text-zinc-600 leading-relaxed space-y-1">
+						<li><strong>Deactivate</strong> — hides your profile; all data preserved indefinitely. Reactivate anytime by logging back in.</li>
+						<li><strong>Delete</strong> — schedules permanent deletion after a 14-day grace period. Log back in to cancel. After 14 days, all data is irreversibly destroyed.</li>
+						<li><strong>Immediate Destroy</strong> — permanently and instantly erases all your data with double confirmation (in-app + email). There is no recovery.</li>
+					</ul>
+					<p class="text-zinc-600 leading-relaxed mt-3">When you leave, you leave. We do not retain hidden profiles or shadow data.</p>
+				</div>
+				<div>
+					<h2 class="text-xl font-semibold text-zinc-900 mb-3">9. Data Security</h2>
+					<p class="text-zinc-600 leading-relaxed">We implement industry-standard security measures including encryption at rest and in transit, regular security audits, and access controls to protect your data from unauthorized access.</p>
+				</div>
+				<div>
+					<h2 class="text-xl font-semibold text-zinc-900 mb-3">10. Sessions &amp; Authentication</h2>
+					<p class="text-zinc-600 leading-relaxed">We use secure JSON Web Tokens (JWTs) and refresh tokens stored on your device to keep you logged in. These are not tracking cookies — they exist solely for authentication and expire automatically. We do not use third-party cookies or cross-site tracking of any kind.</p>
+				</div>
+				<div>
+					<h2 class="text-xl font-semibold text-zinc-900 mb-3">11. International Data Transfers</h2>
+					<p class="text-zinc-600 leading-relaxed">Our primary servers are hosted by <strong>Hetzner</strong> in <strong>Germany</strong>, subject to EU data protection regulations. Media assets are stored via Cloudflare R2 (globally distributed). We apply appropriate safeguards to any cross-border data transfer.</p>
+				</div>
+				<div>
+					<h2 class="text-xl font-semibold text-zinc-900 mb-3">12. Children's Privacy</h2>
+					<p class="text-zinc-600 leading-relaxed">Our services are not intended for anyone under the age of 16. We enforce an age gate at login and do not knowingly collect personal information from minors under 16.</p>
+				</div>
+				<div>
+					<h2 class="text-xl font-semibold text-zinc-900 mb-3">13. Contact</h2>
+					<p class="text-zinc-600 leading-relaxed">
+						For privacy concerns: <a href="mailto:privacy@mp.ls" class="text-brand-700 hover:text-brand-800 font-medium transition-colors">privacy@mp.ls</a>
+					</p>
+					<p class="text-zinc-600 leading-relaxed mt-2">
+						For general inquiries: <a href="mailto:admin@mp.ls" class="text-brand-700 hover:text-brand-800 font-medium transition-colors">admin@mp.ls</a>
+					</p>
+				</div>
+			</div>
+		</div>
+	</section>
+</Layout>

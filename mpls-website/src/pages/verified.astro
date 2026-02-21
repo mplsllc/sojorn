@@ -1,0 +1,30 @@
+---
+import Layout from '../layouts/Layout.astro';
+---
+
+<Layout title="Email Verified | Sojorn">
+  <section class="min-h-[70vh] flex items-center justify-center px-6 py-20">
+    <div class="max-w-lg w-full text-center">
+      <div class="w-20 h-20 bg-emerald-100 rounded-full flex items-center justify-center mx-auto mb-8">
+        <svg class="w-10 h-10 text-emerald-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"></path>
+        </svg>
+      </div>
+
+      <h1 class="text-4xl font-bold text-zinc-900 mb-4">Email Verified</h1>
+      <p class="text-lg text-zinc-600 mb-8 leading-relaxed">
+        Your email has been verified successfully. Your Sojorn account is now active.
+      </p>
+
+      <div class="bg-zinc-50 border border-zinc-200 rounded-xl p-6 mb-8">
+        <p class="text-sm text-zinc-500">
+          You can now open the <strong class="text-zinc-700">Sojorn app</strong> and log in with your credentials.
+        </p>
+      </div>
+
+      <a href="/sojorn" class="inline-flex items-center rounded-lg bg-brand-700 px-6 py-3 text-sm font-semibold text-white hover:bg-brand-800 transition-colors">
+        Learn More About Sojorn
+      </a>
+    </div>
+  </section>
+</Layout>
