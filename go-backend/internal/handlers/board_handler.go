@@ -579,40 +579,20 @@ func (h *BoardHandler) isNeighborhoodAdmin(c *gin.Context, userID uuid.UUID, lat
 }
 
 // aiModerateEntry runs AI moderation on a board entry asynchronously using the
-// shared content moderation cascade (local AI → OpenAI → OpenRouter).
+// shared content moderation cascade (local AI → SightEngine → fail-open).
 // If flagged, it sets ai_flagged = true and hides the entry.
 func (h *BoardHandler) aiModerateEntry(entryID uuid.UUID, body string, authorID uuid.UUID) {
-	if h.contentModerator == nil && h.moderationService == nil {
+	if h.contentModerator == nil {
 		return
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
 
-	var decision, reason, engine string
-	var scores *services.ThreePoisonsScore
-
-	if h.contentModerator != nil {
-		result := h.contentModerator.ModerateText(ctx, "text", body)
-		decision = result.Action
-		reason = result.Reason
-		engine = result.Engine
-		scores = result.Scores
-	} else {
-		// Legacy fallback: OpenAI only
-		s, r, err := h.moderationService.AnalyzeContent(ctx, body, nil)
-		if err != nil {
-			log.Printf("[BoardAI] moderation error for entry %s: %v", entryID, err)
-			return
-		}
-		scores = s
-		if r != "" {
-			decision = "flag"
-			reason = r
-			engine = "openai"
-		} else {
-			decision = "clean"
-		}
-	}
+	result := h.contentModerator.ModerateText(ctx, "text", body)
+	decision := result.Action
+	reason := result.Reason
+	engine := result.Engine
+	scores := result.Scores
 
 	// Always log AI decision for audit
 	if h.moderationService != nil {
@@ -648,36 +628,17 @@ func (h *BoardHandler) aiModerateEntry(entryID uuid.UUID, body string, authorID 
 // aiModerateReply runs AI moderation on a board reply asynchronously using the
 // shared content moderation cascade.
 func (h *BoardHandler) aiModerateReply(replyID uuid.UUID, body string, authorID uuid.UUID) {
-	if h.contentModerator == nil && h.moderationService == nil {
+	if h.contentModerator == nil {
 		return
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
 
-	var decision, reason, engine string
-	var scores *services.ThreePoisonsScore
-
-	if h.contentModerator != nil {
-		result := h.contentModerator.ModerateText(ctx, "text", body)
-		decision = result.Action
-		reason = result.Reason
-		engine = result.Engine
-		scores = result.Scores
-	} else {
-		s, r, err := h.moderationService.AnalyzeContent(ctx, body, nil)
-		if err != nil {
-			log.Printf("[BoardAI] moderation error for reply %s: %v", replyID, err)
-			return
-		}
-		scores = s
-		if r != "" {
-			decision = "flag"
-			reason = r
-			engine = "openai"
-		} else {
-			decision = "clean"
-		}
-	}
+	result := h.contentModerator.ModerateText(ctx, "text", body)
+	decision := result.Action
+	reason := result.Reason
+	engine := result.Engine
+	scores := result.Scores
 
 	if h.moderationService != nil {
 		rawScore, _ := json.Marshal(scores)

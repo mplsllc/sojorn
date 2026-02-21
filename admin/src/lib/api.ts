@@ -420,13 +420,6 @@ class ApiClient {
   }
 
   // AI Moderation
-  async listOpenRouterModels(params: { capability?: string; search?: string } = {}) {
-    const qs = new URLSearchParams();
-    if (params.capability) qs.set('capability', params.capability);
-    if (params.search) qs.set('search', params.search);
-    return this.request<any>(`/api/v1/admin/ai/models?${qs}`);
-  }
-
   async listLocalModels() {
     return this.request<any>('/api/v1/admin/ai/models/local');
   }

@@ -27,7 +27,7 @@ Key features:
 - JWT auth with 15-minute access tokens + refresh tokens
 - ALTCHA bot protection (proof-of-work, no tracking)
 - Feed algorithm: 5-factor scoring, cooling period, diversity injection, impression recording
-- Content moderation: OpenAI text + Google Vision images, Three Poisons scoring
+- Content moderation: Local AI (Ollama) + SightEngine text/image analysis, Three Poisons scoring
 - E2EE messaging (Signal protocol key management)
 - Community Safety Beacons with neutral-language filtering and coordinate fuzzing (~1.1km precision)
 - Neighborhood boards with location-based discovery

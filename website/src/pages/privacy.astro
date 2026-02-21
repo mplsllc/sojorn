@@ -94,7 +94,7 @@ import Layout from '../layouts/Layout.astro';
 
       <!-- ─── 9. CONTENT MODERATION ─── -->
       <h2 class="text-xl font-bold mt-8 mb-4">9. Content Moderation</h2>
-      <p class="mb-4">Public content (posts, comments, board entries) is processed by our AI moderation system, which uses OpenAI for text analysis and Google Vision for image analysis. Moderation operates only on public content — <strong>private encrypted messages are never analyzed</strong>.</p>
+      <p class="mb-4">Public content (posts, comments, board entries) is processed by our AI moderation system, which uses a local AI model and SightEngine for text and image analysis. Moderation operates only on public content — <strong>private encrypted messages are never analyzed</strong>.</p>
       <p class="mb-4">When content is flagged, we log:</p>
       <ul class="list-disc pl-6 mb-4 space-y-1">
         <li>The moderation decision (pass, flag, or NSFW label)</li>
@@ -133,8 +133,7 @@ import Layout from '../layouts/Layout.astro';
       <ul class="list-disc pl-6 mb-4 space-y-1">
         <li><strong>Firebase Cloud Messaging</strong> — push notification delivery.</li>
         <li><strong>Cloudflare R2</strong> — media file storage (images, videos, thumbnails). Files are served via signed URLs that expire.</li>
-        <li><strong>OpenAI</strong> — text content moderation on public content only.</li>
-        <li><strong>Google Vision AI</strong> — image content moderation on public content only.</li>
+        <li><strong>SightEngine</strong> — text and image content moderation on public content only.</li>
         <li><strong>SendPulse</strong> — newsletter delivery (opt-in only) and transactional emails for data requests.</li>
         <li><strong>ALTCHA</strong> — bot protection on forms (proof-of-work challenge, no user tracking).</li>
       </ul>

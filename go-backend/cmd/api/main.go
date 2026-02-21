@@ -129,23 +129,18 @@ func main() {
 	emailService := services.NewEmailService(cfg, dbPool)
 	sendPulseService := services.NewSendPulseService(cfg.SendPulseID, cfg.SendPulseSecret)
 
-	// Load moderation configuration
-	moderationConfig := config.NewModerationConfig()
-	moderationService := services.NewModerationService(dbPool, moderationConfig.OpenAIKey, moderationConfig.GoogleKey, moderationConfig.GoogleCredsFile)
+	// Initialize moderation service (DB operations)
+	moderationService := services.NewModerationService(dbPool)
 
 	// Initialize appeal service
 	appealService := services.NewAppealService(dbPool)
 
-	// Initialize OpenRouter service
-	openRouterService := services.NewOpenRouterService(dbPool, cfg.OpenRouterAPIKey)
-
-	// Initialize Azure OpenAI service
-	var azureOpenAIService *services.AzureOpenAIService
-	if cfg.AzureOpenAIAPIKey != "" && cfg.AzureOpenAIEndpoint != "" {
-		azureOpenAIService = services.NewAzureOpenAIService(dbPool, cfg.AzureOpenAIAPIKey, cfg.AzureOpenAIEndpoint, cfg.AzureOpenAIAPIVersion)
-		log.Info().Msg("Azure OpenAI service initialized")
+	// Initialize SightEngine service (text + image moderation API)
+	sightEngineService := services.NewSightEngineService(cfg.SightEngineUser, cfg.SightEngineSecret)
+	if sightEngineService != nil {
+		log.Info().Msg("SightEngine service initialized")
 	} else {
-		log.Warn().Msg("Azure OpenAI credentials not provided, Azure OpenAI service disabled")
+		log.Warn().Msg("SightEngine credentials not provided, SightEngine service disabled")
 	}
 
 	// Initialize content filter (hard blocklist + strike system)
@@ -183,11 +178,11 @@ func main() {
 	// Initialize link preview service (after S3 client setup)
 	linkPreviewService := services.NewLinkPreviewService(dbPool, s3Client, cfg.R2MediaBucket, cfg.R2ImgDomain)
 
-	// Shared content moderation cascade (local AI → OpenAI → OpenRouter)
-	contentModerator := services.NewContentModerator(localAIService, moderationService, openRouterService)
+	// Shared content moderation cascade (local AI → SightEngine → fail-open)
+	contentModerator := services.NewContentModerator(localAIService, sightEngineService, moderationService)
 
 	userHandler := handlers.NewUserHandler(userRepo, postRepo, notificationService, assetService)
-	postHandler := handlers.NewPostHandler(postRepo, userRepo, feedService, assetService, notificationService, moderationService, contentFilter, openRouterService, linkPreviewService, localAIService, s3Client, cfg.R2VideoBucket, cfg.R2VidDomain, contentModerator)
+	postHandler := handlers.NewPostHandler(postRepo, userRepo, feedService, assetService, notificationService, moderationService, contentFilter, linkPreviewService, localAIService, s3Client, cfg.R2VideoBucket, cfg.R2VidDomain, contentModerator)
 	chatHandler := handlers.NewChatHandler(chatRepo, notificationService, hub)
 	authHandler := handlers.NewAuthHandler(userRepo, cfg, emailService, sendPulseService)
 	categoryHandler := handlers.NewCategoryHandler(categoryRepo)
@@ -198,14 +193,14 @@ func main() {
 	appealHandler := handlers.NewAppealHandler(appealService)
 
 	// Initialize official accounts service
-	officialAccountsService := services.NewOfficialAccountsService(dbPool, openRouterService, localAIService, linkPreviewService, moderationConfig.OpenAIKey)
+	officialAccountsService := services.NewOfficialAccountsService(dbPool, localAIService, linkPreviewService)
 	officialAccountsService.StartScheduler()
 	defer officialAccountsService.StopScheduler()
 
 	icedHandler := handlers.NewIcedHandler(cfg.IcedAPIBase)
-	moderationHandler := handlers.NewModerationHandler(moderationService, openRouterService, localAIService)
+	moderationHandler := handlers.NewModerationHandler(moderationService, sightEngineService, localAIService)
 
-	adminHandler := handlers.NewAdminHandler(dbPool, moderationService, appealService, emailService, openRouterService, azureOpenAIService, officialAccountsService, linkPreviewService, localAIService, cfg.JWTSecret, s3Client, cfg.R2MediaBucket, cfg.R2VideoBucket, cfg.R2ImgDomain, cfg.R2VidDomain)
+	adminHandler := handlers.NewAdminHandler(dbPool, moderationService, appealService, emailService, sightEngineService, officialAccountsService, linkPreviewService, localAIService, cfg.JWTSecret, s3Client, cfg.R2MediaBucket, cfg.R2VideoBucket, cfg.R2ImgDomain, cfg.R2VidDomain)
 
 	accountHandler := handlers.NewAccountHandler(userRepo, emailService, cfg)
 
@@ -702,7 +697,7 @@ func main() {
 		admin.PATCH("/usernames/claims/:id", adminHandler.ReviewClaimRequest)
 
 		// AI Moderation Config
-		admin.GET("/ai/models", adminHandler.ListOpenRouterModels)
+		admin.GET("/ai/models", adminHandler.ListModels)
 		admin.GET("/ai/models/local", adminHandler.ListLocalModels)
 		admin.GET("/ai/config", adminHandler.GetAIModerationConfigs)
 		admin.PUT("/ai/config", adminHandler.SetAIModerationConfig)

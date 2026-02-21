@@ -37,12 +37,10 @@ type Config struct {
 	R2VideoBucket           string
 	APIBaseURL              string
 	AppBaseURL              string
-	OpenRouterAPIKey        string
 	AIGatewayURL            string
 	AIGatewayToken          string
-	AzureOpenAIAPIKey       string
-	AzureOpenAIEndpoint     string
-	AzureOpenAIAPIVersion   string
+	SightEngineUser         string
+	SightEngineSecret       string
 	FunkwhaleBase           string // e.g. "http://localhost:5001" — empty means not yet deployed
 	IcedAPIBase             string // IcedCoffee public-safety API base URL
 }
@@ -88,12 +86,10 @@ func LoadConfig() *Config {
 		R2VideoBucket:           getEnv("R2_VIDEO_BUCKET", "sojorn-videos"),
 		APIBaseURL:              getEnv("API_BASE_URL", "https://api.sojorn.net"),
 		AppBaseURL:              getEnv("APP_BASE_URL", "https://mp.ls"),
-		OpenRouterAPIKey:        getEnv("OPENROUTER_API", ""),
 		AIGatewayURL:            getEnv("AI_GATEWAY_URL", ""),
 		AIGatewayToken:          getEnv("AI_GATEWAY_TOKEN", ""),
-		AzureOpenAIAPIKey:       getEnv("AZURE_OPENAI_API_KEY", ""),
-		AzureOpenAIEndpoint:     getEnv("AZURE_OPENAI_ENDPOINT", ""),
-		AzureOpenAIAPIVersion:   getEnv("AZURE_OPENAI_API_VERSION", "2024-02-15-preview"),
+		SightEngineUser:         getEnv("SIGHTENGINE_USER", ""),
+		SightEngineSecret:       getEnv("SIGHTENGINE_SECRET", ""),
 		FunkwhaleBase:           getEnv("FUNKWHALE_BASE", ""),
 		IcedAPIBase:             getEnv("ICED_API_BASE", "http://127.0.0.1:8089"),
 	}

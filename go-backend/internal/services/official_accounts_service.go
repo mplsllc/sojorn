@@ -131,22 +131,18 @@ type CachedArticle struct {
 // OfficialAccountsService manages official account automation
 type OfficialAccountsService struct {
 	pool               *pgxpool.Pool
-	openRouterService  *OpenRouterService
 	localAIService     *LocalAIService
 	linkPreviewService *LinkPreviewService
-	openAIKey          string
 	httpClient         *http.Client
 	stopCh             chan struct{}
 	wg                 sync.WaitGroup
 }
 
-func NewOfficialAccountsService(pool *pgxpool.Pool, openRouterService *OpenRouterService, localAIService *LocalAIService, linkPreviewService *LinkPreviewService, openAIKey string) *OfficialAccountsService {
+func NewOfficialAccountsService(pool *pgxpool.Pool, localAIService *LocalAIService, linkPreviewService *LinkPreviewService) *OfficialAccountsService {
 	return &OfficialAccountsService{
 		pool:               pool,
-		openRouterService:  openRouterService,
 		localAIService:     localAIService,
 		linkPreviewService: linkPreviewService,
-		openAIKey:          openAIKey,
 		httpClient: &http.Client{
 			Timeout: 30 * time.Second,
 		},
@@ -700,19 +696,13 @@ func (s *OfficialAccountsService) GeneratePost(ctx context.Context, configID str
 	return generated, nil
 }
 
-// routeGenerateText routes text generation to the correct AI provider based on model_id prefix.
-// Prefixes: "local/" → local Ollama, "openai/" → OpenAI direct, anything else → OpenRouter.
+// routeGenerateText routes text generation to the local Ollama instance.
+// The "local/" prefix is optional — all generation uses local AI.
 func (s *OfficialAccountsService) routeGenerateText(ctx context.Context, modelID, systemPrompt, userPrompt string, temperature float64, maxTokens int) (string, error) {
-	switch {
-	case strings.HasPrefix(modelID, "local/"):
-		actualModel := strings.TrimPrefix(modelID, "local/")
-		return s.generateTextLocal(ctx, actualModel, systemPrompt, userPrompt, temperature, maxTokens)
-	case strings.HasPrefix(modelID, "openai/"):
-		actualModel := strings.TrimPrefix(modelID, "openai/")
-		return s.generateTextOpenAI(ctx, actualModel, systemPrompt, userPrompt, temperature, maxTokens)
-	default:
-		return s.openRouterService.GenerateText(ctx, modelID, systemPrompt, userPrompt, temperature, maxTokens)
-	}
+	actualModel := strings.TrimPrefix(modelID, "local/")
+	// Also strip legacy "openai/" prefix — route to local model instead
+	actualModel = strings.TrimPrefix(actualModel, "openai/")
+	return s.generateTextLocal(ctx, actualModel, systemPrompt, userPrompt, temperature, maxTokens)
 }
 
 // generateTextLocal sends a chat completion request to the local Ollama instance via the AI gateway.
@@ -769,63 +759,6 @@ func (s *OfficialAccountsService) generateTextLocal(ctx context.Context, modelID
 	}
 	if len(chatResp.Choices) == 0 {
 		return "", fmt.Errorf("no response from local model")
-	}
-	return strings.TrimSpace(chatResp.Choices[0].Message.Content), nil
-}
-
-// generateTextOpenAI sends a chat completion request directly to the OpenAI API.
-func (s *OfficialAccountsService) generateTextOpenAI(ctx context.Context, modelID, systemPrompt, userPrompt string, temperature float64, maxTokens int) (string, error) {
-	if s.openAIKey == "" {
-		return "", fmt.Errorf("OpenAI API key not configured")
-	}
-
-	reqBody := map[string]any{
-		"model": modelID,
-		"messages": []map[string]string{
-			{"role": "system", "content": systemPrompt},
-			{"role": "user", "content": userPrompt},
-		},
-		"temperature": temperature,
-	}
-	if maxTokens > 0 {
-		reqBody["max_tokens"] = maxTokens
-	}
-
-	jsonBody, err := json.Marshal(reqBody)
-	if err != nil {
-		return "", fmt.Errorf("marshal error: %w", err)
-	}
-
-	req, err := http.NewRequestWithContext(ctx, "POST", "https://api.openai.com/v1/chat/completions", bytes.NewReader(jsonBody))
-	if err != nil {
-		return "", fmt.Errorf("request error: %w", err)
-	}
-	req.Header.Set("Content-Type", "application/json")
-	req.Header.Set("Authorization", "Bearer "+s.openAIKey)
-
-	resp, err := s.httpClient.Do(req)
-	if err != nil {
-		return "", fmt.Errorf("OpenAI request failed: %w", err)
-	}
-	defer resp.Body.Close()
-
-	if resp.StatusCode != http.StatusOK {
-		body, _ := io.ReadAll(resp.Body)
-		return "", fmt.Errorf("OpenAI API error %d: %s", resp.StatusCode, string(body))
-	}
-
-	var chatResp struct {
-		Choices []struct {
-			Message struct {
-				Content string `json:"content"`
-			} `json:"message"`
-		} `json:"choices"`
-	}
-	if err := json.NewDecoder(resp.Body).Decode(&chatResp); err != nil {
-		return "", fmt.Errorf("decode error: %w", err)
-	}
-	if len(chatResp.Choices) == 0 {
-		return "", fmt.Errorf("no response from OpenAI")
 	}
 	return strings.TrimSpace(chatResp.Choices[0].Message.Content), nil
 }

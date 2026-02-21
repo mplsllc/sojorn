@@ -8,35 +8,14 @@ import {
   ChevronDown, ChevronUp, Bot, Clock, AlertCircle, CheckCircle, ExternalLink,
 } from 'lucide-react';
 
-// ─── Model Selector (OpenRouter / Local Ollama / OpenAI) ─────────
-type ProviderTab = 'openrouter' | 'local' | 'openai';
-
-const OPENAI_MODELS = [
-  { id: 'gpt-4o', name: 'GPT-4o' },
-  { id: 'gpt-4o-mini', name: 'GPT-4o Mini' },
-  { id: 'gpt-4-turbo', name: 'GPT-4 Turbo' },
-  { id: 'gpt-4', name: 'GPT-4' },
-  { id: 'gpt-3.5-turbo', name: 'GPT-3.5 Turbo' },
-  { id: 'o1', name: 'o1' },
-  { id: 'o1-mini', name: 'o1 Mini' },
-  { id: 'o3-mini', name: 'o3 Mini' },
-];
-
-function detectProvider(modelId: string): ProviderTab {
-  if (modelId.startsWith('local/')) return 'local';
-  if (modelId.startsWith('openai/')) return 'openai';
-  return 'openrouter';
-}
+// ─── Model Selector (Local Ollama only) ─────────
 
 function stripPrefix(modelId: string): string {
   if (modelId.startsWith('local/')) return modelId.slice(6);
-  if (modelId.startsWith('openai/')) return modelId.slice(7);
   return modelId;
 }
 
 function ModelSelector({ value, onChange, className }: { value: string; onChange: (v: string) => void; className?: string }) {
-  const [tab, setTab] = useState<ProviderTab>(detectProvider(value));
-  const [orModels, setOrModels] = useState<{ id: string; name: string }[]>([]);
   const [localModels, setLocalModels] = useState<{ id: string; name: string }[]>([]);
   const [search, setSearch] = useState('');
   const [open, setOpen] = useState(false);
@@ -44,70 +23,44 @@ function ModelSelector({ value, onChange, className }: { value: string; onChange
 
   useEffect(() => {
     setLoading(true);
-    Promise.allSettled([
-      api.listOpenRouterModels().then((data) => {
-        setOrModels((data.models || []).map((m: any) => ({ id: m.id, name: m.name || m.id })));
-      }),
-      api.listLocalModels().then((data) => {
-        setLocalModels((data.models || []).map((m: any) => ({ id: m.id, name: m.name || m.id })));
-      }),
-    ]).finally(() => setLoading(false));
+    api.listLocalModels().then((data) => {
+      setLocalModels((data.models || []).map((m: any) => ({ id: m.id, name: m.name || m.id })));
+    }).finally(() => setLoading(false));
   }, []);
 
-  const currentModels = tab === 'openrouter' ? orModels : tab === 'local' ? localModels : OPENAI_MODELS;
   const filtered = search
-    ? currentModels.filter((m) => m.id.toLowerCase().includes(search.toLowerCase()) || m.name.toLowerCase().includes(search.toLowerCase()))
-    : currentModels;
+    ? localModels.filter((m) => m.id.toLowerCase().includes(search.toLowerCase()) || m.name.toLowerCase().includes(search.toLowerCase()))
+    : localModels;
 
   const handleSelect = (rawId: string) => {
-    const prefixed = tab === 'local' ? `local/${rawId}` : tab === 'openai' ? `openai/${rawId}` : rawId;
-    onChange(prefixed);
+    onChange(`local/${rawId}`);
     setOpen(false);
     setSearch('');
   };
 
   const rawValue = stripPrefix(value);
-  const allModels = [...orModels, ...localModels, ...OPENAI_MODELS];
-  const displayName = allModels.find((m) => m.id === rawValue)?.name || value;
-
-  const providerLabel = detectProvider(value) === 'local' ? 'Local' : detectProvider(value) === 'openai' ? 'OpenAI' : 'OR';
+  const displayName = localModels.find((m) => m.id === rawValue)?.name || value;
 
   return (
     <div className={`relative ${className || ''}`}>
       <button type="button" onClick={() => setOpen(!open)}
         className="w-full px-3 py-2 border border-warm-300 rounded-lg text-sm text-left truncate bg-white hover:bg-warm-50 transition-colors flex items-center gap-1.5">
-        <span className={`text-[9px] px-1.5 py-0.5 rounded font-bold flex-shrink-0 ${
-          detectProvider(value) === 'local' ? 'bg-purple-100 text-purple-700' :
-          detectProvider(value) === 'openai' ? 'bg-green-100 text-green-700' :
-          'bg-blue-100 text-blue-700'
-        }`}>{providerLabel}</span>
+        <span className="text-[9px] px-1.5 py-0.5 rounded font-bold flex-shrink-0 bg-purple-100 text-purple-700">Local</span>
         <span className="truncate">{loading ? 'Loading...' : displayName}</span>
       </button>
       {open && (
         <div className="absolute z-50 mt-1 w-full bg-white border border-warm-300 rounded-lg shadow-lg max-h-80 overflow-hidden flex flex-col min-w-[320px]">
-          {/* Provider tabs */}
-          <div className="flex border-b border-warm-200">
-            {([['openrouter', 'OpenRouter', orModels.length], ['local', 'Local / Ollama', localModels.length], ['openai', 'OpenAI', OPENAI_MODELS.length]] as const).map(([key, label, count]) => (
-              <button key={key} type="button"
-                onClick={() => { setTab(key as ProviderTab); setSearch(''); }}
-                className={`flex-1 px-2 py-2 text-xs font-medium transition-colors ${
-                  tab === key ? 'text-brand-700 border-b-2 border-brand-500 bg-brand-50' : 'text-gray-500 hover:text-gray-700 hover:bg-warm-50'
-                }`}>
-                {label} <span className="text-[10px] text-gray-400">({count})</span>
-              </button>
-            ))}
-          </div>
-          <input type="text" placeholder={`Search ${tab} models...`} value={search} onChange={(e) => setSearch(e.target.value)} autoFocus
+          <input type="text" placeholder="Search local models..." value={search} onChange={(e) => setSearch(e.target.value)} autoFocus
             className="px-3 py-2 border-b border-warm-200 text-sm outline-none" />
           <div className="overflow-y-auto max-h-52">
             {filtered.length === 0 ? (
-              <p className="p-3 text-xs text-gray-500">{loading ? 'Loading...' : tab === 'local' ? 'No local models (is Ollama running?)' : 'No models found'}</p>
+              <p className="p-3 text-xs text-gray-500">{loading ? 'Loading...' : 'No local models (is Ollama running?)'}</p>
             ) : (
               filtered.slice(0, 100).map((m) => (
                 <button key={m.id} type="button"
                   onClick={() => handleSelect(m.id)}
                   className={`w-full text-left px-3 py-1.5 text-xs hover:bg-brand-50 transition-colors ${
-                    m.id === rawValue && tab === detectProvider(value) ? 'bg-brand-50 text-brand-700 font-medium' : 'text-gray-700'
+                    m.id === rawValue ? 'bg-brand-50 text-brand-700 font-medium' : 'text-gray-700'
                   }`}>
                   <span className="block truncate font-medium">{m.name}</span>
                   <span className="block truncate text-[10px] text-gray-400 font-mono">{m.id}</span>

@@ -3,7 +3,7 @@
 import AdminShell from '@/components/AdminShell';
 import { api } from '@/lib/api';
 import { useEffect, useState, useCallback, useRef } from 'react';
-import { Brain, Search, Check, ChevronDown, Play, Loader2, Eye, MessageSquare, Video, Shield, MapPin, Users, AlertTriangle, Server, Cloud, Cpu, Terminal, Upload } from 'lucide-react';
+import { Brain, Play, Loader2, Eye, MessageSquare, Video, Shield, MapPin, Users, AlertTriangle, Cpu, Terminal, Upload } from 'lucide-react';
 
 const MODERATION_TYPES = [
   { key: 'text', label: 'Text Moderation', icon: MessageSquare },
@@ -17,24 +17,13 @@ const MODERATION_TYPES = [
 
 const ENGINES = [
   { id: 'local_ai', label: 'Local AI (Ollama)', icon: Cpu },
-  { id: 'openrouter', label: 'OpenRouter', icon: Cloud },
-  { id: 'openai', label: 'OpenAI', icon: Server },
-  { id: 'google', label: 'Google Vision', icon: Eye },
-  { id: 'azure', label: 'Azure OpenAI', icon: Cloud },
+  { id: 'sightengine', label: 'SightEngine', icon: Shield },
 ];
 
 const LOCAL_MODELS = [
   { id: 'llama-guard3:1b', name: 'LLaMA Guard 3 (1B)' },
   { id: 'qwen2.5:7b-instruct-q4_K_M', name: 'Qwen 2.5 (7B)' },
 ];
-
-interface ModelInfo {
-  id: string;
-  name: string;
-  pricing: { prompt: string; completion: string };
-  context_length: number;
-  architecture?: Record<string, any>;
-}
 
 interface ModerationConfig {
   id: string;
@@ -68,12 +57,6 @@ export default function AIModerationPage() {
   const [modelName, setModelName] = useState('');
   const [systemPrompt, setSystemPrompt] = useState('');
   const [saving, setSaving] = useState(false);
-  
-  // OpenRouter model picker
-  const [showPicker, setShowPicker] = useState(false);
-  const [models, setModels] = useState<ModelInfo[]>([]);
-  const [modelsLoading, setModelsLoading] = useState(false);
-  const [searchTerm, setSearchTerm] = useState('');
   
   // Test states
   const [testInput, setTestInput] = useState('');
@@ -116,13 +99,6 @@ export default function AIModerationPage() {
       setSystemPrompt('');
     }
   }, [selectedType, configs]);
-
-  const loadModels = useCallback((search?: string) => {
-    setModelsLoading(true);
-    api.listOpenRouterModels({ search })
-      .then((data) => setModels(data.models || []))
-      .finally(() => setModelsLoading(false));
-  }, []);
 
   const handleSave = async () => {
     setSaving(true);
@@ -306,87 +282,8 @@ export default function AIModerationPage() {
               </div>
             )}
 
-            {selectedEngine === 'openrouter' && (
-              <div className="space-y-3">
-                <div>
-                  <label className="text-xs font-medium text-gray-600 block mb-1">Model</label>
-                  <div
-                    onClick={() => setShowPicker(!showPicker)}
-                    className="flex items-center justify-between px-3 py-2 border border-gray-300 rounded-lg cursor-pointer hover:bg-gray-50"
-                  >
-                    {modelId ? (
-                      <span className="text-sm">{modelName || modelId}</span>
-                    ) : (
-                      <span className="text-sm text-gray-400">Select model...</span>
-                    )}
-                    <ChevronDown className={`w-4 h-4 text-gray-400 transition-transform ${showPicker ? 'rotate-180' : ''}`} />
-                  </div>
-                  
-                  {showPicker && (
-                    <div className="mt-2 border border-gray-200 rounded-lg overflow-hidden">
-                      <div className="p-2 bg-gray-50">
-                        <input
-                          type="text"
-                          placeholder="Search models..."
-                          value={searchTerm}
-                          onChange={(e) => {
-                            setSearchTerm(e.target.value);
-                            loadModels(e.target.value);
-                          }}
-                          className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg"
-                        />
-                      </div>
-                      <div className="max-h-64 overflow-y-auto">
-                        {modelsLoading ? (
-                          <div className="p-4 text-center text-sm text-gray-400">Loading...</div>
-                        ) : (
-                          models.map(m => (
-                            <div
-                              key={m.id}
-                              onClick={() => {
-                                setModelId(m.id);
-                                setModelName(m.name);
-                                setShowPicker(false);
-                              }}
-                              className="px-3 py-2 hover:bg-gray-50 cursor-pointer border-b border-gray-100"
-                            >
-                              <div className="text-sm font-medium">{m.name}</div>
-                              <div className="text-xs text-gray-400">{m.id}</div>
-                            </div>
-                          ))
-                        )}
-                      </div>
-                    </div>
-                  )}
-                </div>
-              </div>
-            )}
-
-            {selectedEngine === 'openai' && (
-              <p className="text-xs text-gray-500">OpenAI moderation is automatically configured. No additional settings needed.</p>
-            )}
-
-            {selectedEngine === 'google' && (
-              <p className="text-xs text-gray-500">Google Vision SafeSearch is configured via service account. No additional settings needed.</p>
-            )}
-
-            {selectedEngine === 'azure' && (
-              <div>
-                <label className="text-xs font-medium text-gray-600 block mb-1">Deployment Name</label>
-                <input
-                  type="text"
-                  value={modelId}
-                  onChange={(e) => {
-                    setModelId(e.target.value);
-                    setModelName(e.target.value);
-                  }}
-                  placeholder="e.g., gpt-4o-vision"
-                  className="w-full text-sm border border-gray-300 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-brand-500"
-                />
-                <p className="text-xs text-gray-500 mt-2">
-                  Azure OpenAI deployment name (configured in Azure portal). Uses your Azure credits.
-                </p>
-              </div>
+            {selectedEngine === 'sightengine' && (
+              <p className="text-xs text-gray-500">SightEngine is configured via API credentials in the server environment. Supports both text and image moderation.</p>
             )}
           </div>
 

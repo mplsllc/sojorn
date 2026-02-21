@@ -28,8 +28,7 @@ type AdminHandler struct {
 	moderationService       *services.ModerationService
 	appealService           *services.AppealService
 	emailService            *services.EmailService
-	openRouterService       *services.OpenRouterService
-	azureOpenAIService      *services.AzureOpenAIService
+	sightEngineService      *services.SightEngineService
 	officialAccountsService *services.OfficialAccountsService
 	linkPreviewService      *services.LinkPreviewService
 	localAIService          *services.LocalAIService
@@ -41,14 +40,13 @@ type AdminHandler struct {
 	vidDomain               string
 }
 
-func NewAdminHandler(pool *pgxpool.Pool, moderationService *services.ModerationService, appealService *services.AppealService, emailService *services.EmailService, openRouterService *services.OpenRouterService, azureOpenAIService *services.AzureOpenAIService, officialAccountsService *services.OfficialAccountsService, linkPreviewService *services.LinkPreviewService, localAIService *services.LocalAIService, jwtSecret string, s3Client *s3.Client, mediaBucket string, videoBucket string, imgDomain string, vidDomain string) *AdminHandler {
+func NewAdminHandler(pool *pgxpool.Pool, moderationService *services.ModerationService, appealService *services.AppealService, emailService *services.EmailService, sightEngineService *services.SightEngineService, officialAccountsService *services.OfficialAccountsService, linkPreviewService *services.LinkPreviewService, localAIService *services.LocalAIService, jwtSecret string, s3Client *s3.Client, mediaBucket string, videoBucket string, imgDomain string, vidDomain string) *AdminHandler {
 	return &AdminHandler{
 		pool:                    pool,
 		moderationService:       moderationService,
 		appealService:           appealService,
 		emailService:            emailService,
-		openRouterService:       openRouterService,
-		azureOpenAIService:      azureOpenAIService,
+		sightEngineService:      sightEngineService,
 		officialAccountsService: officialAccountsService,
 		linkPreviewService:      linkPreviewService,
 		localAIService:          localAIService,
@@ -2628,54 +2626,9 @@ func (h *AdminHandler) SubmitClaimRequest(c *gin.Context) {
 // AI Moderation Config
 // ──────────────────────────────────────────────
 
-func (h *AdminHandler) ListOpenRouterModels(c *gin.Context) {
-	if h.openRouterService == nil {
-		c.JSON(http.StatusServiceUnavailable, gin.H{"error": "OpenRouter not configured"})
-		return
-	}
-
-	models, err := h.openRouterService.ListModels(c.Request.Context())
-	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": fmt.Sprintf("Failed to fetch models: %v", err)})
-		return
-	}
-
-	// Optional filter by capability
-	capability := c.Query("capability") // "text", "image", "vision", "free"
-	if capability != "" {
-		var filtered []services.OpenRouterModel
-		for _, m := range models {
-			switch capability {
-			case "free":
-				if m.Pricing.Prompt == "0" || m.Pricing.Prompt == "0.0" {
-					filtered = append(filtered, m)
-				}
-			case "vision", "image":
-				if arch, ok := m.Architecture["modality"].(string); ok {
-					if strings.Contains(arch, "image") {
-						filtered = append(filtered, m)
-					}
-				}
-			default:
-				filtered = append(filtered, m)
-			}
-		}
-		models = filtered
-	}
-
-	// Search filter
-	search := strings.ToLower(c.Query("search"))
-	if search != "" {
-		var filtered []services.OpenRouterModel
-		for _, m := range models {
-			if strings.Contains(strings.ToLower(m.ID), search) || strings.Contains(strings.ToLower(m.Name), search) {
-				filtered = append(filtered, m)
-			}
-		}
-		models = filtered
-	}
-
-	c.JSON(http.StatusOK, gin.H{"models": models, "total": len(models)})
+// ListModels returns an empty model list (legacy endpoint, kept for route compatibility).
+func (h *AdminHandler) ListModels(c *gin.Context) {
+	c.JSON(http.StatusOK, gin.H{"models": []any{}, "total": 0})
 }
 
 // ListLocalModels returns models available on the local Ollama instance.
@@ -2728,12 +2681,7 @@ func (h *AdminHandler) ListLocalModels(c *gin.Context) {
 }
 
 func (h *AdminHandler) GetAIModerationConfigs(c *gin.Context) {
-	if h.openRouterService == nil {
-		c.JSON(http.StatusServiceUnavailable, gin.H{"error": "OpenRouter not configured"})
-		return
-	}
-
-	configs, err := h.openRouterService.GetModerationConfigs(c.Request.Context())
+	configs, err := h.moderationService.GetModerationConfigs(c.Request.Context())
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": fmt.Sprintf("Failed to fetch configs: %v", err)})
 		return
@@ -2743,11 +2691,6 @@ func (h *AdminHandler) GetAIModerationConfigs(c *gin.Context) {
 }
 
 func (h *AdminHandler) SetAIModerationConfig(c *gin.Context) {
-	if h.openRouterService == nil {
-		c.JSON(http.StatusServiceUnavailable, gin.H{"error": "OpenRouter not configured"})
-		return
-	}
-
 	var req struct {
 		ModerationType string   `json:"moderation_type" binding:"required"`
 		ModelID        string   `json:"model_id"`
@@ -2768,7 +2711,7 @@ func (h *AdminHandler) SetAIModerationConfig(c *gin.Context) {
 	}
 
 	adminID := c.GetString("user_id")
-	err := h.openRouterService.SetModerationConfig(c.Request.Context(), req.ModerationType, req.ModelID, req.ModelName, req.SystemPrompt, req.Enabled, req.Engines, adminID)
+	err := h.moderationService.SetModerationConfig(c.Request.Context(), req.ModerationType, req.ModelID, req.ModelName, req.SystemPrompt, req.Enabled, req.Engines, adminID)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": fmt.Sprintf("Failed to save config: %v", err)})
 		return
@@ -2788,7 +2731,7 @@ func (h *AdminHandler) TestAIModeration(c *gin.Context) {
 		ModerationType string `json:"moderation_type" binding:"required"`
 		Content        string `json:"content"`
 		ImageURL       string `json:"image_url"`
-		Engine         string `json:"engine"` // "local_ai", "openrouter", "openai" — empty = openrouter
+		Engine         string `json:"engine"` // "local_ai", "sightengine" — empty = sightengine
 	}
 	if err := c.ShouldBindJSON(&req); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
@@ -2797,7 +2740,7 @@ func (h *AdminHandler) TestAIModeration(c *gin.Context) {
 
 	engine := req.Engine
 	if engine == "" {
-		engine = "openrouter"
+		engine = "sightengine"
 	}
 
 	ctx := c.Request.Context()
@@ -2850,127 +2793,50 @@ func (h *AdminHandler) TestAIModeration(c *gin.Context) {
 			"raw_content": fmt.Sprintf("allowed=%v cached=%v categories=%v severity=%s reason=%s", localResult.Allowed, localResult.Cached, localResult.Categories, localResult.Severity, localResult.Reason),
 		}
 
-	case "openai":
-		if h.moderationService == nil {
-			c.JSON(http.StatusServiceUnavailable, gin.H{"error": "OpenAI moderation service not configured"})
+	case "sightengine":
+		if h.sightEngineService == nil {
+			c.JSON(http.StatusServiceUnavailable, gin.H{"error": "SightEngine not configured"})
 			return
 		}
-		content := req.Content
-		if content == "" {
-			content = req.ImageURL
-		}
-		mediaURLs := []string{}
-		if req.ImageURL != "" {
-			mediaURLs = append(mediaURLs, req.ImageURL)
-		}
-		scores, reason, err := h.moderationService.AnalyzeContent(ctx, content, mediaURLs)
-		if err != nil {
-			response["error"] = err.Error()
-			c.JSON(http.StatusOK, response)
-			return
-		}
-		action := "clean"
-		flagged := false
-		if reason != "" {
-			action = "flag"
-			flagged = true
-		}
-		response["result"] = gin.H{
-			"action":          action,
-			"flagged":         flagged,
-			"reason":          reason,
-			"hate":            scores.Hate,
-			"greed":           scores.Greed,
-			"delusion":        scores.Delusion,
-			"hate_detail":     fmt.Sprintf("Hate=%.3f", scores.Hate),
-			"greed_detail":    fmt.Sprintf("Greed=%.3f", scores.Greed),
-			"delusion_detail": fmt.Sprintf("Delusion=%.3f", scores.Delusion),
-			"explanation":     fmt.Sprintf("OpenAI Three Poisons analysis. Hate=%.3f, Greed=%.3f, Delusion=%.3f. %s", scores.Hate, scores.Greed, scores.Delusion, reason),
-			"raw_content":     fmt.Sprintf("Hate=%.4f Greed=%.4f Delusion=%.4f", scores.Hate, scores.Greed, scores.Delusion),
-		}
-
-	case "google":
-		if h.moderationService == nil || !h.moderationService.HasGoogleVision() {
-			c.JSON(http.StatusServiceUnavailable, gin.H{"error": "Google Vision not configured"})
-			return
-		}
-		imageURL := req.ImageURL
-		if imageURL == "" {
-			// If they passed text content as a URL
-			imageURL = req.Content
-		}
-		if imageURL == "" {
-			response["error"] = "Image URL required for Google Vision test"
-			c.JSON(http.StatusOK, response)
-			return
-		}
-		gResult, err := h.moderationService.AnalyzeImageWithGoogleVision(ctx, imageURL)
-		if err != nil {
-			response["error"] = err.Error()
-			c.JSON(http.StatusOK, response)
-			return
-		}
-		response["result"] = gResult
-
-	case "openrouter":
-		if h.openRouterService == nil {
-			c.JSON(http.StatusServiceUnavailable, gin.H{"error": "OpenRouter not configured"})
-			return
-		}
-		var result *services.ModerationResult
-		var err error
 		isImage := strings.Contains(req.ModerationType, "image") || req.ModerationType == "video"
 		if isImage && req.ImageURL != "" {
-			if req.ModerationType == "video" {
-				urls := strings.Split(req.ImageURL, ",")
-				result, err = h.openRouterService.ModerateVideo(ctx, urls)
-			} else {
-				result, err = h.openRouterService.ModerateImage(ctx, req.ImageURL)
+			result, err := h.sightEngineService.ModerateImage(ctx, req.ImageURL)
+			if err != nil {
+				response["error"] = err.Error()
+				c.JSON(http.StatusOK, response)
+				return
+			}
+			response["result"] = gin.H{
+				"action":      result.Action,
+				"flagged":     result.Action == "flag",
+				"reason":      result.Reason,
+				"nsfw_reason": result.NSFWReason,
+				"hate":        result.Scores.Hate,
+				"greed":       result.Scores.Greed,
+				"delusion":    result.Scores.Delusion,
+				"explanation": fmt.Sprintf("SightEngine image analysis. Hate=%.3f, Greed=%.3f, Delusion=%.3f. %s", result.Scores.Hate, result.Scores.Greed, result.Scores.Delusion, result.Reason),
 			}
 		} else {
-			// Use type-specific config if available, fall back to generic text
-			result, err = h.openRouterService.ModerateWithType(ctx, req.ModerationType, req.Content, nil)
+			content := req.Content
+			if content == "" {
+				content = req.ImageURL
+			}
+			result, err := h.sightEngineService.ModerateText(ctx, content)
 			if err != nil {
-				// Fall back to generic text moderation
-				result, err = h.openRouterService.ModerateText(ctx, req.Content)
+				response["error"] = err.Error()
+				c.JSON(http.StatusOK, response)
+				return
+			}
+			response["result"] = gin.H{
+				"action":      result.Action,
+				"flagged":     result.Action == "flag",
+				"reason":      result.Reason,
+				"hate":        result.Scores.Hate,
+				"greed":       result.Scores.Greed,
+				"delusion":    result.Scores.Delusion,
+				"explanation": fmt.Sprintf("SightEngine text analysis. Hate=%.3f, Greed=%.3f, Delusion=%.3f. %s", result.Scores.Hate, result.Scores.Greed, result.Scores.Delusion, result.Reason),
 			}
 		}
-		if err != nil {
-			response["error"] = err.Error()
-			c.JSON(http.StatusOK, response)
-			return
-		}
-		response["result"] = result
-
-	case "azure":
-		if h.azureOpenAIService == nil {
-			c.JSON(http.StatusServiceUnavailable, gin.H{"error": "Azure OpenAI not configured"})
-			return
-		}
-		var result *services.ModerationResult
-		var err error
-		isImage := strings.Contains(req.ModerationType, "image") || req.ModerationType == "video"
-		if isImage && req.ImageURL != "" {
-			if req.ModerationType == "video" {
-				urls := strings.Split(req.ImageURL, ",")
-				result, err = h.azureOpenAIService.ModerateVideo(ctx, urls)
-			} else {
-				result, err = h.azureOpenAIService.ModerateImage(ctx, req.ImageURL)
-			}
-		} else {
-			// Use type-specific config if available, fall back to generic text
-			result, err = h.azureOpenAIService.ModerateWithType(ctx, req.ModerationType, req.Content, nil)
-			if err != nil {
-				// Fall back to generic text moderation
-				result, err = h.azureOpenAIService.ModerateText(ctx, req.Content)
-			}
-		}
-		if err != nil {
-			response["error"] = err.Error()
-			c.JSON(http.StatusOK, response)
-			return
-		}
-		response["result"] = result
 
 	default:
 		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid engine: " + engine})
@@ -3798,7 +3664,7 @@ func (h *AdminHandler) DeleteSafeDomain(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{"deleted": true})
 }
 
-// GetAIEngines returns the status of all moderation engines (local AI, OpenRouter, OpenAI).
+// GetAIEngines returns the status of all moderation engines (local AI, SightEngine).
 func (h *AdminHandler) GetAIEngines(c *gin.Context) {
 	type EngineStatus struct {
 		ID          string `json:"id"`
@@ -3832,79 +3698,25 @@ func (h *AdminHandler) GetAIEngines(c *gin.Context) {
 	}
 	engines = append(engines, localEngine)
 
-	// 2. OpenRouter
-	openRouterEngine := EngineStatus{
-		ID:          "openrouter",
-		Name:        "OpenRouter",
-		Description: "Cloud AI moderation via configurable models. Supports text, image, and video moderation with customizable system prompts.",
-		Configured:  h.openRouterService != nil,
+	// 2. SightEngine (text + image moderation API)
+	sightEngine := EngineStatus{
+		ID:          "sightengine",
+		Name:        "SightEngine",
+		Description: "Dedicated content moderation API. Supports text (profanity, spam, violence) and image (nudity, gore, weapons, drugs) analysis.",
+		Configured:  h.sightEngineService != nil,
 	}
-	if h.openRouterService != nil {
-		configs, err := h.openRouterService.GetModerationConfigs(c.Request.Context())
+	if h.sightEngineService != nil {
+		status, err := h.sightEngineService.Healthz(c.Request.Context())
 		if err != nil {
-			openRouterEngine.Status = "error"
+			sightEngine.Status = "down"
+			sightEngine.Details = map[string]string{"error": err.Error()}
 		} else {
-			enabledCount := 0
-			for _, cfg := range configs {
-				if cfg.Enabled {
-					enabledCount++
-				}
-			}
-			openRouterEngine.Status = "ready"
-			openRouterEngine.Details = map[string]any{
-				"total_configs":   len(configs),
-				"enabled_configs": enabledCount,
-			}
+			sightEngine.Status = status
 		}
 	} else {
-		openRouterEngine.Status = "not_configured"
+		sightEngine.Status = "not_configured"
 	}
-	engines = append(engines, openRouterEngine)
-
-	// 3. OpenAI Moderation (Three Poisons)
-	openAIEngine := EngineStatus{
-		ID:          "openai",
-		Name:        "OpenAI Moderation (Three Poisons)",
-		Description: "OpenAI content moderation API with Three Poisons scoring (Hate, Greed, Delusion). Used for posts and comments.",
-		Configured:  h.moderationService != nil,
-	}
-	if h.moderationService != nil {
-		openAIEngine.Status = "ready"
-	} else {
-		openAIEngine.Status = "not_configured"
-	}
-	engines = append(engines, openAIEngine)
-
-	// 4. Google Vision (SafeSearch)
-	googleEngine := EngineStatus{
-		ID:          "google",
-		Name:        "Google Vision (SafeSearch)",
-		Description: "Google Cloud Vision SafeSearch detection for images. Returns Adult, Violence, Racy, Spoof, Medical likelihoods.",
-		Configured:  h.moderationService != nil && h.moderationService.HasGoogleVision(),
-	}
-	if h.moderationService != nil && h.moderationService.HasGoogleVision() {
-		googleEngine.Status = "ready"
-	} else {
-		googleEngine.Status = "not_configured"
-	}
-	engines = append(engines, googleEngine)
-
-	// 5. Azure OpenAI
-	azureEngine := EngineStatus{
-		ID:          "azure",
-		Name:        "Azure OpenAI",
-		Description: "Microsoft Azure OpenAI service with vision models. Uses your Azure credits. Supports text and image moderation with customizable prompts.",
-		Configured:  h.azureOpenAIService != nil,
-	}
-	if h.azureOpenAIService != nil {
-		azureEngine.Status = "ready"
-		azureEngine.Details = map[string]any{
-			"uses_azure_credits": true,
-		}
-	} else {
-		azureEngine.Status = "not_configured"
-	}
-	engines = append(engines, azureEngine)
+	engines = append(engines, sightEngine)
 
 	c.JSON(http.StatusOK, gin.H{"engines": engines})
 }

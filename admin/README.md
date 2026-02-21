@@ -18,7 +18,7 @@ Secure administration frontend for the Sojorn social network platform.
 - **Post Management** — Browse, search, flag, remove, restore, view details
 - **Groups & Capsules** — List groups, member management, deactivate, key rotation status
 - **Quip Repair** — List missing thumbnails, server-side FFmpeg repair
-- **AI Moderation Queue** — Review AI-flagged content (OpenAI + Google Vision), approve/dismiss/remove/ban
+- **AI Moderation Queue** — Review AI-flagged content (Local AI + SightEngine), approve/dismiss/remove/ban
 - **AI Moderation Config** — Tune thresholds and scoring weights
 - **AI Audit Log** — Full history of AI moderation decisions with feedback
 - **Appeal System** — Full appeal workflow: review violations, approve/reject appeals, restore content
@@ -73,7 +73,7 @@ Served behind Nginx with SSL at `admin.sojorn.net`, proxied to port 3001.
 ## Moderation Flow
 
 ```
-Content Created → AI Analysis (OpenAI text / Google Vision images)
+Content Created → AI Analysis (Local AI text / SightEngine text+images)
     ↓
 Score > threshold → Auto-flag → Moderation Queue
     ↓

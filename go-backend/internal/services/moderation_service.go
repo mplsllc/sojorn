@@ -5,60 +5,26 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"io"
-	"net/http"
-	"os"
 	"strings"
 	"time"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgxpool"
-	"golang.org/x/oauth2/google"
 )
 
+// ModerationService provides DB operations for content moderation:
+// flagging, audit logging, feedback, and AI engine configuration.
 type ModerationService struct {
-	pool            *pgxpool.Pool
-	httpClient      *http.Client
-	openAIKey       string
-	googleKey       string
-	googleCredsFile string
-	googleCreds     *google.Credentials
+	pool       *pgxpool.Pool
 }
 
-func NewModerationService(pool *pgxpool.Pool, openAIKey, googleKey, googleCredsFile string) *ModerationService {
-	s := &ModerationService{
-		pool: pool,
-		httpClient: &http.Client{
-			Timeout: 30 * time.Second,
-		},
-		openAIKey:       openAIKey,
-		googleKey:       googleKey,
-		googleCredsFile: googleCredsFile,
-	}
-
-	// Load Google service account credentials if provided
-	if googleCredsFile != "" {
-		data, err := os.ReadFile(googleCredsFile)
-		if err != nil {
-			fmt.Printf("Warning: failed to read Google credentials file %s: %v\n", googleCredsFile, err)
-		} else {
-			creds, err := google.CredentialsFromJSON(context.Background(), data, "https://www.googleapis.com/auth/cloud-vision")
-			if err != nil {
-				fmt.Printf("Warning: failed to parse Google credentials: %v\n", err)
-			} else {
-				s.googleCreds = creds
-				fmt.Printf("Google Vision: loaded service account credentials (project: %s)\n", creds.ProjectID)
-			}
-		}
-	}
-
-	return s
+func NewModerationService(pool *pgxpool.Pool) *ModerationService {
+	return &ModerationService{pool: pool}
 }
 
-// HasGoogleVision returns true if Google Vision is configured via API key or service account
-func (s *ModerationService) HasGoogleVision() bool {
-	return s.googleKey != "" || s.googleCreds != nil
-}
+// ============================================================================
+// Three Poisons Score
+// ============================================================================
 
 type ThreePoisonsScore struct {
 	Hate     float64 `json:"hate"`
@@ -66,423 +32,86 @@ type ThreePoisonsScore struct {
 	Delusion float64 `json:"delusion"`
 }
 
-// OpenAIModerationResponse represents the response from OpenAI Moderation API
-type OpenAIModerationResponse struct {
-	Results []struct {
-		Categories struct {
-			Hate                  bool `json:"hate"`
-			HateThreatening       bool `json:"hate/threatening"`
-			Harassment            bool `json:"harassment"`
-			HarassmentThreatening bool `json:"harassment/threatening"`
-			SelfHarm              bool `json:"self-harm"`
-			SelfHarmIntent        bool `json:"self-harm/intent"`
-			SelfHarmInstructions  bool `json:"self-harm/instructions"`
-			Sexual                bool `json:"sexual"`
-			SexualMinors          bool `json:"sexual/minors"`
-			Violence              bool `json:"violence"`
-			ViolenceGraphic       bool `json:"violence/graphic"`
-		} `json:"categories"`
-		CategoryScores struct {
-			Hate                  float64 `json:"hate"`
-			HateThreatening       float64 `json:"hate/threatening"`
-			Harassment            float64 `json:"harassment"`
-			HarassmentThreatening float64 `json:"harassment/threatening"`
-			SelfHarm              float64 `json:"self-harm"`
-			SelfHarmIntent        float64 `json:"self-harm/intent"`
-			SelfHarmInstructions  float64 `json:"self-harm/instructions"`
-			Sexual                float64 `json:"sexual"`
-			SexualMinors          float64 `json:"sexual/minors"`
-			Violence              float64 `json:"violence"`
-			ViolenceGraphic       float64 `json:"violence/graphic"`
-		} `json:"category_scores"`
-		Flagged bool `json:"flagged"`
-	} `json:"results"`
+// ============================================================================
+// AI Moderation Config (from ai_moderation_config table)
+// ============================================================================
+
+// ModerationConfigEntry represents a row in ai_moderation_config.
+type ModerationConfigEntry struct {
+	ID             string    `json:"id"`
+	ModerationType string    `json:"moderation_type"`
+	ModelID        string    `json:"model_id"`
+	ModelName      string    `json:"model_name"`
+	SystemPrompt   string    `json:"system_prompt"`
+	Enabled        bool      `json:"enabled"`
+	Engines        []string  `json:"engines"`
+	UpdatedAt      time.Time `json:"updated_at"`
+	UpdatedBy      *string   `json:"updated_by,omitempty"`
 }
 
-// GoogleVisionSafeSearch represents SafeSearch detection results
-type GoogleVisionSafeSearch struct {
-	Adult    string `json:"adult"`
-	Spoof    string `json:"spoof"`
-	Medical  string `json:"medical"`
-	Violence string `json:"violence"`
-	Racy     string `json:"racy"`
-}
-
-// GoogleVisionResponse represents the response from Google Vision API
-type GoogleVisionResponse struct {
-	Responses []struct {
-		SafeSearchAnnotation GoogleVisionSafeSearch `json:"safeSearchAnnotation"`
-	} `json:"responses"`
-}
-
-func (s *ModerationService) AnalyzeContent(ctx context.Context, body string, mediaURLs []string) (*ThreePoisonsScore, string, error) {
-	score := &ThreePoisonsScore{
-		Hate:     0.0,
-		Greed:    0.0,
-		Delusion: 0.0,
-	}
-
-	// Analyze text with OpenAI Moderation API
-	if s.openAIKey != "" && body != "" {
-		openAIScore, err := s.analyzeWithOpenAI(ctx, body)
-		if err != nil {
-			// Log error but continue with fallback
-			fmt.Printf("OpenAI moderation error: %v\n", err)
-		} else {
-			score = openAIScore
-		}
-	}
-
-	// Analyze media with Google Vision API if provided
-	if s.HasGoogleVision() && len(mediaURLs) > 0 {
-		visionScore, err := s.AnalyzeMediaWithGoogleVision(ctx, mediaURLs)
-		if err != nil {
-			fmt.Printf("Google Vision analysis error: %v\n", err)
-		} else {
-			// Merge vision scores with existing scores
-			if visionScore.Hate > score.Hate {
-				score.Hate = visionScore.Hate
-			}
-			if visionScore.Delusion > score.Delusion {
-				score.Delusion = visionScore.Delusion
-			}
-		}
-	}
-
-	// Fallback to keyword-based analysis for greed/spam detection
-	if score.Greed == 0.0 {
-		greedKeywords := []string{
-			"buy", "crypto", "rich", "scam", "investment", "profit",
-			"money", "cash", "bitcoin", "ethereum", "trading", "forex",
-			"get rich", "quick money", "guaranteed returns", "multiplier",
-		}
-		if containsAny(body, greedKeywords) {
-			score.Greed = 0.7
-		}
-	}
-
-	// Determine primary flag reason
-	flagReason := ""
-	if score.Hate > 0.5 {
-		flagReason = "hate"
-	} else if score.Greed > 0.5 {
-		flagReason = "greed"
-	} else if score.Delusion > 0.5 {
-		flagReason = "delusion"
-	}
-
-	return score, flagReason, nil
-}
-
-// analyzeWithOpenAI sends content to OpenAI Moderation API
-func (s *ModerationService) analyzeWithOpenAI(ctx context.Context, content string) (*ThreePoisonsScore, error) {
-	if s.openAIKey == "" {
-		return nil, fmt.Errorf("OpenAI API key not configured")
-	}
-
-	requestBody := map[string]interface{}{
-		"input": content,
-	}
-
-	jsonBody, err := json.Marshal(requestBody)
-	if err != nil {
-		return nil, fmt.Errorf("failed to marshal request: %w", err)
-	}
-
-	req, err := http.NewRequestWithContext(ctx, "POST", "https://api.openai.com/v1/moderations", bytes.NewBuffer(jsonBody))
-	if err != nil {
-		return nil, fmt.Errorf("failed to create request: %w", err)
-	}
-
-	req.Header.Set("Content-Type", "application/json")
-	req.Header.Set("Authorization", "Bearer "+s.openAIKey)
-
-	resp, err := s.httpClient.Do(req)
-	if err != nil {
-		return nil, fmt.Errorf("failed to send request: %w", err)
-	}
-	defer resp.Body.Close()
-
-	if resp.StatusCode != http.StatusOK {
-		body, _ := io.ReadAll(resp.Body)
-		return nil, fmt.Errorf("OpenAI API error: %d - %s", resp.StatusCode, string(body))
-	}
-
-	var moderationResp OpenAIModerationResponse
-	if err := json.NewDecoder(resp.Body).Decode(&moderationResp); err != nil {
-		return nil, fmt.Errorf("failed to decode response: %w", err)
-	}
-
-	if len(moderationResp.Results) == 0 {
-		return &ThreePoisonsScore{Hate: 0, Greed: 0, Delusion: 0}, nil
-	}
-
-	result := moderationResp.Results[0]
-	scores := result.CategoryScores
-	score := &ThreePoisonsScore{
-		// Map OpenAI category scores to Three Poisons
-		Hate: max(
-			scores.Hate,
-			scores.HateThreatening,
-			scores.Harassment,
-			scores.HarassmentThreatening,
-			scores.Violence,
-			scores.ViolenceGraphic,
-			scores.Sexual,
-			scores.SexualMinors,
-		),
-		Greed: 0, // OpenAI doesn't detect greed/spam — handled by keyword fallback
-		Delusion: max(
-			scores.SelfHarm,
-			scores.SelfHarmIntent,
-			scores.SelfHarmInstructions,
-		),
-	}
-
-	fmt.Printf("OpenAI moderation: flagged=%v hate=%.3f greed=%.3f delusion=%.3f\n", result.Flagged, score.Hate, score.Greed, score.Delusion)
-	return score, nil
-}
-
-// AnalyzeMediaWithGoogleVision analyzes images for inappropriate content.
-// Supports both API key auth and OAuth2 service account auth.
-// Returns ThreePoisonsScore for integration with moderation flow.
-func (s *ModerationService) AnalyzeMediaWithGoogleVision(ctx context.Context, mediaURLs []string) (*ThreePoisonsScore, error) {
-	if s.googleKey == "" && s.googleCreds == nil {
-		return nil, fmt.Errorf("Google Vision not configured (need API key or service account)")
-	}
-
-	score := &ThreePoisonsScore{
-		Hate:     0.0,
-		Greed:    0.0,
-		Delusion: 0.0,
-	}
-
-	for _, mediaURL := range mediaURLs {
-		// Only process image URLs
-		if !isImageURL(mediaURL) {
-			continue
-		}
-
-		requestBody := map[string]interface{}{
-			"requests": []map[string]interface{}{
-				{
-					"image": map[string]interface{}{
-						"source": map[string]interface{}{
-							"imageUri": mediaURL,
-						},
-					},
-					"features": []map[string]interface{}{
-						{
-							"type":       "SAFE_SEARCH_DETECTION",
-							"maxResults": 1,
-						},
-					},
-				},
-			},
-		}
-
-		jsonBody, err := json.Marshal(requestBody)
-		if err != nil {
-			continue
-		}
-
-		req, err := http.NewRequestWithContext(ctx, "POST", "https://vision.googleapis.com/v1/images:annotate", bytes.NewBuffer(jsonBody))
-		if err != nil {
-			continue
-		}
-		req.Header.Set("Content-Type", "application/json")
-
-		// Auth: prefer service account OAuth2, fall back to API key
-		if s.googleCreds != nil {
-			token, err := s.googleCreds.TokenSource.Token()
-			if err != nil {
-				fmt.Printf("Google Vision: failed to get OAuth2 token: %v\n", err)
-				continue
-			}
-			req.Header.Set("Authorization", "Bearer "+token.AccessToken)
-		} else {
-			req.URL.RawQuery = "key=" + s.googleKey
-		}
-
-		resp, err := s.httpClient.Do(req)
-		if err != nil {
-			fmt.Printf("Google Vision: request failed: %v\n", err)
-			continue
-		}
-		defer resp.Body.Close()
-
-		if resp.StatusCode != http.StatusOK {
-			body, _ := io.ReadAll(resp.Body)
-			fmt.Printf("Google Vision: API error %d: %s\n", resp.StatusCode, string(body))
-			continue
-		}
-
-		var visionResp GoogleVisionResponse
-		if err := json.NewDecoder(resp.Body).Decode(&visionResp); err != nil {
-			continue
-		}
-
-		if len(visionResp.Responses) > 0 {
-			imageScore := s.convertVisionScore(visionResp.Responses[0].SafeSearchAnnotation)
-			// Merge with overall score (take maximum)
-			if imageScore.Hate > score.Hate {
-				score.Hate = imageScore.Hate
-			}
-			if imageScore.Delusion > score.Delusion {
-				score.Delusion = imageScore.Delusion
-			}
-		}
-	}
-
-	return score, nil
-}
-
-// AnalyzeImageWithGoogleVision is an exported method for testing Google Vision directly from the admin panel.
-// Returns the raw SafeSearch annotations plus the mapped Three Poisons scores.
-func (s *ModerationService) AnalyzeImageWithGoogleVision(ctx context.Context, imageURL string) (map[string]interface{}, error) {
-	if s.googleKey == "" && s.googleCreds == nil {
-		return nil, fmt.Errorf("Google Vision not configured (need API key or service account)")
-	}
-
-	requestBody := map[string]interface{}{
-		"requests": []map[string]interface{}{
-			{
-				"image": map[string]interface{}{
-					"source": map[string]interface{}{
-						"imageUri": imageURL,
-					},
-				},
-				"features": []map[string]interface{}{
-					{
-						"type":       "SAFE_SEARCH_DETECTION",
-						"maxResults": 1,
-					},
-				},
-			},
-		},
-	}
-
-	jsonBody, err := json.Marshal(requestBody)
-	if err != nil {
-		return nil, fmt.Errorf("failed to marshal request: %w", err)
-	}
-
-	req, err := http.NewRequestWithContext(ctx, "POST", "https://vision.googleapis.com/v1/images:annotate", bytes.NewBuffer(jsonBody))
-	if err != nil {
-		return nil, fmt.Errorf("failed to create request: %w", err)
-	}
-	req.Header.Set("Content-Type", "application/json")
-
-	if s.googleCreds != nil {
-		token, err := s.googleCreds.TokenSource.Token()
-		if err != nil {
-			return nil, fmt.Errorf("failed to get OAuth2 token: %w", err)
-		}
-		req.Header.Set("Authorization", "Bearer "+token.AccessToken)
-	} else {
-		req.URL.RawQuery = "key=" + s.googleKey
-	}
-
-	resp, err := s.httpClient.Do(req)
-	if err != nil {
-		return nil, fmt.Errorf("Google Vision request failed: %w", err)
-	}
-	defer resp.Body.Close()
-
-	if resp.StatusCode != http.StatusOK {
-		body, _ := io.ReadAll(resp.Body)
-		return nil, fmt.Errorf("Google Vision API error %d: %s", resp.StatusCode, string(body))
-	}
-
-	var visionResp GoogleVisionResponse
-	if err := json.NewDecoder(resp.Body).Decode(&visionResp); err != nil {
-		return nil, fmt.Errorf("failed to decode response: %w", err)
-	}
-
-	if len(visionResp.Responses) == 0 {
-		return nil, fmt.Errorf("no response from Google Vision")
-	}
-
-	safeSearch := visionResp.Responses[0].SafeSearchAnnotation
-	scores := s.convertVisionScore(safeSearch)
-
-	action := "clean"
-	flagged := false
-	if scores.Hate > 0.5 || scores.Delusion > 0.5 {
-		action = "flag"
-		flagged = true
-	} else if scores.Hate > 0.25 || scores.Delusion > 0.25 {
-		action = "nsfw"
-	}
-
-	return map[string]interface{}{
-		"action":          action,
-		"flagged":         flagged,
-		"hate":            scores.Hate,
-		"greed":           scores.Greed,
-		"delusion":        scores.Delusion,
-		"hate_detail":     fmt.Sprintf("Adult=%s Violence=%s Racy=%s", safeSearch.Adult, safeSearch.Violence, safeSearch.Racy),
-		"greed_detail":    fmt.Sprintf("Spoof=%s", safeSearch.Spoof),
-		"delusion_detail": fmt.Sprintf("Medical=%s", safeSearch.Medical),
-		"explanation":     fmt.Sprintf("Google Vision SafeSearch: Adult=%s, Violence=%s, Racy=%s, Spoof=%s, Medical=%s", safeSearch.Adult, safeSearch.Violence, safeSearch.Racy, safeSearch.Spoof, safeSearch.Medical),
-		"raw_content":     fmt.Sprintf("Adult=%s Violence=%s Racy=%s Spoof=%s Medical=%s → Hate=%.2f Greed=%.2f Delusion=%.2f", safeSearch.Adult, safeSearch.Violence, safeSearch.Racy, safeSearch.Spoof, safeSearch.Medical, scores.Hate, scores.Greed, scores.Delusion),
-	}, nil
-}
-
-// convertVisionScore converts Google Vision SafeSearch results to ThreePoisonsScore
-func (s *ModerationService) convertVisionScore(safeSearch GoogleVisionSafeSearch) *ThreePoisonsScore {
-	score := &ThreePoisonsScore{
-		Hate:     0.0,
-		Greed:    0.0,
-		Delusion: 0.0,
-	}
-
-	// Convert string likelihoods to numeric scores
-	likelihoodToScore := map[string]float64{
-		"UNKNOWN":       0.0,
-		"VERY_UNLIKELY": 0.1,
-		"UNLIKELY":      0.3,
-		"POSSIBLE":      0.5,
-		"LIKELY":        0.7,
-		"VERY_LIKELY":   0.9,
-	}
-
-	// Map Vision categories to Three Poisons
-	if hateScore, ok := likelihoodToScore[safeSearch.Violence]; ok {
-		score.Hate = hateScore
-	}
-	if adultScore, ok := likelihoodToScore[safeSearch.Adult]; ok && adultScore > score.Hate {
-		score.Hate = adultScore
-	}
-	if racyScore, ok := likelihoodToScore[safeSearch.Racy]; ok && racyScore > score.Delusion {
-		score.Delusion = racyScore
-	}
-
-	return score
-}
-
-// Helper function to get maximum of multiple floats
-func max(values ...float64) float64 {
-	maxVal := 0.0
-	for _, v := range values {
-		if v > maxVal {
-			maxVal = v
-		}
-	}
-	return maxVal
-}
-
-// Helper function to check if URL is an image
-func isImageURL(url string) bool {
-	imageExtensions := []string{".jpg", ".jpeg", ".png", ".gif", ".bmp", ".webp"}
-	lowerURL := strings.ToLower(url)
-	for _, ext := range imageExtensions {
-		if strings.HasSuffix(lowerURL, ext) {
+// HasEngine returns true if the given engine is in the config's engines list.
+func (c *ModerationConfigEntry) HasEngine(engine string) bool {
+	for _, e := range c.Engines {
+		if e == engine {
 			return true
 		}
 	}
 	return false
 }
+
+// GetModerationConfigs returns all moderation type configurations.
+func (s *ModerationService) GetModerationConfigs(ctx context.Context) ([]ModerationConfigEntry, error) {
+	rows, err := s.pool.Query(ctx, `
+		SELECT id, moderation_type, model_id, model_name, system_prompt, enabled, engines, updated_at, updated_by
+		FROM ai_moderation_config
+		ORDER BY moderation_type
+	`)
+	if err != nil {
+		return nil, fmt.Errorf("failed to query configs: %w", err)
+	}
+	defer rows.Close()
+
+	var configs []ModerationConfigEntry
+	for rows.Next() {
+		var c ModerationConfigEntry
+		if err := rows.Scan(&c.ID, &c.ModerationType, &c.ModelID, &c.ModelName, &c.SystemPrompt, &c.Enabled, &c.Engines, &c.UpdatedAt, &c.UpdatedBy); err != nil {
+			return nil, err
+		}
+		configs = append(configs, c)
+	}
+	return configs, nil
+}
+
+// GetModerationConfig returns config for a specific moderation type.
+func (s *ModerationService) GetModerationConfig(ctx context.Context, moderationType string) (*ModerationConfigEntry, error) {
+	var c ModerationConfigEntry
+	err := s.pool.QueryRow(ctx, `
+		SELECT id, moderation_type, model_id, model_name, system_prompt, enabled, engines, updated_at, updated_by
+		FROM ai_moderation_config WHERE moderation_type = $1
+	`, moderationType).Scan(&c.ID, &c.ModerationType, &c.ModelID, &c.ModelName, &c.SystemPrompt, &c.Enabled, &c.Engines, &c.UpdatedAt, &c.UpdatedBy)
+	if err != nil {
+		return nil, err
+	}
+	return &c, nil
+}
+
+// SetModerationConfig upserts a moderation config.
+func (s *ModerationService) SetModerationConfig(ctx context.Context, moderationType, modelID, modelName, systemPrompt string, enabled bool, engines []string, updatedBy string) error {
+	if len(engines) == 0 {
+		engines = []string{"local_ai", "sightengine"}
+	}
+	_, err := s.pool.Exec(ctx, `
+		INSERT INTO ai_moderation_config (moderation_type, model_id, model_name, system_prompt, enabled, engines, updated_by, updated_at)
+		VALUES ($1, $2, $3, $4, $5, $7, $6, NOW())
+		ON CONFLICT (moderation_type)
+		DO UPDATE SET model_id = $2, model_name = $3, system_prompt = $4, enabled = $5, engines = $7, updated_by = $6, updated_at = NOW()
+	`, moderationType, modelID, modelName, systemPrompt, enabled, updatedBy, engines)
+	return err
+}
+
+// ============================================================================
+// Flagging
+// ============================================================================
 
 func (s *ModerationService) FlagPost(ctx context.Context, postID uuid.UUID, scores *ThreePoisonsScore, reason string) error {
 	scoresJSON, err := json.Marshal(scores)
@@ -502,7 +131,6 @@ func (s *ModerationService) FlagPost(ctx context.Context, postID uuid.UUID, scor
 
 	fmt.Printf("Moderation flag created: id=%s post=%s reason=%s\n", flagID, postID, reason)
 
-	// Look up the post author and create a violation record
 	var authorID uuid.UUID
 	if err := s.pool.QueryRow(ctx, `SELECT author_id FROM posts WHERE id = $1`, postID).Scan(&authorID); err == nil && authorID != uuid.Nil {
 		var violationID uuid.UUID
@@ -532,7 +160,6 @@ func (s *ModerationService) FlagComment(ctx context.Context, commentID uuid.UUID
 
 	fmt.Printf("Moderation flag created: id=%s comment=%s reason=%s\n", flagID, commentID, reason)
 
-	// Look up the comment author and create a violation record
 	var authorID uuid.UUID
 	if err := s.pool.QueryRow(ctx, `SELECT author_id FROM comments WHERE id = $1`, commentID).Scan(&authorID); err == nil && authorID != uuid.Nil {
 		var violationID uuid.UUID
@@ -547,8 +174,8 @@ func (s *ModerationService) FlagComment(ctx context.Context, commentID uuid.UUID
 // GetPendingFlags retrieves all pending moderation flags
 func (s *ModerationService) GetPendingFlags(ctx context.Context, limit, offset int) ([]map[string]interface{}, error) {
 	query := `
-		SELECT 
-			mf.id, mf.post_id, mf.comment_id, mf.flag_reason, mf.scores, 
+		SELECT
+			mf.id, mf.post_id, mf.comment_id, mf.flag_reason, mf.scores,
 			mf.status, mf.created_at,
 			p.content as post_content,
 			c.content as comment_content,
@@ -607,44 +234,35 @@ func (s *ModerationService) GetPendingFlags(ctx context.Context, limit, offset i
 
 // UpdateFlagStatus updates the status of a moderation flag
 func (s *ModerationService) UpdateFlagStatus(ctx context.Context, flagID uuid.UUID, status string, reviewedBy uuid.UUID) error {
-	query := `
-		UPDATE moderation_flags 
+	_, err := s.pool.Exec(ctx, `
+		UPDATE moderation_flags
 		SET status = $1, reviewed_by = $2, reviewed_at = NOW()
 		WHERE id = $3
-	`
-
-	_, err := s.pool.Exec(ctx, query, status, reviewedBy, flagID)
+	`, status, reviewedBy, flagID)
 	if err != nil {
 		return fmt.Errorf("failed to update flag status: %w", err)
 	}
-
 	return nil
 }
 
 // UpdateUserStatus updates a user's moderation status
 func (s *ModerationService) UpdateUserStatus(ctx context.Context, userID uuid.UUID, status string, changedBy uuid.UUID, reason string) error {
-	query := `
-		UPDATE users 
+	_, err := s.pool.Exec(ctx, `
+		UPDATE users
 		SET status = $1
 		WHERE id = $2
-	`
-
-	_, err := s.pool.Exec(ctx, query, status, userID)
+	`, status, userID)
 	if err != nil {
 		return fmt.Errorf("failed to update user status: %w", err)
 	}
 
-	// Log the status change
-	historyQuery := `
+	_, err = s.pool.Exec(ctx, `
 		INSERT INTO user_status_history (user_id, old_status, new_status, reason, changed_by)
 		SELECT $1, status, $2, $3, $4
-		FROM users 
+		FROM users
 		WHERE id = $1
-	`
-
-	_, err = s.pool.Exec(ctx, historyQuery, userID, status, reason, changedBy)
+	`, userID, status, reason, changedBy)
 	if err != nil {
-		// Log error but don't fail the main operation
 		fmt.Printf("Failed to log user status change: %v\n", err)
 	}
 
@@ -698,13 +316,11 @@ func (s *ModerationService) GetAIModerationLog(ctx context.Context, limit, offse
 		where += " AND aml.feedback_correct IS NULL"
 	}
 
-	// Count total
 	var total int
 	countArgs := make([]interface{}, len(args))
 	copy(countArgs, args)
 	s.pool.QueryRow(ctx, fmt.Sprintf(`SELECT COUNT(*) FROM ai_moderation_log aml LEFT JOIN profiles pr ON aml.author_id = pr.id %s`, where), countArgs...).Scan(&total)
 
-	// Fetch rows
 	query := fmt.Sprintf(`
 		SELECT aml.id, aml.content_type, aml.content_id, aml.author_id, aml.content_snippet,
 		       aml.ai_provider, aml.decision, aml.flag_reason,
@@ -785,7 +401,7 @@ func (s *ModerationService) GetAIModerationLog(ctx context.Context, limit, offse
 // SubmitAIFeedback records admin training feedback on an AI moderation decision
 func (s *ModerationService) SubmitAIFeedback(ctx context.Context, logID uuid.UUID, correct bool, reason string, adminID uuid.UUID) error {
 	_, err := s.pool.Exec(ctx, `
-		UPDATE ai_moderation_log 
+		UPDATE ai_moderation_log
 		SET feedback_correct = $1, feedback_reason = $2, feedback_by = $3, feedback_at = NOW()
 		WHERE id = $4
 	`, correct, reason, adminID, logID)
@@ -832,10 +448,21 @@ func (s *ModerationService) GetAITrainingData(ctx context.Context) ([]map[string
 }
 
 func containsAny(body string, terms []string) bool {
-	// Case insensitive check
 	lower := bytes.ToLower([]byte(body))
 	for _, term := range terms {
 		if bytes.Contains(lower, []byte(term)) {
+			return true
+		}
+	}
+	return false
+}
+
+// Helper function to check if URL is an image
+func isImageURL(url string) bool {
+	imageExtensions := []string{".jpg", ".jpeg", ".png", ".gif", ".bmp", ".webp"}
+	lowerURL := strings.ToLower(url)
+	for _, ext := range imageExtensions {
+		if strings.HasSuffix(lowerURL, ext) {
 			return true
 		}
 	}

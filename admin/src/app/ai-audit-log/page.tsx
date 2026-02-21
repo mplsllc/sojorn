@@ -312,11 +312,11 @@ export default function AIAuditLogPage() {
                       </div>
                       <div>
                         <h4 className="text-xs font-semibold text-gray-500 uppercase mb-1">AI Provider</h4>
-                        <p className="text-xs text-gray-600">{item.ai_provider || 'openai'}</p>
+                        <p className="text-xs text-gray-600">{item.ai_provider || 'local_ai'}</p>
                       </div>
                       {item.or_decision && (
                         <div>
-                          <h4 className="text-xs font-semibold text-gray-500 uppercase mb-1">OpenRouter Decision</h4>
+                          <h4 className="text-xs font-semibold text-gray-500 uppercase mb-1">Engine Decision</h4>
                           <p className="text-xs text-gray-600">{item.or_decision}</p>
                         </div>
                       )}

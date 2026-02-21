@@ -16,7 +16,7 @@ import (
 
 // LocalAIService communicates with the on-server AI Gateway (localhost:8099).
 // It provides text moderation via llama-guard and content generation via qwen2.5.
-// Runs alongside OpenRouter — both engines are available simultaneously.
+// Runs alongside SightEngine — both engines are available simultaneously.
 type LocalAIService struct {
 	baseURL    string
 	token      string
@@ -110,7 +110,7 @@ func (s *LocalAIService) resetCircuit() {
 }
 
 // ModerateText sends text to the local AI gateway for moderation.
-// Returns nil result (not an error) if the service is unavailable — caller should fall through to OpenRouter.
+// Returns nil result (not an error) if the service is unavailable — caller should fall through to SightEngine.
 func (s *LocalAIService) ModerateText(ctx context.Context, text string) (*LocalAIModerationResult, error) {
 	if !s.isAvailable() {
 		return nil, fmt.Errorf("local_ai_unavailable: circuit breaker open")

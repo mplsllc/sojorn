@@ -93,7 +93,7 @@ func (s *HealthCheckService) RunHealthChecks(ctx context.Context) HealthStatus {
 	checks["database"] = s.checkDatabase(ctx)
 
 	// External service checks
-	checks["azure_openai"] = s.checkAzureOpenAI(ctx)
+	checks["sightengine"] = s.checkSightEngine(ctx)
 	checks["cloudflare_r2"] = s.checkCloudflareR2(ctx)
 
 	// Internal service checks
@@ -161,26 +161,22 @@ func (s *HealthCheckService) checkDatabase(ctx context.Context) HealthCheck {
 	return check
 }
 
-// Azure OpenAI health check
-func (s *HealthCheckService) checkAzureOpenAI(ctx context.Context) HealthCheck {
+// SightEngine health check
+func (s *HealthCheckService) checkSightEngine(ctx context.Context) HealthCheck {
 	start := time.Now()
-	
+
 	check := HealthCheck{
-		Name:      "azure_openai",
+		Name:      "sightengine",
 		Timestamp: start,
 	}
 
-	// Create a simple test request
-	req, err := http.NewRequestWithContext(ctx, "GET", "https://api.openai.com/v1/models", nil)
+	req, err := http.NewRequestWithContext(ctx, "GET", "https://api.sightengine.com/1.0/status.json", nil)
 	if err != nil {
 		check.Status = "unhealthy"
 		check.Message = fmt.Sprintf("Failed to create request: %v", err)
 		check.Duration = time.Since(start)
 		return check
 	}
-
-	// Add authorization header (this should come from config)
-	req.Header.Set("Authorization", "Bearer test-key")
 
 	resp, err := s.httpClient.Do(req)
 	if err != nil {
@@ -193,13 +189,10 @@ func (s *HealthCheckService) checkAzureOpenAI(ctx context.Context) HealthCheck {
 
 	if resp.StatusCode == 200 {
 		check.Status = "healthy"
-		check.Message = "Azure OpenAI service is responsive"
-	} else if resp.StatusCode >= 400 && resp.StatusCode < 500 {
-		check.Status = "degraded"
-		check.Message = fmt.Sprintf("Azure OpenAI returned status %d", resp.StatusCode)
+		check.Message = "SightEngine API is responsive"
 	} else {
 		check.Status = "unhealthy"
-		check.Message = fmt.Sprintf("Azure OpenAI returned status %d", resp.StatusCode)
+		check.Message = fmt.Sprintf("SightEngine returned status %d", resp.StatusCode)
 	}
 
 	check.Duration = time.Since(start)

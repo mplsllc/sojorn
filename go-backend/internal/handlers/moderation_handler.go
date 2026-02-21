@@ -4,24 +4,24 @@ import (
 	"net/http"
 
 	"github.com/gin-gonic/gin"
-	"gitlab.com/patrickbritton3/sojorn/go-backend/internal/services"
 	"github.com/rs/zerolog/log"
+	"gitlab.com/patrickbritton3/sojorn/go-backend/internal/services"
 )
 
 // ModerationHandler provides a stateless content moderation endpoint.
 // It checks text and/or images for policy violations and returns pass/fail.
 // NO content is stored — designed for pre-send checks (e.g. E2EE group messages).
 type ModerationHandler struct {
-	moderationService *services.ModerationService
-	openRouterService *services.OpenRouterService
-	localAIService    *services.LocalAIService
+	moderationService  *services.ModerationService
+	sightEngineService *services.SightEngineService
+	localAIService     *services.LocalAIService
 }
 
-func NewModerationHandler(moderationService *services.ModerationService, openRouterService *services.OpenRouterService, localAIService *services.LocalAIService) *ModerationHandler {
+func NewModerationHandler(moderationService *services.ModerationService, sightEngineService *services.SightEngineService, localAIService *services.LocalAIService) *ModerationHandler {
 	return &ModerationHandler{
-		moderationService: moderationService,
-		openRouterService: openRouterService,
-		localAIService:    localAIService,
+		moderationService:  moderationService,
+		sightEngineService: sightEngineService,
+		localAIService:     localAIService,
 	}
 }
 
@@ -48,9 +48,8 @@ func (h *ModerationHandler) CheckContent(c *gin.Context) {
 	}
 
 	// Resolve which engines are enabled for this moderation context.
-	// Try context-specific config first (e.g. group_text), fall back to generic (text).
-	useLocalAI, useOpenAI, useOpenRouter := true, true, true // defaults: all engines
-	if h.openRouterService != nil {
+	useLocalAI, useSightEngine := true, true
+	if h.moderationService != nil {
 		configType := "text"
 		if req.Text != "" && req.Context != "" {
 			configType = req.Context + "_text"
@@ -59,25 +58,23 @@ func (h *ModerationHandler) CheckContent(c *gin.Context) {
 		} else if req.ImageURL != "" {
 			configType = "image"
 		}
-		cfg, err := h.openRouterService.GetModerationConfig(c.Request.Context(), configType)
+		cfg, err := h.moderationService.GetModerationConfig(c.Request.Context(), configType)
 		if err != nil && req.Context != "" {
-			// Fall back to generic text/image config
 			fallbackType := "text"
 			if req.ImageURL != "" && req.Text == "" {
 				fallbackType = "image"
 			}
-			cfg, _ = h.openRouterService.GetModerationConfig(c.Request.Context(), fallbackType)
+			cfg, _ = h.moderationService.GetModerationConfig(c.Request.Context(), fallbackType)
 		}
 		if cfg != nil && len(cfg.Engines) > 0 {
 			useLocalAI = cfg.HasEngine("local_ai")
-			useOpenAI = cfg.HasEngine("openai")
-			useOpenRouter = cfg.HasEngine("openrouter")
+			useSightEngine = cfg.HasEngine("sightengine")
 		}
 	}
 
 	action := "pass"
 	reason := ""
-	engine := "" // tracks which engine flagged
+	engine := ""
 
 	// Stage 0: Local AI moderation (llama-guard, on-server, free, fast)
 	if useLocalAI && h.localAIService != nil && req.Text != "" {
@@ -91,70 +88,44 @@ func (h *ModerationHandler) CheckContent(c *gin.Context) {
 		}
 	}
 
-	// Stage 1: Three Poisons moderation (OpenAI + Google Vision)
-	if useOpenAI && h.moderationService != nil {
-		mediaURLs := []string{}
-		if req.ImageURL != "" {
-			mediaURLs = append(mediaURLs, req.ImageURL)
-		}
-		_, flagReason, err := h.moderationService.AnalyzeContent(c.Request.Context(), req.Text, mediaURLs)
-		if err == nil && flagReason != "" {
-			action = "flag"
-			reason = flagReason
-			if engine == "" {
-				engine = "openai"
-			}
-		}
-	}
-
-	// Stage 2: OpenRouter moderation (text + image)
-	if useOpenRouter && h.openRouterService != nil {
-		if req.Text != "" {
-			var textResult *services.ModerationResult
-			var textErr error
-			if req.Context != "" {
-				textResult, textErr = h.openRouterService.ModerateWithType(c.Request.Context(), req.Context+"_text", req.Text, nil)
-			}
-			if textResult == nil || textErr != nil {
-				textResult, textErr = h.openRouterService.ModerateText(c.Request.Context(), req.Text)
-			}
-			if textErr == nil && textResult != nil {
+	// Stage 1: SightEngine moderation (text + image)
+	if useSightEngine && h.sightEngineService != nil {
+		if req.Text != "" && action != "flag" {
+			textResult, err := h.sightEngineService.ModerateText(c.Request.Context(), req.Text)
+			if err != nil {
+				log.Debug().Err(err).Msg("SightEngine text moderation failed")
+			} else if textResult != nil {
 				if textResult.Action == "flag" {
 					action = "flag"
 					reason = textResult.Reason
 					if engine == "" {
-						engine = "openrouter"
+						engine = "sightengine"
 					}
 				} else if textResult.Action == "nsfw" && action != "flag" {
 					action = "nsfw"
-					reason = textResult.NSFWReason
+					reason = textResult.Reason
 					if engine == "" {
-						engine = "openrouter"
+						engine = "sightengine"
 					}
 				}
 			}
 		}
 		if req.ImageURL != "" && action != "flag" {
-			var imgResult *services.ModerationResult
-			var imgErr error
-			if req.Context != "" {
-				imgResult, imgErr = h.openRouterService.ModerateWithType(c.Request.Context(), req.Context+"_image", "", []string{req.ImageURL})
-			}
-			if imgResult == nil || imgErr != nil {
-				imgResult, imgErr = h.openRouterService.ModerateImage(c.Request.Context(), req.ImageURL)
-			}
-			if imgErr == nil && imgResult != nil {
+			imgResult, err := h.sightEngineService.ModerateImage(c.Request.Context(), req.ImageURL)
+			if err != nil {
+				log.Debug().Err(err).Msg("SightEngine image moderation failed")
+			} else if imgResult != nil {
 				if imgResult.Action == "flag" {
 					action = "flag"
 					reason = imgResult.Reason
 					if engine == "" {
-						engine = "openrouter"
+						engine = "sightengine"
 					}
 				} else if imgResult.Action == "nsfw" && action != "flag" {
 					action = "nsfw"
 					reason = imgResult.NSFWReason
 					if engine == "" {
-						engine = "openrouter"
+						engine = "sightengine"
 					}
 				}
 			}

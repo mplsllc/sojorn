@@ -26,14 +26,13 @@ type PostHandler struct {
 	notificationService *services.NotificationService
 	moderationService   *services.ModerationService
 	contentFilter       *services.ContentFilter
-	openRouterService   *services.OpenRouterService
 	linkPreviewService  *services.LinkPreviewService
 	localAIService      *services.LocalAIService
 	videoProcessor      *services.VideoProcessor
 	contentModerator    *services.ContentModerator
 }
 
-func NewPostHandler(postRepo *repository.PostRepository, userRepo *repository.UserRepository, feedService *services.FeedService, assetService *services.AssetService, notificationService *services.NotificationService, moderationService *services.ModerationService, contentFilter *services.ContentFilter, openRouterService *services.OpenRouterService, linkPreviewService *services.LinkPreviewService, localAIService *services.LocalAIService, s3Client *s3.Client, videoBucket, vidDomain string, contentModerator *services.ContentModerator) *PostHandler {
+func NewPostHandler(postRepo *repository.PostRepository, userRepo *repository.UserRepository, feedService *services.FeedService, assetService *services.AssetService, notificationService *services.NotificationService, moderationService *services.ModerationService, contentFilter *services.ContentFilter, linkPreviewService *services.LinkPreviewService, localAIService *services.LocalAIService, s3Client *s3.Client, videoBucket, vidDomain string, contentModerator *services.ContentModerator) *PostHandler {
 	return &PostHandler{
 		postRepo:            postRepo,
 		userRepo:            userRepo,
@@ -42,7 +41,6 @@ func NewPostHandler(postRepo *repository.PostRepository, userRepo *repository.Us
 		notificationService: notificationService,
 		moderationService:   moderationService,
 		contentFilter:       contentFilter,
-		openRouterService:   openRouterService,
 		linkPreviewService:  linkPreviewService,
 		localAIService:      localAIService,
 		videoProcessor:      services.NewVideoProcessor(s3Client, videoBucket, vidDomain),
@@ -363,7 +361,7 @@ func (h *PostHandler) CreateBeacon(c *gin.Context) {
 		ImageURL:       req.ImageURL,
 	}
 
-	// AI Moderation — text cascade (local AI → OpenAI → OpenRouter with beacon_text config).
+	// AI Moderation — text cascade (local AI → SightEngine with beacon_text config).
 	modFlagged := false
 	if h.contentModerator != nil {
 		modResult := h.contentModerator.ModerateText(c.Request.Context(), "beacon_text", req.Body)
@@ -578,7 +576,7 @@ func (h *PostHandler) CreatePost(c *gin.Context) {
 		}
 	}
 
-	// 5. AI Moderation — cascade through all admin-enabled engines (local AI → OpenAI → OpenRouter)
+	// 5. AI Moderation — cascade through all admin-enabled engines (local AI → SightEngine)
 	userSelfLabeledNSFW := req.IsNSFW
 	orDecision := ""
 	var cachedScores *services.ThreePoisonsScore
