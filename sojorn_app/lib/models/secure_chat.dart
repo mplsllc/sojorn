@@ -1,3 +1,7 @@
+// Copyright (c) 2026 MPLS LLC
+// Licensed under the Apache License, Version 2.0
+// See LICENSE file for details
+
 // Models for Secure E2EE Chat
 import 'dart:convert';
 import 'dart:typed_data';

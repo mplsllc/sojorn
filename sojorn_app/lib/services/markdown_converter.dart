@@ -1,3 +1,7 @@
+// Copyright (c) 2026 MPLS LLC
+// Licensed under the Apache License, Version 2.0
+// See LICENSE file for details
+
 import 'package:flutter_quill/flutter_quill.dart' as quill;
 
 /// Service for converting between Quill Delta format and Markdown

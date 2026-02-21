@@ -1,3 +1,7 @@
+// Copyright (c) 2026 MPLS LLC
+// Licensed under the Apache License, Version 2.0
+// See LICENSE file for details
+
 /// User search result with minimal info for display
 class SearchUser {
   final String id;

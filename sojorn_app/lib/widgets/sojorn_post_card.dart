@@ -1,3 +1,7 @@
+// Copyright (c) 2026 MPLS LLC
+// Licensed under the Apache License, Version 2.0
+// See LICENSE file for details
+
 import 'dart:ui';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -120,7 +124,7 @@ class _sojornPostCardState extends ConsumerState<sojornPostCard> {
     switch (mode) {
       case PostViewMode.feed:
       case PostViewMode.sponsored:
-        return 36.0;
+        return 42.0;
       case PostViewMode.detail:
         return 44.0;
       case PostViewMode.compact:
@@ -163,7 +167,11 @@ class _sojornPostCardState extends ConsumerState<sojornPostCard> {
         child: ClipRRect(
           borderRadius: BorderRadius.circular(_isThread ? 12 : 20),
           child: Container(
-            padding: _padding.copyWith(left: 0, right: 0),
+            padding: _padding.copyWith(
+              left: 0,
+              right: 0,
+              bottom: post.hasLinkPreview ? 0 : _padding.bottom,
+            ),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
@@ -245,7 +253,8 @@ class _sojornPostCardState extends ConsumerState<sojornPostCard> {
                           ),
                         ],
                       ),
-                      const SizedBox(height: 6),
+                      if (!post.hasLinkPreview || post.body.trim().isNotEmpty)
+                        const SizedBox(height: 6),
 
                       // Sponsored badge
                       if (_isSponsored) ...[                        Container(
@@ -331,7 +340,10 @@ class _sojornPostCardState extends ConsumerState<sojornPostCard> {
                       ],
 
                       // Body text - clickable for post detail with full background coverage
-                      if (_shouldBlurNsfw) ...[
+                      // Skip body entirely for link-preview-only posts (no real text)
+                      if (post.hasLinkPreview && post.body.trim().isEmpty) ...[
+                        // No body to show — link preview handles display
+                      ] else if (_shouldBlurNsfw) ...[
                         // NSFW blurred body
                         ClipRect(
                           child: Stack(

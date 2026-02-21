@@ -1,3 +1,7 @@
+// Copyright (c) 2026 MPLS LLC
+// Licensed under the Apache License, Version 2.0
+// See LICENSE file for details
+
 import 'dart:async';
 import 'dart:ui';
 import 'package:cryptography_flutter/cryptography_flutter.dart';
@@ -8,6 +12,7 @@ import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:flutter_quill/flutter_quill.dart' as flutter_quill;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:firebase_core/firebase_core.dart';
+import 'package:firebase_crashlytics/firebase_crashlytics.dart';
 import 'package:firebase_messaging/firebase_messaging.dart';
 import 'package:app_links/app_links.dart';
 import 'config/firebase_web_config.dart';
@@ -49,6 +54,7 @@ void main() {
       // ── Global error handlers for freeze/crash diagnosis ──────────────
       FlutterError.onError = (FlutterErrorDetails details) {
         FlutterError.presentError(details);
+        FirebaseCrashlytics.instance.recordFlutterFatalError(details);
         debugPrint('\n╔══ FLUTTER ERROR ══════════════════════════════════');
         debugPrint('║ ${DateTime.now().toIso8601String()}');
         debugPrint('║ Library: ${details.library}');
@@ -65,6 +71,7 @@ void main() {
       };
 
       PlatformDispatcher.instance.onError = (error, stack) {
+        FirebaseCrashlytics.instance.recordError(error, stack, fatal: true);
         debugPrint('\n╔══ PLATFORM ERROR ═════════════════════════════════');
         debugPrint('║ ${DateTime.now().toIso8601String()}');
         debugPrint('║ Error: $error');
@@ -107,6 +114,7 @@ void main() {
       );
     },
     (error, stackTrace) {
+      FirebaseCrashlytics.instance.recordError(error, stackTrace, fatal: false);
       debugPrint('\n╔══ UNCAUGHT ASYNC ERROR ═══════════════════════════');
       debugPrint('║ ${DateTime.now().toIso8601String()}');
       debugPrint('║ Error: $error');

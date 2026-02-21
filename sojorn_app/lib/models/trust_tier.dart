@@ -1,3 +1,7 @@
+// Copyright (c) 2026 MPLS LLC
+// Licensed under the Apache License, Version 2.0
+// See LICENSE file for details
+
 /// Trust tier enum matching backend schema
 enum TrustTier {
   // ignore: constant_identifier_names

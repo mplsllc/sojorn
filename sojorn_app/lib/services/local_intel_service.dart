@@ -1,3 +1,7 @@
+// Copyright (c) 2026 MPLS LLC
+// Licensed under the Apache License, Version 2.0
+// See LICENSE file for details
+
 import 'dart:convert';
 import 'package:http/http.dart' as http;
 import '../models/local_intel.dart';

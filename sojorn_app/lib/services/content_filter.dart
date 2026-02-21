@@ -1,3 +1,7 @@
+// Copyright (c) 2026 MPLS LLC
+// Licensed under the Apache License, Version 2.0
+// See LICENSE file for details
+
 /// Client-side content filter for Sojorn.
 /// Layer 0: Catches obvious slurs BEFORE sending to server.
 /// This prevents the post from ever leaving the device.

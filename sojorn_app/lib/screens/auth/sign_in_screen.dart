@@ -1,3 +1,7 @@
+// Copyright (c) 2026 MPLS LLC
+// Licensed under the Apache License, Version 2.0
+// See LICENSE file for details
+
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -95,7 +99,7 @@ class _SignInScreenState extends ConsumerState<SignInScreen> {
       _supportsBiometric &&
       _hasStoredCredentials &&
       !_isBiometricAuthenticating &&
-      (_altchaToken != null || kDebugMode); // Allow bypass for development
+      _altchaToken != null;
 
   Future<void> _signIn() async {
     final email = _emailController.text.trim();
@@ -117,15 +121,10 @@ class _SignInScreenState extends ConsumerState<SignInScreen> {
 
     // Validate ALTCHA token
     if (_altchaToken == null || _altchaToken!.isEmpty) {
-      if (kDebugMode) {
-        // Allow bypass for development
-        _altchaToken = "BYPASS_DEV_MODE";
-      } else {
-        setState(() {
-          _errorMessage = 'Please complete the security verification';
-        });
-        return;
-      }
+      setState(() {
+        _errorMessage = 'Please complete the security verification';
+      });
+      return;
     }
 
     setState(() {

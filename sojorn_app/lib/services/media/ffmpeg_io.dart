@@ -1,3 +1,7 @@
+// Copyright (c) 2026 MPLS LLC
+// Licensed under the Apache License, Version 2.0
+// See LICENSE file for details
+
 /// Mobile/desktop: re-export the real ffmpeg_kit_flutter_new classes.
 export 'package:ffmpeg_kit_flutter_new/ffmpeg_kit.dart';
 export 'package:ffmpeg_kit_flutter_new/ffmpeg_session.dart';

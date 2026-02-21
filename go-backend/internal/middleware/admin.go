@@ -1,3 +1,7 @@
+// Copyright (c) 2026 MPLS LLC
+// Licensed under the Business Source License 1.1
+// See LICENSE file for details
+
 package middleware
 
 import (

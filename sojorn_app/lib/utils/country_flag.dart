@@ -1,3 +1,7 @@
+// Copyright (c) 2026 MPLS LLC
+// Licensed under the Apache License, Version 2.0
+// See LICENSE file for details
+
 /// Converts an ISO 3166-1 alpha-2 country code to a flag emoji.
 ///
 /// Uses Unicode Regional Indicator Symbols to create flag emojis.

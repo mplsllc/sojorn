@@ -1,3 +1,7 @@
+// Copyright (c) 2026 MPLS LLC
+// Licensed under the Apache License, Version 2.0
+// See LICENSE file for details
+
 import 'package:flutter/material.dart';
 import 'package:flutter/foundation.dart';
 import 'dart:async';
@@ -305,6 +309,7 @@ class _HomeShellState extends ConsumerState<HomeShell> with WidgetsBindingObserv
                     index: 1,
                     label: 'Quips',
                     assetPath: 'assets/icon/quips.png',
+                    activeAssetPath: 'assets/icon/quipso.png',
                   ),
                   const SizedBox(width: SojornNav.bottomFabGap),
                   _buildNavBarItem(
@@ -313,6 +318,7 @@ class _HomeShellState extends ConsumerState<HomeShell> with WidgetsBindingObserv
                     index: 2,
                     label: 'Beacons',
                     assetPath: 'assets/icon/beacon.png',
+                    activeAssetPath: 'assets/icon/beacono.png',
                   ),
                   _buildNavBarItem(
                     icon: Icons.person_outline,
@@ -541,6 +547,7 @@ class _HomeShellState extends ConsumerState<HomeShell> with WidgetsBindingObserv
     required int index,
     required String label,
     String? assetPath,
+    String? activeAssetPath,
   }) {
     final isActive = widget.navigationShell.currentIndex == index;
     final helperBadge = _helperBadges[index];
@@ -584,10 +591,9 @@ class _HomeShellState extends ConsumerState<HomeShell> with WidgetsBindingObserv
                   children: [
                     assetPath != null
                         ? Image.asset(
-                            assetPath,
+                            (isActive && activeAssetPath != null) ? activeAssetPath : assetPath,
                             width: SojornNav.bottomBarIconSize,
                             height: SojornNav.bottomBarIconSize,
-                            color: isActive ? AppTheme.navyBlue : SojornColors.bottomNavUnselected,
                           )
                         : Icon(
                             isActive ? activeIcon : icon,

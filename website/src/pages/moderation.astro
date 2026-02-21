@@ -1,4 +1,7 @@
 ---
+// Copyright (c) 2026 MPLS LLC
+// Licensed under the GNU Affero General Public License v3.0
+// See LICENSE file for details
 import Layout from '../layouts/Layout.astro';
 ---
 
@@ -165,7 +168,7 @@ import Layout from '../layouts/Layout.astro';
         <li>SightEngine is <strong>GDPR compliant</strong>, operates under a signed Data Processing Addendum, and encrypts all data in transit with TLS 1.3. Their infrastructure partners hold ISO 27001 and SOC 2 certifications.</li>
         <li>We do <strong>not</strong> use your content to train any AI models &mdash; not locally, and not through any third party.</li>
         <li>Moderation metadata stored in our logs is automatically deleted after 14 days. We do not retain copies of your content for moderation review beyond what is needed for the active appeal window.</li>
-        <li>Our source code is open source under the <a href="https://www.gnu.org/licenses/agpl-3.0.html" class="text-egyptianBlue underline">AGPL-3.0 license</a>. You can verify every claim in this document by reviewing <a href="https://gitlab.com/patrickbritton3/sojorn" class="text-egyptianBlue underline">our code</a>.</li>
+        <li>Our source code is publicly available for audit and transparency. We use a <a href="/licenses" class="text-egyptianBlue underline">split licensing model</a> &mdash; the mobile app is Apache 2.0, the admin panel and website are AGPL-3.0, and the core API engine uses the Business Source License 1.1 (which converts to Apache 2.0 after four years). You can review all code at <a href="https://gitlab.com/patrickbritton3/sojorn" class="text-egyptianBlue underline">our repository</a>.</li>
       </ul>
 
       <!-- ─── INFRASTRUCTURE & TECHNOLOGY ─── -->
@@ -206,7 +209,7 @@ import Layout from '../layouts/Layout.astro';
             <strong>End-to-End Encryption: X3DH + Double Ratchet</strong> &mdash; private messages and Capsule (encrypted group) conversations use the <a href="https://signal.org/docs/specifications/x3dh/" class="text-egyptianBlue underline" target="_blank">Extended Triple Diffie-Hellman</a> key agreement protocol, the same cryptographic foundation used by Signal. Encrypted messages cannot be read by our server, our moderators, or any third party.
           </li>
           <li>
-            <strong>Open Source</strong> &mdash; our entire codebase (backend, admin panel, website) is published under the <a href="https://www.gnu.org/licenses/agpl-3.0.html" class="text-egyptianBlue underline" target="_blank">AGPL-3.0 license</a>. You can audit every line of code at <a href="https://gitlab.com/patrickbritton3/sojorn" class="text-egyptianBlue underline" target="_blank">gitlab.com/patrickbritton3/sojorn</a>.
+            <strong>Source Available</strong> &mdash; our entire codebase is publicly available. We use a <a href="/licenses" class="text-egyptianBlue underline" target="_blank">split licensing model</a>: the mobile app is Apache 2.0, the admin panel and website are AGPL-3.0, and the core API engine uses the BSL 1.1 (converts to Apache 2.0 after four years). Audit every line at <a href="https://gitlab.com/patrickbritton3/sojorn" class="text-egyptianBlue underline" target="_blank">gitlab.com/patrickbritton3/sojorn</a>.
           </li>
         </ul>
       </div>

@@ -1,3 +1,7 @@
+// Copyright (c) 2026 MPLS LLC
+// Licensed under the Apache License, Version 2.0
+// See LICENSE file for details
+
 /// Security utilities for input validation and sanitization
 class SecurityUtils {
   /// Sanitize user-generated text content

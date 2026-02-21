@@ -1,0 +1,184 @@
+---
+// Copyright (c) 2026 MPLS LLC
+// Licensed under the GNU Affero General Public License v3.0
+// See LICENSE file for details
+import Layout from '../layouts/Layout.astro';
+---
+
+<Layout title="Licenses - Sojorn" description="Sojorn licensing model and open source acknowledgments">
+  <div class="max-w-4xl mx-auto px-6 py-12">
+    <h1 class="text-3xl font-bold mb-2 text-egyptianBlue">Licenses</h1>
+    <p class="mb-8 text-sm text-gray-500">Last Updated: February 21, 2026</p>
+
+    <div class="prose prose-blue max-w-none text-gray-700">
+
+      <!-- ─── SOJORN LICENSING ─── -->
+      <h2 class="text-2xl font-bold mt-8 mb-4">Sojorn Licensing</h2>
+      <p class="mb-4">Sojorn uses a split licensing model. Each component is licensed independently:</p>
+
+      <table class="w-full mb-6 text-sm border-collapse">
+        <thead><tr class="border-b bg-gray-50"><th class="text-left py-3 px-4">Component</th><th class="text-left py-3 px-4">License</th><th class="text-left py-3 px-4">Description</th></tr></thead>
+        <tbody>
+          <tr class="border-b"><td class="py-3 px-4 font-medium">Go API Engine</td><td class="py-3 px-4"><a href="https://mariadb.com/bsl11/" class="text-egyptianBlue underline" target="_blank">BSL 1.1</a></td><td class="py-3 px-4">Core platform engine. Non-production use permitted. Converts to Apache 2.0 on 2030-02-21.</td></tr>
+          <tr class="border-b"><td class="py-3 px-4 font-medium">AI Gateway</td><td class="py-3 px-4"><a href="https://mariadb.com/bsl11/" class="text-egyptianBlue underline" target="_blank">BSL 1.1</a></td><td class="py-3 px-4">AI moderation pipeline. Same terms as the API engine.</td></tr>
+          <tr class="border-b"><td class="py-3 px-4 font-medium">Flutter App</td><td class="py-3 px-4"><a href="https://www.apache.org/licenses/LICENSE-2.0" class="text-egyptianBlue underline" target="_blank">Apache 2.0</a></td><td class="py-3 px-4">Mobile and desktop client. Free to use, modify, and distribute.</td></tr>
+          <tr class="border-b"><td class="py-3 px-4 font-medium">Admin Panel</td><td class="py-3 px-4"><a href="https://www.gnu.org/licenses/agpl-3.0.html" class="text-egyptianBlue underline" target="_blank">AGPL-3.0</a></td><td class="py-3 px-4">Administration interface. Must share modifications if deployed as a network service.</td></tr>
+          <tr class="border-b"><td class="py-3 px-4 font-medium">Website</td><td class="py-3 px-4"><a href="https://www.gnu.org/licenses/agpl-3.0.html" class="text-egyptianBlue underline" target="_blank">AGPL-3.0</a></td><td class="py-3 px-4">Public website (sojorn.net). Same terms as admin panel.</td></tr>
+        </tbody>
+      </table>
+
+      <p class="mb-4">All source code is publicly available at <a href="https://gitlab.com/patrickbritton3/sojorn" class="text-egyptianBlue underline" target="_blank">gitlab.com/patrickbritton3/sojorn</a>.</p>
+      <p class="mb-6">For commercial licensing of BSL-licensed components: <a href="mailto:hello@sojorn.net" class="text-egyptianBlue underline">hello@sojorn.net</a></p>
+
+      <!-- ─── WHAT IS THE BSL? ─── -->
+      <div class="bg-blue-50 border border-blue-200 rounded-xl p-6 mb-8">
+        <h3 class="text-lg font-bold mb-3 text-egyptianBlue">What is the Business Source License?</h3>
+        <p class="mb-2">The BSL 1.1 is a source-available license created by <a href="https://mariadb.com/bsl11/" class="text-egyptianBlue underline" target="_blank">MariaDB</a>. It allows you to read, copy, modify, and redistribute the code, and use it for non-production purposes (development, testing, education, research). Production use requires a commercial license.</p>
+        <p class="mb-2">The key feature of the BSL is the <strong>Change Date</strong>: four years after each release, the code automatically converts to a permissive open source license (Apache 2.0 in our case). This means all Sojorn API code will eventually be fully open source.</p>
+        <p>Companies like <a href="https://www.cockroachlabs.com/" class="text-egyptianBlue underline" target="_blank">CockroachDB</a>, <a href="https://surrealdb.com/" class="text-egyptianBlue underline" target="_blank">SurrealDB</a>, and <a href="https://mariadb.com/" class="text-egyptianBlue underline" target="_blank">MariaDB</a> use the BSL to balance open development with sustainable business models.</p>
+      </div>
+
+      <!-- ─── OPEN SOURCE ACKNOWLEDGMENTS ─── -->
+      <h2 class="text-2xl font-bold mt-12 mb-4">Open Source Acknowledgments</h2>
+      <p class="mb-6">Sojorn is built on the work of hundreds of open source projects. We are grateful to every contributor. Below is a listing of the major dependencies we use, organized by component.</p>
+
+      <!-- Server Infrastructure -->
+      <h3 class="text-xl font-bold mt-8 mb-3">Server Infrastructure</h3>
+      <table class="w-full mb-6 text-sm border-collapse">
+        <thead><tr class="border-b bg-gray-50"><th class="text-left py-2 px-3">Software</th><th class="text-left py-2 px-3">License</th><th class="text-left py-2 px-3">Purpose</th></tr></thead>
+        <tbody>
+          <tr class="border-b"><td class="py-2 px-3">Linux (Ubuntu)</td><td class="py-2 px-3">GPL-2.0</td><td class="py-2 px-3">Operating system</td></tr>
+          <tr class="border-b"><td class="py-2 px-3">nginx</td><td class="py-2 px-3">BSD-2-Clause</td><td class="py-2 px-3">Reverse proxy &amp; TLS termination</td></tr>
+          <tr class="border-b"><td class="py-2 px-3">PostgreSQL</td><td class="py-2 px-3">PostgreSQL License</td><td class="py-2 px-3">Database</td></tr>
+          <tr class="border-b"><td class="py-2 px-3">PM2</td><td class="py-2 px-3">AGPL-3.0</td><td class="py-2 px-3">Node.js process manager</td></tr>
+          <tr class="border-b"><td class="py-2 px-3">Let's Encrypt / Certbot</td><td class="py-2 px-3">Apache-2.0</td><td class="py-2 px-3">TLS certificates</td></tr>
+          <tr class="border-b"><td class="py-2 px-3">Prometheus</td><td class="py-2 px-3">Apache-2.0</td><td class="py-2 px-3">Monitoring</td></tr>
+          <tr class="border-b"><td class="py-2 px-3">Node Exporter</td><td class="py-2 px-3">Apache-2.0</td><td class="py-2 px-3">System metrics</td></tr>
+          <tr class="border-b"><td class="py-2 px-3">Ollama</td><td class="py-2 px-3">MIT</td><td class="py-2 px-3">Local AI model runtime</td></tr>
+          <tr class="border-b"><td class="py-2 px-3">LLaMA Guard 3</td><td class="py-2 px-3">Llama 3 Community</td><td class="py-2 px-3">Content moderation model</td></tr>
+        </tbody>
+      </table>
+
+      <!-- Go Backend Dependencies -->
+      <h3 class="text-xl font-bold mt-8 mb-3">Go Backend</h3>
+      <table class="w-full mb-6 text-sm border-collapse">
+        <thead><tr class="border-b bg-gray-50"><th class="text-left py-2 px-3">Package</th><th class="text-left py-2 px-3">License</th><th class="text-left py-2 px-3">Purpose</th></tr></thead>
+        <tbody>
+          <tr class="border-b"><td class="py-2 px-3">gin-gonic/gin</td><td class="py-2 px-3">MIT</td><td class="py-2 px-3">HTTP framework</td></tr>
+          <tr class="border-b"><td class="py-2 px-3">jackc/pgx v5</td><td class="py-2 px-3">MIT</td><td class="py-2 px-3">PostgreSQL driver</td></tr>
+          <tr class="border-b"><td class="py-2 px-3">rs/zerolog</td><td class="py-2 px-3">MIT</td><td class="py-2 px-3">Structured logging</td></tr>
+          <tr class="border-b"><td class="py-2 px-3">golang-jwt/jwt</td><td class="py-2 px-3">MIT</td><td class="py-2 px-3">JWT authentication</td></tr>
+          <tr class="border-b"><td class="py-2 px-3">gorilla/websocket</td><td class="py-2 px-3">BSD-2-Clause</td><td class="py-2 px-3">WebSocket messaging</td></tr>
+          <tr class="border-b"><td class="py-2 px-3">google/uuid</td><td class="py-2 px-3">BSD-3-Clause</td><td class="py-2 px-3">UUID generation</td></tr>
+          <tr class="border-b"><td class="py-2 px-3">aws/aws-sdk-go-v2</td><td class="py-2 px-3">Apache-2.0</td><td class="py-2 px-3">Cloudflare R2 storage</td></tr>
+          <tr class="border-b"><td class="py-2 px-3">firebase.google.com/go</td><td class="py-2 px-3">Apache-2.0</td><td class="py-2 px-3">FCM push notifications</td></tr>
+          <tr class="border-b"><td class="py-2 px-3">gin-contrib/cors</td><td class="py-2 px-3">MIT</td><td class="py-2 px-3">CORS middleware</td></tr>
+          <tr class="border-b"><td class="py-2 px-3">joho/godotenv</td><td class="py-2 px-3">MIT</td><td class="py-2 px-3">Environment config</td></tr>
+          <tr class="border-b"><td class="py-2 px-3">altcha-org/altcha-lib-go</td><td class="py-2 px-3">MIT</td><td class="py-2 px-3">Bot protection</td></tr>
+          <tr class="border-b"><td class="py-2 px-3">koddr/go-email-sender</td><td class="py-2 px-3">Apache-2.0</td><td class="py-2 px-3">Email sending</td></tr>
+          <tr class="border-b"><td class="py-2 px-3">golang.org/x/crypto</td><td class="py-2 px-3">BSD-3-Clause</td><td class="py-2 px-3">Cryptography</td></tr>
+          <tr class="border-b"><td class="py-2 px-3">golang.org/x/time</td><td class="py-2 px-3">BSD-3-Clause</td><td class="py-2 px-3">Rate limiting</td></tr>
+          <tr class="border-b"><td class="py-2 px-3">google.golang.org/api</td><td class="py-2 px-3">BSD-3-Clause</td><td class="py-2 px-3">Google APIs</td></tr>
+          <tr class="border-b"><td class="py-2 px-3">stretchr/testify</td><td class="py-2 px-3">MIT</td><td class="py-2 px-3">Testing</td></tr>
+          <tr class="border-b"><td class="py-2 px-3">lib/pq</td><td class="py-2 px-3">MIT</td><td class="py-2 px-3">PostgreSQL (legacy)</td></tr>
+        </tbody>
+      </table>
+
+      <!-- Flutter App Dependencies -->
+      <h3 class="text-xl font-bold mt-8 mb-3">Flutter App</h3>
+      <table class="w-full mb-6 text-sm border-collapse">
+        <thead><tr class="border-b bg-gray-50"><th class="text-left py-2 px-3">Package</th><th class="text-left py-2 px-3">License</th><th class="text-left py-2 px-3">Purpose</th></tr></thead>
+        <tbody>
+          <tr class="border-b"><td class="py-2 px-3">Flutter SDK</td><td class="py-2 px-3">BSD-3-Clause</td><td class="py-2 px-3">UI framework</td></tr>
+          <tr class="border-b"><td class="py-2 px-3">flutter_riverpod</td><td class="py-2 px-3">MIT</td><td class="py-2 px-3">State management</td></tr>
+          <tr class="border-b"><td class="py-2 px-3">http</td><td class="py-2 px-3">BSD-3-Clause</td><td class="py-2 px-3">HTTP client</td></tr>
+          <tr class="border-b"><td class="py-2 px-3">go_router</td><td class="py-2 px-3">BSD-3-Clause</td><td class="py-2 px-3">Navigation</td></tr>
+          <tr class="border-b"><td class="py-2 px-3">firebase_core</td><td class="py-2 px-3">BSD-3-Clause</td><td class="py-2 px-3">Firebase initialization</td></tr>
+          <tr class="border-b"><td class="py-2 px-3">firebase_messaging</td><td class="py-2 px-3">BSD-3-Clause</td><td class="py-2 px-3">Push notifications</td></tr>
+          <tr class="border-b"><td class="py-2 px-3">firebase_crashlytics</td><td class="py-2 px-3">BSD-3-Clause</td><td class="py-2 px-3">Crash reporting</td></tr>
+          <tr class="border-b"><td class="py-2 px-3">cached_network_image</td><td class="py-2 px-3">MIT</td><td class="py-2 px-3">Image caching</td></tr>
+          <tr class="border-b"><td class="py-2 px-3">flutter_svg</td><td class="py-2 px-3">MIT</td><td class="py-2 px-3">SVG rendering</td></tr>
+          <tr class="border-b"><td class="py-2 px-3">google_fonts</td><td class="py-2 px-3">Apache-2.0</td><td class="py-2 px-3">Typography</td></tr>
+          <tr class="border-b"><td class="py-2 px-3">flutter_quill</td><td class="py-2 px-3">MIT</td><td class="py-2 px-3">Rich text editor</td></tr>
+          <tr class="border-b"><td class="py-2 px-3">pro_image_editor</td><td class="py-2 px-3">BSD-3-Clause</td><td class="py-2 px-3">Image editing</td></tr>
+          <tr class="border-b"><td class="py-2 px-3">camera</td><td class="py-2 px-3">BSD-3-Clause</td><td class="py-2 px-3">Camera access</td></tr>
+          <tr class="border-b"><td class="py-2 px-3">video_player</td><td class="py-2 px-3">BSD-3-Clause</td><td class="py-2 px-3">Video playback</td></tr>
+          <tr class="border-b"><td class="py-2 px-3">chewie</td><td class="py-2 px-3">MIT</td><td class="py-2 px-3">Video player UI</td></tr>
+          <tr class="border-b"><td class="py-2 px-3">ffmpeg_kit_flutter_new</td><td class="py-2 px-3">LGPL-3.0</td><td class="py-2 px-3">Video processing</td></tr>
+          <tr class="border-b"><td class="py-2 px-3">flutter_map</td><td class="py-2 px-3">BSD-3-Clause</td><td class="py-2 px-3">Maps (OpenStreetMap)</td></tr>
+          <tr class="border-b"><td class="py-2 px-3">geolocator</td><td class="py-2 px-3">MIT</td><td class="py-2 px-3">GPS location</td></tr>
+          <tr class="border-b"><td class="py-2 px-3">permission_handler</td><td class="py-2 px-3">MIT</td><td class="py-2 px-3">Permission requests</td></tr>
+          <tr class="border-b"><td class="py-2 px-3">flutter_animate</td><td class="py-2 px-3">MIT</td><td class="py-2 px-3">Animations</td></tr>
+          <tr class="border-b"><td class="py-2 px-3">cryptography</td><td class="py-2 px-3">Apache-2.0</td><td class="py-2 px-3">E2EE cryptography</td></tr>
+          <tr class="border-b"><td class="py-2 px-3">hive / hive_flutter</td><td class="py-2 px-3">Apache-2.0</td><td class="py-2 px-3">Local storage</td></tr>
+          <tr class="border-b"><td class="py-2 px-3">shared_preferences</td><td class="py-2 px-3">BSD-3-Clause</td><td class="py-2 px-3">Settings storage</td></tr>
+          <tr class="border-b"><td class="py-2 px-3">flutter_secure_storage</td><td class="py-2 px-3">BSD-3-Clause</td><td class="py-2 px-3">Secure credentials</td></tr>
+          <tr class="border-b"><td class="py-2 px-3">local_auth</td><td class="py-2 px-3">BSD-3-Clause</td><td class="py-2 px-3">Biometric auth</td></tr>
+          <tr class="border-b"><td class="py-2 px-3">web_socket_channel</td><td class="py-2 px-3">BSD-3-Clause</td><td class="py-2 px-3">WebSocket client</td></tr>
+          <tr class="border-b"><td class="py-2 px-3">share_plus</td><td class="py-2 px-3">BSD-3-Clause</td><td class="py-2 px-3">Share sheet</td></tr>
+          <tr class="border-b"><td class="py-2 px-3">connectivity_plus</td><td class="py-2 px-3">BSD-3-Clause</td><td class="py-2 px-3">Network state</td></tr>
+          <tr class="border-b"><td class="py-2 px-3">device_info_plus</td><td class="py-2 px-3">BSD-3-Clause</td><td class="py-2 px-3">Device info</td></tr>
+          <tr class="border-b"><td class="py-2 px-3">image_picker</td><td class="py-2 px-3">Apache-2.0</td><td class="py-2 px-3">Photo/video selection</td></tr>
+          <tr class="border-b"><td class="py-2 px-3">url_launcher</td><td class="py-2 px-3">BSD-3-Clause</td><td class="py-2 px-3">External links</td></tr>
+          <tr class="border-b"><td class="py-2 px-3">path_provider</td><td class="py-2 px-3">BSD-3-Clause</td><td class="py-2 px-3">File paths</td></tr>
+          <tr class="border-b"><td class="py-2 px-3">file_picker</td><td class="py-2 px-3">MIT</td><td class="py-2 px-3">File selection</td></tr>
+          <tr class="border-b"><td class="py-2 px-3">app_links</td><td class="py-2 px-3">Apache-2.0</td><td class="py-2 px-3">Deep links</td></tr>
+          <tr class="border-b"><td class="py-2 px-3">timeago</td><td class="py-2 px-3">MIT</td><td class="py-2 px-3">Relative timestamps</td></tr>
+          <tr class="border-b"><td class="py-2 px-3">equatable</td><td class="py-2 px-3">MIT</td><td class="py-2 px-3">Value equality</td></tr>
+          <tr class="border-b"><td class="py-2 px-3">intl</td><td class="py-2 px-3">BSD-3-Clause</td><td class="py-2 px-3">Internationalization</td></tr>
+          <tr class="border-b"><td class="py-2 px-3">markdown</td><td class="py-2 px-3">BSD-3-Clause</td><td class="py-2 px-3">Markdown parsing</td></tr>
+        </tbody>
+      </table>
+
+      <!-- Admin Panel Dependencies -->
+      <h3 class="text-xl font-bold mt-8 mb-3">Admin Panel</h3>
+      <table class="w-full mb-6 text-sm border-collapse">
+        <thead><tr class="border-b bg-gray-50"><th class="text-left py-2 px-3">Package</th><th class="text-left py-2 px-3">License</th><th class="text-left py-2 px-3">Purpose</th></tr></thead>
+        <tbody>
+          <tr class="border-b"><td class="py-2 px-3">Next.js</td><td class="py-2 px-3">MIT</td><td class="py-2 px-3">React framework</td></tr>
+          <tr class="border-b"><td class="py-2 px-3">React</td><td class="py-2 px-3">MIT</td><td class="py-2 px-3">UI library</td></tr>
+          <tr class="border-b"><td class="py-2 px-3">Tailwind CSS</td><td class="py-2 px-3">MIT</td><td class="py-2 px-3">Styling</td></tr>
+          <tr class="border-b"><td class="py-2 px-3">Recharts</td><td class="py-2 px-3">MIT</td><td class="py-2 px-3">Charts &amp; graphs</td></tr>
+          <tr class="border-b"><td class="py-2 px-3">Lucide React</td><td class="py-2 px-3">ISC</td><td class="py-2 px-3">Icons</td></tr>
+          <tr class="border-b"><td class="py-2 px-3">TypeScript</td><td class="py-2 px-3">Apache-2.0</td><td class="py-2 px-3">Type system</td></tr>
+          <tr class="border-b"><td class="py-2 px-3">clsx / tailwind-merge / cva</td><td class="py-2 px-3">MIT</td><td class="py-2 px-3">CSS utilities</td></tr>
+        </tbody>
+      </table>
+
+      <!-- Website Dependencies -->
+      <h3 class="text-xl font-bold mt-8 mb-3">Website</h3>
+      <table class="w-full mb-6 text-sm border-collapse">
+        <thead><tr class="border-b bg-gray-50"><th class="text-left py-2 px-3">Package</th><th class="text-left py-2 px-3">License</th><th class="text-left py-2 px-3">Purpose</th></tr></thead>
+        <tbody>
+          <tr class="border-b"><td class="py-2 px-3">Astro</td><td class="py-2 px-3">MIT</td><td class="py-2 px-3">SSR framework</td></tr>
+          <tr class="border-b"><td class="py-2 px-3">@astrojs/node</td><td class="py-2 px-3">MIT</td><td class="py-2 px-3">Node adapter</td></tr>
+          <tr class="border-b"><td class="py-2 px-3">altcha-lib</td><td class="py-2 px-3">MIT</td><td class="py-2 px-3">Bot protection</td></tr>
+          <tr class="border-b"><td class="py-2 px-3">Tailwind CSS (CDN)</td><td class="py-2 px-3">MIT</td><td class="py-2 px-3">Styling</td></tr>
+        </tbody>
+      </table>
+
+      <!-- Fonts -->
+      <h3 class="text-xl font-bold mt-8 mb-3">Fonts</h3>
+      <table class="w-full mb-6 text-sm border-collapse">
+        <thead><tr class="border-b bg-gray-50"><th class="text-left py-2 px-3">Font</th><th class="text-left py-2 px-3">License</th><th class="text-left py-2 px-3">Usage</th></tr></thead>
+        <tbody>
+          <tr class="border-b"><td class="py-2 px-3">Inter</td><td class="py-2 px-3">OFL-1.1</td><td class="py-2 px-3">UI labels and interface text</td></tr>
+          <tr class="border-b"><td class="py-2 px-3">Literata</td><td class="py-2 px-3">OFL-1.1</td><td class="py-2 px-3">Content and body text</td></tr>
+        </tbody>
+      </table>
+
+      <!-- License Notes -->
+      <h2 class="text-xl font-bold mt-10 mb-4">License Notes</h2>
+      <ul class="list-disc pl-6 mb-6 space-y-2">
+        <li><strong>ffmpeg_kit_flutter_new</strong> uses <strong>LGPL-3.0</strong>. This is the most restrictive dependency in the Flutter app. LGPL requires that users can replace the LGPL'd library. Since it is dynamically linked, this requirement is satisfied.</li>
+        <li><strong>PM2</strong> uses <strong>AGPL-3.0</strong>, but it runs as a standalone process manager on the server and is not linked into Sojorn code. No copyleft obligation flows to Sojorn.</li>
+        <li><strong>LLaMA Guard 3</strong> uses Meta's <strong>Llama 3 Community License</strong>, which is free for commercial use for services with fewer than 700 million monthly active users.</li>
+        <li>The <strong>PostgreSQL License</strong> is a permissive BSD-style license specific to the PostgreSQL project.</li>
+        <li>The <strong>SIL Open Font License (OFL-1.1)</strong> allows free use, modification, and redistribution of fonts.</li>
+        <li>All other dependencies use <strong>MIT</strong>, <strong>BSD-2-Clause</strong>, <strong>BSD-3-Clause</strong>, <strong>Apache-2.0</strong>, or <strong>ISC</strong> licenses &mdash; all permissive licenses with no copyleft requirements.</li>
+      </ul>
+
+      <p class="mb-4 text-sm text-gray-500">This page lists direct dependencies only. Each dependency may have its own transitive dependencies with their own licenses. The Flutter app resolves approximately 195 packages total; the Go backend resolves approximately 100 modules total. For complete dependency trees, see <code class="bg-gray-100 px-1 rounded">sojorn_app/pubspec.lock</code> and <code class="bg-gray-100 px-1 rounded">go-backend/go.sum</code> in our <a href="https://gitlab.com/patrickbritton3/sojorn" class="text-egyptianBlue underline" target="_blank">source repository</a>.</p>
+    </div>
+  </div>
+</Layout>

@@ -1,3 +1,7 @@
+// Copyright (c) 2026 MPLS LLC
+// Licensed under the Apache License, Version 2.0
+// See LICENSE file for details
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../services/auth_service.dart';
@@ -143,7 +147,7 @@ class _PostHeaderState extends ConsumerState<PostHeader> {
     final avatarUrl = _resolveAvatarUrl(widget.post.author?.avatarUrl);
     final initial = displayName.isNotEmpty ? displayName[0].toUpperCase() : '?';
 
-    final size = widget.avatarSize ?? 36.0;
+    final size = widget.avatarSize ?? 42.0;
 
     return Padding(
       padding: const EdgeInsets.symmetric(

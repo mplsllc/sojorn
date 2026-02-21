@@ -1,3 +1,7 @@
+// Copyright (c) 2026 MPLS LLC
+// Licensed under the GNU Affero General Public License v3.0
+// See LICENSE file for details
+
 'use client';
 
 import { useState, useRef, useCallback } from 'react';

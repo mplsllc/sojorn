@@ -1,3 +1,7 @@
+// Copyright (c) 2026 MPLS LLC
+// Licensed under the Apache License, Version 2.0
+// See LICENSE file for details
+
 /// Defines how a post should be displayed based on its context.
 ///
 /// This enum controls visual variations without duplicating widgets.

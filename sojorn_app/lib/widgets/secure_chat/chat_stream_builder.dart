@@ -1,3 +1,7 @@
+// Copyright (c) 2026 MPLS LLC
+// Licensed under the Apache License, Version 2.0
+// See LICENSE file for details
+
 import 'package:flutter/material.dart';
 import '../../services/secure_chat_service.dart';
 import '../../services/local_message_store.dart';

@@ -1,3 +1,7 @@
+// Copyright (c) 2026 MPLS LLC
+// Licensed under the Apache License, Version 2.0
+// See LICENSE file for details
+
 /// Web-safe stubs that mirror the ffmpeg_kit_flutter_new API surface.
 /// These classes compile on web but always return failure / no-op.
 

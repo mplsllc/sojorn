@@ -1,3 +1,7 @@
+// Copyright (c) 2026 MPLS LLC
+// Licensed under the Apache License, Version 2.0
+// See LICENSE file for details
+
 // Models for the Local Intel Service (OpenMeteo + Overpass API data)
 
 /// Weather conditions from OpenMeteo API

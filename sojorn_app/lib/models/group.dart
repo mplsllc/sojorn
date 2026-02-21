@@ -1,3 +1,7 @@
+// Copyright (c) 2026 MPLS LLC
+// Licensed under the Apache License, Version 2.0
+// See LICENSE file for details
+
 import 'package:equatable/equatable.dart';
 import 'cluster.dart' show GroupCategory;
 export 'cluster.dart' show GroupCategory;

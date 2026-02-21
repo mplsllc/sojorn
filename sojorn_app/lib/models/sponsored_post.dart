@@ -1,3 +1,7 @@
+// Copyright (c) 2026 MPLS LLC
+// Licensed under the Apache License, Version 2.0
+// See LICENSE file for details
+
 /// Sponsored Post model for First-Party Contextual Ads
 /// Matches the sponsored_posts table schema
 class SponsoredPost {

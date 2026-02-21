@@ -1,3 +1,7 @@
+// Copyright (c) 2026 MPLS LLC
+// Licensed under the Apache License, Version 2.0
+// See LICENSE file for details
+
 import 'package:flutter/material.dart';
 import '../models/trust_state.dart';
 import '../models/trust_tier.dart';

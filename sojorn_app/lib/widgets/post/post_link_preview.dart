@@ -1,3 +1,7 @@
+// Copyright (c) 2026 MPLS LLC
+// Licensed under the Apache License, Version 2.0
+// See LICENSE file for details
+
 import 'package:flutter/material.dart';
 import 'package:url_launcher/url_launcher.dart';
 import '../../models/post.dart';
@@ -18,9 +22,9 @@ class PostLinkPreview extends StatelessWidget {
     switch (mode) {
       case PostViewMode.feed:
       case PostViewMode.sponsored:
-        return 220.0;
+        return 240.0;
       case PostViewMode.detail:
-        return 280.0;
+        return 300.0;
       case PostViewMode.compact:
         return 160.0;
       case PostViewMode.thread:

@@ -3,8 +3,21 @@
 A privacy-first social network with community safety features, end-to-end encrypted messaging, and neighborhood-based organizing.
 
 **Operator**: MPLS LLC
-**License**: AGPL-3.0
 **Status**: Active Development — MVP near-complete
+
+## Licensing
+
+This project uses a split licensing model:
+
+| Component | License | License File |
+|-----------|---------|--------------|
+| Go API Engine (`go-backend/`) | [BSL 1.1](go-backend/LICENSE) | Core platform engine |
+| AI Gateway (`ai-gateway/`) | [BSL 1.1](ai-gateway/LICENSE) | AI moderation pipeline |
+| Flutter App (`sojorn_app/`) | [Apache 2.0](sojorn_app/LICENSE) | Mobile/desktop client |
+| Admin Panel (`admin/`) | [AGPL-3.0](admin/LICENSE) | Administration interface |
+| Website (`website/`) | [AGPL-3.0](website/LICENSE) | Public website |
+
+The BSL-licensed components (API engine and AI gateway) convert to **Apache License 2.0** four years after each release. All source code is publicly available for audit and transparency.
 
 ## Architecture
 

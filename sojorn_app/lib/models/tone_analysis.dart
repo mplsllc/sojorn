@@ -1,3 +1,7 @@
+// Copyright (c) 2026 MPLS LLC
+// Licensed under the Apache License, Version 2.0
+// See LICENSE file for details
+
 /// Represents the tone analysis result from the AI moderation system.
 ///
 /// The tone analysis uses intent-based detection rather than simple

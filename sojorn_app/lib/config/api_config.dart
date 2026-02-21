@@ -1,3 +1,7 @@
+// Copyright (c) 2026 MPLS LLC
+// Licensed under the Apache License, Version 2.0
+// See LICENSE file for details
+
 class ApiConfig {
   // Not const so we can normalize away accidentally-configured http/8080 URLs.
   static final String baseUrl = _computeBaseUrl();
