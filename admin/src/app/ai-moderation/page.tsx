@@ -20,10 +20,7 @@ const ENGINES = [
   { id: 'sightengine', label: 'SightEngine', icon: Shield },
 ];
 
-const LOCAL_MODELS = [
-  { id: 'llama-guard3:1b', name: 'LLaMA Guard 3 (1B)' },
-  { id: 'qwen2.5:7b-instruct-q4_K_M', name: 'Qwen 2.5 (7B)' },
-];
+// Fetched dynamically from Ollama via /ai/models/local
 
 interface ModerationConfig {
   id: string;
@@ -65,16 +62,19 @@ export default function AIModerationPage() {
   const [testHistory, setTestHistory] = useState<any[]>([]);
   const [uploadedFile, setUploadedFile] = useState<File | null>(null);
   const [uploading, setUploading] = useState(false);
+  const [localModels, setLocalModels] = useState<{id: string; name: string}[]>([]);
 
   const loadConfigs = useCallback(() => {
     setLoading(true);
     Promise.all([
       api.getAIModerationConfigs(),
-      api.getAIEngines()
+      api.getAIEngines(),
+      api.listLocalModels()
     ])
-      .then(([configData, engineData]) => {
+      .then(([configData, engineData, modelData]) => {
         setConfigs(configData.configs || []);
         setEngines(engineData.engines || []);
+        setLocalModels((modelData.models || []).map((m: any) => ({ id: m.id || m.name, name: m.name })));
       })
       .finally(() => setLoading(false));
   }, []);
@@ -268,14 +268,14 @@ export default function AIModerationPage() {
                 <select 
                   value={modelId}
                   onChange={(e) => {
-                    const selected = LOCAL_MODELS.find(m => m.id === e.target.value);
+                    const selected = localModels.find(m => m.id === e.target.value);
                     setModelId(e.target.value);
                     setModelName(selected?.name || '');
                   }}
                   className="w-full text-sm border border-gray-300 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-brand-500"
                 >
                   <option value="">Select model...</option>
-                  {LOCAL_MODELS.map(m => (
+                  {localModels.map(m => (
                     <option key={m.id} value={m.id}>{m.name}</option>
                   ))}
                 </select>
