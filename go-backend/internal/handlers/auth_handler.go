@@ -86,16 +86,16 @@ func (h *AuthHandler) Register(c *gin.Context) {
 		return
 	}
 
-	// Age gate: reject under-16s at registration so no data is ever stored for minors.
+	// Age gate: reject under-18s at registration so no data is ever stored for minors.
 	if req.BirthYear > 0 && req.BirthMonth >= 1 && req.BirthMonth <= 12 {
 		now := time.Now()
 		age := now.Year() - req.BirthYear
 		if int(now.Month()) < req.BirthMonth {
 			age--
 		}
-		if age < 16 {
+		if age < 18 {
 			c.JSON(http.StatusForbidden, gin.H{
-				"error": "You must be at least 16 years old to create an account on Sojorn.",
+				"error": "You must be at least 18 years old to create an account on Sojorn.",
 				"code":  "age_restricted",
 			})
 			return
@@ -252,7 +252,7 @@ func (h *AuthHandler) Login(c *gin.Context) {
 		return
 	}
 
-	// Age gate: check if user is under 16
+	// Age gate: check if user is under 18
 	var profile *models.Profile
 	profile, _ = h.repo.GetProfileByID(c.Request.Context(), user.ID.String())
 	if profile != nil && profile.BirthYear > 0 {
@@ -261,10 +261,10 @@ func (h *AuthHandler) Login(c *gin.Context) {
 		if int(now.Month()) < profile.BirthMonth {
 			age--
 		}
-		if age < 16 {
+		if age < 18 {
 			log.Printf("[Auth] Login blocked for underage user %s (age %d)", req.Email, age)
 			c.JSON(http.StatusForbidden, gin.H{
-				"error": "You must be at least 16 years old to use Sojorn. Please come back when you're older!",
+				"error": "You must be at least 18 years old to use Sojorn.",
 				"code":  "age_restricted",
 			})
 			return

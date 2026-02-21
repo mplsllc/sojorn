@@ -371,7 +371,7 @@ class _SignUpScreenState extends ConsumerState<SignUpScreen> {
                     ),
                     const SizedBox(height: 4),
                     Text(
-                      'You must be at least 16 to use Sojorn. Users under 18 cannot access sensitive content.',
+                      'You must be at least 18 years old to use Sojorn.',
                       style: AppTheme.textTheme.labelSmall?.copyWith(
                         color: AppTheme.navyText.withValues(alpha: 0.6),
                       ),
