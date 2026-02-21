@@ -36,8 +36,9 @@ class HomeShell extends ConsumerStatefulWidget {
   ConsumerState<HomeShell> createState() => _HomeShellState();
 }
 
-class _HomeShellState extends ConsumerState<HomeShell> with WidgetsBindingObserver {
+class _HomeShellState extends ConsumerState<HomeShell> with WidgetsBindingObserver, TickerProviderStateMixin {
   bool _isRadialMenuVisible = false;
+  late final AnimationController _fabRotationController;
   final SecureChatService _chatService = SecureChatService();
   StreamSubscription<RemoteMessage>? _notifSub;
 
@@ -60,6 +61,10 @@ class _HomeShellState extends ConsumerState<HomeShell> with WidgetsBindingObserv
   @override
   void initState() {
     super.initState();
+    _fabRotationController = AnimationController(
+      duration: const Duration(milliseconds: 300),
+      vsync: this,
+    );
     WidgetsBinding.instance.addObserver(this);
     _chatService.startBackgroundSync();
     _initNotificationListener();
@@ -203,6 +208,7 @@ class _HomeShellState extends ConsumerState<HomeShell> with WidgetsBindingObserv
 
   @override
   void dispose() {
+    _fabRotationController.dispose();
     WidgetsBinding.instance.removeObserver(this);
     _chatService.stopBackgroundSync();
     _notifSub?.cancel();
@@ -222,132 +228,61 @@ class _HomeShellState extends ConsumerState<HomeShell> with WidgetsBindingObserv
   Widget build(BuildContext context) {
     final currentIndex = widget.navigationShell.currentIndex;
 
-    return Scaffold(
-      backgroundColor: AppTheme.scaffoldBg,
-      appBar: _buildAppBar(),
-      body: Column(
-        children: [
-          const OfflineIndicator(),
-          Expanded(
-            child: Stack(
-              children: [
-                NavigationShellScope(
-                  currentIndex: currentIndex,
-                  child: widget.navigationShell,
-                ),
-                RadialMenuOverlay(
-            isVisible: _isRadialMenuVisible,
-            onDismiss: () => setState(() => _isRadialMenuVisible = false),
-            onPostTap: () {
-              Navigator.of(context).push(
-                MaterialPageRoute(
-                  builder: (_) => const ComposeScreen(),
-                ),
-              );
-            },
-            onQuipTap: () {
-              Navigator.of(context).push(
-                MaterialPageRoute(
-                  builder: (_) => const QuipCreationFlow(),
-                ),
-              );
-            },
-            onBeaconTap: () {
-              setState(() => _isRadialMenuVisible = false);
-              widget.navigationShell.goBranch(2);
-              WidgetsBinding.instance.addPostFrameCallback((_) {
-                BeaconScreen.globalKey.currentState?.onCreateAction();
-              });
-            },
-                ),
-              ],
-            ),
-          ),
-        ],
-      ),
-      floatingActionButton: Transform.translate(
-        offset: const Offset(0, 12),
-        child: GestureDetector(
-          onTap: () => setState(() => _isRadialMenuVisible = !_isRadialMenuVisible),
-          child: Stack(
-            alignment: Alignment.center,
+    return Stack(
+      children: [
+        Scaffold(
+          backgroundColor: AppTheme.scaffoldBg,
+          appBar: _buildAppBar(),
+          body: Column(
             children: [
-              Consumer(
-                builder: (context, ref, child) {
-                  final upload = ref.watch(quipUploadProvider);
-                  final isDone = !upload.isUploading && upload.progress >= 1.0;
-                  final isUploading = upload.isUploading;
-                  final hasState = isUploading || isDone;
-
-                  return Container(
-                    width: 56,
-                    height: 56,
-                    decoration: BoxDecoration(
-                      color: hasState ? AppTheme.brightNavy : AppTheme.navyBlue,
-                      borderRadius: BorderRadius.circular(16),
-                      boxShadow: [
-                        BoxShadow(
-                          color: (hasState ? AppTheme.brightNavy : AppTheme.navyBlue).withValues(alpha: 0.4),
-                          blurRadius: 12,
-                          offset: const Offset(0, 4),
-                        ),
-                      ],
+              const OfflineIndicator(),
+              Expanded(
+                child: Stack(
+                  children: [
+                    NavigationShellScope(
+                      currentIndex: currentIndex,
+                      child: widget.navigationShell,
                     ),
-                    child: Stack(
-                      alignment: Alignment.center,
-                      children: [
-                        // Inside Border Progress
-                        if (hasState)
-                          SizedBox(
-                            width: 50,
-                            height: 50,
-                            child: CustomPaint(
-                              painter: _VerticalBorderProgressPainter(
-                                progress: upload.progress,
-                                color: SojornColors.basicWhite,
-                                backgroundColor: SojornColors.basicWhite.withValues(alpha: 0.2),
-                                strokeWidth: 3.5,
-                                borderRadius: 12,
-                              ),
-                            ),
+                    RadialMenuOverlay(
+                      isVisible: _isRadialMenuVisible,
+                      onDismiss: () {
+                        setState(() => _isRadialMenuVisible = false);
+                        _fabRotationController.reverse();
+                      },
+                      onPostTap: () {
+                        Navigator.of(context).push(
+                          MaterialPageRoute(
+                            builder: (_) => const ComposeScreen(),
                           ),
-                        
-                        // Content: Icon(+) or Percent or Check
-                        if (isDone)
-                          const Icon(Icons.check, color: SojornColors.basicWhite, size: 28)
-                        else if (isUploading)
-                          Text(
-                            '${(upload.progress * 100).toInt()}%',
-                            style: GoogleFonts.outfit(
-                              color: SojornColors.basicWhite,
-                              fontSize: 13,
-                              fontWeight: FontWeight.bold,
-                            ),
-                          )
-                        else
-                          const Icon(
-                            Icons.add,
-                            color: SojornColors.basicWhite,
-                            size: 32,
+                        );
+                      },
+                      onQuipTap: () {
+                        Navigator.of(context).push(
+                          MaterialPageRoute(
+                            builder: (_) => const QuipCreationFlow(),
                           ),
-                      ],
+                        );
+                      },
+                      onBeaconTap: () {
+                        setState(() => _isRadialMenuVisible = false);
+                        _fabRotationController.reverse();
+                        widget.navigationShell.goBranch(2);
+                        WidgetsBinding.instance.addPostFrameCallback((_) {
+                          BeaconScreen.globalKey.currentState?.onCreateAction();
+                        });
+                      },
                     ),
-                  );
-                },
+                  ],
+                ),
               ),
             ],
           ),
-        ),
-      ),
-      floatingActionButtonLocation: FloatingActionButtonLocation.centerDocked,
-      bottomNavigationBar: Padding(
+          bottomNavigationBar: Padding(
         padding: const EdgeInsets.only(bottom: 2),
         child: BottomAppBar(
-          notchMargin: 8.0,
           padding: EdgeInsets.zero,
           height: SojornNav.bottomBarHeight,
           clipBehavior: Clip.antiAlias,
-          shape: const CircularNotchedRectangle(),
           child: ClipRRect(
             borderRadius: const BorderRadius.only(
               topLeft: Radius.circular(16),
@@ -391,6 +326,93 @@ class _HomeShellState extends ConsumerState<HomeShell> with WidgetsBindingObserv
           ),
         ),
       ),
+        ),
+        // FAB — positioned absolutely so nothing (snackbars, banners) can push it
+        Positioned(
+          left: 0,
+          right: 0,
+          bottom: SojornNav.bottomBarHeight / 2 - 2,
+          child: Center(
+            child: GestureDetector(
+              onTap: () {
+                setState(() => _isRadialMenuVisible = !_isRadialMenuVisible);
+                if (_isRadialMenuVisible) {
+                  _fabRotationController.forward();
+                } else {
+                  _fabRotationController.reverse();
+                }
+              },
+              child: Consumer(
+                builder: (context, ref, child) {
+                  final upload = ref.watch(quipUploadProvider);
+                  final isDone = !upload.isUploading && upload.progress >= 1.0;
+                  final isUploading = upload.isUploading;
+                  final hasState = isUploading || isDone;
+
+                  return Container(
+                    width: 48,
+                    height: 48,
+                    decoration: BoxDecoration(
+                      color: hasState ? AppTheme.brightNavy : AppTheme.navyBlue,
+                      borderRadius: BorderRadius.circular(14),
+                      boxShadow: [
+                        BoxShadow(
+                          color: (hasState ? AppTheme.brightNavy : AppTheme.navyBlue).withValues(alpha: 0.4),
+                          blurRadius: 12,
+                          offset: const Offset(0, 4),
+                        ),
+                      ],
+                    ),
+                    child: Stack(
+                      alignment: Alignment.center,
+                      children: [
+                        if (hasState)
+                          SizedBox(
+                            width: 42,
+                            height: 42,
+                            child: CustomPaint(
+                              painter: _VerticalBorderProgressPainter(
+                                progress: upload.progress,
+                                color: SojornColors.basicWhite,
+                                backgroundColor: SojornColors.basicWhite.withValues(alpha: 0.2),
+                                strokeWidth: 3.0,
+                                borderRadius: 10,
+                              ),
+                            ),
+                          ),
+                        if (isDone)
+                          const Icon(Icons.check, color: SojornColors.basicWhite, size: 24)
+                        else if (isUploading)
+                          Text(
+                            '${(upload.progress * 100).toInt()}%',
+                            style: GoogleFonts.outfit(
+                              color: SojornColors.basicWhite,
+                              fontSize: 12,
+                              fontWeight: FontWeight.bold,
+                            ),
+                          )
+                        else
+                          AnimatedBuilder(
+                            animation: _fabRotationController,
+                            builder: (context, child) => Transform.rotate(
+                              angle: _fabRotationController.value * 0.785398,
+                              child: child,
+                            ),
+                            child: const Icon(
+                              Icons.add,
+                              color: SojornColors.basicWhite,
+                              size: 28,
+                            ),
+                          ),
+                      ],
+                    ),
+                  );
+                },
+              ),
+            ),
+          ),
+        ),
+      ],
     );
   }
 

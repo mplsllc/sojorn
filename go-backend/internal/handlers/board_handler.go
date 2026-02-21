@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"log"
+	"math"
 	"net/http"
 	"strconv"
 	"time"
@@ -15,10 +16,11 @@ import (
 )
 
 type BoardHandler struct {
-	pool              *pgxpool.Pool
-	contentFilter     *services.ContentFilter
-	moderationService *services.ModerationService
-	contentModerator  *services.ContentModerator
+	pool                *pgxpool.Pool
+	contentFilter       *services.ContentFilter
+	moderationService   *services.ModerationService
+	contentModerator    *services.ContentModerator
+	notificationService *services.NotificationService
 }
 
 func NewBoardHandler(pool *pgxpool.Pool, opts ...interface{}) *BoardHandler {
@@ -31,6 +33,8 @@ func NewBoardHandler(pool *pgxpool.Pool, opts ...interface{}) *BoardHandler {
 			h.moderationService = v
 		case *services.ContentModerator:
 			h.contentModerator = v
+		case *services.NotificationService:
+			h.notificationService = v
 		}
 	}
 	return h
@@ -168,13 +172,17 @@ func (h *BoardHandler) CreateEntry(c *gin.Context) {
 		}
 	}
 
+	// Fuzz coordinates to ~1.1 km precision — same as beacons.
+	fLat := math.Round(req.Lat*100) / 100
+	fLong := math.Round(req.Long*100) / 100
+
 	var id uuid.UUID
 	var createdAt time.Time
 	err = h.pool.QueryRow(c.Request.Context(), `
 		INSERT INTO board_entries (author_id, body, image_url, topic, lat, long)
 		VALUES ($1, $2, $3, $4, $5, $6)
 		RETURNING id, created_at
-	`, userID, req.Body, req.ImageURL, req.Topic, req.Lat, req.Long).Scan(&id, &createdAt)
+	`, userID, req.Body, req.ImageURL, req.Topic, fLat, fLong).Scan(&id, &createdAt)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to create entry"})
 		return
@@ -191,7 +199,7 @@ func (h *BoardHandler) CreateEntry(c *gin.Context) {
 
 	c.JSON(http.StatusCreated, gin.H{"entry": gin.H{
 		"id": id, "body": req.Body, "image_url": req.ImageURL, "topic": req.Topic,
-		"lat": req.Lat, "long": req.Long, "upvotes": 0, "reply_count": 0,
+		"lat": fLat, "long": fLong, "upvotes": 0, "reply_count": 0,
 		"is_pinned": false, "created_at": createdAt,
 		"author_handle": handle, "author_display_name": displayName, "author_avatar_url": avatarURL,
 		"has_voted": false,
@@ -630,6 +638,11 @@ func (h *BoardHandler) aiModerateEntry(entryID uuid.UUID, body string, authorID 
 		INSERT INTO board_moderation_actions (entry_id, moderator_id, action, reason, ai_engine, ai_reason)
 		VALUES ($1, $2, 'remove', $3, $4, $3)
 	`, entryID, authorID, "AI flagged: "+reason, engine)
+
+	// Notify the author that their content was removed so they can appeal
+	if h.notificationService != nil {
+		_ = h.notificationService.NotifyContentRemoved(ctx, authorID.String(), entryID.String())
+	}
 }
 
 // aiModerateReply runs AI moderation on a board reply asynchronously using the
@@ -688,4 +701,9 @@ func (h *BoardHandler) aiModerateReply(replyID uuid.UUID, body string, authorID 
 		INSERT INTO board_moderation_actions (reply_id, moderator_id, action, reason, ai_engine, ai_reason)
 		VALUES ($1, $2, 'remove', $3, $4, $3)
 	`, replyID, authorID, "AI flagged: "+reason, engine)
+
+	// Notify the author that their reply was removed so they can appeal
+	if h.notificationService != nil {
+		_ = h.notificationService.NotifyContentRemoved(ctx, authorID.String(), replyID.String())
+	}
 }

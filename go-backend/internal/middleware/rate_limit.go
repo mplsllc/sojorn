@@ -77,3 +77,26 @@ func RateLimit(rps float64, burst int) gin.HandlerFunc {
 		c.Next()
 	}
 }
+
+// UserRateLimit returns a gin middleware that limits requests by authenticated
+// user ID (from JWT "user_id" context key). Falls back to IP if no user ID.
+// rps: Requests per second, burst: Max burst size
+func UserRateLimit(rps float64, burst int) gin.HandlerFunc {
+	limiter := NewIPRateLimiter(rate.Limit(rps), burst)
+
+	return func(c *gin.Context) {
+		key := c.ClientIP()
+		if uid, exists := c.Get("user_id"); exists {
+			if s, ok := uid.(string); ok && s != "" {
+				key = "user:" + s
+			}
+		}
+		if !limiter.GetLimiter(key).Allow() {
+			c.AbortWithStatusJSON(http.StatusTooManyRequests, gin.H{
+				"error": "Rate limit exceeded. Please try again later.",
+			})
+			return
+		}
+		c.Next()
+	}
+}

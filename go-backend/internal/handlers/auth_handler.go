@@ -517,7 +517,7 @@ func (h *AuthHandler) RefreshSession(c *gin.Context) {
 func (h *AuthHandler) generateToken(userID uuid.UUID) (string, error) {
 	token := jwt.NewWithClaims(jwt.SigningMethodHS256, jwt.MapClaims{
 		"sub":  userID.String(),
-		"exp":  time.Now().Add(time.Hour * 24 * 7).Unix(), // 7 days (Access token life)
+		"exp":  time.Now().Add(time.Minute * 15).Unix(), // 15 minutes — refresh token handles session continuity
 		"role": "authenticated",
 	})
 	return token.SignedString([]byte(h.config.JWTSecret))

@@ -173,9 +173,10 @@ class _QuipVideoItemState extends State<QuipVideoItem>
       final size = ctrl!.value.size;
       return Container(
         color: SojornColors.basicBlack,
-        child: Center(
+        child: SizedBox.expand(
           child: FittedBox(
             fit: BoxFit.cover,
+            clipBehavior: Clip.hardEdge,
             child: SizedBox(
               width: size.width,
               height: size.height,

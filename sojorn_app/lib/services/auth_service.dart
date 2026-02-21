@@ -60,12 +60,13 @@ class AuthService {
   }
 
   final _storage = const FlutterSecureStorage();
-  
+
   String? _accessToken;
-  String? _temporaryToken; 
+  String? _temporaryToken;
   model.AuthUser? _localUser;
   bool _initialized = false;
   final _authEventController = StreamController<AuthState>.broadcast();
+  Timer? _refreshTimer;
 
   AuthService._internal() {
     _init();
@@ -161,8 +162,34 @@ class AuthService {
     _accessToken = access;
     await _storage.write(key: 'access_token', value: access);
     await _storage.write(key: 'refresh_token', value: refresh);
-    await _storage.write(key: 'go_auth_token', value: access); 
+    await _storage.write(key: 'go_auth_token', value: access);
     _temporaryToken = access;
+    _scheduleProactiveRefresh(access);
+  }
+
+  /// Parses the JWT exp claim and schedules a silent refresh 2 minutes before
+  /// the token expires, avoiding the extra 401 round-trip on short-lived JWTs.
+  void _scheduleProactiveRefresh(String token) {
+    _refreshTimer?.cancel();
+    try {
+      final parts = token.split('.');
+      if (parts.length != 3) return;
+      final payload = json.decode(
+        utf8.decode(base64Url.decode(base64.normalize(parts[1]))),
+      );
+      if (payload is Map<String, dynamic> && payload.containsKey('exp')) {
+        final exp = DateTime.fromMillisecondsSinceEpoch(payload['exp'] * 1000);
+        // Refresh 2 minutes before expiry (or immediately if <2 min left)
+        final refreshAt = exp.subtract(const Duration(minutes: 2));
+        final delay = refreshAt.difference(DateTime.now());
+        if (delay.isNegative) return; // Already near/past expiry — let 401 handler do it
+        _refreshTimer = Timer(delay, () async {
+          await refreshSession();
+        });
+      }
+    } catch (_) {
+      // Silently ignore parse errors — 401 handler is the fallback
+    }
   }
 
   User? get currentUser {
@@ -315,6 +342,8 @@ class AuthService {
   }
 
   Future<void> signOut() async {
+    _refreshTimer?.cancel();
+    _refreshTimer = null;
     _temporaryToken = null;
     _accessToken = null;
     _localUser = null;

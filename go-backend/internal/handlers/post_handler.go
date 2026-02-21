@@ -323,6 +323,9 @@ func (h *PostHandler) CreateBeacon(c *gin.Context) {
 		return
 	}
 
+	// Sanitize beacon text — replace agency/enforcement terms with neutral language.
+	req.Body, _ = utils.SanitizeBeaconText(req.Body)
+
 	severity := "medium"
 	if req.Severity != "" {
 		severity = req.Severity

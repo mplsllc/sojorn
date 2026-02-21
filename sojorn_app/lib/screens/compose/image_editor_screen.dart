@@ -70,6 +70,16 @@ class sojornImageEditor extends StatelessWidget {
   ProImageEditorConfigs _buildConfigs() {
     return ProImageEditorConfigs(
       theme: _buildEditorTheme(),
+      cropRotateEditor: const CropRotateEditorConfigs(
+        initAspectRatio: -1,
+        aspectRatios: [
+          AspectRatioItem(text: 'Free', value: -1),
+          AspectRatioItem(text: '4:5', value: 4 / 5),
+          AspectRatioItem(text: '1:1', value: 1),
+          AspectRatioItem(text: '3:4', value: 3 / 4),
+          AspectRatioItem(text: '9:16', value: 9 / 16),
+        ],
+      ),
     );
   }
 

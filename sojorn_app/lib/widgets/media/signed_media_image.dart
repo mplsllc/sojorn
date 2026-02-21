@@ -8,6 +8,7 @@ class SignedMediaImage extends ConsumerStatefulWidget {
   final double? width;
   final double? height;
   final BoxFit? fit;
+  final Alignment alignment;
   final WidgetBuilder? loadingBuilder;
   final Widget Function(BuildContext, Object, StackTrace?)? errorBuilder;
 
@@ -17,6 +18,7 @@ class SignedMediaImage extends ConsumerStatefulWidget {
     this.width,
     this.height,
     this.fit,
+    this.alignment = Alignment.center,
     this.loadingBuilder,
     this.errorBuilder,
   });
@@ -169,6 +171,7 @@ class _SignedMediaImageState extends ConsumerState<SignedMediaImage> {
       width: widget.width,
       height: widget.height,
       fit: widget.fit,
+      alignment: widget.alignment,
       frameBuilder: (context, child, frame, wasSynchronouslyLoaded) {
         if (wasSynchronouslyLoaded) return child;
         return AnimatedOpacity(

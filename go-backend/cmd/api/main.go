@@ -217,7 +217,7 @@ func main() {
 	groupHandler := handlers.NewGroupHandler(dbPool, notificationService)
 
 	// Neighborhood board handler (standalone message board)
-	boardHandler := handlers.NewBoardHandler(dbPool, contentFilter, moderationService, contentModerator)
+	boardHandler := handlers.NewBoardHandler(dbPool, contentFilter, moderationService, contentModerator, notificationService)
 
 	// Beacon search handler (search beacons, board, public groups)
 	beaconSearchHandler := handlers.NewBeaconSearchHandler(dbPool)
@@ -369,7 +369,7 @@ func main() {
 			authorized.POST("/posts/:id/comments", postHandler.CreateComment)
 			authorized.GET("/feed", postHandler.GetFeed)
 			authorized.GET("/feed/personal", postHandler.GetFeed)
-			authorized.POST("/beacons", postHandler.CreateBeacon)
+			authorized.POST("/beacons", middleware.UserRateLimit(3.0/3600.0, 3), postHandler.CreateBeacon)
 			authorized.GET("/beacons/nearby", postHandler.GetNearbyBeacons)
 			authorized.GET("/beacons/official", postHandler.GetOfficialAlerts)
 			authorized.GET("/beacons/cameras", postHandler.GetOfficialCameras)

@@ -122,7 +122,7 @@ class _RadialMenuOverlayState extends State<RadialMenuOverlay>
     final centerX = screenWidth / 2;
     
     // Arc parameters - position from bottom up
-    const radius = 110.0;
+    const radius = 126.0;
     const startAngle = math.pi * 0.75; // 135 degrees (left)
     const endAngle = math.pi * 0.25;   // 45 degrees (right)
     
@@ -157,14 +157,14 @@ class _RadialMenuOverlayState extends State<RadialMenuOverlay>
     ];
 
     return SizedBox(
-      height: 200,
+      height: 220,
       child: Stack(
         clipBehavior: Clip.none,
         children: items.map((item) {
           // Calculate position in arc
           final dx = centerX + radius * math.cos(item.angle);
           // Position from top of container (lowered for easier reach)
-          final dy = 200 - 20 - (radius * math.sin(item.angle));
+          final dy = 220 - 20 - (radius * math.sin(item.angle));
           
           return Positioned(
             left: dx - 35, // Center the 70px button

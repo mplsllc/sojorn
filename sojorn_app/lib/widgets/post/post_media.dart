@@ -122,7 +122,8 @@ class PostMedia extends StatelessWidget {
       children: [
         SignedMediaImage(
           url: displayUrl,
-          fit: (isVideo && mode == PostViewMode.feed) ? BoxFit.cover : BoxFit.cover,
+          fit: BoxFit.cover,
+          alignment: Alignment.topCenter,
           loadingBuilder: (context) => Container(
             color: AppTheme.mediaLoadingBg,
             child: const Center(child: CircularProgressIndicator()),

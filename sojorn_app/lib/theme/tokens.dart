@@ -157,11 +157,11 @@ class SojornNav {
 
   // Shell bottom nav
   static const double bottomBarHeight = 58.0;
-  static const double bottomBarIconSize = 34.0;
+  static const double bottomBarIconSize = 24.0;
   static const double bottomBarVerticalPadding = 0.0;
   static const double bottomFabGap = 48.0;
-  static const double bottomBarLabelSize = 10.0;
-  static const double bottomBarLabelTopGap = 1.0;
+  static const double bottomBarLabelSize = 11.0;
+  static const double bottomBarLabelTopGap = 2.0;
 
   // Beacon top tab icons
   static const double beaconTabIconSize = 18.0;

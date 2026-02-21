@@ -69,9 +69,9 @@ class ImageUploadService {
     return _auth.accessToken;
   }
 
-  /// Default upload settings
-  static const int defaultMaxWidth = 1920;
-  static const int defaultMaxHeight = 1920;
+  /// Default upload settings — optimized for mobile-first feed
+  static const int defaultMaxWidth = 1080;
+  static const int defaultMaxHeight = 1350;
   static const int defaultQuality = 85;
 
   // =========================================================
