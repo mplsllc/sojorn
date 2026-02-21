@@ -37,7 +37,14 @@ func NewSightEngineService(apiUser, apiSecret string) *SightEngineService {
 // --- Text Moderation ---
 
 type sightEngineTextResponse struct {
-	Status    string `json:"status"`
+	Status           string `json:"status"`
+	ModerationClasses struct {
+		Sexual         float64 `json:"sexual"`
+		Discriminatory float64 `json:"discriminatory"`
+		Insulting      float64 `json:"insulting"`
+		Violent        float64 `json:"violent"`
+		Toxic          float64 `json:"toxic"`
+	} `json:"moderation_classes"`
 	Profanity struct {
 		Matches []struct {
 			Type      string `json:"type"`
@@ -45,32 +52,12 @@ type sightEngineTextResponse struct {
 			Match     string `json:"match"`
 		} `json:"matches"`
 	} `json:"profanity"`
-	Personal struct {
-		Matches []struct {
-			Type  string `json:"type"`
-			Match string `json:"match"`
-		} `json:"matches"`
-	} `json:"personal"`
 	Link struct {
 		Matches []struct {
 			Type  string `json:"type"`
 			Match string `json:"match"`
 		} `json:"matches"`
 	} `json:"link"`
-	// ML mode classes
-	Drug            *sightEngineMLClass `json:"drug"`
-	Weapon          *sightEngineMLClass `json:"weapon"`
-	Violence        *sightEngineMLClass `json:"violence_threat"`
-	SelfHarm        *sightEngineMLClass `json:"self_harm"`
-	Extremism       *sightEngineMLClass `json:"extremism"`
-	Spam            *sightEngineMLClass `json:"spam"`
-	ContentTrade    *sightEngineMLClass `json:"content_trade"`
-	MoneyTransaction *sightEngineMLClass `json:"money_transaction"`
-	Sexual          *sightEngineMLClass `json:"sexual"`
-}
-
-type sightEngineMLClass struct {
-	Score float64 `json:"score"`
 }
 
 // ModerateText sends text to SightEngine for moderation using ML mode.
@@ -122,18 +109,30 @@ func (s *SightEngineService) mapTextResult(resp *sightEngineTextResponse) *Conte
 		Scores: &ThreePoisonsScore{},
 	}
 
+	mc := resp.ModerationClasses
+
 	// Map to Three Poisons
-	// hate ← violence + weapon + sexual + profanity(discriminatory/sexual)
-	if resp.Violence != nil && resp.Violence.Score > result.Scores.Hate {
-		result.Scores.Hate = resp.Violence.Score
+	// hate ← violent + discriminatory + sexual + toxic
+	result.Scores.Hate = mc.Violent
+	if mc.Discriminatory > result.Scores.Hate {
+		result.Scores.Hate = mc.Discriminatory
 	}
-	if resp.Weapon != nil && resp.Weapon.Score > result.Scores.Hate {
-		result.Scores.Hate = resp.Weapon.Score
+	if mc.Sexual > result.Scores.Hate {
+		result.Scores.Hate = mc.Sexual
 	}
-	if resp.Sexual != nil && resp.Sexual.Score > result.Scores.Hate {
-		result.Scores.Hate = resp.Sexual.Score
+
+	// greed ← link spam
+	if len(resp.Link.Matches) > 2 {
+		result.Scores.Greed = 0.5
 	}
-	// High-intensity profanity contributes to hate
+
+	// delusion ← toxic + insulting (manipulative/abusive language)
+	result.Scores.Delusion = mc.Toxic
+	if mc.Insulting > result.Scores.Delusion {
+		result.Scores.Delusion = mc.Insulting
+	}
+
+	// High-intensity profanity boosts hate
 	for _, m := range resp.Profanity.Matches {
 		if m.Type == "discriminatory" || m.Type == "sexual" {
 			if m.Intensity == "high" && result.Scores.Hate < 0.7 {
@@ -142,33 +141,6 @@ func (s *SightEngineService) mapTextResult(resp *sightEngineTextResponse) *Conte
 				result.Scores.Hate = 0.4
 			}
 		}
-	}
-
-	// greed ← spam + content_trade + money_transaction + link spam
-	if resp.Spam != nil && resp.Spam.Score > result.Scores.Greed {
-		result.Scores.Greed = resp.Spam.Score
-	}
-	if resp.ContentTrade != nil && resp.ContentTrade.Score > result.Scores.Greed {
-		result.Scores.Greed = resp.ContentTrade.Score
-	}
-	if resp.MoneyTransaction != nil && resp.MoneyTransaction.Score > result.Scores.Greed {
-		result.Scores.Greed = resp.MoneyTransaction.Score
-	}
-	if len(resp.Link.Matches) > 2 {
-		if result.Scores.Greed < 0.5 {
-			result.Scores.Greed = 0.5
-		}
-	}
-
-	// delusion ← self_harm + extremism + drug
-	if resp.SelfHarm != nil && resp.SelfHarm.Score > result.Scores.Delusion {
-		result.Scores.Delusion = resp.SelfHarm.Score
-	}
-	if resp.Extremism != nil && resp.Extremism.Score > result.Scores.Delusion {
-		result.Scores.Delusion = resp.Extremism.Score
-	}
-	if resp.Drug != nil && resp.Drug.Score > result.Scores.Delusion {
-		result.Scores.Delusion = resp.Drug.Score
 	}
 
 	// Determine action from scores
@@ -193,24 +165,22 @@ func (s *SightEngineService) mapTextResult(resp *sightEngineTextResponse) *Conte
 }
 
 func (s *SightEngineService) buildTextReason(resp *sightEngineTextResponse) string {
+	mc := resp.ModerationClasses
 	parts := []string{}
-	if resp.Violence != nil && resp.Violence.Score > 0.3 {
-		parts = append(parts, fmt.Sprintf("violence=%.2f", resp.Violence.Score))
+	if mc.Violent > 0.3 {
+		parts = append(parts, fmt.Sprintf("violent=%.2f", mc.Violent))
 	}
-	if resp.Sexual != nil && resp.Sexual.Score > 0.3 {
-		parts = append(parts, fmt.Sprintf("sexual=%.2f", resp.Sexual.Score))
+	if mc.Sexual > 0.3 {
+		parts = append(parts, fmt.Sprintf("sexual=%.2f", mc.Sexual))
 	}
-	if resp.Spam != nil && resp.Spam.Score > 0.3 {
-		parts = append(parts, fmt.Sprintf("spam=%.2f", resp.Spam.Score))
+	if mc.Discriminatory > 0.3 {
+		parts = append(parts, fmt.Sprintf("discriminatory=%.2f", mc.Discriminatory))
 	}
-	if resp.SelfHarm != nil && resp.SelfHarm.Score > 0.3 {
-		parts = append(parts, fmt.Sprintf("self_harm=%.2f", resp.SelfHarm.Score))
+	if mc.Insulting > 0.3 {
+		parts = append(parts, fmt.Sprintf("insulting=%.2f", mc.Insulting))
 	}
-	if resp.Extremism != nil && resp.Extremism.Score > 0.3 {
-		parts = append(parts, fmt.Sprintf("extremism=%.2f", resp.Extremism.Score))
-	}
-	if resp.Drug != nil && resp.Drug.Score > 0.3 {
-		parts = append(parts, fmt.Sprintf("drug=%.2f", resp.Drug.Score))
+	if mc.Toxic > 0.3 {
+		parts = append(parts, fmt.Sprintf("toxic=%.2f", mc.Toxic))
 	}
 	if len(resp.Profanity.Matches) > 0 {
 		parts = append(parts, fmt.Sprintf("profanity=%d matches", len(resp.Profanity.Matches)))
