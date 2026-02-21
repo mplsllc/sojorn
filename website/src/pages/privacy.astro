@@ -2,48 +2,223 @@
 import Layout from '../layouts/Layout.astro';
 ---
 
-<Layout title="Privacy Policy - Sojorn" description="Sojorn Privacy & Data Sovereignty Policy">
+<Layout title="Privacy Policy - Sojorn" description="Sojorn Privacy Policy — what we collect, how we use it, and your rights">
   <div class="max-w-3xl mx-auto px-6 py-12">
-    <h1 class="text-3xl font-bold mb-2 text-egyptianBlue">Privacy & Data Sovereignty</h1>
+    <h1 class="text-3xl font-bold mb-2 text-egyptianBlue">Privacy Policy</h1>
     <p class="mb-8 text-sm text-gray-500">Last Updated: February 21, 2026</p>
 
     <div class="prose prose-blue max-w-none text-gray-700">
-      <p class="lead font-semibold">Profiting from surveillance is strictly against our principles. We reject the "attention economy" model and will never sell your data or allow third parties to track you.</p>
+      <p class="lead font-semibold">Sojorn is operated by MPLS LLC ("we," "us," "our"). This policy explains exactly what data we collect, why, how long we keep it, and what control you have over it.</p>
 
-      <h2 class="text-xl font-bold mt-6 mb-4">1. Data Sovereignty</h2>
-      <p class="mb-4">We do not sell your data. We do not license your data. We do not provide your data to third-party analytics, advertising, or data brokerage firms. Your content is not indexed on public search engines. Sojorn is a private community designed to protect your posts and identity from the extractivist economy.</p>
+      <!-- ─── 1. ACCOUNT DATA ─── -->
+      <h2 class="text-xl font-bold mt-8 mb-4">1. Account Data</h2>
+      <p class="mb-4">When you create a Sojorn account, we collect:</p>
+      <ul class="list-disc pl-6 mb-4 space-y-1">
+        <li><strong>Email address</strong> — used for authentication, password resets, and account notifications. Stored until you delete your account.</li>
+        <li><strong>Password</strong> — stored as a one-way cryptographic hash. We cannot read your password.</li>
+        <li><strong>Display name &amp; handle</strong> — your public identity within Sojorn.</li>
+        <li><strong>Birth month &amp; year</strong> — used solely for age verification (minimum age: 16). We do not display or share your birth date.</li>
+        <li><strong>Profile information</strong> — bio, avatar, cover image, location (free-text, optional), origin country (optional), interests (optional). All voluntarily provided and editable at any time.</li>
+      </ul>
 
-      <h2 class="text-xl font-bold mt-6 mb-4">2. What We Collect</h2>
-      <p class="mb-4">We collect only what is technically necessary to operate the Service: your email address (authentication), birth month &amp; year (age verification), display name &amp; handle (profile identity), content you create (displayed to your chosen audience), approximate location for Beacons only (ephemeral), and device push tokens (notifications). We do <strong>not</strong> collect precise GPS location outside of Beacons, contact lists, browsing history, biometric data, or financial information.</p>
+      <!-- ─── 2. CONTENT YOU CREATE ─── -->
+      <h2 class="text-xl font-bold mt-8 mb-4">2. Content You Create</h2>
+      <p class="mb-4">Sojorn stores the content you post, including:</p>
+      <ul class="list-disc pl-6 mb-4 space-y-1">
+        <li><strong>Posts</strong> — text, images, videos, link previews, and audio overlays. Visible to the audience you choose (public, followers, or group).</li>
+        <li><strong>Comments &amp; replies</strong> — attached to the post they respond to.</li>
+        <li><strong>Quips</strong> — short-form video content with optional audio overlays.</li>
+        <li><strong>Reposts</strong> — shared content with optional commentary.</li>
+        <li><strong>Board entries &amp; replies</strong> — neighborhood board posts (see Section 5: Location Data).</li>
+        <li><strong>Group content</strong> — posts, comments, forum threads, and chat messages within groups you join.</li>
+      </ul>
+      <p class="mb-4">All content you create is permanently deleted when you delete it or delete your account. We do not retain shadow copies or soft-deleted records.</p>
 
-      <h2 class="text-xl font-bold mt-6 mb-4">3. Third-Party Services</h2>
-      <p class="mb-4">We use Firebase (authentication, push notifications), Cloudflare R2 (media storage), SendPulse (newsletter delivery, opt-in only), and OpenAI / Google Vision (content moderation on public posts only). We do <strong>not</strong> use third-party tracking pixels, cross-site cookies, behavioral analytics, or third-party advertising SDKs.</p>
+      <!-- ─── 3. PRIVATE MESSAGES & ENCRYPTION ─── -->
+      <h2 class="text-xl font-bold mt-8 mb-4">3. Private Messages &amp; Encryption</h2>
+      <p class="mb-4">Direct messages are protected by <strong>end-to-end encryption (E2EE)</strong> using the Signal protocol. Encryption keys are generated on your device. We store only the encrypted ciphertext — <strong>we cannot read your private messages</strong>.</p>
+      <p class="mb-4">Encrypted group conversations ("Capsules") use the same E2EE approach. The server stores encrypted payloads and encrypted key material, but never has access to plaintext content.</p>
+      <p class="mb-4">We store the following cryptographic material to enable E2EE:</p>
+      <ul class="list-disc pl-6 mb-4 space-y-1">
+        <li>Your public identity key (never your private key)</li>
+        <li>Signed pre-keys and one-time pre-keys (for establishing new sessions)</li>
+        <li>Encrypted group key blobs (decryptable only by group members)</li>
+      </ul>
+      <p class="mb-4">Unencrypted group chat messages (in non-capsule groups) are stored as plaintext on our servers and are subject to our content moderation policies.</p>
 
-      <h2 class="text-xl font-bold mt-6 mb-4">4. Zero-Knowledge Encryption</h2>
-      <p class="mb-4">Private messages and encrypted capsule content are protected by end-to-end encryption (E2EE) using keys generated on your device. <strong>We cannot decrypt your private content.</strong></p>
+      <!-- ─── 4. COMMUNITY SAFETY BEACONS ─── -->
+      <h2 class="text-xl font-bold mt-8 mb-4">4. Community Safety Beacons</h2>
+      <p class="mb-4">Beacons are safety alerts that users can post to notify their community about real-world situations. Beacon posts include:</p>
+      <ul class="list-disc pl-6 mb-4 space-y-1">
+        <li><strong>Alert text</strong> — automatically processed through a neutral-language filter that replaces specific agency names with general terms (e.g., "Official Presence") for App Store compliance and community safety.</li>
+        <li><strong>Beacon type &amp; severity</strong> — categorization of the alert.</li>
+        <li><strong>Approximate location</strong> — beacons use location data to be geographically relevant. See Section 5 for how location is handled.</li>
+        <li><strong>Confidence score &amp; community votes</strong> — used to surface reliable alerts.</li>
+      </ul>
+      <p class="mb-4">Beacons can be set to expire automatically. Expired beacons remain in the database but are no longer displayed.</p>
 
-      <h2 class="text-xl font-bold mt-6 mb-4">5. Your Right to Vanish</h2>
-      <p class="mb-4">You have the absolute right to delete your account and all associated data at any time. We perform <strong>hard deletes</strong> — database records, media files, and encryption key backups are permanently removed. We do not retain shadow copies, hidden archives, or behavioral profiles. When you leave, you leave.</p>
-      <p class="mb-4">Automated cloud backups (Cloudflare R2) are retained for up to <strong>14 days</strong> as part of standard disaster-recovery operations. After that window, all backup data is permanently purged. Deletion requests take effect immediately in production systems; residual backup copies are removed as they age out of the retention window.</p>
+      <!-- ─── 5. LOCATION DATA ─── -->
+      <h2 class="text-xl font-bold mt-8 mb-4">5. Location Data</h2>
+      <p class="mb-4">We handle location data with deliberate imprecision:</p>
+      <ul class="list-disc pl-6 mb-4 space-y-1">
+        <li><strong>Neighborhood board entries</strong> — GPS coordinates are automatically rounded to approximately 1.1 kilometer precision (two decimal places) before storage. We never store your exact location for board posts.</li>
+        <li><strong>Beacons</strong> — location is stored for geographic relevance. Beacon location data indicates where an event is occurring, not where you are.</li>
+        <li><strong>Profile location</strong> — a free-text field you fill in yourself (e.g., "Minneapolis, MN"). This is not GPS data.</li>
+        <li><strong>Home neighborhood</strong> — you select a neighborhood from a predefined list. We store the neighborhood ID, not your address.</li>
+      </ul>
+      <p class="mb-4">We do <strong>not</strong> continuously track your GPS location, store location history, or use background location services.</p>
 
-      <h2 class="text-xl font-bold mt-6 mb-4">6. Your Right to Clear Data</h2>
-      <p class="mb-4">You may request that some or all of your content be deleted without closing your account. This includes posts, messages, media, and activity history. You can submit a request through the app or via our <a href="/settings/clear-data" class="text-egyptianBlue underline">data clearing request form</a>.</p>
+      <!-- ─── 6. THIRD-PARTY SAFETY DATA ─── -->
+      <h2 class="text-xl font-bold mt-8 mb-4">6. Third-Party Safety Data</h2>
+      <p class="mb-4">Sojorn may display community safety information sourced from third-party public-safety APIs. This data is proxied through our servers — we do not send your location or identity to these third-party services. We forward only the geographic query parameters necessary to retrieve relevant alerts for your area.</p>
 
-      <h2 class="text-xl font-bold mt-6 mb-4">7. Advertising &amp; In-App Data</h2>
-      <p class="mb-4">Sojorn may display sponsored content to help fund the platform. All advertising is served in-house by MPLS LLC. We do not use third-party ad networks, tracking pixels, or advertising SDKs. The factors that determine which ads you see include: your geographic neighborhood zone, the content section you are browsing, interest categories you explicitly choose, and your in-app engagement (such as likes and saves). This engagement data stays within Sojorn and is <strong>never shared with advertisers or any third party</strong>.</p>
-      <p class="mb-4">You can disable engagement-based ad relevance in your settings at any time. You can also change or clear your declared interest categories. Advertisers receive only aggregate metrics (total impressions, total taps) — never user-level data, device information, or demographics.</p>
-      <p class="mb-4">Content moderation logs (such as AI moderation decisions) retain content snippets for <strong>14 days</strong> to support the appeal process, after which snippets are permanently erased. Moderation metadata (scores, decisions) is retained for platform safety.</p>
-      <p class="mb-4">Sponsored content is clearly labeled and subject to the same AI moderation and community guidelines as all other content. For complete details, see our <a href="/advertising" class="text-egyptianBlue underline">Advertising Policy</a>.</p>
+      <!-- ─── 7. DEVICE & NOTIFICATION DATA ─── -->
+      <h2 class="text-xl font-bold mt-8 mb-4">7. Device &amp; Notification Data</h2>
+      <ul class="list-disc pl-6 mb-4 space-y-1">
+        <li><strong>Push notification tokens</strong> — we store Firebase Cloud Messaging (FCM) tokens to deliver push notifications. These are device identifiers, not personal identifiers. You can disable push notifications at any time.</li>
+        <li><strong>Device information</strong> — device type (Android/iOS/web) and a device fingerprint for multi-device sync. We do not collect device model, OS version, or hardware identifiers beyond what is necessary for sync.</li>
+        <li><strong>Sync codes</strong> — short-lived 6-digit codes for device pairing. These expire automatically.</li>
+      </ul>
 
-      <h2 class="text-xl font-bold mt-6 mb-4">8. Anti-Extraction Commitment</h2>
-      <p class="mb-4">MPLS LLC will never use your content to train AI models, sell or share your data with data brokers or third-party advertisers, export your engagement data outside of Sojorn, or provide "data partnerships" derived from your content or activity.</p>
+      <!-- ─── 8. FEED, ENGAGEMENT & AD RELEVANCE ─── -->
+      <h2 class="text-xl font-bold mt-8 mb-4">8. Feed, Engagement &amp; Ad Relevance</h2>
+      <p class="mb-4">To provide a useful feed and relevant sponsored content, we record:</p>
+      <ul class="list-disc pl-6 mb-4 space-y-1">
+        <li><strong>Feed impressions</strong> — which posts were shown to you (used to avoid showing the same content repeatedly).</li>
+        <li><strong>Engagement signals</strong> — likes, saves, comments, shares, and views (used for feed ranking and ad relevance).</li>
+        <li><strong>Interest categories</strong> — categories you explicitly select in your settings.</li>
+        <li><strong>Trust &amp; harmony score</strong> — an internal score based on your posting patterns and community standing, used for rate limiting and content moderation. This is not shared with other users or advertisers.</li>
+      </ul>
+      <p class="mb-4">This data is used to improve your experience within Sojorn. It is <strong>never sold, exported, or shared with advertisers or any third party</strong>. Advertisers receive only aggregate metrics (total impressions, total taps).</p>
+      <p class="mb-4">You can disable engagement-based ad relevance in your settings. You will still see ads, but they will be based only on geography, content section, and your declared interest categories. For full details, see our <a href="/advertising" class="text-egyptianBlue underline">Advertising Policy</a>.</p>
 
-      <h2 class="text-xl font-bold mt-6 mb-4">9. Open Source Transparency</h2>
-      <p class="mb-4">Our source code is published under the <a href="https://www.gnu.org/licenses/agpl-3.0.html" class="text-egyptianBlue underline">GNU Affero General Public License v3.0</a> (AGPL-3.0). We share our code so that users, security researchers, and the public can verify that we honor every commitment in this document. Our source code repository is hosted at <a href="https://gitlab.com/patrickbritton3/sojorn" class="text-egyptianBlue underline">gitlab.com/patrickbritton3/sojorn</a>.</p>
+      <!-- ─── 9. CONTENT MODERATION ─── -->
+      <h2 class="text-xl font-bold mt-8 mb-4">9. Content Moderation</h2>
+      <p class="mb-4">Public content (posts, comments, board entries) is processed by our AI moderation system, which uses OpenAI for text analysis and Google Vision for image analysis. Moderation operates only on public content — <strong>private encrypted messages are never analyzed</strong>.</p>
+      <p class="mb-4">When content is flagged, we log:</p>
+      <ul class="list-disc pl-6 mb-4 space-y-1">
+        <li>The moderation decision (pass, flag, or NSFW label)</li>
+        <li>AI confidence scores</li>
+        <li>A short content snippet for human review</li>
+      </ul>
+      <p class="mb-4"><strong>Content snippets in moderation logs are automatically deleted after 14 days.</strong> Moderation metadata (scores and decisions, without content) is retained for platform safety and to support the appeal process.</p>
+      <p class="mb-4">You can appeal any moderation decision through the in-app appeal process. Appeals are reviewed by a human moderator.</p>
 
-      <h2 class="text-xl font-bold mt-6 mb-4">10. Contact</h2>
-      <p class="mb-4">For privacy concerns: <a href="mailto:privacy@sojorn.net" class="text-egyptianBlue underline">privacy@sojorn.net</a>.<br>
-        For legal inquiries: <a href="mailto:legal@mp.ls" class="text-egyptianBlue underline">legal@mp.ls</a>.</p>
+      <!-- ─── 10. ACCOUNT SECURITY ─── -->
+      <h2 class="text-xl font-bold mt-8 mb-4">10. Account Security</h2>
+      <ul class="list-disc pl-6 mb-4 space-y-1">
+        <li><strong>Authentication tokens</strong> — short-lived JWTs (15-minute expiry) and refresh tokens. Expired and revoked tokens are automatically purged daily.</li>
+        <li><strong>Multi-factor authentication</strong> — if enabled, we store your TOTP secret and recovery codes (encrypted). These are deleted when you disable MFA or delete your account.</li>
+        <li><strong>WebAuthn credentials</strong> — if you use a security key or biometric login, we store the public key credential. We never have access to your biometric data.</li>
+        <li><strong>Social recovery</strong> — if you designate recovery guardians, we store encrypted key shards. These are usable only when enough guardians participate in recovery and are deleted if you revoke guardianship.</li>
+      </ul>
+
+      <!-- ─── 11. WHAT WE DO NOT COLLECT ─── -->
+      <h2 class="text-xl font-bold mt-8 mb-4">11. What We Do Not Collect</h2>
+      <p class="mb-4">We do <strong>not</strong> collect:</p>
+      <ul class="list-disc pl-6 mb-4 space-y-1">
+        <li>Precise GPS location (except as described in Section 5, and always reduced in precision)</li>
+        <li>Contact lists or address books</li>
+        <li>Browsing history outside of Sojorn</li>
+        <li>Biometric data</li>
+        <li>Financial or payment information</li>
+        <li>Phone numbers</li>
+        <li>IP addresses for tracking purposes (IP addresses may be temporarily processed for abuse prevention but are not stored in user records)</li>
+        <li>Cross-app or cross-site tracking data</li>
+      </ul>
+
+      <!-- ─── 12. THIRD-PARTY SERVICES ─── -->
+      <h2 class="text-xl font-bold mt-8 mb-4">12. Third-Party Services</h2>
+      <p class="mb-4">We use the following third-party services:</p>
+      <ul class="list-disc pl-6 mb-4 space-y-1">
+        <li><strong>Firebase Cloud Messaging</strong> — push notification delivery.</li>
+        <li><strong>Cloudflare R2</strong> — media file storage (images, videos, thumbnails). Files are served via signed URLs that expire.</li>
+        <li><strong>OpenAI</strong> — text content moderation on public content only.</li>
+        <li><strong>Google Vision AI</strong> — image content moderation on public content only.</li>
+        <li><strong>SendPulse</strong> — newsletter delivery (opt-in only) and transactional emails for data requests.</li>
+        <li><strong>ALTCHA</strong> — bot protection on forms (proof-of-work challenge, no user tracking).</li>
+      </ul>
+      <p class="mb-4">We do <strong>not</strong> use third-party analytics, third-party advertising SDKs, cross-site tracking pixels, or social login providers.</p>
+
+      <!-- ─── 13. DATA RETENTION ─── -->
+      <h2 class="text-xl font-bold mt-8 mb-4">13. Data Retention</h2>
+      <table class="w-full mb-4 text-sm border-collapse">
+        <thead><tr class="border-b"><th class="text-left py-2 pr-4">Data</th><th class="text-left py-2">Retention</th></tr></thead>
+        <tbody>
+          <tr class="border-b"><td class="py-2 pr-4">Account &amp; profile data</td><td class="py-2">Until you delete your account</td></tr>
+          <tr class="border-b"><td class="py-2 pr-4">Posts, comments, media</td><td class="py-2">Until you delete them or your account</td></tr>
+          <tr class="border-b"><td class="py-2 pr-4">Private messages (E2EE)</td><td class="py-2">Until you or the other party deletes them</td></tr>
+          <tr class="border-b"><td class="py-2 pr-4">Expired auth/verification tokens</td><td class="py-2">Purged daily (automated)</td></tr>
+          <tr class="border-b"><td class="py-2 pr-4">Moderation content snippets</td><td class="py-2">14 days, then permanently erased</td></tr>
+          <tr class="border-b"><td class="py-2 pr-4">Moderation metadata (scores, decisions)</td><td class="py-2">Retained for platform safety</td></tr>
+          <tr class="border-b"><td class="py-2 pr-4">Cloud backups (disaster recovery)</td><td class="py-2">14 days rolling, then permanently purged</td></tr>
+          <tr class="border-b"><td class="py-2 pr-4">Sync codes</td><td class="py-2">Expire automatically (minutes)</td></tr>
+        </tbody>
+      </table>
+
+      <!-- ─── 14. YOUR RIGHTS ─── -->
+      <h2 class="text-xl font-bold mt-8 mb-4">14. Your Rights</h2>
+      <h3 class="text-lg font-bold mt-4 mb-2">Right to Delete</h3>
+      <p class="mb-4">You can delete your account at any time through the app or via our <a href="/settings/delete-account" class="text-egyptianBlue underline">account deletion request form</a>. Deletion is a <strong>hard delete</strong> — your profile, posts, comments, media files, encryption keys, moderation records, and all associated data are permanently removed. Cascading deletion is enforced at the database level. Residual copies in disaster-recovery backups are automatically purged within 14 days.</p>
+      <h3 class="text-lg font-bold mt-4 mb-2">Right to Clear Data</h3>
+      <p class="mb-4">You can request partial data clearing (posts, messages, media, activity history) without deleting your account via the app or our <a href="/settings/clear-data" class="text-egyptianBlue underline">data clearing request form</a>.</p>
+      <h3 class="text-lg font-bold mt-4 mb-2">Right to Access</h3>
+      <p class="mb-4">You can request a copy of all data we hold about you by contacting <a href="mailto:privacy@sojorn.net" class="text-egyptianBlue underline">privacy@sojorn.net</a>.</p>
+      <h3 class="text-lg font-bold mt-4 mb-2">Right to Correct</h3>
+      <p class="mb-4">You can edit your profile, posts, and settings at any time through the app.</p>
+      <h3 class="text-lg font-bold mt-4 mb-2">Right to Object</h3>
+      <p class="mb-4">You can disable engagement-based ad relevance, push notifications, email notifications, and marketing communications at any time in your settings.</p>
+
+      <!-- ─── 15. PRIVACY CONTROLS ─── -->
+      <h2 class="text-xl font-bold mt-8 mb-4">15. Privacy Controls Available to You</h2>
+      <p class="mb-4">Sojorn provides granular privacy controls:</p>
+      <ul class="list-disc pl-6 mb-4 space-y-1">
+        <li>Private profile mode (followers-only visibility)</li>
+        <li>Per-post visibility settings (public, followers, or group)</li>
+        <li>Control over who can send you direct messages</li>
+        <li>Control over who can tag or mention you</li>
+        <li>Show/hide online status and last-seen time</li>
+        <li>Show/hide location, interests, and profile in search</li>
+        <li>Block and mute users</li>
+        <li>NSFW content blur toggle</li>
+        <li>Content filter sensitivity level</li>
+        <li>Notification preferences per type (likes, comments, follows, messages, beacons, etc.)</li>
+        <li>Quiet hours for notifications</li>
+        <li>Marketing opt-in/opt-out</li>
+        <li>Engagement-based ad relevance opt-out</li>
+      </ul>
+
+      <!-- ─── 16. ANTI-EXTRACTION ─── -->
+      <h2 class="text-xl font-bold mt-8 mb-4">16. Anti-Extraction Commitment</h2>
+      <p class="mb-4">MPLS LLC will never:</p>
+      <ul class="list-disc pl-6 mb-4 space-y-1">
+        <li>Use your content to train AI models</li>
+        <li>Sell or share your data with data brokers or third-party advertisers</li>
+        <li>Export your engagement data outside of Sojorn</li>
+        <li>Provide "data partnerships" derived from your content or activity</li>
+        <li>Index your content on public search engines without your explicit consent</li>
+        <li>Allow third-party tracking pixels or advertising SDKs in the app</li>
+      </ul>
+
+      <!-- ─── 17. OPEN SOURCE ─── -->
+      <h2 class="text-xl font-bold mt-8 mb-4">17. Open Source Transparency</h2>
+      <p class="mb-4">Sojorn's source code is published under the <a href="https://www.gnu.org/licenses/agpl-3.0.html" class="text-egyptianBlue underline">GNU Affero General Public License v3.0</a> (AGPL-3.0). Every claim in this policy can be verified by reviewing our source code at <a href="https://gitlab.com/patrickbritton3/sojorn" class="text-egyptianBlue underline">gitlab.com/patrickbritton3/sojorn</a>.</p>
+
+      <!-- ─── 18. CHILDREN ─── -->
+      <h2 class="text-xl font-bold mt-8 mb-4">18. Children's Privacy</h2>
+      <p class="mb-4">Sojorn is not intended for users under 16 years of age. We do not knowingly collect personal information from children under 16. If we become aware that a user is under 16, we will delete their account and all associated data.</p>
+
+      <!-- ─── 19. CHANGES ─── -->
+      <h2 class="text-xl font-bold mt-8 mb-4">19. Changes to This Policy</h2>
+      <p class="mb-4">We will notify registered users via email and in-app notification of any material changes to this policy at least 30 days before they take effect.</p>
+
+      <!-- ─── 20. CONTACT ─── -->
+      <h2 class="text-xl font-bold mt-8 mb-4">20. Contact</h2>
+      <p class="mb-4">
+        Privacy concerns: <a href="mailto:privacy@sojorn.net" class="text-egyptianBlue underline">privacy@sojorn.net</a><br>
+        Legal inquiries: <a href="mailto:legal@mp.ls" class="text-egyptianBlue underline">legal@mp.ls</a><br>
+        General: <a href="mailto:hello@sojorn.net" class="text-egyptianBlue underline">hello@sojorn.net</a>
+      </p>
     </div>
   </div>
 </Layout>
