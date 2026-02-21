@@ -133,6 +133,21 @@ debug/
 # Project Specific Exclusions
 logo.ai
 sojorn_app/analysis_results_final.txt
+
+# Removed legacy / junk (wiped from history)
+_legacy/
+sojorn_docs/
+html_landing/
+create_firebase_json.sh
+*.nginx
+Caddyfile
+firebase.json
+PRIVACY.md
+TERMS.md
+reset-password.html
+verified.html
+verify-error.html
+*.ps1
 go-backend/.env
 go-backend/bin/
 go-backend/sojorn-api*
