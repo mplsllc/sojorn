@@ -219,15 +219,27 @@ type sightEngineImageResponse struct {
 			Knife   float64 `json:"knife"`
 		} `json:"classes"`
 	} `json:"weapon"`
-	Drugs    *struct {
+	RecreationalDrug *struct {
 		Prob float64 `json:"prob"`
-	} `json:"drugs"`
+	} `json:"recreational_drug"`
+	Medical *struct {
+		Prob float64 `json:"prob"`
+	} `json:"medical"`
 	Offensive *struct {
 		Prob float64 `json:"prob"`
 	} `json:"offensive"`
-	Scam     *struct {
+	Tobacco *struct {
 		Prob float64 `json:"prob"`
-	} `json:"scam"`
+	} `json:"tobacco"`
+	Alcohol *struct {
+		Prob float64 `json:"prob"`
+	} `json:"alcohol"`
+	SelfHarm *struct {
+		Prob float64 `json:"prob"`
+	} `json:"self-harm"`
+	Gambling *struct {
+		Prob float64 `json:"prob"`
+	} `json:"gambling"`
 }
 
 // ModerateImage sends an image URL to SightEngine for moderation.
@@ -237,7 +249,7 @@ func (s *SightEngineService) ModerateImage(ctx context.Context, imageURL string)
 	}
 
 	endpoint := fmt.Sprintf(
-		"https://api.sightengine.com/1.0/check.json?url=%s&models=nudity-2.1,gore,violence,weapon,drugs,offensive,scam&api_user=%s&api_secret=%s",
+		"https://api.sightengine.com/1.0/check.json?url=%s&models=nudity-2.1,gore-2.0,violence,weapon,recreational_drug,medical,offensive-2.0,alcohol,tobacco,self-harm,gambling&api_user=%s&api_secret=%s",
 		url.QueryEscape(imageURL), s.apiUser, s.apiSecret,
 	)
 
@@ -313,12 +325,23 @@ func (s *SightEngineService) mapImageResult(resp *sightEngineImageResponse) *Con
 		result.Scores.Hate = resp.Offensive.Prob
 	}
 
-	// greed ← scam + drugs
-	if resp.Scam != nil && resp.Scam.Prob > result.Scores.Greed {
-		result.Scores.Greed = resp.Scam.Prob
+	// greed ← drugs + alcohol + gambling
+	if resp.RecreationalDrug != nil && resp.RecreationalDrug.Prob > result.Scores.Greed {
+		result.Scores.Greed = resp.RecreationalDrug.Prob
 	}
-	if resp.Drugs != nil && resp.Drugs.Prob > result.Scores.Greed {
-		result.Scores.Greed = resp.Drugs.Prob
+	if resp.Medical != nil && resp.Medical.Prob > result.Scores.Greed {
+		result.Scores.Greed = resp.Medical.Prob
+	}
+	if resp.Alcohol != nil && resp.Alcohol.Prob > result.Scores.Greed {
+		result.Scores.Greed = resp.Alcohol.Prob
+	}
+	if resp.Gambling != nil && resp.Gambling.Prob > result.Scores.Greed {
+		result.Scores.Greed = resp.Gambling.Prob
+	}
+
+	// delusion ← self-harm
+	if resp.SelfHarm != nil && resp.SelfHarm.Prob > result.Scores.Delusion {
+		result.Scores.Delusion = resp.SelfHarm.Prob
 	}
 
 	// Determine action
@@ -368,8 +391,11 @@ func (s *SightEngineService) buildImageReason(resp *sightEngineImageResponse) st
 	if resp.Violence != nil && resp.Violence.Prob > 0.3 {
 		parts = append(parts, fmt.Sprintf("violence=%.2f", resp.Violence.Prob))
 	}
-	if resp.Scam != nil && resp.Scam.Prob > 0.3 {
-		parts = append(parts, fmt.Sprintf("scam=%.2f", resp.Scam.Prob))
+	if resp.RecreationalDrug != nil && resp.RecreationalDrug.Prob > 0.3 {
+		parts = append(parts, fmt.Sprintf("drugs=%.2f", resp.RecreationalDrug.Prob))
+	}
+	if resp.SelfHarm != nil && resp.SelfHarm.Prob > 0.3 {
+		parts = append(parts, fmt.Sprintf("self-harm=%.2f", resp.SelfHarm.Prob))
 	}
 	if len(parts) == 0 {
 		return "image flagged by SightEngine"
