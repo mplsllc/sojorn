@@ -94,7 +94,12 @@ import Layout from '../layouts/Layout.astro';
 
       <!-- ─── 9. CONTENT MODERATION ─── -->
       <h2 class="text-xl font-bold mt-8 mb-4">9. Content Moderation</h2>
-      <p class="mb-4">Public content (posts, comments, board entries) is processed by our AI moderation system, which uses a local AI model and SightEngine for text and image analysis. Moderation operates only on public content — <strong>private encrypted messages are never analyzed</strong>.</p>
+      <p class="mb-4">Public content (posts, comments, board entries) is processed by our AI moderation system. We use a <strong>two-layer approach designed to keep your data on our infrastructure</strong>:</p>
+      <ul class="list-disc pl-6 mb-4 space-y-1">
+        <li><strong>Local AI (primary)</strong> — an open-source language model (LLaMA Guard) running on our own server hardware. Text analysis happens entirely on our infrastructure. <strong>Your content never leaves our servers</strong> for this layer.</li>
+        <li><strong>SightEngine (secondary)</strong> — a dedicated content moderation API used for image analysis and as a secondary text check. SightEngine processes content snippets solely for moderation purposes and does not store, train on, or share your content.</li>
+      </ul>
+      <p class="mb-4">Moderation operates only on public content — <strong>private encrypted messages are never analyzed</strong>.</p>
       <p class="mb-4">When content is flagged, we log:</p>
       <ul class="list-disc pl-6 mb-4 space-y-1">
         <li>The moderation decision (pass, flag, or NSFW label)</li>
@@ -102,6 +107,7 @@ import Layout from '../layouts/Layout.astro';
         <li>A short content snippet for human review</li>
       </ul>
       <p class="mb-4"><strong>Content snippets in moderation logs are automatically deleted after 14 days.</strong> Moderation metadata (scores and decisions, without content) is retained for platform safety and to support the appeal process.</p>
+      <p class="mb-4">For full details on what content is and isn't allowed, see our <a href="/moderation" class="text-egyptianBlue underline">Community Guidelines &amp; Moderation Policy</a>.</p>
       <p class="mb-4">You can appeal any moderation decision through the in-app appeal process. Appeals are reviewed by a human moderator.</p>
 
       <!-- ─── 10. ACCOUNT SECURITY ─── -->

@@ -1,0 +1,180 @@
+---
+import Layout from '../layouts/Layout.astro';
+---
+
+<Layout title="Community Guidelines & Moderation - Sojorn" description="What's allowed on Sojorn, how we moderate, and what happens when content is flagged">
+  <div class="max-w-3xl mx-auto px-6 py-12">
+    <h1 class="text-3xl font-bold mb-2 text-egyptianBlue">Community Guidelines &amp; Moderation Policy</h1>
+    <p class="mb-8 text-sm text-gray-500">Last Updated: February 21, 2026</p>
+
+    <div class="prose prose-blue max-w-none text-gray-700">
+      <p class="lead font-semibold">Sojorn exists to connect friends and communities in a space that respects your dignity, your privacy, and your intelligence. These guidelines define what belongs here and what doesn't. By using Sojorn, you agree to follow them.</p>
+
+      <!-- ─── HOW WE MODERATE ─── -->
+      <h2 class="text-xl font-bold mt-10 mb-4">How We Moderate</h2>
+      <p class="mb-4">All public content on Sojorn (posts, comments, quips, board entries, and group messages in non-encrypted groups) passes through a two-layer moderation system:</p>
+
+      <div class="bg-blue-50 border border-blue-200 rounded-xl p-6 mb-6">
+        <h3 class="text-lg font-bold mb-3 text-egyptianBlue">Layer 1: Local AI</h3>
+        <p class="mb-2">An open-source language model (<strong>LLaMA Guard</strong>) runs directly on our own server hardware. Text analysis happens entirely within our infrastructure.</p>
+        <p class="font-semibold text-egyptianBlue">Your content never leaves our servers for this layer.</p>
+      </div>
+
+      <div class="bg-blue-50 border border-blue-200 rounded-xl p-6 mb-6">
+        <h3 class="text-lg font-bold mb-3 text-egyptianBlue">Layer 2: SightEngine</h3>
+        <p class="mb-2">A dedicated content moderation API that handles image analysis and provides a secondary text check. SightEngine processes content solely for safety classification and does not store, train on, or share your content.</p>
+      </div>
+
+      <div class="bg-gray-50 border border-gray-200 rounded-xl p-6 mb-6">
+        <h3 class="text-lg font-bold mb-3">Fail-Open Fallback</h3>
+        <p>If both moderation layers are temporarily unavailable, content is published and flagged for later review. We do not block you from posting because of a system outage.</p>
+      </div>
+
+      <p class="mb-4"><strong>Private encrypted messages are never moderated.</strong> End-to-end encrypted conversations (DMs and Capsule groups) cannot be read by our systems.</p>
+
+      <p class="mb-4">When content is flagged, a human moderator reviews the decision. You are notified and can appeal any moderation action through the in-app appeal process.</p>
+
+      <!-- ─── SCORING ─── -->
+      <h2 class="text-xl font-bold mt-10 mb-4">How Content Is Scored</h2>
+      <p class="mb-4">Our moderation system evaluates content against three categories we call the <strong>Three Poisons</strong> (a framework borrowed from Buddhist philosophy):</p>
+      <ul class="list-disc pl-6 mb-4 space-y-2">
+        <li><strong>Hate (dosa)</strong> &mdash; violence, discrimination, threats, sexual exploitation, weapons</li>
+        <li><strong>Greed (lobha)</strong> &mdash; scams, spam, financial exploitation, MLM schemes</li>
+        <li><strong>Delusion (moha)</strong> &mdash; manipulation, toxicity, deliberate misinformation designed to harm</li>
+      </ul>
+      <p class="mb-4">Each category produces a score from 0 to 1. Content scoring above our thresholds is either flagged for human review or labeled as sensitive (NSFW). Content that clearly violates our rules is removed automatically and the poster is notified.</p>
+
+      <!-- ─── WHAT'S NOT ALLOWED ─── -->
+      <h2 class="text-2xl font-bold mt-12 mb-6 text-red-700">What Is NOT Allowed</h2>
+      <p class="mb-6">The following content will be removed and may result in account suspension or permanent ban. There are no warnings for the most severe categories.</p>
+
+      <h3 class="text-lg font-bold mt-6 mb-3 text-red-700">Violence &amp; Weapons</h3>
+      <ul class="list-disc pl-6 mb-4 space-y-1">
+        <li>Threats of violence against any person or group</li>
+        <li>Content glorifying, promoting, or instructing violence</li>
+        <li>Firearms, explosives, or weapon promotion of any kind</li>
+        <li>Gore, graphic violence, or content depicting real harm to people or animals</li>
+      </ul>
+
+      <h3 class="text-lg font-bold mt-6 mb-3 text-red-700">Sexual Exploitation</h3>
+      <ul class="list-disc pl-6 mb-4 space-y-1">
+        <li>Non-consensual intimate imagery (revenge porn, deepfakes, hidden recordings)</li>
+        <li>Sexual exploitation or trafficking content</li>
+        <li>Solicitation of sexual services</li>
+        <li>Sexually explicit content involving or appearing to involve minors &mdash; <strong>zero tolerance, immediate permanent ban, and report to NCMEC</strong></li>
+      </ul>
+
+      <h3 class="text-lg font-bold mt-6 mb-3 text-red-700">Child Safety</h3>
+      <ul class="list-disc pl-6 mb-4 space-y-1">
+        <li>Any content that sexualizes, endangers, or exploits minors in any way</li>
+        <li>Grooming behavior or attempts to contact minors for inappropriate purposes</li>
+        <li>Sharing personal information about minors without parental consent</li>
+      </ul>
+      <p class="mb-4 font-semibold text-red-700">Sojorn has a strict 18+ age requirement. Violations of child safety rules result in immediate and permanent removal with no appeal, and are reported to the appropriate authorities.</p>
+
+      <h3 class="text-lg font-bold mt-6 mb-3 text-red-700">Hard Drugs</h3>
+      <ul class="list-disc pl-6 mb-4 space-y-1">
+        <li>Promotion, sale, or instruction for manufacturing of hard drugs (cocaine, heroin, methamphetamine, fentanyl, etc.)</li>
+        <li>Content glorifying hard drug use or encouraging others to try hard drugs</li>
+      </ul>
+
+      <h3 class="text-lg font-bold mt-6 mb-3 text-red-700">Financial Exploitation</h3>
+      <ul class="list-disc pl-6 mb-4 space-y-1">
+        <li>Scams, phishing, or fraudulent schemes of any kind</li>
+        <li>Multi-level marketing (MLM) recruitment or promotion</li>
+        <li>Pyramid schemes, Ponzi schemes, or any deceptive financial structures</li>
+        <li>Fake investment opportunities, pump-and-dump crypto schemes, or get-rich-quick promotions</li>
+        <li>Gambling promotion or gambling-related content</li>
+      </ul>
+
+      <h3 class="text-lg font-bold mt-6 mb-3 text-red-700">Religious Exploitation</h3>
+      <ul class="list-disc pl-6 mb-4 space-y-1">
+        <li>Using religious authority, language, or community trust to manipulate, recruit, or extract money from users</li>
+        <li>Cult recruitment or high-control group promotion</li>
+        <li>Faith-based scams (prosperity gospel grifts, fake charity solicitation, etc.)</li>
+      </ul>
+      <p class="mb-4">For clarity: sincere religious expression and discussion is welcome. Exploiting faith to manipulate people is not.</p>
+
+      <h3 class="text-lg font-bold mt-6 mb-3 text-red-700">Harassment &amp; Hate Speech</h3>
+      <ul class="list-disc pl-6 mb-4 space-y-1">
+        <li>Targeted harassment, bullying, or coordinated attacks against individuals</li>
+        <li>Hate speech based on race, ethnicity, gender, sexual orientation, disability, religion, or national origin</li>
+        <li>Doxxing (publishing private personal information without consent)</li>
+        <li>Encouraging others to harass or harm someone</li>
+      </ul>
+
+      <h3 class="text-lg font-bold mt-6 mb-3 text-red-700">Spam &amp; Platform Manipulation</h3>
+      <ul class="list-disc pl-6 mb-4 space-y-1">
+        <li>Automated posting, bot networks, or coordinated inauthentic behavior</li>
+        <li>Mass unsolicited messaging or comment spam</li>
+        <li>Impersonation of other users, public figures, or organizations</li>
+        <li>Artificially inflating engagement (fake likes, fake follows, engagement rings)</li>
+      </ul>
+
+      <!-- ─── WHAT'S ALLOWED ─── -->
+      <h2 class="text-2xl font-bold mt-12 mb-6 text-green-700">What IS Allowed</h2>
+      <p class="mb-4">Sojorn is for real people connecting authentically. The following are explicitly permitted:</p>
+
+      <ul class="list-disc pl-6 mb-6 space-y-2">
+        <li><strong>Genuine self-expression</strong> &mdash; art, photography, writing, opinions, humor, and creative content</li>
+        <li><strong>Tobacco &amp; cannabis</strong> &mdash; discussion and depiction of smoking and marijuana use is allowed. This is an adults-only platform.</li>
+        <li><strong>Alcohol</strong> &mdash; discussion and social content involving alcohol is allowed</li>
+        <li><strong>Political speech</strong> &mdash; political opinions, debate, and activism are allowed as long as they don't cross into hate speech, threats, or targeted harassment</li>
+        <li><strong>Religious expression</strong> &mdash; sincere discussion of faith, spirituality, and religious topics is welcome</li>
+        <li><strong>Criticism</strong> &mdash; criticism of ideas, public figures, companies, and institutions is allowed, including strong opinions and harsh words, as long as it doesn't become targeted harassment of private individuals</li>
+        <li><strong>Profanity</strong> &mdash; swearing is allowed. This is an adult platform. Profanity is only flagged when it crosses into hate speech or targeted abuse</li>
+        <li><strong>NSFW content (labeled)</strong> &mdash; artistic nudity, mature themes, and suggestive content are allowed when properly labeled as NSFW. Our AI moderation system automatically applies NSFW labels to sensitive content so users who have blur enabled won't see it unexpectedly</li>
+        <li><strong>Harm reduction content</strong> &mdash; educational discussion about drug safety, addiction recovery, and harm reduction resources is permitted and encouraged</li>
+      </ul>
+
+      <!-- ─── WHAT HAPPENS WHEN CONTENT IS FLAGGED ─── -->
+      <h2 class="text-xl font-bold mt-10 mb-4">What Happens When Content Is Flagged</h2>
+      <ol class="list-decimal pl-6 mb-4 space-y-2">
+        <li><strong>Automatic classification</strong> &mdash; our AI system evaluates your content and assigns a classification: clean, NSFW (labeled but visible), or flagged (pending review)</li>
+        <li><strong>Human review</strong> &mdash; flagged content is placed in a moderation queue for human review. A moderator examines the content and the AI's reasoning</li>
+        <li><strong>Action</strong> &mdash; the moderator either approves the content (false positive), applies an NSFW label, or removes it with a reason</li>
+        <li><strong>Notification</strong> &mdash; you are notified of any moderation action taken on your content, including the reason</li>
+        <li><strong>Appeal</strong> &mdash; you can appeal any moderation decision through the in-app appeal process. Appeals are reviewed by a different moderator</li>
+      </ol>
+
+      <!-- ─── ACCOUNT CONSEQUENCES ─── -->
+      <h2 class="text-xl font-bold mt-10 mb-4">Account Consequences</h2>
+      <table class="w-full mb-6 text-sm border-collapse">
+        <thead><tr class="border-b"><th class="text-left py-2 pr-4">Severity</th><th class="text-left py-2 pr-4">Action</th><th class="text-left py-2">Examples</th></tr></thead>
+        <tbody>
+          <tr class="border-b"><td class="py-2 pr-4">Low</td><td class="py-2 pr-4">Content labeled NSFW</td><td class="py-2">Suggestive imagery, strong language in specific contexts</td></tr>
+          <tr class="border-b"><td class="py-2 pr-4">Medium</td><td class="py-2 pr-4">Content removed + warning</td><td class="py-2">Spam, mild harassment, untagged NSFW content</td></tr>
+          <tr class="border-b"><td class="py-2 pr-4">High</td><td class="py-2 pr-4">Content removed + temporary suspension</td><td class="py-2">Hate speech, scams, doxxing, repeated violations</td></tr>
+          <tr class="border-b"><td class="py-2 pr-4">Severe</td><td class="py-2 pr-4">Immediate permanent ban</td><td class="py-2">CSAM, sexual exploitation of minors, credible threats of violence</td></tr>
+        </tbody>
+      </table>
+
+      <!-- ─── DATA & AI TRANSPARENCY ─── -->
+      <h2 class="text-xl font-bold mt-10 mb-4">Data &amp; AI Transparency</h2>
+      <ul class="list-disc pl-6 mb-4 space-y-2">
+        <li>Our primary AI moderation model runs <strong>locally on our own servers</strong>. Your text content is not sent to OpenAI, Google, Microsoft, or any external LLM provider for moderation.</li>
+        <li>SightEngine, our secondary layer, is a dedicated moderation service that processes content for safety classification only. They do not use your content for model training.</li>
+        <li>We do <strong>not</strong> use your content to train any AI models.</li>
+        <li>Moderation content snippets stored in our logs are automatically deleted after 14 days.</li>
+        <li>Our source code is open source under the <a href="https://www.gnu.org/licenses/agpl-3.0.html" class="text-egyptianBlue underline">AGPL-3.0 license</a>. You can verify every claim in this document by reviewing <a href="https://gitlab.com/patrickbritton3/sojorn" class="text-egyptianBlue underline">our code</a>.</li>
+      </ul>
+
+      <!-- ─── REPORTING ─── -->
+      <h2 class="text-xl font-bold mt-10 mb-4">Reporting Content</h2>
+      <p class="mb-4">If you see content that violates these guidelines:</p>
+      <ul class="list-disc pl-6 mb-4 space-y-1">
+        <li><strong>In-app</strong> &mdash; tap the three-dot menu on any post, comment, or profile and select "Report"</li>
+        <li><strong>Email</strong> &mdash; contact <a href="mailto:safety@sojorn.net" class="text-egyptianBlue underline">safety@sojorn.net</a> with details</li>
+      </ul>
+      <p class="mb-4">All reports are reviewed. We do not disclose the identity of reporters.</p>
+
+      <!-- ─── CONTACT ─── -->
+      <h2 class="text-xl font-bold mt-10 mb-4">Contact</h2>
+      <p class="mb-4">
+        Safety &amp; moderation: <a href="mailto:safety@sojorn.net" class="text-egyptianBlue underline">safety@sojorn.net</a><br>
+        Privacy: <a href="mailto:privacy@sojorn.net" class="text-egyptianBlue underline">privacy@sojorn.net</a><br>
+        General: <a href="mailto:hello@sojorn.net" class="text-egyptianBlue underline">hello@sojorn.net</a>
+      </p>
+    </div>
+  </div>
+</Layout>
