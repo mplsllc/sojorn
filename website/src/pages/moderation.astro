@@ -168,6 +168,49 @@ import Layout from '../layouts/Layout.astro';
         <li>Our source code is open source under the <a href="https://www.gnu.org/licenses/agpl-3.0.html" class="text-egyptianBlue underline">AGPL-3.0 license</a>. You can verify every claim in this document by reviewing <a href="https://gitlab.com/patrickbritton3/sojorn" class="text-egyptianBlue underline">our code</a>.</li>
       </ul>
 
+      <!-- ─── INFRASTRUCTURE & TECHNOLOGY ─── -->
+      <h2 class="text-xl font-bold mt-10 mb-4">Infrastructure &amp; Technology</h2>
+      <p class="mb-6">We believe you should know exactly where your data lives and what software handles it. Here is our full stack.</p>
+
+      <div class="bg-gray-50 border border-gray-200 rounded-xl p-6 mb-6">
+        <h3 class="text-lg font-bold mb-3">Hosting: Hetzner (Germany)</h3>
+        <p class="mb-3">All Sojorn infrastructure runs on a dedicated server hosted by <strong>Hetzner Online GmbH</strong>, a German hosting company headquartered in Gunzenhausen, Germany. Our server is located in Hetzner's <strong>Falkenstein, Germany</strong> data center.</p>
+        <ul class="list-disc pl-6 space-y-1 text-sm">
+          <li><strong>German jurisdiction.</strong> Hetzner is subject to German privacy law and the GDPR &mdash; not US surveillance laws, not the CLOUD Act, and not National Security Letters. Any foreign data request must go through Mutual Legal Assistance Treaties (MLATs) and German court review.</li>
+          <li><strong>ISO 27001 certified.</strong> Hetzner's data centers are certified under the ISO/IEC 27001 information security management standard.</li>
+          <li><strong>GDPR compliant.</strong> Hetzner operates under a Data Processing Agreement per GDPR Article 28. The German Federal Data Protection Act (BDSG) adds supplementary protections beyond the GDPR baseline.</li>
+          <li><strong>Data stays in the EU.</strong> Unless otherwise specified, your data remains within the European Union and is not passed to third parties.</li>
+          <li><strong>Dedicated hardware.</strong> We run on a dedicated physical server &mdash; not shared cloud instances. Your data is not co-located with other customers' workloads.</li>
+          <li><strong>Encrypted in transit.</strong> All connections to our server use TLS. Internal services communicate over encrypted channels.</li>
+        </ul>
+        <p class="mt-3 text-sm">Hetzner policies: <a href="https://www.hetzner.com/legal/privacy-policy/" class="text-egyptianBlue underline" target="_blank">Privacy Policy</a> &middot; <a href="https://www.hetzner.com/legal/terms-and-conditions/" class="text-egyptianBlue underline" target="_blank">Terms &amp; Conditions</a> &middot; <a href="https://www.hetzner.com/legal/data-privacy-faq/" class="text-egyptianBlue underline" target="_blank">Data Privacy FAQ</a></p>
+      </div>
+
+      <div class="bg-gray-50 border border-gray-200 rounded-xl p-6 mb-6">
+        <h3 class="text-lg font-bold mb-3">Tech Stack</h3>
+        <p class="mb-3">We use a straightforward, modern stack with no third-party analytics, tracking pixels, or ad networks.</p>
+        <ul class="list-disc pl-6 space-y-2 text-sm">
+          <li>
+            <strong>Backend: Go (Golang)</strong> &mdash; our API server is written in Go using the <a href="https://gin-gonic.com/" class="text-egyptianBlue underline" target="_blank">Gin</a> framework. Go is a compiled, statically-typed language created by Google. It runs directly on our server as a single binary with no external runtime dependencies. There is no Node.js, Python, or PHP involved in serving your data.
+          </li>
+          <li>
+            <strong>Database: PostgreSQL</strong> &mdash; all user data, posts, messages, and moderation records are stored in <a href="https://www.postgresql.org/" class="text-egyptianBlue underline" target="_blank">PostgreSQL</a>, an open-source relational database that has been actively developed for over 35 years. PostgreSQL runs locally on our server &mdash; we do not use any cloud-hosted database service (no AWS RDS, no Supabase, no Firebase). Your data never leaves our machine for storage.
+          </li>
+          <li>
+            <strong>Mobile App: Flutter</strong> &mdash; the Sojorn app is built with <a href="https://flutter.dev/" class="text-egyptianBlue underline" target="_blank">Flutter</a>, Google's open-source UI framework. The app communicates with our API over HTTPS and does not contain any third-party analytics SDKs, ad SDKs, or tracking libraries. Push notifications use Firebase Cloud Messaging (FCM), which is the standard delivery mechanism for Android &mdash; notification tokens are stored on our server, not in any third-party analytics platform.
+          </li>
+          <li>
+            <strong>Media Storage: Cloudflare R2</strong> &mdash; uploaded images and videos are stored in <a href="https://www.cloudflare.com/products/r2/" class="text-egyptianBlue underline" target="_blank">Cloudflare R2</a>, an S3-compatible object storage service. R2 does not charge egress fees and Cloudflare does not inspect or analyze stored content. All media URLs are signed (time-limited) so content cannot be hotlinked or accessed without authorization.
+          </li>
+          <li>
+            <strong>End-to-End Encryption: X3DH + Double Ratchet</strong> &mdash; private messages and Capsule (encrypted group) conversations use the <a href="https://signal.org/docs/specifications/x3dh/" class="text-egyptianBlue underline" target="_blank">Extended Triple Diffie-Hellman</a> key agreement protocol, the same cryptographic foundation used by Signal. Encrypted messages cannot be read by our server, our moderators, or any third party.
+          </li>
+          <li>
+            <strong>Open Source</strong> &mdash; our entire codebase (backend, admin panel, website) is published under the <a href="https://www.gnu.org/licenses/agpl-3.0.html" class="text-egyptianBlue underline" target="_blank">AGPL-3.0 license</a>. You can audit every line of code at <a href="https://gitlab.com/patrickbritton3/sojorn" class="text-egyptianBlue underline" target="_blank">gitlab.com/patrickbritton3/sojorn</a>.
+          </li>
+        </ul>
+      </div>
+
       <!-- ─── REPORTING ─── -->
       <h2 class="text-xl font-bold mt-10 mb-4">Reporting Content</h2>
       <p class="mb-4">If you see content that violates these guidelines:</p>
