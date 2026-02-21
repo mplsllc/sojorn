@@ -2,18 +2,6 @@
 
 Secure administration frontend for the Sojorn social network platform.
 
-## Features
-
-- **Dashboard** — Real-time platform stats, user/post growth charts, quick actions
-- **User Management** — Search, view, suspend, ban, verify, change roles, reset strikes
-- **Post Management** — Browse, search, flag, remove, restore, view details
-- **AI Moderation Queue** — Review AI-flagged content (OpenAI + Google Vision), approve/dismiss/remove/ban
-- **Appeal System** — Full appeal workflow: review violations, approve/reject appeals, restore content
-- **Reports** — Community reports management with action/dismiss workflow
-- **Algorithm Settings** — Configure feed ranking weights and AI moderation thresholds
-- **Categories** — Create, edit, manage content categories
-- **System Health** — Database status, connection pool monitoring, audit log
-
 ## Tech Stack
 
 - **Framework**: Next.js 14 (App Router)
@@ -23,17 +11,38 @@ Secure administration frontend for the Sojorn social network platform.
 - **Icons**: Lucide React
 - **Backend**: Go (Gin) REST API at `api.sojorn.net`
 
+## Features
+
+- **Dashboard** — Real-time platform stats, user/post growth charts, quick actions
+- **User Management** — Search, view, suspend, ban, verify, change roles, reset strikes
+- **Post Management** — Browse, search, flag, remove, restore, view details
+- **Groups & Capsules** — List groups, member management, deactivate, key rotation status
+- **Quip Repair** — List missing thumbnails, server-side FFmpeg repair
+- **AI Moderation Queue** — Review AI-flagged content (OpenAI + Google Vision), approve/dismiss/remove/ban
+- **AI Moderation Config** — Tune thresholds and scoring weights
+- **AI Audit Log** — Full history of AI moderation decisions with feedback
+- **Appeal System** — Full appeal workflow: review violations, approve/reject appeals, restore content
+- **Reports** — Community reports management with action/dismiss workflow
+- **Algorithm Settings** — Configure feed ranking weights, cooling period, diversity injection
+- **Algorithm Feed Scores** — Live viewer of feed scoring for any post
+- **Categories** — Create, edit, manage content categories
+- **Neighborhoods** — Manage neighborhood seeds and geographic zones
+- **Official Accounts** — Scheduler for official account article posting
+- **Content Tools** — Bulk content operations
+- **Safety** — Safe domains management, content filter configuration
+- **Storage Browser** — Browse Cloudflare R2 media storage
+- **System Health** — Database status, connection pool monitoring
+- **Settings** — Platform-wide configuration
+- **Email Templates** — Manage and test-send email templates
+- **Reserved Usernames** — Manage reserved/blocked handles
+- **Waitlist** — Manage waitlist entries and invitations
+- **Audit Log** — Full admin action history
+
 ## Setup
 
 ```bash
-# Install dependencies
 npm install
-
-# Configure API endpoint
 cp .env.local.example .env.local
-# Edit NEXT_PUBLIC_API_URL if needed
-
-# Run development server
 npm run dev
 ```
 
@@ -47,90 +56,30 @@ The admin panel runs on **port 3001** by default.
 
 ## Authentication
 
-The admin panel uses the same JWT authentication as the main app. Users must have `role = 'admin'` in the `profiles` table to access admin endpoints.
-
-### Setting up an admin user
+Uses JWT authentication. Users must have `role = 'admin'` in the `profiles` table.
 
 ```sql
--- On the VPS, connect to sojorn database
 UPDATE profiles SET role = 'admin' WHERE handle = 'your_handle';
 ```
-
-## Backend API Routes
-
-All admin endpoints are under `/api/v1/admin/` and require:
-1. Valid JWT token (Bearer auth)
-2. User profile with `role = 'admin'`
-
-| Method | Endpoint | Description |
-|--------|----------|-------------|
-| GET | `/admin/dashboard` | Platform stats |
-| GET | `/admin/growth` | User/post growth data |
-| GET | `/admin/users` | List users (search, filter) |
-| GET | `/admin/users/:id` | User detail |
-| PATCH | `/admin/users/:id/status` | Change user status |
-| PATCH | `/admin/users/:id/role` | Change user role |
-| PATCH | `/admin/users/:id/verification` | Toggle verification |
-| POST | `/admin/users/:id/reset-strikes` | Reset strikes |
-| GET | `/admin/posts` | List posts |
-| GET | `/admin/posts/:id` | Post detail |
-| PATCH | `/admin/posts/:id/status` | Change post status |
-| DELETE | `/admin/posts/:id` | Delete post |
-| GET | `/admin/moderation` | Moderation queue |
-| PATCH | `/admin/moderation/:id/review` | Review flagged content |
-| GET | `/admin/appeals` | List appeals |
-| PATCH | `/admin/appeals/:id/review` | Review appeal |
-| GET | `/admin/reports` | List reports |
-| PATCH | `/admin/reports/:id` | Update report status |
-| GET | `/admin/algorithm` | Get algorithm config |
-| PUT | `/admin/algorithm` | Update algorithm config |
-| GET | `/admin/categories` | List categories |
-| POST | `/admin/categories` | Create category |
-| PATCH | `/admin/categories/:id` | Update category |
-| GET | `/admin/health` | System health check |
-| GET | `/admin/audit-log` | Audit log |
 
 ## Deployment
 
 ```bash
-# Build for production
-npm run build
-
-# Start production server
-npm start
+npm run build && npm start
 ```
 
-For production, serve behind Nginx with SSL. Add a server block for `admin.sojorn.net`:
-
-```nginx
-server {
-    listen 443 ssl http2;
-    server_name admin.sojorn.net;
-
-    ssl_certificate /etc/letsencrypt/live/admin.sojorn.net/fullchain.pem;
-    ssl_certificate_key /etc/letsencrypt/live/admin.sojorn.net/privkey.pem;
-
-    location / {
-        proxy_pass http://localhost:3001;
-        proxy_http_version 1.1;
-        proxy_set_header Upgrade $http_upgrade;
-        proxy_set_header Connection 'upgrade';
-        proxy_set_header Host $host;
-        proxy_cache_bypass $http_upgrade;
-    }
-}
-```
+Served behind Nginx with SSL at `admin.sojorn.net`, proxied to port 3001.
 
 ## Moderation Flow
 
 ```
-Content Created → AI Analysis (OpenAI/Google Vision)
+Content Created → AI Analysis (OpenAI text / Google Vision images)
     ↓
 Score > threshold → Auto-flag → Moderation Queue
     ↓
 Admin reviews → Approve / Dismiss / Remove Content / Ban User
     ↓
-If removed → User sees violation → Can file appeal
+If removed → User notified → Can file appeal
     ↓
 Admin reviews appeal → Approve (restore) / Reject (uphold)
 ```
