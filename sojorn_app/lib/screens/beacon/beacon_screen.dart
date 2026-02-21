@@ -105,6 +105,7 @@ class BeaconScreenState extends ConsumerState<BeaconScreen> with TickerProviderS
 
   // Groups / clusters data
   List<Cluster> _clusters = [];
+  List<Cluster> _discoverClusters = [];
   bool _isLoadingClusters = false;
   Map<String, String> _encryptedKeys = {};
   GroupCategory? _selectedGroupCategory;
@@ -215,6 +216,12 @@ class BeaconScreenState extends ConsumerState<BeaconScreen> with TickerProviderS
             _suppressAutoCenterOnUser = false;
           }
         });
+        // Update map center so board uses real location
+        _mapCenter = _userLocation!;
+        // Refresh board if it was already loaded with stale coordinates
+        if (_boardEntries.isNotEmpty || _activeTab == BeaconTab.board) {
+          _loadBoardEntries();
+        }
         // Fetch weather for current location
         _fetchWeather(position.latitude, position.longitude);
         // Detect neighborhood
@@ -401,11 +408,22 @@ class BeaconScreenState extends ConsumerState<BeaconScreen> with TickerProviderS
   Future<void> _loadClusters() async {
     setState(() => _isLoadingClusters = true);
     try {
-      final groups = await ApiService.instance.fetchMyGroups();
+      final results = await Future.wait([
+        ApiService.instance.fetchMyGroups(),
+        ApiService.instance.discoverGroups(),
+      ]);
+      final groups = results[0];
+      final discover = results[1];
       final allClusters = groups.map((g) => Cluster.fromJson(g)).toList();
+      final myIds = allClusters.map((c) => c.id).toSet();
+      final discoverClusters = discover
+          .map((g) => Cluster.fromJson(g))
+          .where((c) => !myIds.contains(c.id))
+          .toList();
       if (mounted) {
         setState(() {
           _clusters = allClusters;
+          _discoverClusters = discoverClusters;
           _encryptedKeys = {
             for (final g in groups)
               if ((g['encrypted_group_key'] as String?)?.isNotEmpty == true)
@@ -2029,6 +2047,15 @@ class BeaconScreenState extends ConsumerState<BeaconScreen> with TickerProviderS
     final neighborhoods = filtered.where((c) => !c.isCapsule).toList();
     final capsules = filtered.where((c) => c.isCapsule).toList();
 
+    var filteredDiscover = _selectedGroupCategory == null
+        ? _discoverClusters
+        : _discoverClusters.where((c) => c.category == _selectedGroupCategory).toList();
+    // Also filter out neighborhood group from discover
+    if (_neighborhood != null && _neighborhood!['group_id'] != null) {
+      final hoodGroupId = _neighborhood!['group_id'];
+      filteredDiscover = filteredDiscover.where((c) => c.id != hoodGroupId).toList();
+    }
+
     return Container(
       color: AppTheme.scaffoldBg,
       child: Column(
@@ -2096,95 +2123,81 @@ class BeaconScreenState extends ConsumerState<BeaconScreen> with TickerProviderS
           Expanded(
             child: _isLoadingClusters
                 ? const Center(child: CircularProgressIndicator())
-                : _clusters.isEmpty
-                    ? Center(
-                        child: Column(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            Icon(Icons.group_add, color: AppTheme.navyBlue.withValues(alpha: 0.2), size: 48),
-                            const SizedBox(height: 12),
-                            Text('No groups yet', style: TextStyle(
-                              color: AppTheme.navyBlue.withValues(alpha: 0.4), fontSize: 15, fontWeight: FontWeight.w600)),
-                            const SizedBox(height: 4),
-                            Text('Create or join a group to get started',
-                              style: TextStyle(color: SojornColors.textDisabled, fontSize: 13)),
-                            const SizedBox(height: 20),
-                            Row(
-                              mainAxisSize: MainAxisSize.min,
+                : RefreshIndicator(
+                    onRefresh: _loadClusters,
+                    child: ListView(
+                      padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 12),
+                      children: [
+                        if (neighborhoods.isNotEmpty) ...[
+                          Padding(
+                            padding: const EdgeInsets.fromLTRB(4, 8, 4, 8),
+                            child: Text('MY GROUPS', style: TextStyle(
+                              color: AppTheme.navyBlue.withValues(alpha: 0.4),
+                              fontSize: 10, fontWeight: FontWeight.w700, letterSpacing: 1,
+                            )),
+                          ),
+                          ...neighborhoods.map((c) => _buildClusterCard(c, isCapsule: false)),
+                        ],
+                        if (capsules.isNotEmpty) ...[
+                          Padding(
+                            padding: const EdgeInsets.fromLTRB(4, 16, 4, 8),
+                            child: Row(
                               children: [
-                                OutlinedButton.icon(
-                                  onPressed: _showCreateGroupSheet,
-                                  icon: const Icon(Icons.location_on, size: 16),
-                                  label: const Text('New Group'),
-                                  style: OutlinedButton.styleFrom(
-                                    foregroundColor: AppTheme.brightNavy,
-                                    side: BorderSide(color: AppTheme.brightNavy.withValues(alpha: 0.3)),
-                                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                                Icon(Icons.lock, size: 12, color: const Color(0xFF4CAF50)),
+                                const SizedBox(width: 6),
+                                Text('CAPSULES', style: TextStyle(
+                                  color: const Color(0xFF2E7D32),
+                                  fontSize: 10, fontWeight: FontWeight.w700, letterSpacing: 1,
+                                )),
+                                const SizedBox(width: 6),
+                                Container(
+                                  padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                                  decoration: BoxDecoration(
+                                    color: const Color(0xFF4CAF50).withValues(alpha: 0.12),
+                                    borderRadius: BorderRadius.circular(999),
                                   ),
-                                ),
-                                const SizedBox(width: 10),
-                                OutlinedButton.icon(
-                                  onPressed: _showCreateCapsuleSheet,
-                                  icon: const Icon(Icons.lock, size: 16),
-                                  label: const Text('New Capsule'),
-                                  style: OutlinedButton.styleFrom(
-                                    foregroundColor: const Color(0xFF4CAF50),
-                                    side: BorderSide(color: const Color(0xFF4CAF50).withValues(alpha: 0.3)),
-                                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                                  child: const Text(
+                                    'E2E',
+                                    style: TextStyle(
+                                      color: Color(0xFF2E7D32),
+                                      fontSize: 9,
+                                      fontWeight: FontWeight.w700,
+                                    ),
                                   ),
                                 ),
                               ],
                             ),
-                          ],
-                        ),
-                      )
-                    : RefreshIndicator(
-                        onRefresh: _loadClusters,
-                        child: ListView(
-                          padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 12),
-                          children: [
-                            if (neighborhoods.isNotEmpty) ...[
-                              Padding(
-                                padding: const EdgeInsets.fromLTRB(4, 8, 4, 8),
-                                child: Text('NEIGHBORHOODS', style: TextStyle(
-                                  color: AppTheme.navyBlue.withValues(alpha: 0.4),
-                                  fontSize: 10, fontWeight: FontWeight.w700, letterSpacing: 1,
-                                )),
+                          ),
+                          ...capsules.map((c) => _buildClusterCard(c, isCapsule: true)),
+                        ],
+                        if (filteredDiscover.isNotEmpty) ...[
+                          Padding(
+                            padding: const EdgeInsets.fromLTRB(4, 16, 4, 8),
+                            child: Text('DISCOVER', style: TextStyle(
+                              color: AppTheme.navyBlue.withValues(alpha: 0.4),
+                              fontSize: 10, fontWeight: FontWeight.w700, letterSpacing: 1,
+                            )),
+                          ),
+                          ...filteredDiscover.map((c) => _buildClusterCard(c, isCapsule: false)),
+                        ],
+                        if (_clusters.isEmpty && filteredDiscover.isEmpty)
+                          Padding(
+                            padding: const EdgeInsets.only(top: 40),
+                            child: Center(
+                              child: Column(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  Icon(Icons.group_add, color: AppTheme.navyBlue.withValues(alpha: 0.2), size: 48),
+                                  const SizedBox(height: 12),
+                                  Text('No groups yet', style: TextStyle(
+                                    color: AppTheme.navyBlue.withValues(alpha: 0.4), fontSize: 15, fontWeight: FontWeight.w600)),
+                                  const SizedBox(height: 4),
+                                  Text('Create a group to get started',
+                                    style: TextStyle(color: SojornColors.textDisabled, fontSize: 13)),
+                                ],
                               ),
-                              ...neighborhoods.map((c) => _buildClusterCard(c, isCapsule: false)),
-                            ],
-                            if (capsules.isNotEmpty) ...[
-                              Padding(
-                                padding: const EdgeInsets.fromLTRB(4, 16, 4, 8),
-                                child: Row(
-                                  children: [
-                                    Icon(Icons.lock, size: 12, color: const Color(0xFF4CAF50)),
-                                    const SizedBox(width: 6),
-                                    Text('CAPSULES', style: TextStyle(
-                                      color: const Color(0xFF2E7D32),
-                                      fontSize: 10, fontWeight: FontWeight.w700, letterSpacing: 1,
-                                    )),
-                                    const SizedBox(width: 6),
-                                    Container(
-                                      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                                      decoration: BoxDecoration(
-                                        color: const Color(0xFF4CAF50).withValues(alpha: 0.12),
-                                        borderRadius: BorderRadius.circular(999),
-                                      ),
-                                      child: const Text(
-                                        'E2E',
-                                        style: TextStyle(
-                                          color: Color(0xFF2E7D32),
-                                          fontSize: 9,
-                                          fontWeight: FontWeight.w700,
-                                        ),
-                                      ),
-                                    ),
-                                  ],
-                                ),
-                              ),
-                              ...capsules.map((c) => _buildClusterCard(c, isCapsule: true)),
-                            ],
+                            ),
+                          ),
                             const SizedBox(height: 16),
                           ],
                         ),

@@ -103,17 +103,25 @@ class SecureChatService {
     connectRealtime();
   }
   
-  void connectRealtime() {
-      final token = AuthService.instance.accessToken;
-      if (token == null) return;
+  Future<void> connectRealtime() async {
       if (_wsChannel != null) return; // Already connected
       if (_isReconnecting) return;
+
+      // Ensure token is fresh before connecting
+      final auth = AuthService.instance;
+      if (auth.accessToken == null) return;
+      if (auth.isAccessTokenExpired) {
+        final refreshed = await auth.refreshSession();
+        if (!refreshed) return;
+      }
+      final token = auth.accessToken;
+      if (token == null) return;
 
       final wsUrl = Uri.parse(ApiConfig.baseUrl)
           .replace(scheme: ApiConfig.baseUrl.startsWith('https') ? 'wss' : 'ws', path: '/ws', queryParameters: {'token': token});
 
       _isReconnecting = true;
-      
+
       try {
         _wsChannel = WebSocketChannel.connect(wsUrl);
         _isReconnecting = false;

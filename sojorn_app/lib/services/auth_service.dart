@@ -105,6 +105,9 @@ class AuthService {
     }
   }
   
+  bool get isAccessTokenExpired =>
+      _accessToken == null || _isTokenExpired(_accessToken!);
+
   bool _isTokenExpired(String token) {
     try {
       final parts = token.split('.');

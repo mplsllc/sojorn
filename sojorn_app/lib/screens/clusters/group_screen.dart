@@ -39,6 +39,8 @@ class _GroupScreenState extends ConsumerState<GroupScreen>
   bool _isUnlocking = false;
   String? _unlockError;
   String? _currentUserId;
+  late bool _isMember;
+  bool _isJoining = false;
 
   bool get isEncrypted => widget.group.isEncrypted;
 
@@ -47,8 +49,24 @@ class _GroupScreenState extends ConsumerState<GroupScreen>
     super.initState();
     _tabController = TabController(length: 4, vsync: this);
     _currentUserId = AuthService.instance.currentUser?.id;
+    _isMember = widget.group.isMember;
     if (isEncrypted) {
       _unlockCapsule();
+    }
+  }
+
+  Future<void> _joinGroup() async {
+    setState(() => _isJoining = true);
+    try {
+      await ApiService.instance.joinGroup(widget.group.id);
+      if (mounted) setState(() { _isMember = true; _isJoining = false; });
+    } catch (e) {
+      if (mounted) {
+        setState(() => _isJoining = false);
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Failed to join: $e')),
+        );
+      }
     }
   }
 
@@ -84,35 +102,37 @@ class _GroupScreenState extends ConsumerState<GroupScreen>
       body: NestedScrollView(
         headerSliverBuilder: (context, innerBoxIsScrolled) => [
           _buildHeader(context),
-          _buildTabBar(),
+          if (_isMember) _buildTabBar(),
         ],
-        body: TabBarView(
-          controller: _tabController,
-          children: [
-            GroupFeedTab(
-              groupId: widget.group.id,
-              isEncrypted: isEncrypted,
-              capsuleKey: _capsuleKey,
-              currentUserId: _currentUserId,
-            ),
-            GroupChatTab(
-              groupId: widget.group.id,
-              isEncrypted: isEncrypted,
-              capsuleKey: _capsuleKey,
-              currentUserId: _currentUserId,
-            ),
-            GroupForumTab(
-              groupId: widget.group.id,
-              isEncrypted: isEncrypted,
-              capsuleKey: _capsuleKey,
-            ),
-            GroupMembersTab(
-              groupId: widget.group.id,
-              group: widget.group,
-              isEncrypted: isEncrypted,
-            ),
-          ],
-        ),
+        body: _isMember
+            ? TabBarView(
+                controller: _tabController,
+                children: [
+                  GroupFeedTab(
+                    groupId: widget.group.id,
+                    isEncrypted: isEncrypted,
+                    capsuleKey: _capsuleKey,
+                    currentUserId: _currentUserId,
+                  ),
+                  GroupChatTab(
+                    groupId: widget.group.id,
+                    isEncrypted: isEncrypted,
+                    capsuleKey: _capsuleKey,
+                    currentUserId: _currentUserId,
+                  ),
+                  GroupForumTab(
+                    groupId: widget.group.id,
+                    isEncrypted: isEncrypted,
+                    capsuleKey: _capsuleKey,
+                  ),
+                  GroupMembersTab(
+                    groupId: widget.group.id,
+                    group: widget.group,
+                    isEncrypted: isEncrypted,
+                  ),
+                ],
+              )
+            : _buildJoinPrompt(),
       ),
     );
   }
@@ -277,6 +297,63 @@ class _GroupScreenState extends ConsumerState<GroupScreen>
               child: LinearProgressIndicator(
                 backgroundColor: AppTheme.navyBlue.withValues(alpha: 0.08),
                 valueColor: const AlwaysStoppedAnimation<Color>(Color(0xFF4CAF50)),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildJoinPrompt() {
+    return Center(
+      child: Padding(
+        padding: const EdgeInsets.all(32),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(Icons.group_add, size: 56, color: AppTheme.brightNavy.withValues(alpha: 0.25)),
+            const SizedBox(height: 16),
+            Text(widget.group.name,
+              style: TextStyle(fontSize: 18, fontWeight: FontWeight.w700, color: AppTheme.navyBlue),
+              textAlign: TextAlign.center),
+            if (widget.group.description.isNotEmpty) ...[
+              const SizedBox(height: 8),
+              Text(widget.group.description,
+                style: TextStyle(fontSize: 13, color: SojornColors.textDisabled),
+                textAlign: TextAlign.center, maxLines: 4, overflow: TextOverflow.ellipsis),
+            ],
+            const SizedBox(height: 8),
+            Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Icon(Icons.people, size: 14, color: SojornColors.textDisabled),
+                const SizedBox(width: 4),
+                Text('${widget.group.memberCount} members',
+                  style: TextStyle(fontSize: 12, color: SojornColors.textDisabled)),
+                if (widget.group.category != GroupCategory.general) ...[
+                  const SizedBox(width: 12),
+                  Icon(widget.group.category.icon, size: 14, color: widget.group.category.color),
+                  const SizedBox(width: 4),
+                  Text(widget.group.category.displayName,
+                    style: TextStyle(fontSize: 12, color: widget.group.category.color)),
+                ],
+              ],
+            ),
+            const SizedBox(height: 24),
+            SizedBox(
+              width: 200,
+              height: 44,
+              child: ElevatedButton(
+                onPressed: _isJoining ? null : _joinGroup,
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: AppTheme.brightNavy,
+                  foregroundColor: SojornColors.basicWhite,
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                ),
+                child: _isJoining
+                    ? const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2, color: SojornColors.basicWhite))
+                    : const Text('Join Group', style: TextStyle(fontWeight: FontWeight.w600, fontSize: 15)),
               ),
             ),
           ],

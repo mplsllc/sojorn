@@ -42,6 +42,7 @@ class Cluster {
   final GroupCategory category;
   final int keyVersion;
   final DateTime createdAt;
+  final bool isMember;
 
   Cluster({
     required this.id,
@@ -59,6 +60,7 @@ class Cluster {
     this.category = GroupCategory.general,
     this.keyVersion = 1,
     required this.createdAt,
+    this.isMember = true,
   });
 
   bool get isPublic => type == 'geo' || type == 'public_geo';
@@ -91,6 +93,7 @@ class Cluster {
       category: GroupCategory.fromString(json['category'] as String? ?? 'general'),
       keyVersion: json['key_version'] as int? ?? 1,
       createdAt: DateTime.parse(json['created_at'] as String),
+      isMember: json['is_member'] as bool? ?? true,
     );
   }
 }
