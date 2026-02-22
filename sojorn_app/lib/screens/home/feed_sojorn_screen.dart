@@ -127,11 +127,24 @@ class _FeedsojornScreenState extends ConsumerState<FeedsojornScreen> {
   }
 
   void _openPostDetail(Post post) {
-    Navigator.of(context, rootNavigator: true).push(
-      MaterialPageRoute(
-        builder: (_) => PostDetailScreen(post: post),
-      ),
-    );
+    final isDesktop = MediaQuery.of(context).size.width >= 900;
+    if (isDesktop) {
+      showDialog(
+        context: context,
+        barrierDismissible: true,
+        barrierColor: Colors.black38,
+        builder: (ctx) => Dialog(
+          insetPadding: const EdgeInsets.symmetric(horizontal: 220, vertical: 32),
+          shape: const RoundedRectangleBorder(borderRadius: BorderRadius.all(Radius.circular(16))),
+          clipBehavior: Clip.antiAlias,
+          child: PostDetailScreen(post: post),
+        ),
+      );
+    } else {
+      Navigator.of(context, rootNavigator: true).push(
+        MaterialPageRoute(builder: (_) => PostDetailScreen(post: post)),
+      );
+    }
   }
 
   void _openChainComposer(Post post) async {
