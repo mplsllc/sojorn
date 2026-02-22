@@ -399,7 +399,7 @@ export default function OfficialAccountsPage() {
 function CreateAccountForm({ onDone, initialProfile }: { onDone: () => void; initialProfile?: OfficialProfile | null }) {
   const [handle, setHandle] = useState(initialProfile?.handle || '');
   const [accountType, setAccountType] = useState('general');
-  const [modelId, setModelId] = useState('google/gemini-2.0-flash-001');
+  const [modelId, setModelId] = useState('devstral:latest');
   const [systemPrompt, setSystemPrompt] = useState(DEFAULT_GENERAL_PROMPT);
   const [temperature, setTemperature] = useState(0.7);
   const [maxTokens, setMaxTokens] = useState(500);

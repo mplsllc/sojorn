@@ -39,7 +39,8 @@ export default function NeighborhoodsPage() {
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');
   const [zip, setZip] = useState('');
-  const [sort, setSort] = useState<'name' | 'zip' | 'members' | 'created'>('name');
+  const [state, setState] = useState('');
+  const [sort, setSort] = useState<'name' | 'zip' | 'state' | 'members' | 'created'>('name');
   const [order, setOrder] = useState<'asc' | 'desc'>('asc');
   const [offset, setOffset] = useState(0);
   const [selected, setSelected] = useState<Neighborhood | null>(null);
@@ -64,7 +65,7 @@ export default function NeighborhoodsPage() {
   const fetchNeighborhoods = () => {
     setLoading(true);
     api
-      .listNeighborhoods({ limit, offset, search: search || undefined, zip: zip || undefined, sort, order })
+      .listNeighborhoods({ limit, offset, search: search || undefined, zip: zip || undefined, state: state || undefined, sort, order })
       .then((data) => {
         setItems(data.neighborhoods || []);
         setTotal(data.total || 0);
@@ -153,12 +154,19 @@ export default function NeighborhoodsPage() {
         </form>
         <input
           className="input w-32"
+          placeholder="State"
+          value={state}
+          onChange={(e) => setState(e.target.value)}
+        />
+        <input
+          className="input w-32"
           placeholder="ZIP"
           value={zip}
           onChange={(e) => setZip(e.target.value)}
         />
         <select className="input w-auto" value={sort} onChange={(e) => setSort(e.target.value as any)}>
           <option value="name">Sort: Name</option>
+          <option value="state">Sort: State</option>
           <option value="zip">Sort: ZIP</option>
           <option value="members">Sort: Members</option>
           <option value="created">Sort: Created</option>
@@ -176,6 +184,7 @@ export default function NeighborhoodsPage() {
               <thead className="bg-warm-200">
                 <tr>
                   <th className="table-header">Neighborhood</th>
+                  <th className="table-header">State</th>
                   <th className="table-header">ZIP</th>
                   <th className="table-header">Members</th>
                   <th className="table-header">Admins</th>
@@ -187,19 +196,20 @@ export default function NeighborhoodsPage() {
               <tbody className="divide-y divide-warm-300">
                 {loading ? (
                   [...Array(6)].map((_, i) => (
-                    <tr key={i}>{[...Array(7)].map((__, j) => <td key={j} className="table-cell"><div className="h-4 bg-warm-300 rounded animate-pulse w-20" /></td>)}</tr>
+                    <tr key={i}>{[...Array(8)].map((__, j) => <td key={j} className="table-cell"><div className="h-4 bg-warm-300 rounded animate-pulse w-20" /></td>)}</tr>
                   ))
                 ) : items.length === 0 ? (
-                  <tr><td colSpan={7} className="table-cell text-center text-gray-400 py-8">No neighborhoods found</td></tr>
+                  <tr><td colSpan={8} className="table-cell text-center text-gray-400 py-8">No neighborhoods found</td></tr>
                 ) : (
                   items.map((n) => (
                     <tr key={n.id} className={`hover:bg-warm-50 cursor-pointer ${selected?.id === n.id ? 'bg-brand-50' : ''}`} onClick={() => onSelectNeighborhood(n)}>
                       <td className="table-cell">
                         <div>
                           <p className="font-medium text-gray-900">{n.name}</p>
-                          <p className="text-xs text-gray-500">{truncate(`${n.city}, ${n.state}`, 30)}</p>
+                          <p className="text-xs text-gray-500">{truncate(n.city, 25)}</p>
                         </div>
                       </td>
+                      <td className="table-cell text-gray-600">{n.state || '—'}</td>
                       <td className="table-cell">{n.zip_code || '—'}</td>
                       <td className="table-cell">{n.member_count}</td>
                       <td className="table-cell">{n.admin_count}</td>

@@ -6,8 +6,8 @@
 
 import AdminShell from '@/components/AdminShell';
 import { api } from '@/lib/api';
-import { useState } from 'react';
-import { UserPlus, Upload, AlertCircle, CheckCircle, Copy, FileText, Link2 } from 'lucide-react';
+import { useCallback, useEffect, useRef, useState } from 'react';
+import { UserPlus, Upload, AlertCircle, CheckCircle, Copy, FileText, Link2, Search, Globe, Download, Check, X, Loader2, ExternalLink, Play, Image as ImageIcon } from 'lucide-react';
 
 // ─── CSV Parser ───────────────────────────────────────
 function parseCsvLine(line: string): string[] {
@@ -29,14 +29,123 @@ function parseCsvLine(line: string): string[] {
   return result;
 }
 
+// ─── User Search Component ───────────────────────────
+function UserSearch({ value, onChange }: { value: string; onChange: (id: string, display: string) => void }) {
+  const [query, setQuery] = useState('');
+  const [results, setResults] = useState<any[]>([]);
+  const [loading, setLoading] = useState(false);
+  const [open, setOpen] = useState(false);
+  const [selected, setSelected] = useState('');
+  const debounceRef = useRef<NodeJS.Timeout>();
+  const wrapperRef = useRef<HTMLDivElement>(null);
+
+  // Close dropdown on outside click
+  useEffect(() => {
+    const handler = (e: MouseEvent) => {
+      if (wrapperRef.current && !wrapperRef.current.contains(e.target as Node)) setOpen(false);
+    };
+    document.addEventListener('mousedown', handler);
+    return () => document.removeEventListener('mousedown', handler);
+  }, []);
+
+  const search = useCallback((q: string) => {
+    if (debounceRef.current) clearTimeout(debounceRef.current);
+    if (q.length < 2) { setResults([]); setOpen(false); return; }
+    debounceRef.current = setTimeout(async () => {
+      setLoading(true);
+      try {
+        const data = await api.listUsers({ search: q, limit: 8 });
+        setResults(data.users || []);
+        setOpen(true);
+      } catch { setResults([]); }
+      setLoading(false);
+    }, 300);
+  }, []);
+
+  const handleSelect = (user: any) => {
+    const display = `@${user.handle || '?'} — ${user.display_name || user.email || ''}`;
+    setSelected(display);
+    setQuery('');
+    setOpen(false);
+    onChange(user.id, display);
+  };
+
+  const handleClear = () => {
+    setSelected('');
+    setQuery('');
+    onChange('', '');
+  };
+
+  return (
+    <div ref={wrapperRef} className="relative">
+      <label className="block text-sm font-medium text-gray-700 mb-1">Author *</label>
+      {selected ? (
+        <div className="flex items-center gap-2 px-3 py-2 border border-brand-300 bg-brand-50 rounded-lg text-sm">
+          <span className="flex-1 truncate font-medium text-brand-700">{selected}</span>
+          <button onClick={handleClear} className="text-gray-400 hover:text-gray-600"><X className="w-4 h-4" /></button>
+        </div>
+      ) : (
+        <>
+          <div className="relative">
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
+            <input
+              type="text"
+              value={query}
+              onChange={(e) => { setQuery(e.target.value); search(e.target.value); }}
+              onFocus={() => results.length > 0 && setOpen(true)}
+              className="w-full pl-10 pr-3 py-2 border border-warm-300 rounded-lg text-sm focus:ring-2 focus:ring-brand-500 focus:border-brand-500"
+              placeholder="Search by handle, name, or email..."
+            />
+            {loading && <Loader2 className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400 animate-spin" />}
+          </div>
+          {open && results.length > 0 && (
+            <div className="absolute z-50 mt-1 w-full bg-white border border-warm-300 rounded-lg shadow-lg max-h-60 overflow-y-auto">
+              {results.map((u) => (
+                <button
+                  key={u.id}
+                  onClick={() => handleSelect(u)}
+                  className="w-full text-left px-3 py-2 hover:bg-brand-50 border-b border-warm-100 last:border-0 flex items-center gap-3"
+                >
+                  <div className="w-8 h-8 bg-brand-100 rounded-lg flex items-center justify-center text-brand-600 text-xs font-bold flex-shrink-0">
+                    {(u.handle || u.email || '?')[0].toUpperCase()}
+                  </div>
+                  <div className="min-w-0">
+                    <p className="text-sm font-medium text-gray-900 truncate">{u.display_name || u.handle || '—'}</p>
+                    <p className="text-xs text-gray-500 truncate">@{u.handle || '—'} · {u.email}</p>
+                  </div>
+                </button>
+              ))}
+            </div>
+          )}
+          {open && results.length === 0 && query.length >= 2 && !loading && (
+            <div className="absolute z-50 mt-1 w-full bg-white border border-warm-300 rounded-lg shadow-lg p-3">
+              <p className="text-sm text-gray-500">No users found</p>
+            </div>
+          )}
+        </>
+      )}
+      {/* Still allow manual UUID entry */}
+      {!selected && (
+        <input
+          type="text"
+          value={value}
+          onChange={(e) => onChange(e.target.value, '')}
+          className="w-full px-3 py-2 border border-warm-300 rounded-lg text-sm font-mono mt-2 focus:ring-2 focus:ring-brand-500 focus:border-brand-500"
+          placeholder="...or paste User ID directly"
+        />
+      )}
+    </div>
+  );
+}
+
 export default function ContentToolsPage() {
-  const [activeTab, setActiveTab] = useState<'create-user' | 'import'>('create-user');
+  const [activeTab, setActiveTab] = useState<'create-user' | 'import' | 'social'>('create-user');
 
   return (
     <AdminShell>
       <div className="mb-6">
         <h1 className="text-2xl font-bold text-gray-900">Content Tools</h1>
-        <p className="text-gray-500 mt-1">Create users and import content</p>
+        <p className="text-gray-500 mt-1">Create users, import content, and pull from social platforms</p>
       </div>
 
       {/* Tabs */}
@@ -63,9 +172,20 @@ export default function ContentToolsPage() {
           <Upload className="w-4 h-4" />
           Import Content
         </button>
+        <button
+          onClick={() => setActiveTab('social')}
+          className={`flex items-center gap-2 px-4 py-2 rounded-md text-sm font-medium transition-colors ${
+            activeTab === 'social'
+              ? 'bg-white text-gray-900 shadow-sm'
+              : 'text-gray-600 hover:text-gray-900'
+          }`}
+        >
+          <Globe className="w-4 h-4" />
+          Social Import
+        </button>
       </div>
 
-      {activeTab === 'create-user' ? <CreateUserPanel /> : <ImportContentPanel />}
+      {activeTab === 'create-user' ? <CreateUserPanel /> : activeTab === 'import' ? <ImportContentPanel /> : <SocialImportPanel />}
     </AdminShell>
   );
 }
@@ -274,7 +394,7 @@ function ImportContentPanel() {
 
   const handleImport = async () => {
     if (!authorId.trim()) {
-      setResult({ error: 'Author ID is required' });
+      setResult({ error: 'Author is required' });
       return;
     }
     const items = parseItems();
@@ -310,14 +430,7 @@ function ImportContentPanel() {
       {/* Author + Type */}
       <div className="grid grid-cols-3 gap-4 mb-4">
         <div className="col-span-2">
-          <label className="block text-sm font-medium text-gray-700 mb-1">Author User ID *</label>
-          <input
-            type="text"
-            value={authorId}
-            onChange={(e) => setAuthorId(e.target.value)}
-            className="w-full px-3 py-2 border border-warm-300 rounded-lg text-sm font-mono focus:ring-2 focus:ring-brand-500 focus:border-brand-500"
-            placeholder="UUID of the user who owns these posts"
-          />
+          <UserSearch value={authorId} onChange={(id) => setAuthorId(id)} />
         </div>
         <div>
           <label className="block text-sm font-medium text-gray-700 mb-1">Content Type</label>
@@ -445,7 +558,7 @@ function ImportContentPanel() {
                 <div className="mb-2">
                   <p className="text-xs font-semibold text-red-700 mb-1">Errors:</p>
                   {result.errors.map((err: string, i: number) => (
-                    <p key={i} className="text-xs text-red-600">• {err}</p>
+                    <p key={i} className="text-xs text-red-600">{err}</p>
                   ))}
                 </div>
               )}
@@ -473,6 +586,388 @@ function ImportContentPanel() {
                   </div>
                 </div>
               )}
+            </div>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ─── Social Import Panel ──────────────────────────────
+type SocialItem = {
+  id: string;
+  title: string;
+  description: string;
+  url: string;
+  thumbnail_url: string;
+  media_type: string;
+  duration: number;
+  upload_date: string;
+  view_count: number;
+  like_count: number;
+  platform: string;
+};
+
+function SocialImportPanel() {
+  const [profileUrl, setProfileUrl] = useState('');
+  const [authorId, setAuthorId] = useState('');
+  const [fetching, setFetching] = useState(false);
+  const [items, setItems] = useState<SocialItem[]>([]);
+  const [selected, setSelected] = useState<Set<string>>(new Set());
+  const [importAs, setImportAs] = useState<Record<string, 'post' | 'quip'>>({});
+  const [platform, setPlatform] = useState('');
+  const [error, setError] = useState('');
+  const [importing, setImporting] = useState(false);
+  const [downloadProgress, setDownloadProgress] = useState<Record<string, 'pending' | 'downloading' | 'done' | 'error'>>({});
+  const [downloadedUrls, setDownloadedUrls] = useState<Record<string, string>>({});
+  const [importResult, setImportResult] = useState<any>(null);
+  const [fetchLimit, setFetchLimit] = useState(20);
+
+  const handleFetch = async () => {
+    if (!profileUrl.trim()) return;
+    setFetching(true);
+    setError('');
+    setItems([]);
+    setSelected(new Set());
+    setImportAs({});
+    setImportResult(null);
+    try {
+      const data = await api.fetchSocialContent(profileUrl.trim(), fetchLimit);
+      setItems(data.items || []);
+      setPlatform(data.platform || '');
+      // Default: videos → quip, images → post
+      const defaults: Record<string, 'post' | 'quip'> = {};
+      (data.items || []).forEach((item: SocialItem) => {
+        defaults[item.id] = item.media_type === 'video' ? 'quip' : 'post';
+      });
+      setImportAs(defaults);
+    } catch (e: any) {
+      setError(e.message || 'Failed to fetch content');
+    }
+    setFetching(false);
+  };
+
+  const toggleSelect = (id: string) => {
+    setSelected((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id); else next.add(id);
+      return next;
+    });
+  };
+
+  const selectAll = () => {
+    if (selected.size === items.length) {
+      setSelected(new Set());
+    } else {
+      setSelected(new Set(items.map((i) => i.id)));
+    }
+  };
+
+  const handleImport = async () => {
+    if (!authorId.trim()) { setError('Select an author first'); return; }
+    if (selected.size === 0) { setError('Select at least one item'); return; }
+
+    setImporting(true);
+    setError('');
+    setImportResult(null);
+
+    const selectedItems = items.filter((i) => selected.has(i.id));
+
+    // Step 1: Download each selected item
+    const progress: Record<string, 'pending' | 'downloading' | 'done' | 'error'> = {};
+    const urls: Record<string, string> = {};
+    selectedItems.forEach((i) => { progress[i.id] = 'pending'; });
+    setDownloadProgress({ ...progress });
+
+    for (const item of selectedItems) {
+      progress[item.id] = 'downloading';
+      setDownloadProgress({ ...progress });
+      try {
+        const result = await api.downloadSocialMedia(item.url, platform, item.media_type);
+        urls[item.id] = result.media_url || result.local_path || item.url;
+        progress[item.id] = 'done';
+      } catch {
+        // Fall back to using the original URL (thumbnail for display)
+        urls[item.id] = item.url;
+        progress[item.id] = 'error';
+      }
+      setDownloadProgress({ ...progress });
+      setDownloadedUrls({ ...urls });
+    }
+
+    // Step 2: Group by content type and import
+    const postItems = selectedItems.filter((i) => importAs[i.id] === 'post');
+    const quipItems = selectedItems.filter((i) => importAs[i.id] === 'quip');
+
+    let totalSuccess = 0;
+    let totalFailures = 0;
+    const allErrors: string[] = [];
+    const allCreated: string[] = [];
+
+    for (const [type, batch] of [['post', postItems], ['quip', quipItems]] as const) {
+      if (batch.length === 0) continue;
+      try {
+        const resp = await api.adminImportContent({
+          author_id: authorId.trim(),
+          content_type: type,
+          items: batch.map((item) => ({
+            body: item.description || item.title || '',
+            media_url: urls[item.id] || item.url,
+            thumbnail_url: item.thumbnail_url,
+            duration_ms: item.duration ? item.duration * 1000 : undefined,
+            visibility: 'public',
+          })),
+        });
+        totalSuccess += resp.success || 0;
+        totalFailures += resp.failures || 0;
+        if (resp.errors) allErrors.push(...resp.errors);
+        if (resp.created) allCreated.push(...resp.created);
+      } catch (e: any) {
+        allErrors.push(`${type} batch failed: ${e.message}`);
+        totalFailures += batch.length;
+      }
+    }
+
+    setImportResult({
+      success: totalSuccess,
+      failures: totalFailures,
+      errors: allErrors,
+      created: allCreated,
+      message: `Imported ${totalSuccess} items`,
+    });
+    setImporting(false);
+  };
+
+  const formatDuration = (s: number) => {
+    if (!s) return '';
+    const m = Math.floor(s / 60);
+    const sec = s % 60;
+    return `${m}:${sec.toString().padStart(2, '0')}`;
+  };
+
+  const formatCount = (n: number) => {
+    if (!n) return '0';
+    if (n >= 1000000) return (n / 1000000).toFixed(1) + 'M';
+    if (n >= 1000) return (n / 1000).toFixed(1) + 'K';
+    return String(n);
+  };
+
+  return (
+    <div className="bg-white rounded-xl border border-warm-300 p-6 max-w-5xl">
+      <h2 className="text-lg font-semibold text-gray-900 mb-1">Social Media Import</h2>
+      <p className="text-sm text-gray-500 mb-6">
+        Fetch public content from YouTube, TikTok, Facebook, or Instagram and import as posts or quips. Requires <code className="text-xs bg-warm-100 px-1 rounded">yt-dlp</code> on the server.
+      </p>
+
+      {/* Profile URL + Author */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 mb-4">
+        <div>
+          <label className="block text-sm font-medium text-gray-700 mb-1">Profile / Channel URL *</label>
+          <div className="flex gap-2">
+            <input
+              type="url"
+              value={profileUrl}
+              onChange={(e) => setProfileUrl(e.target.value)}
+              onKeyDown={(e) => e.key === 'Enter' && handleFetch()}
+              className="flex-1 px-3 py-2 border border-warm-300 rounded-lg text-sm focus:ring-2 focus:ring-brand-500 focus:border-brand-500"
+              placeholder="https://www.youtube.com/@channel or https://tiktok.com/@user"
+            />
+            <div className="flex items-center gap-2">
+              <select
+                value={fetchLimit}
+                onChange={(e) => setFetchLimit(Number(e.target.value))}
+                className="px-2 py-2 border border-warm-300 rounded-lg text-sm w-16"
+              >
+                <option value={10}>10</option>
+                <option value={20}>20</option>
+                <option value={30}>30</option>
+                <option value={50}>50</option>
+              </select>
+              <button
+                onClick={handleFetch}
+                disabled={fetching || !profileUrl.trim()}
+                className="flex items-center gap-2 px-4 py-2 bg-brand-500 text-white rounded-lg text-sm font-medium hover:bg-brand-600 disabled:opacity-50 transition-colors whitespace-nowrap"
+              >
+                {fetching ? <Loader2 className="w-4 h-4 animate-spin" /> : <Search className="w-4 h-4" />}
+                {fetching ? 'Fetching...' : 'Fetch'}
+              </button>
+            </div>
+          </div>
+        </div>
+        <div>
+          <UserSearch value={authorId} onChange={(id) => setAuthorId(id)} />
+        </div>
+      </div>
+
+      {error && (
+        <div className="mb-4 p-3 rounded-lg text-sm bg-red-50 text-red-800 border border-red-200 flex items-start gap-2">
+          <AlertCircle className="w-4 h-4 mt-0.5 flex-shrink-0" />
+          <span>{error}</span>
+        </div>
+      )}
+
+      {/* Content Grid */}
+      {items.length > 0 && (
+        <>
+          <div className="flex items-center justify-between mb-3">
+            <div className="flex items-center gap-3">
+              <button
+                onClick={selectAll}
+                className="text-sm text-brand-600 hover:text-brand-700 font-medium"
+              >
+                {selected.size === items.length ? 'Deselect All' : 'Select All'}
+              </button>
+              <span className="text-sm text-gray-500">
+                {selected.size} of {items.length} selected
+              </span>
+              {platform && (
+                <span className="text-xs bg-warm-200 px-2 py-0.5 rounded-full text-gray-600 capitalize">{platform}</span>
+              )}
+            </div>
+
+            <button
+              onClick={handleImport}
+              disabled={importing || selected.size === 0 || !authorId}
+              className="flex items-center gap-2 px-5 py-2 bg-brand-500 text-white rounded-lg text-sm font-medium hover:bg-brand-600 disabled:opacity-50 transition-colors"
+            >
+              {importing ? <Loader2 className="w-4 h-4 animate-spin" /> : <Download className="w-4 h-4" />}
+              {importing ? 'Importing...' : `Import ${selected.size} Items`}
+            </button>
+          </div>
+
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 max-h-[600px] overflow-y-auto">
+            {items.map((item) => {
+              const isSelected = selected.has(item.id);
+              const dlStatus = downloadProgress[item.id];
+              return (
+                <div
+                  key={item.id}
+                  onClick={() => !importing && toggleSelect(item.id)}
+                  className={`relative rounded-lg border-2 overflow-hidden cursor-pointer transition-all ${
+                    isSelected
+                      ? 'border-brand-500 ring-2 ring-brand-200'
+                      : 'border-warm-200 hover:border-warm-400'
+                  }`}
+                >
+                  {/* Thumbnail */}
+                  <div className="relative aspect-video bg-warm-100">
+                    {item.thumbnail_url ? (
+                      <img src={item.thumbnail_url} alt="" className="w-full h-full object-cover" />
+                    ) : (
+                      <div className="w-full h-full flex items-center justify-center text-gray-400">
+                        {item.media_type === 'video' ? <Play className="w-8 h-8" /> : <ImageIcon className="w-8 h-8" />}
+                      </div>
+                    )}
+
+                    {/* Duration badge */}
+                    {item.duration > 0 && (
+                      <span className="absolute bottom-1 right-1 bg-black/75 text-white text-[10px] px-1.5 py-0.5 rounded">
+                        {formatDuration(item.duration)}
+                      </span>
+                    )}
+
+                    {/* Selection check */}
+                    <div className={`absolute top-2 left-2 w-5 h-5 rounded border-2 flex items-center justify-center transition-colors ${
+                      isSelected ? 'bg-brand-500 border-brand-500' : 'bg-white/80 border-gray-400'
+                    }`}>
+                      {isSelected && <Check className="w-3 h-3 text-white" />}
+                    </div>
+
+                    {/* Download status */}
+                    {dlStatus && (
+                      <div className={`absolute top-2 right-2 w-5 h-5 rounded-full flex items-center justify-center ${
+                        dlStatus === 'downloading' ? 'bg-yellow-400' :
+                        dlStatus === 'done' ? 'bg-green-500' :
+                        dlStatus === 'error' ? 'bg-red-500' : 'bg-gray-300'
+                      }`}>
+                        {dlStatus === 'downloading' && <Loader2 className="w-3 h-3 text-white animate-spin" />}
+                        {dlStatus === 'done' && <Check className="w-3 h-3 text-white" />}
+                        {dlStatus === 'error' && <X className="w-3 h-3 text-white" />}
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Info */}
+                  <div className="p-2">
+                    <p className="text-xs font-medium text-gray-900 line-clamp-2 leading-tight">{item.title || item.description || 'Untitled'}</p>
+                    <div className="flex items-center justify-between mt-1.5">
+                      <div className="flex items-center gap-2 text-[10px] text-gray-500">
+                        {item.view_count > 0 && <span>{formatCount(item.view_count)} views</span>}
+                        {item.like_count > 0 && <span>{formatCount(item.like_count)} likes</span>}
+                      </div>
+                      {/* Import as toggle */}
+                      {isSelected && (
+                        <select
+                          value={importAs[item.id] || 'quip'}
+                          onClick={(e) => e.stopPropagation()}
+                          onChange={(e) => {
+                            e.stopPropagation();
+                            setImportAs((prev) => ({ ...prev, [item.id]: e.target.value as 'post' | 'quip' }));
+                          }}
+                          className="text-[10px] px-1 py-0.5 border border-warm-300 rounded bg-white"
+                        >
+                          <option value="quip">Quip</option>
+                          <option value="post">Post</option>
+                        </select>
+                      )}
+                    </div>
+                    {item.url && (
+                      <a
+                        href={item.url}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        onClick={(e) => e.stopPropagation()}
+                        className="mt-1 text-[10px] text-brand-500 hover:text-brand-600 flex items-center gap-0.5"
+                      >
+                        <ExternalLink className="w-2.5 h-2.5" /> View original
+                      </a>
+                    )}
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </>
+      )}
+
+      {/* Import Result */}
+      {importResult && (
+        <div className="mt-4 p-4 rounded-lg bg-green-50 border border-green-200">
+          <div className="flex items-center gap-2 mb-2">
+            <CheckCircle className="w-4 h-4 text-green-600" />
+            <span className="text-sm font-medium text-green-800">{importResult.message}</span>
+          </div>
+          <p className="text-xs text-green-700 mb-2">
+            Success: {importResult.success} | Failures: {importResult.failures}
+          </p>
+          {importResult.errors?.length > 0 && (
+            <div className="mb-2">
+              <p className="text-xs font-semibold text-red-700 mb-1">Errors:</p>
+              {importResult.errors.map((err: string, i: number) => (
+                <p key={i} className="text-xs text-red-600">{err}</p>
+              ))}
+            </div>
+          )}
+          {importResult.created?.length > 0 && (
+            <div>
+              <div className="flex items-center gap-2 mb-1">
+                <p className="text-xs font-semibold text-green-700">Created IDs:</p>
+                <button
+                  onClick={() => navigator.clipboard.writeText(importResult.created.join('\n'))}
+                  className="text-xs text-brand-500 hover:text-brand-600 flex items-center gap-1"
+                >
+                  <Copy className="w-3 h-3" /> Copy
+                </button>
+              </div>
+              <div className="max-h-24 overflow-y-auto">
+                {importResult.created.slice(0, 10).map((id: string) => (
+                  <p key={id} className="text-xs font-mono text-gray-600">{id}</p>
+                ))}
+                {importResult.created.length > 10 && (
+                  <p className="text-xs text-gray-500">...and {importResult.created.length - 10} more</p>
+                )}
+              </div>
             </div>
           )}
         </div>

@@ -289,7 +289,8 @@ class ApiClient {
     offset?: number;
     search?: string;
     zip?: string;
-    sort?: 'name' | 'zip' | 'members' | 'created';
+    state?: string;
+    sort?: 'name' | 'zip' | 'state' | 'members' | 'created';
     order?: 'asc' | 'desc';
   } = {}) {
     const qs = new URLSearchParams();
@@ -297,6 +298,7 @@ class ApiClient {
     if (params.offset) qs.set('offset', String(params.offset));
     if (params.search) qs.set('search', params.search);
     if (params.zip) qs.set('zip', params.zip);
+    if (params.state) qs.set('state', params.state);
     if (params.sort) qs.set('sort', params.sort);
     if (params.order) qs.set('order', params.order);
     return this.request<any>(`/api/v1/admin/neighborhoods?${qs}`);
@@ -597,6 +599,21 @@ class ApiClient {
       body: JSON.stringify(data),
     });
   }
+  // Social Media Import
+  async fetchSocialContent(profileUrl: string, limit = 20) {
+    return this.request<any>('/api/v1/admin/social/fetch', {
+      method: 'POST',
+      body: JSON.stringify({ profile_url: profileUrl, limit }),
+    });
+  }
+
+  async downloadSocialMedia(url: string, platform: string, mediaType: string) {
+    return this.request<any>('/api/v1/admin/social/download', {
+      method: 'POST',
+      body: JSON.stringify({ url, platform, media_type: mediaType }),
+    });
+  }
+
   // Safe Domains
   async listSafeDomains(category?: string) {
     const params = category ? `?category=${category}` : '';

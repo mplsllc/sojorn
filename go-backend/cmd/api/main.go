@@ -716,6 +716,10 @@ func main() {
 		admin.POST("/users/create", adminHandler.AdminCreateUser)
 		admin.POST("/content/import", adminHandler.AdminImportContent)
 
+		// Social Media Import
+		admin.POST("/social/fetch", adminHandler.FetchSocialContent)
+		admin.POST("/social/download", adminHandler.DownloadSocialMedia)
+
 		// Official Accounts Management
 		admin.GET("/official-profiles", adminHandler.ListOfficialProfiles)
 		admin.GET("/official-accounts", adminHandler.ListOfficialAccounts)

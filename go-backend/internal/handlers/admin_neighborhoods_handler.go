@@ -23,6 +23,7 @@ func (h *AdminHandler) ListNeighborhoods(c *gin.Context) {
 	offset, _ := strconv.Atoi(c.DefaultQuery("offset", "0"))
 	search := strings.TrimSpace(c.Query("search"))
 	zip := strings.TrimSpace(c.Query("zip"))
+	state := strings.TrimSpace(c.Query("state"))
 	sortBy := strings.TrimSpace(c.DefaultQuery("sort", "name"))
 	order := strings.ToLower(strings.TrimSpace(c.DefaultQuery("order", "asc")))
 
@@ -40,6 +41,8 @@ func (h *AdminHandler) ListNeighborhoods(c *gin.Context) {
 	switch sortBy {
 	case "zip":
 		sortColumn = "ns.zip_code"
+	case "state":
+		sortColumn = "ns.state"
 	case "members":
 		sortColumn = "g.member_count"
 	case "created":
@@ -62,6 +65,11 @@ func (h *AdminHandler) ListNeighborhoods(c *gin.Context) {
 	if zip != "" {
 		base += fmt.Sprintf(" AND ns.zip_code ILIKE $%d", argIdx)
 		args = append(args, "%"+zip+"%")
+		argIdx++
+	}
+	if state != "" {
+		base += fmt.Sprintf(" AND ns.state ILIKE $%d", argIdx)
+		args = append(args, "%"+state+"%")
 		argIdx++
 	}
 
