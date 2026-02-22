@@ -2696,12 +2696,13 @@ func (h *AdminHandler) GetAIModerationConfigs(c *gin.Context) {
 
 func (h *AdminHandler) SetAIModerationConfig(c *gin.Context) {
 	var req struct {
-		ModerationType string   `json:"moderation_type" binding:"required"`
-		ModelID        string   `json:"model_id"`
-		ModelName      string   `json:"model_name"`
-		SystemPrompt   string   `json:"system_prompt"`
-		Enabled        bool     `json:"enabled"`
-		Engines        []string `json:"engines"`
+		ModerationType    string          `json:"moderation_type" binding:"required"`
+		ModelID           string          `json:"model_id"`
+		ModelName         string          `json:"model_name"`
+		SystemPrompt      string          `json:"system_prompt"`
+		Enabled           bool            `json:"enabled"`
+		Engines           []string        `json:"engines"`
+		SightEngineConfig json.RawMessage `json:"sightengine_config"`
 	}
 	if err := c.ShouldBindJSON(&req); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
@@ -2715,7 +2716,7 @@ func (h *AdminHandler) SetAIModerationConfig(c *gin.Context) {
 	}
 
 	adminID := c.GetString("user_id")
-	err := h.moderationService.SetModerationConfig(c.Request.Context(), req.ModerationType, req.ModelID, req.ModelName, req.SystemPrompt, req.Enabled, req.Engines, adminID)
+	err := h.moderationService.SetModerationConfig(c.Request.Context(), req.ModerationType, req.ModelID, req.ModelName, req.SystemPrompt, req.Enabled, req.Engines, adminID, req.SightEngineConfig)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": fmt.Sprintf("Failed to save config: %v", err)})
 		return

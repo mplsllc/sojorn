@@ -99,7 +99,14 @@ func (cm *ContentModerator) ModerateImage(ctx context.Context, contentType strin
 	cm.resolveEngines(ctx, contentType, &useSightEngine, &useSightEngine)
 
 	if useSightEngine && cm.sightEngine != nil {
-		seResult, err := cm.sightEngine.ModerateImage(ctx, imageURL)
+		// Load SightEngine config for this content type
+		var seCfg *SightEngineConfig
+		if cm.moderation != nil {
+			if modCfg, err := cm.moderation.GetModerationConfig(ctx, contentType); err == nil && modCfg != nil {
+				seCfg = modCfg.ParseSightEngineConfig()
+			}
+		}
+		seResult, err := cm.sightEngine.ModerateImageWithConfig(ctx, imageURL, seCfg)
 		if err != nil {
 			log.Debug().Err(err).Str("type", contentType).Msg("SightEngine image moderation failed")
 		} else if seResult != nil {

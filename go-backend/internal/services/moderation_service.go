@@ -42,15 +42,55 @@ type ThreePoisonsScore struct {
 
 // ModerationConfigEntry represents a row in ai_moderation_config.
 type ModerationConfigEntry struct {
-	ID             string    `json:"id"`
-	ModerationType string    `json:"moderation_type"`
-	ModelID        string    `json:"model_id"`
-	ModelName      string    `json:"model_name"`
-	SystemPrompt   string    `json:"system_prompt"`
-	Enabled        bool      `json:"enabled"`
-	Engines        []string  `json:"engines"`
-	UpdatedAt      time.Time `json:"updated_at"`
-	UpdatedBy      *string   `json:"updated_by,omitempty"`
+	ID               string            `json:"id"`
+	ModerationType   string            `json:"moderation_type"`
+	ModelID          string            `json:"model_id"`
+	ModelName        string            `json:"model_name"`
+	SystemPrompt     string            `json:"system_prompt"`
+	Enabled          bool              `json:"enabled"`
+	Engines          []string          `json:"engines"`
+	SightEngineConfig json.RawMessage  `json:"sightengine_config"`
+	UpdatedAt        time.Time         `json:"updated_at"`
+	UpdatedBy        *string           `json:"updated_by,omitempty"`
+}
+
+// SightEngineModelConfig controls per-model enablement and thresholds.
+type SightEngineModelConfig struct {
+	Enabled   bool    `json:"enabled"`
+	Threshold float64 `json:"threshold"`
+}
+
+// SightEngineConfig is the parsed form of the sightengine_config JSONB.
+type SightEngineConfig struct {
+	ImageModels    map[string]SightEngineModelConfig `json:"image_models"`
+	TextModels     map[string]SightEngineModelConfig `json:"text_models"`
+	TextCategories map[string]bool                   `json:"text_categories"`
+	NSFWThreshold  float64                           `json:"nsfw_threshold"`
+	FlagThreshold  float64                           `json:"flag_threshold"`
+}
+
+// ParseSightEngineConfig parses the raw JSON config into a typed struct.
+func (c *ModerationConfigEntry) ParseSightEngineConfig() *SightEngineConfig {
+	if len(c.SightEngineConfig) == 0 {
+		return &SightEngineConfig{
+			NSFWThreshold: 0.4,
+			FlagThreshold: 0.7,
+		}
+	}
+	var cfg SightEngineConfig
+	if err := json.Unmarshal(c.SightEngineConfig, &cfg); err != nil {
+		return &SightEngineConfig{
+			NSFWThreshold: 0.4,
+			FlagThreshold: 0.7,
+		}
+	}
+	if cfg.NSFWThreshold == 0 {
+		cfg.NSFWThreshold = 0.4
+	}
+	if cfg.FlagThreshold == 0 {
+		cfg.FlagThreshold = 0.7
+	}
+	return &cfg
 }
 
 // HasEngine returns true if the given engine is in the config's engines list.
@@ -66,7 +106,7 @@ func (c *ModerationConfigEntry) HasEngine(engine string) bool {
 // GetModerationConfigs returns all moderation type configurations.
 func (s *ModerationService) GetModerationConfigs(ctx context.Context) ([]ModerationConfigEntry, error) {
 	rows, err := s.pool.Query(ctx, `
-		SELECT id, moderation_type, model_id, model_name, system_prompt, enabled, engines, updated_at, updated_by
+		SELECT id, moderation_type, model_id, model_name, system_prompt, enabled, engines, sightengine_config, updated_at, updated_by
 		FROM ai_moderation_config
 		ORDER BY moderation_type
 	`)
@@ -78,7 +118,7 @@ func (s *ModerationService) GetModerationConfigs(ctx context.Context) ([]Moderat
 	var configs []ModerationConfigEntry
 	for rows.Next() {
 		var c ModerationConfigEntry
-		if err := rows.Scan(&c.ID, &c.ModerationType, &c.ModelID, &c.ModelName, &c.SystemPrompt, &c.Enabled, &c.Engines, &c.UpdatedAt, &c.UpdatedBy); err != nil {
+		if err := rows.Scan(&c.ID, &c.ModerationType, &c.ModelID, &c.ModelName, &c.SystemPrompt, &c.Enabled, &c.Engines, &c.SightEngineConfig, &c.UpdatedAt, &c.UpdatedBy); err != nil {
 			return nil, err
 		}
 		configs = append(configs, c)
@@ -90,9 +130,9 @@ func (s *ModerationService) GetModerationConfigs(ctx context.Context) ([]Moderat
 func (s *ModerationService) GetModerationConfig(ctx context.Context, moderationType string) (*ModerationConfigEntry, error) {
 	var c ModerationConfigEntry
 	err := s.pool.QueryRow(ctx, `
-		SELECT id, moderation_type, model_id, model_name, system_prompt, enabled, engines, updated_at, updated_by
+		SELECT id, moderation_type, model_id, model_name, system_prompt, enabled, engines, sightengine_config, updated_at, updated_by
 		FROM ai_moderation_config WHERE moderation_type = $1
-	`, moderationType).Scan(&c.ID, &c.ModerationType, &c.ModelID, &c.ModelName, &c.SystemPrompt, &c.Enabled, &c.Engines, &c.UpdatedAt, &c.UpdatedBy)
+	`, moderationType).Scan(&c.ID, &c.ModerationType, &c.ModelID, &c.ModelName, &c.SystemPrompt, &c.Enabled, &c.Engines, &c.SightEngineConfig, &c.UpdatedAt, &c.UpdatedBy)
 	if err != nil {
 		return nil, err
 	}
@@ -100,16 +140,19 @@ func (s *ModerationService) GetModerationConfig(ctx context.Context, moderationT
 }
 
 // SetModerationConfig upserts a moderation config.
-func (s *ModerationService) SetModerationConfig(ctx context.Context, moderationType, modelID, modelName, systemPrompt string, enabled bool, engines []string, updatedBy string) error {
+func (s *ModerationService) SetModerationConfig(ctx context.Context, moderationType, modelID, modelName, systemPrompt string, enabled bool, engines []string, updatedBy string, sightengineConfig json.RawMessage) error {
 	if len(engines) == 0 {
 		engines = []string{"local_ai", "sightengine"}
 	}
+	if len(sightengineConfig) == 0 {
+		sightengineConfig = json.RawMessage(`{}`)
+	}
 	_, err := s.pool.Exec(ctx, `
-		INSERT INTO ai_moderation_config (moderation_type, model_id, model_name, system_prompt, enabled, engines, updated_by, updated_at)
-		VALUES ($1, $2, $3, $4, $5, $7, $6, NOW())
+		INSERT INTO ai_moderation_config (moderation_type, model_id, model_name, system_prompt, enabled, engines, updated_by, sightengine_config, updated_at)
+		VALUES ($1, $2, $3, $4, $5, $7, $6, $8, NOW())
 		ON CONFLICT (moderation_type)
-		DO UPDATE SET model_id = $2, model_name = $3, system_prompt = $4, enabled = $5, engines = $7, updated_by = $6, updated_at = NOW()
-	`, moderationType, modelID, modelName, systemPrompt, enabled, updatedBy, engines)
+		DO UPDATE SET model_id = $2, model_name = $3, system_prompt = $4, enabled = $5, engines = $7, updated_by = $6, sightengine_config = $8, updated_at = NOW()
+	`, moderationType, modelID, modelName, systemPrompt, enabled, updatedBy, engines, sightengineConfig)
 	return err
 }
 

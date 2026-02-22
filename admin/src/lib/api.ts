@@ -434,7 +434,7 @@ class ApiClient {
     return this.request<any>('/api/v1/admin/ai/config');
   }
 
-  async setAIModerationConfig(data: { moderation_type: string; model_id: string; model_name: string; system_prompt: string; enabled: boolean; engines?: string[] }) {
+  async setAIModerationConfig(data: { moderation_type: string; model_id: string; model_name: string; system_prompt: string; enabled: boolean; engines?: string[]; sightengine_config?: any }) {
     return this.request<any>('/api/v1/admin/ai/config', {
       method: 'PUT',
       body: JSON.stringify(data),
