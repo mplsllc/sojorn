@@ -14,6 +14,7 @@ import '../../theme/app_theme.dart';
 import 'group_feed_tab.dart';
 import 'group_chat_tab.dart';
 import 'group_forum_tab.dart';
+import 'group_events_tab.dart';
 import 'group_members_tab.dart';
 
 /// Shared GroupScreen for both public groups and private capsules.
@@ -47,7 +48,7 @@ class _GroupScreenState extends ConsumerState<GroupScreen>
   @override
   void initState() {
     super.initState();
-    _tabController = TabController(length: 4, vsync: this);
+    _tabController = TabController(length: 5, vsync: this);
     _currentUserId = AuthService.instance.currentUser?.id;
     _isMember = widget.group.isMember;
     if (isEncrypted) {
@@ -124,6 +125,9 @@ class _GroupScreenState extends ConsumerState<GroupScreen>
                     groupId: widget.group.id,
                     isEncrypted: isEncrypted,
                     capsuleKey: _capsuleKey,
+                  ),
+                  GroupEventsTab(
+                    groupId: widget.group.id,
                   ),
                   GroupMembersTab(
                     groupId: widget.group.id,
@@ -238,6 +242,7 @@ class _GroupScreenState extends ConsumerState<GroupScreen>
             Tab(icon: Icon(Icons.dynamic_feed, size: 18), text: 'Feed'),
             Tab(icon: Icon(Icons.chat_bubble, size: 18), text: 'Chat'),
             Tab(icon: Icon(Icons.forum, size: 18), text: 'Forum'),
+            Tab(icon: Icon(Icons.event, size: 18), text: 'Events'),
             Tab(icon: Icon(Icons.people, size: 18), text: 'Members'),
           ],
         ),

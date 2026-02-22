@@ -45,7 +45,8 @@ type Config struct {
 	AIGatewayToken          string
 	SightEngineUser         string
 	SightEngineSecret       string
-	FunkwhaleBase           string // e.g. "http://localhost:5001" — empty means not yet deployed
+	FunkwhaleBase           string // deprecated — Freesound replaces Funkwhale
+	FreesoundAPIKey         string // Freesound.org API key for royalty-free audio
 	IcedAPIBase             string // IcedCoffee public-safety API base URL
 }
 
@@ -95,6 +96,7 @@ func LoadConfig() *Config {
 		SightEngineUser:         getEnv("SIGHTENGINE_USER", ""),
 		SightEngineSecret:       getEnv("SIGHTENGINE_SECRET", ""),
 		FunkwhaleBase:           getEnv("FUNKWHALE_BASE", ""),
+		FreesoundAPIKey:         getEnv("FREESOUND_API_KEY", ""),
 		IcedAPIBase:             getEnv("ICED_API_BASE", "http://127.0.0.1:8089"),
 	}
 }

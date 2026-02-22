@@ -241,8 +241,14 @@ func main() {
 	repostHandler := handlers.NewRepostHandler(dbPool)
 	profileLayoutHandler := handlers.NewProfileLayoutHandler(dbPool)
 
-	// Audio library proxy (Funkwhale — gracefully returns 503 until FUNKWHALE_BASE is set)
-	audioHandler := handlers.NewAudioHandler(cfg.FunkwhaleBase)
+	// Audio library proxy (Freesound — gracefully returns 503 until FREESOUND_API_KEY is set)
+	audioHandler := handlers.NewAudioHandler(cfg.FreesoundAPIKey)
+
+	// Group events handler
+	eventHandler := handlers.NewEventHandler(dbPool)
+
+	// Dashboard layout handler (customizable home page widgets)
+	dashboardLayoutHandler := handlers.NewDashboardLayoutHandler(dbPool)
 
 	r.GET("/ws", wsHandler.ServeWS)
 
@@ -535,6 +541,15 @@ func main() {
 				groups.POST("/:id/invite-member", groupsHandler.InviteMember)
 				groups.DELETE("/:id/members/:userId", groupsHandler.RemoveMember)
 				groups.PATCH("/:id/settings", groupsHandler.UpdateGroupSettings)
+
+				// Group events
+				groups.POST("/:id/events", eventHandler.CreateEvent)
+				groups.GET("/:id/events", eventHandler.ListGroupEvents)
+				groups.GET("/:id/events/:eventId", eventHandler.GetEvent)
+				groups.PATCH("/:id/events/:eventId", eventHandler.UpdateEvent)
+				groups.DELETE("/:id/events/:eventId", eventHandler.DeleteEvent)
+				groups.POST("/:id/events/:eventId/rsvp", eventHandler.RSVPEvent)
+				groups.DELETE("/:id/events/:eventId/rsvp", eventHandler.RemoveRSVP)
 			}
 
 			// Capsule system (E2EE groups + clusters)
@@ -603,10 +618,19 @@ func main() {
 			// Profile widget layout
 			authorized.GET("/profile/layout", profileLayoutHandler.GetProfileLayout)
 			authorized.PUT("/profile/layout", profileLayoutHandler.SaveProfileLayout)
+			authorized.GET("/profiles/:id/layout", profileLayoutHandler.GetPublicProfileLayout)
 
-			// Audio library (Funkwhale proxy — returns 503 until FUNKWHALE_BASE is set in env)
+			// Dashboard widget layout (customizable home page)
+			authorized.GET("/dashboard/layout", dashboardLayoutHandler.GetDashboardLayout)
+			authorized.PUT("/dashboard/layout", dashboardLayoutHandler.SaveDashboardLayout)
+
+			// Audio library (Freesound proxy — returns 503 until FREESOUND_API_KEY is set)
 			authorized.GET("/audio/library", audioHandler.SearchAudioLibrary)
 			authorized.GET("/audio/library/:trackId/listen", audioHandler.GetAudioTrackListen)
+
+			// Events (public feed + user's groups)
+			authorized.GET("/events/upcoming", eventHandler.GetUpcomingPublicEvents)
+			authorized.GET("/events/mine", eventHandler.GetMyEvents)
 
 		}
 	}

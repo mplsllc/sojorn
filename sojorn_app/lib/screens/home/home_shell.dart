@@ -27,6 +27,11 @@ import '../../widgets/neighborhood/neighborhood_picker_sheet.dart';
 import '../../services/api_service.dart';
 import '../../providers/quip_upload_provider.dart';
 import '../../providers/notification_provider.dart';
+import '../../models/profile.dart';
+import '../../models/dashboard_widgets.dart';
+import '../../widgets/dashboard/dashboard_editor_sheet.dart';
+import '../../widgets/desktop/desktop_sidebar_widgets.dart';
+import '../../widgets/media/sojorn_avatar.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 /// Root shell for the main tabs. The active tab is controlled by GoRouter's
@@ -45,6 +50,13 @@ class _HomeShellState extends ConsumerState<HomeShell> with WidgetsBindingObserv
   late final AnimationController _fabRotationController;
   final SecureChatService _chatService = SecureChatService();
   StreamSubscription<RemoteMessage>? _notifSub;
+
+  // Desktop sidebar state
+  Profile? _desktopProfile;
+  Map<String, int> _desktopStats = {};
+  List<Map<String, dynamic>> _desktopFriends = [];
+  List<Map<String, dynamic>> _desktopOnlineUsers = [];
+  DashboardLayout _dashboardLayout = DashboardLayout.defaultLayout;
 
   // Nav helper badges — show descriptive subtitle for first N taps
   static const _maxHelperShows = 3;
@@ -65,20 +77,59 @@ class _HomeShellState extends ConsumerState<HomeShell> with WidgetsBindingObserv
   @override
   void initState() {
     super.initState();
+    if (kDebugMode) debugPrint('[SHELL] HomeShell initState');
     _fabRotationController = AnimationController(
       duration: const Duration(milliseconds: 300),
       vsync: this,
     );
     WidgetsBinding.instance.addObserver(this);
     _chatService.startBackgroundSync();
+    if (kDebugMode) debugPrint('[SHELL] Chat background sync started');
     _initNotificationListener();
     _loadNavTapCounts();
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (mounted) {
         OnboardingModal.showIfNeeded(context);
         _checkNeighborhoodOnboarding();
+        _loadDesktopSidebarData();
       }
     });
+  }
+
+  Future<void> _loadDesktopSidebarData() async {
+    try {
+      final profileData = await ApiService.instance.getProfile();
+      final profile = Profile.fromJson(profileData);
+      final followers = await ApiService.instance.getFollowers(profile.id);
+      final following = await ApiService.instance.getFollowing(profile.id);
+      if (mounted) {
+        setState(() {
+          _desktopProfile = profile;
+          _desktopStats = {
+            'posts': profileData['post_count'] as int? ?? 0,
+            'followers': followers.length,
+            'following': following.length,
+          };
+          // Use following as "friends" for Top 8 (mutual follows could be added later)
+          _desktopFriends = following.take(8).toList();
+          // Online users — placeholder until presence API exists
+          _desktopOnlineUsers = following.take(5).map((u) {
+            return {...u, 'status': 'online'};
+          }).toList();
+        });
+      }
+      // Load dashboard layout (non-blocking — defaults already set)
+      try {
+        final layoutData = await ApiService.instance.getDashboardLayout();
+        if (mounted) {
+          setState(() => _dashboardLayout = DashboardLayout.fromJson(layoutData));
+        }
+      } catch (_) {
+        // Use default layout on error
+      }
+    } catch (e) {
+      if (kDebugMode) debugPrint('[SHELL] Desktop sidebar data load failed: $e');
+    }
   }
 
   Future<void> _loadNavTapCounts() async {
@@ -104,19 +155,24 @@ class _HomeShellState extends ConsumerState<HomeShell> with WidgetsBindingObserv
   }
 
   Future<void> _checkNeighborhoodOnboarding() async {
+    if (kDebugMode) debugPrint('[SHELL] Checking neighborhood onboarding...');
     try {
       final data = await ApiService.instance.getMyNeighborhood();
-      if (data == null) return;
+      if (data == null) {
+        if (kDebugMode) debugPrint('[SHELL] No neighborhood data returned');
+        return;
+      }
       final onboarded = data['onboarded'] as bool? ?? false;
+      if (kDebugMode) debugPrint('[SHELL] Neighborhood onboarded=$onboarded');
       if (!onboarded && mounted) {
-        // Small delay so the onboarding modal (if shown) has time to appear first
         await Future.delayed(const Duration(milliseconds: 800));
         if (mounted) {
+          if (kDebugMode) debugPrint('[SHELL] Starting auto-assign neighborhood');
           await _autoAssignNeighborhood();
         }
       }
-    } catch (_) {
-      // Non-critical — silently ignore if network unavailable
+    } catch (e) {
+      if (kDebugMode) debugPrint('[SHELL] Neighborhood check failed: $e');
     }
   }
 
@@ -203,7 +259,9 @@ class _HomeShellState extends ConsumerState<HomeShell> with WidgetsBindingObserv
   }
 
   void _initNotificationListener() {
+    if (kDebugMode) debugPrint('[SHELL] Initializing notification listener');
     _notifSub = NotificationService.instance.foregroundMessages.listen((message) {
+      if (kDebugMode) debugPrint('[SHELL] Foreground notification received: ${message.notification?.title}');
       if (mounted) {
         NotificationService.instance.showNotificationBanner(context, message);
       }
@@ -212,6 +270,7 @@ class _HomeShellState extends ConsumerState<HomeShell> with WidgetsBindingObserv
 
   @override
   void dispose() {
+    if (kDebugMode) debugPrint('[SHELL] HomeShell disposing');
     _fabRotationController.dispose();
     WidgetsBinding.instance.removeObserver(this);
     _chatService.stopBackgroundSync();
@@ -221,6 +280,7 @@ class _HomeShellState extends ConsumerState<HomeShell> with WidgetsBindingObserv
 
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (kDebugMode) debugPrint('[SHELL] Lifecycle: $state');
     if (state == AppLifecycleState.resumed) {
       _chatService.startBackgroundSync();
     } else if (state == AppLifecycleState.paused) {
@@ -230,6 +290,327 @@ class _HomeShellState extends ConsumerState<HomeShell> with WidgetsBindingObserv
 
   @override
   Widget build(BuildContext context) {
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final isDesktop = SojornBreakpoints.isDesktop(constraints.maxWidth);
+
+        // Close radial menu if crossing to desktop while it's open
+        if (isDesktop && _isRadialMenuVisible) {
+          _isRadialMenuVisible = false;
+          _fabRotationController.reverse();
+        }
+
+        if (isDesktop) {
+          return _buildDesktopLayout(constraints.maxWidth);
+        }
+        return _buildMobileLayout();
+      },
+    );
+  }
+
+  Widget _buildDesktopLayout(double width) {
+    final currentIndex = widget.navigationShell.currentIndex;
+    final isHome = currentIndex == 0;
+
+    return Scaffold(
+      backgroundColor: AppTheme.scaffoldBg,
+      body: Column(
+        children: [
+          const OfflineIndicator(),
+          // ── Top Navigation Bar ──────────────────────────────────
+          _buildDesktopTopNav(currentIndex),
+          // ── Content area ────────────────────────────────────────
+          Expanded(
+            child: isHome
+                ? _buildDesktop3Column(currentIndex)
+                : NavigationShellScope(
+                    currentIndex: currentIndex,
+                    child: widget.navigationShell,
+                  ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  PreferredSizeWidget _buildDesktopTopNav(int currentIndex) {
+    return PreferredSize(
+      preferredSize: const Size.fromHeight(56),
+      child: Container(
+        height: 56,
+        decoration: BoxDecoration(
+          color: AppTheme.cardSurface,
+          border: Border(
+            bottom: BorderSide(
+              color: AppTheme.royalPurple.withValues(alpha: 0.08),
+            ),
+          ),
+          boxShadow: [
+            BoxShadow(
+              color: AppTheme.royalPurple.withValues(alpha: 0.06),
+              blurRadius: 12,
+              offset: const Offset(0, 2),
+            ),
+          ],
+        ),
+        padding: const EdgeInsets.symmetric(horizontal: 20),
+        child: Row(
+          children: [
+            // ── Left: Logo ────────────────────────────────────
+            GestureDetector(
+              onTap: () => widget.navigationShell.goBranch(0, initialLocation: true),
+              child: Image.asset('assets/images/toplogo.png', height: 32),
+            ),
+            const SizedBox(width: 28),
+            // ── Center: Nav items ─────────────────────────────
+            Expanded(
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  _buildDesktopNavItem(Icons.home_outlined, Icons.home, 'Home', 0, currentIndex),
+                  _buildDesktopNavItem(Icons.music_note_outlined, Icons.music_note, 'Music', 1, currentIndex),
+                  _buildDesktopNavItem(Icons.explore_outlined, Icons.explore, 'Discover', -1, currentIndex),
+                  _buildDesktopNavItem(Icons.person_outline, Icons.person, 'Profile', 3, currentIndex),
+                  _buildDesktopNavItem(Icons.mail_outline, Icons.mail, 'Messages', -2, currentIndex),
+                ],
+              ),
+            ),
+            // ── Right: Create, Notifications, Avatar ──────────
+            DesktopCreateButton(
+              onPost: () => Navigator.of(context).push(
+                MaterialPageRoute(builder: (_) => const ComposeScreen()),
+              ),
+              onQuip: () => Navigator.of(context).push(
+                MaterialPageRoute(builder: (_) => const QuipCreationFlow()),
+              ),
+              onBeacon: () {
+                widget.navigationShell.goBranch(2);
+                WidgetsBinding.instance.addPostFrameCallback((_) {
+                  BeaconScreen.globalKey.currentState?.onCreateAction();
+                });
+              },
+            ),
+            const SizedBox(width: 8),
+            IconButton(
+              icon: Icon(Icons.dashboard_customize_outlined, color: AppTheme.navyBlue, size: 20),
+              tooltip: 'Customize Dashboard',
+              onPressed: () => _openDashboardEditor(),
+            ),
+            const SizedBox(width: 4),
+            IconButton(
+              icon: Consumer(
+                builder: (context, ref, child) {
+                  final badge = ref.watch(currentBadgeProvider);
+                  return Badge(
+                    label: Text(badge.notificationCount.toString()),
+                    isLabelVisible: badge.notificationCount > 0,
+                    backgroundColor: SojornColors.destructive,
+                    child: Icon(Icons.notifications_none, color: AppTheme.navyBlue, size: 22),
+                  );
+                },
+              ),
+              tooltip: 'Notifications',
+              onPressed: () {
+                Navigator.of(context, rootNavigator: true).push(
+                  MaterialPageRoute(builder: (_) => const NotificationsScreen()),
+                );
+              },
+            ),
+            const SizedBox(width: 4),
+            // User avatar
+            if (_desktopProfile != null)
+              GestureDetector(
+                onTap: () => widget.navigationShell.goBranch(3),
+                child: SojornAvatar(
+                  displayName: _desktopProfile!.displayName,
+                  avatarUrl: _desktopProfile!.avatarUrl,
+                  size: 34,
+                ),
+              ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildDesktopNavItem(IconData icon, IconData activeIcon, String label, int index, int currentIndex) {
+    final isActive = index >= 0 && index == currentIndex;
+    final isSpecial = index < 0; // -1 = Discover, -2 = Messages
+
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 2),
+      child: InkWell(
+        onTap: () {
+          if (index == -1) {
+            Navigator.of(context, rootNavigator: true).push(
+              MaterialPageRoute(builder: (_) => const DiscoverScreen()),
+            );
+          } else if (index == -2) {
+            Navigator.of(context, rootNavigator: true).push(
+              MaterialPageRoute(
+                builder: (_) => const SecureChatFullScreen(),
+                fullscreenDialog: true,
+              ),
+            );
+          } else {
+            widget.navigationShell.goBranch(index, initialLocation: index == currentIndex);
+          }
+        },
+        borderRadius: BorderRadius.circular(8),
+        hoverColor: AppTheme.royalPurple.withValues(alpha: 0.06),
+        child: Container(
+          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+          decoration: BoxDecoration(
+            border: Border(
+              bottom: BorderSide(
+                color: isActive ? AppTheme.royalPurple : SojornColors.transparent,
+                width: 2.5,
+              ),
+            ),
+          ),
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              index == -2
+                  ? Consumer(
+                      builder: (context, ref, child) {
+                        final badge = ref.watch(currentBadgeProvider);
+                        return Badge(
+                          label: Text(badge.messageCount.toString(), style: const TextStyle(fontSize: 9)),
+                          isLabelVisible: badge.messageCount > 0,
+                          backgroundColor: AppTheme.brightNavy,
+                          child: Icon(
+                            icon,
+                            color: isActive ? AppTheme.royalPurple : SojornColors.bottomNavUnselected,
+                            size: 20,
+                          ),
+                        );
+                      },
+                    )
+                  : Icon(
+                      isActive ? activeIcon : icon,
+                      color: isActive ? AppTheme.royalPurple : (isSpecial ? SojornColors.bottomNavUnselected : SojornColors.bottomNavUnselected),
+                      size: 20,
+                    ),
+              const SizedBox(height: 2),
+              Text(
+                label,
+                style: TextStyle(
+                  color: isActive ? AppTheme.royalPurple : SojornColors.bottomNavUnselected,
+                  fontSize: 11,
+                  fontWeight: isActive ? FontWeight.w700 : FontWeight.w500,
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  void _openDashboardEditor() {
+    DashboardEditorSheet.show(
+      context,
+      layout: _dashboardLayout,
+      onSaved: (newLayout) {
+        setState(() => _dashboardLayout = newLayout);
+      },
+    );
+  }
+
+  Widget _buildDesktop3Column(int currentIndex) {
+    return Container(
+      decoration: BoxDecoration(
+        // Subtle lavender tint matching the mockup's background
+        color: SojornColors.basicQueenPinkLight.withValues(alpha: 0.5),
+      ),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          // ── Left sidebar (dynamic) ──────────────────
+          SizedBox(
+            width: 280,
+            child: SingleChildScrollView(
+              padding: const EdgeInsets.all(16),
+              child: Column(
+                children: _buildSidebarWidgets(_dashboardLayout.leftSidebar),
+              ),
+            ),
+          ),
+          // ── Center: Feed (GoRouter shell content) ──────────
+          Expanded(
+            child: NavigationShellScope(
+              currentIndex: currentIndex,
+              child: widget.navigationShell,
+            ),
+          ),
+          // ── Right sidebar (dynamic) ─────────
+          SizedBox(
+            width: 260,
+            child: SingleChildScrollView(
+              padding: const EdgeInsets.all(16),
+              child: Column(
+                children: _buildSidebarWidgets(_dashboardLayout.rightSidebar),
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  /// Renders a list of dashboard widgets dynamically based on saved layout.
+  List<Widget> _buildSidebarWidgets(List<DashboardWidget> widgets) {
+    final rendered = <Widget>[];
+    for (final w in widgets) {
+      if (!w.isEnabled) continue;
+      final widget = _renderDashboardWidget(w.type);
+      if (widget != null) {
+        if (rendered.isNotEmpty) rendered.add(const SizedBox(height: 12));
+        rendered.add(widget);
+      }
+    }
+    return rendered;
+  }
+
+  /// Maps a DashboardWidgetType to the actual widget instance.
+  Widget? _renderDashboardWidget(DashboardWidgetType type) {
+    switch (type) {
+      case DashboardWidgetType.profileCard:
+        if (_desktopProfile == null) return null;
+        return DesktopProfileCard(
+          profile: _desktopProfile!,
+          stats: _desktopStats,
+          onProfileTap: () => widget.navigationShell.goBranch(3),
+          onEditTap: () => widget.navigationShell.goBranch(3),
+        );
+      case DashboardWidgetType.top8Friends:
+        if (_desktopFriends.isEmpty) return null;
+        return Top8FriendsGrid(
+          friends: _desktopFriends,
+          onViewAll: () => widget.navigationShell.goBranch(3),
+          onFriendTap: (userId) => context.push('/u/$userId'),
+        );
+      case DashboardWidgetType.upcomingEvents:
+        return const UpcomingEventsWidget();
+      case DashboardWidgetType.whosOnline:
+        return WhosOnlineList(
+          onlineUsers: _desktopOnlineUsers,
+          onUserTap: (userId) => context.push('/u/$userId'),
+        );
+      case DashboardWidgetType.nowPlaying:
+        return const NowPlayingCard(
+          trackTitle: 'No track playing',
+          artistName: 'Browse sounds',
+        );
+      default:
+        // Other widget types (quote, customText, photoFrame, etc.) — placeholder
+        return null;
+    }
+  }
+
+  Widget _buildMobileLayout() {
     final currentIndex = widget.navigationShell.currentIndex;
 
     return Stack(
@@ -573,6 +954,8 @@ class _HomeShellState extends ConsumerState<HomeShell> with WidgetsBindingObserv
         } : null,
         child: InkWell(
           onTap: () {
+            final tabs = ['Home', 'Quips', 'Beacons', 'Profile'];
+            if (kDebugMode) debugPrint('[NAV] Tab tapped: ${index < tabs.length ? tabs[index] : index}');
             _incrementNavTap(index);
             widget.navigationShell.goBranch(
               index,

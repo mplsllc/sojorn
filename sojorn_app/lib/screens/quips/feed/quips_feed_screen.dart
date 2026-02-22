@@ -126,6 +126,7 @@ class _QuipsFeedScreenState extends ConsumerState<QuipsFeedScreen>
   @override
   void initState() {
     super.initState();
+    debugPrint('[QUIPS] initState — isActive=${widget.isActive}, initialPostId=${widget.initialPostId}');
     WidgetsBinding.instance.addObserver(this);
     _isScreenActive = widget.isActive ?? false;
     if (widget.initialPostId != null) {
@@ -272,6 +273,7 @@ class _QuipsFeedScreenState extends ConsumerState<QuipsFeedScreen>
           .map(Quip.fromMap)
           .where((quip) => quip.videoUrl.isNotEmpty)
           .toList();
+      debugPrint('[QUIPS] Fetched ${items.length} quips (offset=$start, refresh=$refresh)');
 
       // If we have an initialPostId, ensure it's at the top
       // If we have an initialPostId, ensure it's at the top
@@ -334,6 +336,7 @@ class _QuipsFeedScreenState extends ConsumerState<QuipsFeedScreen>
         _preloadController(_currentIndex + 1);
       }
     } catch (e) {
+      debugPrint('[QUIPS] Fetch error: $e');
       if (!mounted) return;
       setState(() {
         _error = 'Failed to load quips: $e';
@@ -596,58 +599,123 @@ class _QuipsFeedScreenState extends ConsumerState<QuipsFeedScreen>
       );
     }
 
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final isDesktop = SojornBreakpoints.isDesktop(constraints.maxWidth);
+
+        if (isDesktop) {
+          return _buildDesktopQuips();
+        }
+        return _buildMobileQuips();
+      },
+    );
+  }
+
+  Widget _buildDesktopQuips() {
+    final currentQuip = _quips.isNotEmpty ? _quips[_currentIndex] : null;
+
+    return Scaffold(
+      backgroundColor: SojornColors.basicBlack,
+      body: Row(
+        children: [
+          // Centered video player in phone-shaped container
+          Expanded(
+            child: Center(
+              child: Container(
+                constraints: const BoxConstraints(maxWidth: 400),
+                child: AspectRatio(
+                  aspectRatio: 9 / 16,
+                  child: ClipRRect(
+                    borderRadius: BorderRadius.circular(SojornRadii.card),
+                    child: _buildQuipPageView(),
+                  ),
+                ),
+              ),
+            ),
+          ),
+          // Comments sidebar
+          if (currentQuip != null)
+            Container(
+              width: SojornBreakpoints.sidebarWidth,
+              decoration: BoxDecoration(
+                color: AppTheme.cardSurface,
+                border: Border(
+                  left: BorderSide(
+                    color: SojornColors.basicWhite.withValues(alpha: 0.1),
+                    width: 1,
+                  ),
+                ),
+              ),
+              child: VideoCommentsSheet(
+                key: ValueKey('desktop-comments-${currentQuip.id}'),
+                postId: currentQuip.id,
+                initialCommentCount: currentQuip.commentCount,
+                showNavActions: false,
+                onCommentPosted: () {},
+              ),
+            ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildMobileQuips() {
     return Scaffold(
       backgroundColor: SojornColors.basicBlack,
       body: Stack(
         children: [
-          RefreshIndicator(
-            onRefresh: () async {
-              await _fetchQuips(refresh: true);
-            },
-            backgroundColor: AppTheme.cardSurface,
-            color: AppTheme.brightNavy,
-            child: PageView.builder(
-              controller: _pageController,
-              scrollDirection: Axis.vertical,
-              physics: const PageScrollPhysics(parent: AlwaysScrollableScrollPhysics()),
-              itemCount: _quips.length,
-              onPageChanged: (index) {
-                _currentIndex = index;
-                _preloadController(index + 1);
-                _disposeFarControllers(index);
-                if (_hasMore && index >= _quips.length - 3) {
-                  _fetchMore();
-                }
-              },
-              itemBuilder: (context, index) {
-                final quip = _quips[index];
-                final controller = _controllers[index];
-                return VisibilityDetector(
-                  key: ValueKey('quip-${quip.id}'),
-                  onVisibilityChanged: (info) =>
-                      _onVisibilityChanged(index, info.visibleFraction),
-                  child: QuipVideoItem(
-                    quip: quip,
-                    controller: controller,
-                    isActive: index == _currentIndex,
-                    reactions: _reactionCounts[quip.id] ?? quip.reactions,
-                    myReactions: _myReactions[quip.id] ?? quip.myReactions,
-                    commentCount: quip.commentCount,
-                    isUserPaused: _isUserPaused,
-                    isFollowing: _followStates[quip.authorId] ?? false,
-                    onReact: (emoji) => _toggleReaction(quip, emoji),
-                    onOpenReactionPicker: (pos) => _openReactionPicker(quip, pos),
-                    onComment: () => _openComments(quip),
-                    onShare: () => _shareQuip(quip),
-                    onTogglePause: _toggleUserPause,
-                    onNotInterested: () => _handleNotInterested(quip),
-                    onFollow: quip.authorId.isNotEmpty ? () => _toggleFollow(quip) : null,
-                  ),
-                );
-              },
-            ),
-          ),
+          _buildQuipPageView(),
         ],
+      ),
+    );
+  }
+
+  Widget _buildQuipPageView() {
+    return RefreshIndicator(
+      onRefresh: () async {
+        await _fetchQuips(refresh: true);
+      },
+      backgroundColor: AppTheme.cardSurface,
+      color: AppTheme.brightNavy,
+      child: PageView.builder(
+        controller: _pageController,
+        scrollDirection: Axis.vertical,
+        physics: const PageScrollPhysics(parent: AlwaysScrollableScrollPhysics()),
+        itemCount: _quips.length,
+        onPageChanged: (index) {
+          setState(() => _currentIndex = index);
+          _preloadController(index + 1);
+          _disposeFarControllers(index);
+          if (_hasMore && index >= _quips.length - 3) {
+            _fetchMore();
+          }
+        },
+        itemBuilder: (context, index) {
+          final quip = _quips[index];
+          final controller = _controllers[index];
+          return VisibilityDetector(
+            key: ValueKey('quip-${quip.id}'),
+            onVisibilityChanged: (info) =>
+                _onVisibilityChanged(index, info.visibleFraction),
+            child: QuipVideoItem(
+              quip: quip,
+              controller: controller,
+              isActive: index == _currentIndex,
+              reactions: _reactionCounts[quip.id] ?? quip.reactions,
+              myReactions: _myReactions[quip.id] ?? quip.myReactions,
+              commentCount: quip.commentCount,
+              isUserPaused: _isUserPaused,
+              isFollowing: _followStates[quip.authorId] ?? false,
+              onReact: (emoji) => _toggleReaction(quip, emoji),
+              onOpenReactionPicker: (pos) => _openReactionPicker(quip, pos),
+              onComment: () => _openComments(quip),
+              onShare: () => _shareQuip(quip),
+              onTogglePause: _toggleUserPause,
+              onNotInterested: () => _handleNotInterested(quip),
+              onFollow: quip.authorId.isNotEmpty ? () => _toggleFollow(quip) : null,
+            ),
+          );
+        },
       ),
     );
   }

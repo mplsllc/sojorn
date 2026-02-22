@@ -96,10 +96,13 @@ class SecureChatService {
 
   
   Future<void> initialize({bool generateIfMissing = false}) async {
+    debugPrint('[E2EE] Initializing secure chat — generateIfMissing=$generateIfMissing');
     await _e2ee.initialize();
     if (!_e2ee.isReady && generateIfMissing) {
+      debugPrint('[E2EE] No identity found, generating new keys');
       await _e2ee.generateNewIdentity();
     }
+    debugPrint('[E2EE] Identity ready=${_e2ee.isReady}, connecting realtime');
     connectRealtime();
   }
   
@@ -295,8 +298,10 @@ class SecureChatService {
       }
 
       // 1. Encrypt (X3DH)
+      debugPrint('[E2EE] Encrypting message for $recipientId (${plaintext.length} chars)');
       final encrypted = await _e2ee.encrypt(recipientId, plaintext);
-      
+      debugPrint('[E2EE] Encrypted, sending to backend');
+
       // 2. Send to Go Backend
       // Go Model expects MessageHeader as a JSON String, not a Map.
       final headerMap = encrypted['header'];
@@ -604,7 +609,9 @@ class SecureChatService {
     final userId = currentUserId;
     if (userId == null) return [];
     final response = await _api.getConversations();
-    return response.map((row) => SecureConversation.fromJson(row, userId)).toList();
+    final convos = response.map((row) => SecureConversation.fromJson(row, userId)).toList();
+    debugPrint('[E2EE] Loaded ${convos.length} conversations');
+    return convos;
   }
 
   Future<SecureConversation?> getOrCreateConversation(String otherUserId) async {

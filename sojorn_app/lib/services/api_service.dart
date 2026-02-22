@@ -1742,4 +1742,65 @@ class ApiService {
     return requests.map((r) => JoinRequest.fromJson(r)).toList();
   }
 
+  // =========================================================================
+  // Group Events
+  // =========================================================================
+
+  Future<List<Map<String, dynamic>>> fetchGroupEvents(String groupId) async {
+    final data = await _callGoApi('/groups/$groupId/events', method: 'GET');
+    return (data['events'] as List?)?.cast<Map<String, dynamic>>() ?? [];
+  }
+
+  Future<Map<String, dynamic>> createGroupEvent(String groupId, Map<String, dynamic> body) async {
+    return await _callGoApi('/groups/$groupId/events', body: body);
+  }
+
+  Future<Map<String, dynamic>> updateGroupEvent(String groupId, String eventId, Map<String, dynamic> body) async {
+    return await _callGoApi('/groups/$groupId/events/$eventId', method: 'PATCH', body: body);
+  }
+
+  Future<void> deleteGroupEvent(String groupId, String eventId) async {
+    await _callGoApi('/groups/$groupId/events/$eventId', method: 'DELETE');
+  }
+
+  Future<Map<String, dynamic>> rsvpEvent(String groupId, String eventId, String status) async {
+    return await _callGoApi('/groups/$groupId/events/$eventId/rsvp', body: {'status': status});
+  }
+
+  Future<void> removeRsvp(String groupId, String eventId) async {
+    await _callGoApi('/groups/$groupId/events/$eventId/rsvp', method: 'DELETE');
+  }
+
+  Future<List<Map<String, dynamic>>> fetchUpcomingEvents({int limit = 20}) async {
+    final data = await _callGoApi('/events/upcoming', method: 'GET',
+        queryParams: {'limit': '$limit'});
+    return (data['events'] as List?)?.cast<Map<String, dynamic>>() ?? [];
+  }
+
+  Future<List<Map<String, dynamic>>> fetchMyEvents({int limit = 20}) async {
+    final data = await _callGoApi('/events/mine', method: 'GET',
+        queryParams: {'limit': '$limit'});
+    return (data['events'] as List?)?.cast<Map<String, dynamic>>() ?? [];
+  }
+
+  // =========================================================================
+  // Dashboard Layout
+  // =========================================================================
+
+  Future<Map<String, dynamic>> getDashboardLayout() async {
+    return await _callGoApi('/dashboard/layout', method: 'GET');
+  }
+
+  Future<Map<String, dynamic>> saveDashboardLayout(Map<String, dynamic> layout) async {
+    return await _callGoApi('/dashboard/layout', method: 'PUT', body: layout);
+  }
+
+  // =========================================================================
+  // Public Profile Layout (viewing another user's profile)
+  // =========================================================================
+
+  Future<Map<String, dynamic>> getPublicProfileLayout(String userId) async {
+    return await _callGoApi('/profiles/$userId/layout', method: 'GET');
+  }
+
 }

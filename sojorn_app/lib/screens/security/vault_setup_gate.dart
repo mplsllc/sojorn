@@ -13,6 +13,7 @@ import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:file_picker/file_picker.dart';
 import '../../services/key_vault_service.dart';
+import '../../services/simple_e2ee_service.dart';
 import '../../providers/vault_provider.dart';
 import '../../theme/app_theme.dart';
 import '../../theme/tokens.dart';
@@ -52,6 +53,9 @@ class _VaultSetupGateState extends ConsumerState<VaultSetupGate> {
   bool _isReactivated = false;
   String? _previousStatus;
   bool _reactivationChecked = false;
+
+  // One-shot E2EE init for the pass-through path
+  bool _e2eeInitStarted = false;
 
   @override
   void initState() {
@@ -127,6 +131,7 @@ class _VaultSetupGateState extends ConsumerState<VaultSetupGate> {
     setState(() { _submitting = true; _error = null; });
     try {
       await KeyVaultService.instance.restoreFromPassphrase(pw);
+      SimpleE2EEService().clearNeedsVaultRestore();
       ref.invalidate(vaultSetupProvider);
     } catch (e) {
       if (mounted) {
@@ -150,6 +155,7 @@ class _VaultSetupGateState extends ConsumerState<VaultSetupGate> {
     setState(() { _submitting = true; _error = null; });
     try {
       await KeyVaultService.instance.restoreFromRecoveryKey(key);
+      SimpleE2EEService().clearNeedsVaultRestore();
       ref.invalidate(vaultSetupProvider);
     } catch (e) {
       if (mounted) {
@@ -222,6 +228,16 @@ class _VaultSetupGateState extends ConsumerState<VaultSetupGate> {
     ref.invalidate(vaultSetupProvider);
   }
 
+  // ── E2EE init (one-shot, only on pass-through) ─────────────────────
+
+  void _ensureE2eeInitialized() {
+    if (_e2eeInitStarted) return;
+    _e2eeInitStarted = true;
+    SimpleE2EEService().initialize().then((_) {
+      KeyVaultService.instance.autoSync();
+    });
+  }
+
   // ── Build ───────────────────────────────────────────────────────────
 
   @override
@@ -230,7 +246,23 @@ class _VaultSetupGateState extends ConsumerState<VaultSetupGate> {
 
     return vaultAsync.when(
       data: (isSetup) {
-        if (isSetup) return widget.child;
+        // Vault exists on server but keys aren't loaded locally —
+        // the user reinstalled or cleared cache. Force restore mode.
+        if (isSetup && SimpleE2EEService().needsVaultRestore) {
+          if (_reactivationChecked && _mode == _GateMode.create) {
+            _mode = _GateMode.restore;
+          }
+          if (!_reactivationChecked) {
+            return const Scaffold(body: Center(child: CircularProgressIndicator()));
+          }
+          return _buildPasswordScreen();
+        }
+
+        if (isSetup) {
+          _ensureE2eeInitialized();
+          return widget.child;
+        }
+
         if (!_reactivationChecked) {
           return const Scaffold(body: Center(child: CircularProgressIndicator()));
         }
@@ -238,7 +270,35 @@ class _VaultSetupGateState extends ConsumerState<VaultSetupGate> {
         return _buildPasswordScreen();
       },
       loading: () => const Scaffold(body: Center(child: CircularProgressIndicator())),
-      error: (_, __) => widget.child,
+      // Don't bypass the gate on error — show a retry screen instead
+      error: (e, __) => Scaffold(
+        backgroundColor: AppTheme.scaffoldBg,
+        body: Center(
+          child: Padding(
+            padding: const EdgeInsets.all(32),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Icon(Icons.cloud_off, size: 48, color: AppTheme.textSecondary),
+                const SizedBox(height: 16),
+                Text('Could not check encryption status',
+                  textAlign: TextAlign.center,
+                  style: GoogleFonts.inter(color: AppTheme.textSecondary, fontSize: 14)),
+                const SizedBox(height: 20),
+                ElevatedButton(
+                  onPressed: () => ref.invalidate(vaultSetupProvider),
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: AppTheme.brightNavy,
+                    foregroundColor: Colors.white,
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                  ),
+                  child: const Text('Retry'),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
     );
   }
 

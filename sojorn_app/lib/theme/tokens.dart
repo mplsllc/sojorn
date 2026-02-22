@@ -170,3 +170,21 @@ class SojornNav {
   // Beacon top tab icons
   static const double beaconTabIconSize = 18.0;
 }
+
+class SojornBreakpoints {
+  const SojornBreakpoints._();
+
+  static const double mobile = 600.0;
+  static const double tablet = 900.0;
+  static const double desktop = 1200.0;
+
+  static const double maxContentWidth = 640.0;
+  static const double sidebarWidth = 320.0;
+  static const double navRailWidth = 72.0;
+  static const double navRailExtended = 200.0;
+
+  static bool isMobile(double w) => w < mobile;
+  static bool isTablet(double w) => w >= mobile && w < tablet;
+  static bool isDesktop(double w) => w >= tablet;
+  static bool isWideDesktop(double w) => w >= desktop;
+}

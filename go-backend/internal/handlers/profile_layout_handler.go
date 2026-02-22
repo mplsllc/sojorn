@@ -63,6 +63,47 @@ func (h *ProfileLayoutHandler) GetProfileLayout(c *gin.Context) {
 	})
 }
 
+// GetPublicProfileLayout — GET /profiles/:id/layout
+// Returns another user's profile layout (public-facing, for visitors).
+func (h *ProfileLayoutHandler) GetPublicProfileLayout(c *gin.Context) {
+	targetID := c.Param("id")
+
+	var widgetsJSON []byte
+	var theme string
+	var accentColor, bannerImageURL *string
+	var updatedAt time.Time
+
+	err := h.db.QueryRow(c.Request.Context(), `
+		SELECT widgets, theme, accent_color, banner_image_url, updated_at
+		FROM profile_layouts
+		WHERE user_id = $1
+	`, targetID).Scan(&widgetsJSON, &theme, &accentColor, &bannerImageURL, &updatedAt)
+
+	if err != nil {
+		c.JSON(http.StatusOK, gin.H{
+			"widgets":          []interface{}{},
+			"theme":            "default",
+			"accent_color":     nil,
+			"banner_image_url": nil,
+			"updated_at":       time.Now().Format(time.RFC3339),
+		})
+		return
+	}
+
+	var widgets interface{}
+	if err := json.Unmarshal(widgetsJSON, &widgets); err != nil {
+		widgets = []interface{}{}
+	}
+
+	c.JSON(http.StatusOK, gin.H{
+		"widgets":          widgets,
+		"theme":            theme,
+		"accent_color":     accentColor,
+		"banner_image_url": bannerImageURL,
+		"updated_at":       updatedAt.Format(time.RFC3339),
+	})
+}
+
 // SaveProfileLayout — PUT /profile/layout
 func (h *ProfileLayoutHandler) SaveProfileLayout(c *gin.Context) {
 	userID, _ := c.Get("user_id")

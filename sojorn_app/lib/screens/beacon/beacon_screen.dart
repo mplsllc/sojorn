@@ -132,21 +132,26 @@ class BeaconScreenState extends ConsumerState<BeaconScreen> with TickerProviderS
   @override
   void initState() {
     super.initState();
+    debugPrint('[BEACON] initState — loading map, beacons, clusters, neighborhood');
     _tabController = TabController(length: 4, vsync: this);
     _tabController.addListener(() {
       if (!_tabController.indexIsChanging) {
+        final tabNames = ['Map', 'Board', 'Hub', 'Clusters'];
+        debugPrint('[BEACON] Tab switched to: ${_tabController.index < tabNames.length ? tabNames[_tabController.index] : _tabController.index}');
         setState(() => _activeTab = _tabOrder[_tabController.index]);
         if (_tabController.index == 1 && _boardEntries.isEmpty) _loadBoardEntries();
       }
     });
-    _mapCenter = widget.initialMapCenter ?? const LatLng(37.7749, -122.4194);
+    _mapCenter = widget.initialMapCenter ?? const LatLng(44.9778, -93.2650); // Minneapolis default, overridden by neighborhood/GPS
     _suppressAutoCenterOnUser = widget.initialMapCenter != null;
     if (widget.initialMapCenter != null) {
       _loadBeacons(center: widget.initialMapCenter);
     }
+    // Check home neighborhood FIRST — it provides map center + pre-loads data.
+    // GPS location runs in parallel and refines the position once resolved.
+    _checkHomeNeighborhood();
     _checkLocationPermission();
     _loadClusters();
-    _checkHomeNeighborhood();
     WidgetsBinding.instance.addPostFrameCallback((_) {
       _sheetController.addListener(_onSheetSizeChanged);
     });
@@ -177,11 +182,16 @@ class BeaconScreenState extends ConsumerState<BeaconScreen> with TickerProviderS
 
   Future<void> _checkLocationPermission() async {
     final status = await Permission.location.status;
+    debugPrint('[BEACON] Location permission: $status');
     if (mounted) {
       setState(() => _locationPermissionGranted = status.isGranted);
       if (status.isGranted) {
+        final hadBeacons = _beacons.isNotEmpty || _officialPosts.isNotEmpty;
         await _getCurrentLocation(forceCenter: !_suppressAutoCenterOnUser);
-        await _loadBeacons();
+        // Only reload beacons if neighborhood didn't already pre-load them
+        if (!hadBeacons) {
+          await _loadBeacons();
+        }
       }
     }
   }
@@ -207,9 +217,11 @@ class BeaconScreenState extends ConsumerState<BeaconScreen> with TickerProviderS
 
   Future<void> _getCurrentLocation({bool forceCenter = false}) async {
     if (!_locationPermissionGranted) return;
+    debugPrint('[BEACON] Getting current location...');
     setState(() => _isLoadingLocation = true);
     try {
       final position = await Geolocator.getCurrentPosition(desiredAccuracy: LocationAccuracy.low);
+      debugPrint('[BEACON] Location: ${position.latitude.toStringAsFixed(4)}, ${position.longitude.toStringAsFixed(4)}');
       if (mounted) {
         setState(() {
           _userLocation = LatLng(position.latitude, position.longitude);
@@ -219,9 +231,14 @@ class BeaconScreenState extends ConsumerState<BeaconScreen> with TickerProviderS
           }
         });
         // Update map center so board uses real location
+        final oldCenter = _mapCenter;
         _mapCenter = _userLocation!;
-        // Refresh board if it was already loaded with stale coordinates
-        if (_boardEntries.isNotEmpty || _activeTab == BeaconTab.board) {
+        // Only refresh board if GPS position is significantly different from
+        // the previous center (>500m) to avoid redundant reloads when
+        // neighborhood coords already loaded correct data.
+        final distMoved = const Distance().as(LengthUnit.Meter, oldCenter, _mapCenter);
+        if (distMoved > 500 && (_boardEntries.isNotEmpty || _activeTab == BeaconTab.board)) {
+          debugPrint('[BEACON] GPS moved ${distMoved.toInt()}m from previous center — refreshing board');
           _loadBoardEntries();
         }
         // Fetch weather for current location
@@ -287,6 +304,7 @@ class BeaconScreenState extends ConsumerState<BeaconScreen> with TickerProviderS
   /// If onboarded: load saved neighborhood, skip GPS detection entirely.
   /// If not onboarded: wait for GPS, then auto-show the picker.
   Future<void> _checkHomeNeighborhood() async {
+    debugPrint('[BEACON] Checking home neighborhood...');
     try {
       final mine = await ApiService.instance.getMyNeighborhood();
       if (mine == null || !mounted) return;
@@ -295,11 +313,15 @@ class BeaconScreenState extends ConsumerState<BeaconScreen> with TickerProviderS
       final hood = mine['neighborhood'] as Map<String, dynamic>?;
       final canChange = mine['can_change'] as bool? ?? true;
       final nextChange = mine['next_change_allowed_at'] as String?;
+      debugPrint('[BEACON] Home neighborhood: onboarded=$onboarded, hood=${hood?['name']}, canChange=$canChange');
 
       if (onboarded && hood != null) {
         // User already chose a neighborhood — load it and skip GPS detect
         final name = hood['name'] as String? ?? '';
         final city = hood['city'] as String? ?? '';
+        // Use neighborhood coords as map center immediately (avoids SF default)
+        final hoodLat = (hood['lat'] as num?)?.toDouble();
+        final hoodLng = (hood['lng'] as num?)?.toDouble();
         setState(() {
           _neighborhood = mine;
           _neighborhoodDetected = true;
@@ -309,7 +331,18 @@ class BeaconScreenState extends ConsumerState<BeaconScreen> with TickerProviderS
           if (name.isNotEmpty) {
             _locationName = city.isNotEmpty ? '$name, $city' : name;
           }
+          if (hoodLat != null && hoodLng != null) {
+            _mapCenter = LatLng(hoodLat, hoodLng);
+            debugPrint('[BEACON] Using neighborhood center: ${hoodLat.toStringAsFixed(4)}, ${hoodLng.toStringAsFixed(4)}');
+          }
         });
+        // Move map to neighborhood center and pre-load data with correct coords
+        if (hoodLat != null && hoodLng != null && !_suppressAutoCenterOnUser) {
+          try { _mapController.move(_mapCenter, _currentZoom); } catch (_) {}
+          _loadBeacons(center: _mapCenter);
+        }
+        // Pre-load board entries with neighborhood coords so they're ready on tab switch
+        _loadBoardEntries();
         return; // Done — no GPS detect needed for neighborhood
       }
 
@@ -423,6 +456,7 @@ class BeaconScreenState extends ConsumerState<BeaconScreen> with TickerProviderS
   }
 
   Future<void> _loadClusters() async {
+    debugPrint('[BEACON] Loading clusters...');
     setState(() => _isLoadingClusters = true);
     try {
       final results = await Future.wait([
@@ -449,8 +483,9 @@ class BeaconScreenState extends ConsumerState<BeaconScreen> with TickerProviderS
           _isLoadingClusters = false;
         });
       }
+      debugPrint('[BEACON] Loaded ${_clusters.length} clusters, ${_discoverClusters.length} discover');
     } catch (e) {
-      if (kDebugMode) print('[Beacon] Clusters load error: $e');
+      debugPrint('[BEACON] Clusters load error: $e');
       if (mounted) setState(() => _isLoadingClusters = false);
     }
   }
@@ -565,6 +600,7 @@ class BeaconScreenState extends ConsumerState<BeaconScreen> with TickerProviderS
 
   Future<void> _loadBoardEntries() async {
     if (_isLoadingBoard) return;
+    debugPrint('[BEACON] Loading board entries for ${_mapCenter.latitude.toStringAsFixed(4)}, ${_mapCenter.longitude.toStringAsFixed(4)} topic=${_selectedBoardTopic?.value} sort=$_boardSort');
     setState(() => _isLoadingBoard = true);
     try {
       final data = await ApiService.instance.fetchBoardEntries(
@@ -580,9 +616,10 @@ class BeaconScreenState extends ConsumerState<BeaconScreen> with TickerProviderS
           _isNeighborhoodAdmin = data['is_neighborhood_admin'] == true;
           _isLoadingBoard = false;
         });
+        debugPrint('[BEACON] Loaded ${_boardEntries.length} board entries, isAdmin=$_isNeighborhoodAdmin');
       }
     } catch (e) {
-      if (kDebugMode) print('[Board] Load error: $e');
+      debugPrint('[BEACON] Board load error: $e');
       if (mounted) setState(() => _isLoadingBoard = false);
     }
 
@@ -873,11 +910,144 @@ class BeaconScreenState extends ConsumerState<BeaconScreen> with TickerProviderS
   // ─── Map tab (map + overlay + draggable sheet) ────────────────────────
   Widget _buildMapTab() {
     return LayoutBuilder(builder: (context, constraints) {
+      if (SojornBreakpoints.isDesktop(constraints.maxWidth)) {
+        return _buildDesktopMapLayout();
+      }
       // Use actual container height (excludes AppBar + NavBar) so FAB and pill
       // align correctly with the DraggableScrollableSheet fraction.
       final screenH = constraints.maxHeight;
       return _buildMapStack(screenH);
     });
+  }
+
+  Widget _buildDesktopMapLayout() {
+    return Row(
+      children: [
+        // Map takes remaining space
+        Expanded(
+          child: Stack(
+            children: [
+              _buildMap(),
+              _buildMapOverlayBar(),
+              // FAB — create a new report
+              Positioned(
+                bottom: 24,
+                right: 24,
+                child: GestureDetector(
+                  onTap: _onCreateBeacon,
+                  child: ClipRRect(
+                    borderRadius: BorderRadius.circular(28),
+                    child: BackdropFilter(
+                      filter: ImageFilter.blur(sigmaX: 12, sigmaY: 12),
+                      child: Container(
+                        width: 52, height: 52,
+                        decoration: BoxDecoration(
+                          color: AppTheme.brightNavy.withValues(alpha: 0.92),
+                          shape: BoxShape.circle,
+                          boxShadow: [
+                            BoxShadow(color: AppTheme.brightNavy.withValues(alpha: 0.35), blurRadius: 14, offset: const Offset(0, 4)),
+                          ],
+                        ),
+                        child: const Icon(Icons.add, color: Colors.white, size: 26),
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
+        // Side panel replaces DraggableScrollableSheet
+        Container(
+          width: SojornBreakpoints.sidebarWidth,
+          decoration: BoxDecoration(
+            color: AppTheme.cardSurface,
+            border: Border(
+              left: BorderSide(
+                color: SojornColors.basicBlack.withValues(alpha: 0.08),
+                width: 1,
+              ),
+            ),
+          ),
+          child: Column(
+            children: [
+              ActiveAlertsTicker(alerts: _beaconModels, onAlertTap: _onBeaconModelTap),
+              if (_activeGeoAlerts.isNotEmpty)
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(16, 8, 16, 2),
+                  child: Row(
+                    children: [
+                      Icon(Icons.location_on, size: 11, color: SojornColors.textDisabled),
+                      const SizedBox(width: 3),
+                      Text('Sorted by distance',
+                        style: TextStyle(color: SojornColors.textDisabled, fontSize: 10)),
+                    ],
+                  ),
+                ),
+              Expanded(
+                child: _activeGeoAlerts.isEmpty
+                    ? SingleChildScrollView(
+                        padding: const EdgeInsets.fromLTRB(20, 8, 20, 32),
+                        child: Column(
+                          children: [
+                            Container(
+                              padding: const EdgeInsets.all(16),
+                              decoration: BoxDecoration(
+                                color: AppTheme.brightNavy.withValues(alpha: 0.06),
+                                borderRadius: BorderRadius.circular(16),
+                                border: Border.all(color: AppTheme.brightNavy.withValues(alpha: 0.12)),
+                              ),
+                              child: Row(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Icon(Icons.lightbulb_outline, color: AppTheme.brightNavy, size: 20),
+                                  const SizedBox(width: 12),
+                                  Expanded(
+                                    child: Column(
+                                      crossAxisAlignment: CrossAxisAlignment.start,
+                                      children: [
+                                        Text('What are Beacons?',
+                                          style: TextStyle(
+                                            color: AppTheme.navyBlue,
+                                            fontWeight: FontWeight.w700,
+                                            fontSize: 13,
+                                          )),
+                                        const SizedBox(height: 4),
+                                        Text(
+                                          'Beacons are real-time local alerts from people in your area — road closures, safety incidents, community events, and more. Tap the + button to post your first beacon.',
+                                          style: TextStyle(
+                                            color: AppTheme.navyBlue.withValues(alpha: 0.65),
+                                            fontSize: 12,
+                                            height: 1.4,
+                                          ),
+                                        ),
+                                      ],
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                            const SizedBox(height: 24),
+                            Icon(Icons.shield, color: AppTheme.brightNavy.withValues(alpha: 0.25), size: 40),
+                            const SizedBox(height: 10),
+                            Text('All clear in your area',
+                              style: TextStyle(color: AppTheme.navyBlue.withValues(alpha: 0.45), fontSize: 14, fontWeight: FontWeight.w500)),
+                            const SizedBox(height: 4),
+                            Text('No active alerts nearby',
+                              style: TextStyle(color: AppTheme.navyBlue.withValues(alpha: 0.3), fontSize: 12)),
+                          ],
+                        ),
+                      )
+                    : ListView.builder(
+                        itemCount: _activeGeoAlerts.length,
+                        itemBuilder: (context, index) => _buildIncidentCard(_activeGeoAlerts[index]),
+                      ),
+              ),
+            ],
+          ),
+        ),
+      ],
+    );
   }
 
   Widget _buildMapStack(double screenH) {

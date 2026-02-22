@@ -42,9 +42,8 @@ const {
 		<meta property="twitter:title" content={title} />
 		<meta property="twitter:description" content={description} />
 		
-		<!-- Security headers -->
+		<!-- Security headers (X-Frame-Options set via nginx, not meta tag) -->
 		<meta http-equiv="X-Content-Type-Options" content="nosniff" />
-		<meta http-equiv="X-Frame-Options" content="DENY" />
 		<meta http-equiv="Referrer-Policy" content="strict-origin-when-cross-origin" />
 	</head>
 	<body class="min-h-screen antialiased bg-white text-zinc-900">

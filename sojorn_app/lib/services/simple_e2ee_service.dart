@@ -44,6 +44,7 @@ class SimpleE2EEService {
   
   String? _initializedForUserId;
   Future<void>? _initFuture;
+  bool _needsVaultRestore = false;
 
   // Cache for X3DH shared secrets
   final Map<String, SecretKey> _sessionCache = {};
@@ -64,6 +65,17 @@ class SimpleE2EEService {
   }
 
   bool get isReady => _identityDhKeyPair != null && _identitySigningKeyPair != null;
+
+  /// True when keys are missing locally but a vault backup exists on the server.
+  /// The VaultSetupGate checks this to prompt for passphrase restore instead of
+  /// letting the app through with no keys or silently generating new ones.
+  bool get needsVaultRestore => _needsVaultRestore;
+
+  /// Clear the restore flag after a successful vault restore.
+  void clearNeedsVaultRestore() {
+    _needsVaultRestore = false;
+    _initFuture = null; // Allow re-initialization after restore
+  }
 
   // DEPRECATED: Old backup PIN was user ID (insecure — server could derive it).
   // KeyVaultService now handles passphrase-based backup. This getter is kept
@@ -206,7 +218,7 @@ class SimpleE2EEService {
     } catch (e) {
     }
 
-    // 2. Try Cloud Restore
+    // 2. Try Cloud Restore (legacy path — profile-based encrypted key)
     final restored = await _restoreFromCloud(userId);
     if (restored) {
         // Test restored keys
@@ -218,7 +230,26 @@ class SimpleE2EEService {
         }
     }
 
-    // 3. Generate New
+    // 3. Check if a vault backup exists before generating new keys.
+    //    If the user has a vault backup, they need to enter their passphrase
+    //    to restore — we must NOT silently generate a new identity.
+    try {
+      final statusData = await _api.callGoApi('/capsule/escrow/status', method: 'GET');
+      if (statusData['has_backup'] == true) {
+        if (kDebugMode) debugPrint('[E2EE] Vault backup found on server — waiting for user to restore');
+        _needsVaultRestore = true;
+        return; // Do NOT generate new keys — VaultSetupGate will prompt
+      }
+    } catch (e) {
+      if (kDebugMode) debugPrint('[E2EE] Could not check vault status: $e');
+      // If we can't reach the server, don't generate new keys either —
+      // better to wait than to silently overwrite a backup.
+      _needsVaultRestore = true;
+      return;
+    }
+
+    // 4. Genuinely new user — no local keys, no legacy backup, no vault backup
+    if (kDebugMode) debugPrint('[E2EE] No keys found anywhere — generating new identity');
     await generateNewIdentity();
   }
 

@@ -32,6 +32,7 @@ import 'providers/settings_provider.dart';
 import 'providers/feed_refresh_provider.dart';
 import 'providers/header_state_provider.dart';
 import 'services/chat_backup_manager.dart';
+import 'providers/vault_provider.dart';
 import 'routes/app_routes.dart';
 
 Future<void> _firebaseMessagingBackgroundHandler(RemoteMessage message) async {
@@ -155,10 +156,8 @@ class _sojornAppState extends ConsumerState<sojornApp> with WidgetsBindingObserv
     // Defer heavy work with real delays to avoid jank on first paint
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (kDebugMode) debugPrint('[APP] Post-frame: starting deferred init');
-      // Stagger init with longer delays to reduce jank from heavy synchronous work
-      Future.delayed(const Duration(milliseconds: 300), () {
-        _initE2ee();
-      });
+      // E2EE init is now handled by VaultSetupGate to avoid racing ahead
+      // of the vault restore prompt. Only notifications and sync here.
       Future.delayed(const Duration(milliseconds: 800), () {
         _initNotifications();
       });
@@ -181,6 +180,14 @@ class _sojornAppState extends ConsumerState<sojornApp> with WidgetsBindingObserv
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
     if (kDebugMode) debugPrint('[APP] Lifecycle: $state  ${DateTime.now().toIso8601String()}');
+    if (state == AppLifecycleState.resumed && _authService.isAuthenticated) {
+      // Quick check: if chat keys were wiped (cache clear, etc.),
+      // re-evaluate the vault gate so it can prompt for restore.
+      if (!SimpleE2EEService().isReady) {
+        if (kDebugMode) debugPrint('[APP] Keys missing after resume — re-checking vault');
+        ref.invalidate(vaultSetupProvider);
+      }
+    }
   }
 
   Future<void> _initDeepLinks() async {
@@ -241,10 +248,11 @@ class _sojornAppState extends ConsumerState<sojornApp> with WidgetsBindingObserv
     _authSub = _authService.authStateChanges.listen((data) {
       if (data.event == AuthChangeEvent.signedIn ||
           data.event == AuthChangeEvent.tokenRefreshed) {
-        SimpleE2EEService().initialize().then((_) {
-          // Auto-sync vault after E2EE re-init on auth change
-          KeyVaultService.instance.autoSync();
-        });
+        // Only re-init E2EE on token refresh (keys already loaded).
+        // Initial sign-in E2EE is handled by VaultSetupGate.
+        if (data.event == AuthChangeEvent.tokenRefreshed) {
+          _initE2ee();
+        }
         NotificationService.instance.init();
         _listenForNotifications();
         _ensureSyncManager();

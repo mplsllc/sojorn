@@ -4,6 +4,7 @@
 
 import 'dart:async';
 import 'dart:convert';
+import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as http;
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import '../config/api_config.dart';
@@ -78,30 +79,43 @@ class AuthService {
 
   Future<void> _init() async {
     if (_initialized) return;
-    
+    if (kDebugMode) debugPrint('[AUTH] Initializing auth service...');
+
     _accessToken = await _storage.read(key: 'access_token');
     final refreshToken = await _storage.read(key: 'refresh_token');
-    
+
     _temporaryToken = await _storage.read(key: 'go_auth_token');
     final userJson = await _storage.read(key: 'go_auth_user');
-    
+
     if (userJson != null) {
       try {
         _localUser = model.AuthUser.fromJson(jsonDecode(userJson));
-      } catch (_) {}
+        if (kDebugMode) debugPrint('[AUTH] Loaded cached user: ${_localUser?.email ?? _localUser?.id}');
+      } catch (_) {
+        if (kDebugMode) debugPrint('[AUTH] Failed to parse cached user JSON');
+      }
     }
 
     if (_accessToken != null && refreshToken != null) {
       if (_isTokenExpired(_accessToken!)) {
+        if (kDebugMode) debugPrint('[AUTH] Access token expired, refreshing...');
         await refreshSession();
+      } else {
+        if (kDebugMode) debugPrint('[AUTH] Access token valid');
       }
     } else if (refreshToken != null) {
+      if (kDebugMode) debugPrint('[AUTH] No access token but have refresh token, refreshing...');
        await refreshSession();
+    } else {
+      if (kDebugMode) debugPrint('[AUTH] No tokens found — user not authenticated');
     }
 
     _initialized = true;
     if (isAuthenticated) {
+      if (kDebugMode) debugPrint('[AUTH] Init complete — authenticated as ${_localUser?.email ?? currentUser?.id}');
       _notifyGoAuthChange();
+    } else {
+      if (kDebugMode) debugPrint('[AUTH] Init complete — not authenticated');
     }
   }
   
@@ -142,8 +156,12 @@ class AuthService {
   }
 
   Future<bool> refreshSession() async {
+    if (kDebugMode) debugPrint('[AUTH] Attempting token refresh...');
     final refreshToken = await _storage.read(key: 'refresh_token');
-    if (refreshToken == null) return false;
+    if (refreshToken == null) {
+      if (kDebugMode) debugPrint('[AUTH] No refresh token available');
+      return false;
+    }
 
     try {
       final response = await http.post(
@@ -155,12 +173,15 @@ class AuthService {
       if (response.statusCode == 200) {
         final data = jsonDecode(response.body);
         await _saveTokens(data['access_token'], data['refresh_token']);
+        if (kDebugMode) debugPrint('[AUTH] Token refresh successful');
         return true;
       } else {
+        if (kDebugMode) debugPrint('[AUTH] Token refresh failed (${response.statusCode}) — signing out');
         await signOut(); // Refresh failed (revoked/expired), force logout
         return false;
       }
     } catch (e) {
+      if (kDebugMode) debugPrint('[AUTH] Token refresh error: $e');
       return false;
     }
   }
@@ -238,9 +259,8 @@ class AuthService {
   }) async {
     try {
       final uri = Uri.parse('${ApiConfig.baseUrl}/auth/login');
-      // DEBUG: Log the API URL being used
-      print('[AUTH] Login URL: $uri');
-      print('[AUTH] API_BASE_URL from env: ${ApiConfig.baseUrl}');
+      if (kDebugMode) debugPrint('[AUTH] Login attempt for $email');
+      if (kDebugMode) debugPrint('[AUTH] Login URL: $uri');
       
       final response = await http.post(
         uri,
@@ -255,21 +275,25 @@ class AuthService {
       final data = jsonDecode(response.body);
       
       if (response.statusCode == 200) {
+        if (kDebugMode) debugPrint('[AUTH] Login successful');
         final accessToken = data['token'] ?? data['access_token'];
         final refreshToken = data['refresh_token'];
-        
+
         if (accessToken == null || refreshToken == null) {
+          if (kDebugMode) debugPrint('[AUTH] Login response missing tokens!');
           throw AuthException('Invalid response from server: missing tokens');
         }
-        
+
         await _saveTokens(accessToken as String, refreshToken as String);
-        
+
         if (data['user'] != null) {
             final userJson = data['user'];
             try {
               _localUser = model.AuthUser.fromJson(userJson);
               await _storage.write(key: 'go_auth_user', value: jsonEncode(userJson));
+              if (kDebugMode) debugPrint('[AUTH] User saved: ${_localUser?.email}');
             } catch (e) {
+              if (kDebugMode) debugPrint('[AUTH] Failed to parse user from login response: $e');
             }
         }
         
@@ -349,6 +373,7 @@ class AuthService {
   }
 
   Future<void> signOut() async {
+    if (kDebugMode) debugPrint('[AUTH] Signing out — clearing all tokens');
     _refreshTimer?.cancel();
     _refreshTimer = null;
     _temporaryToken = null;
@@ -359,6 +384,7 @@ class AuthService {
     await _storage.delete(key: 'go_auth_token');
     await _storage.delete(key: 'go_auth_user');
     _authEventController.add(const AuthState(AuthChangeEvent.signedOut, null));
+    if (kDebugMode) debugPrint('[AUTH] Sign out complete');
   }
 
   String? get accessToken => _accessToken ?? _temporaryToken ?? currentSession?.accessToken;

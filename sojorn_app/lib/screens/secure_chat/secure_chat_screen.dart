@@ -64,6 +64,7 @@ class _SecureChatScreenState extends State<SecureChatScreen>
   @override
   void initState() {
     super.initState();
+    debugPrint('[CHAT] initState — conversationId=${widget.conversation.id}, otherUser=${widget.conversation.otherUserHandle}');
     WidgetsBinding.instance.addObserver(this);
     // Use a broadcast stream so both StreamBuilder and the reconcile
     // subscription can listen without conflict.
@@ -156,6 +157,7 @@ class _SecureChatScreenState extends State<SecureChatScreen>
     _messageController.clear();
 
     try {
+      debugPrint('[CHAT] Sending message to $_recipientId (${composedText.length} chars)');
       final message = await _chatService.sendMessage(
         widget.conversation.id,
         _recipientId,
@@ -163,6 +165,7 @@ class _SecureChatScreenState extends State<SecureChatScreen>
       );
 
       if (!mounted) return;
+      debugPrint('[CHAT] Message sent — success=${message != null}');
 
       setState(() {
         _isSending = false;
@@ -173,6 +176,7 @@ class _SecureChatScreenState extends State<SecureChatScreen>
         }
       });
     } catch (e) {
+      debugPrint('[CHAT] Send failed: $e');
       if (!mounted) return;
       setState(() {
         _isSending = false;

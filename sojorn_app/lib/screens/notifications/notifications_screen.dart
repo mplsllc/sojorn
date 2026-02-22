@@ -43,6 +43,7 @@ class _NotificationsScreenState extends ConsumerState<NotificationsScreen> {
   @override
   void initState() {
     super.initState();
+    debugPrint('[NOTIF] initState — authenticated=${AuthService.instance.isAuthenticated}');
     final auth = AuthService.instance;
     if (!auth.isAuthenticated) {
       _authSub = auth.authStateChanges.listen((event) {
@@ -158,6 +159,7 @@ class _NotificationsScreenState extends ConsumerState<NotificationsScreen> {
         final filtered = notifications
             .where((item) => !_locallyArchivedIds.contains(item.id))
             .toList();
+        debugPrint('[NOTIF] Loaded ${filtered.length} notifications (refresh=$refresh, silent=$silent, tab=${_activeTabIndex == 0 ? "Active" : "Archived"})');
 
         setState(() {
           if (refresh || silent) {
@@ -170,6 +172,7 @@ class _NotificationsScreenState extends ConsumerState<NotificationsScreen> {
         });
       }
     } catch (e) {
+      debugPrint('[NOTIF] Load failed: $e');
       if (mounted && !silent) {
         setState(() {
           _error = e.toString().replaceAll('Exception: ', '');

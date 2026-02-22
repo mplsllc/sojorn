@@ -87,6 +87,7 @@ class _ComposeScreenState extends ConsumerState<ComposeScreen> {
   @override
   void initState() {
     super.initState();
+    debugPrint('[COMPOSE] initState${widget.chainParentPost != null ? " chain=${widget.chainParentPost!.id}" : ""}');
     _allowChain = true;
     _bodyController.addListener(() {
       _charCountNotifier.value = _bodyController.text.length;

@@ -5,9 +5,11 @@
 import 'dart:convert';
 import 'dart:typed_data';
 import 'package:cryptography/cryptography.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'capsule_crypto.dart';
 import 'key_vault_service.dart';
+import 'simple_e2ee_service.dart';
 
 /// CapsuleSecurityService — High-level orchestrator for Private Capsule E2EE.
 ///
@@ -27,7 +29,11 @@ class CapsuleSecurityService {
   static Future<SecretKey> generateCapsuleKey() =>
       CapsuleCrypto.generateSymmetricKey();
 
-  /// Generate or retrieve the user's X25519 key pair from secure storage
+  /// Generate or retrieve the user's X25519 key pair from secure storage.
+  ///
+  /// If keys are missing locally but a vault backup exists on the server,
+  /// this will NOT generate new keys — it flags the E2EE service for vault
+  /// restore so the user is prompted for their passphrase first.
   static Future<SimpleKeyPair> getOrCreateUserKeyPair() async {
     final existing = await _storage.read(key: 'capsule_private_key');
     if (existing != null) {
@@ -36,6 +42,13 @@ class CapsuleSecurityService {
         base64Decode(existing),
         base64Decode(publicKeyB64!),
       );
+    }
+
+    // Keys missing locally — check if a vault backup exists before generating new ones.
+    // If it does, the user needs to restore via passphrase, not get fresh keys.
+    if (SimpleE2EEService().needsVaultRestore) {
+      if (kDebugMode) debugPrint('[CAPSULE] Keys missing but vault backup exists — waiting for restore');
+      throw StateError('Capsule keys need vault restore');
     }
 
     final keyPair = await CapsuleCrypto.generateKeyPair();

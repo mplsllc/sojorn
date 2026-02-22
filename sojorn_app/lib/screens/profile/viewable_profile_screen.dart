@@ -27,10 +27,13 @@ import '../../services/auth_service.dart';
 import '../../services/secure_chat_service.dart';
 import '../post/post_detail_screen.dart';
 import 'profile_settings_screen.dart';
+import 'profile_layout_editor.dart';
 import 'followers_following_screen.dart';
+import '../../models/profile_widgets.dart';
 import '../../widgets/harmony_explainer_modal.dart';
 import '../../widgets/follow_button.dart';
 import '../../widgets/media/sojorn_avatar.dart';
+import '../../widgets/profile_widgets/profile_widget_renderer.dart';
 
 /// Unified profile screen - handles both own profile and viewing others.
 ///
@@ -79,6 +82,9 @@ class _UnifiedProfileScreenState extends ConsumerState<UnifiedProfileScreen>
   List<Map<String, dynamic>> _mutualFollowers = [];
   bool _isMutualFollowersLoading = false;
 
+  ProfileLayout? _profileLayout;
+  bool _isLayoutLoading = false;
+
   /// True when no handle was provided (bottom-nav profile tab)
   bool get _isOwnProfileMode => widget.handle == null;
 
@@ -107,6 +113,7 @@ class _UnifiedProfileScreenState extends ConsumerState<UnifiedProfileScreen>
   @override
   void initState() {
     super.initState();
+    debugPrint('[PROFILE] initState — ${_isOwnProfileMode ? "own profile" : "viewing @${widget.handle}"}');
     // Own profile gets 3 tabs (Posts, Saved, Chains), others get 4 (+About)
     _tabController = TabController(length: _isOwnProfileMode ? 3 : 4, vsync: this);
     _tabController.addListener(() {
@@ -157,6 +164,7 @@ class _UnifiedProfileScreenState extends ConsumerState<UnifiedProfileScreen>
       final isFollowedBy = data['is_followed_by'] as bool? ?? false;
       final isFriend = data['is_friend'] as bool? ?? false;
       final isPrivate = data['is_private'] as bool? ?? false;
+      debugPrint('[PROFILE] Loaded @${profile.handle} — posts=${stats.posts}, followers=${stats.followers}, following=${stats.following}, isPrivate=$isPrivate');
       final currentUserId = AuthService.instance.currentUser?.id;
       final isOwnProfile = _isOwnProfileMode ||
           (currentUserId != null &&
@@ -178,12 +186,15 @@ class _UnifiedProfileScreenState extends ConsumerState<UnifiedProfileScreen>
       if (isOwnProfile) {
         await _loadPrivacySettings();
       }
+      _loadProfileLayout();
       await _loadPosts(refresh: true);
     } catch (error) {
+      debugPrint('[PROFILE] Load error: $error');
       if (!mounted) return;
 
       // Auto-create profile if own profile and profile not found
       if (_isOwnProfileMode && _shouldAutoCreateProfile(error)) {
+        debugPrint('[PROFILE] Auto-creating profile for new user');
         await _createProfileIfMissing();
         return;
       }
@@ -198,6 +209,33 @@ class _UnifiedProfileScreenState extends ConsumerState<UnifiedProfileScreen>
         });
       }
     }
+  }
+
+  Future<void> _loadProfileLayout() async {
+    if (_profile == null) return;
+    setState(() => _isLayoutLoading = true);
+    try {
+      final apiService = ref.read(apiServiceProvider);
+      final data = _isOwnProfile
+          ? await apiService.callGoApi('/profile/layout', method: 'GET')
+          : await apiService.getPublicProfileLayout(_profile!.id);
+      if (mounted) {
+        setState(() {
+          _profileLayout = ProfileLayout.fromJson(data);
+          _isLayoutLoading = false;
+        });
+      }
+    } catch (_) {
+      if (mounted) setState(() => _isLayoutLoading = false);
+    }
+  }
+
+  Future<void> _openLayoutEditor() async {
+    await Navigator.of(context, rootNavigator: true).push(
+      MaterialPageRoute(builder: (_) => const ProfileLayoutEditor()),
+    );
+    // Refresh layout after editing
+    _loadProfileLayout();
   }
 
   bool _shouldAutoCreateProfile(dynamic error) {
@@ -857,6 +895,92 @@ class _UnifiedProfileScreenState extends ConsumerState<UnifiedProfileScreen>
       );
     }
 
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        if (SojornBreakpoints.isDesktop(constraints.maxWidth)) {
+          return _buildDesktopProfile();
+        }
+        return _buildMobileProfile();
+      },
+    );
+  }
+
+  Widget _buildDesktopProfile() {
+    return Scaffold(
+      backgroundColor: AppTheme.scaffoldBg,
+      appBar: !_isOwnProfileMode
+          ? AppBar(
+              title: Text('@${_profile!.handle}'),
+              leading: IconButton(
+                icon: const Icon(Icons.arrow_back),
+                onPressed: () {
+                  if (Navigator.of(context).canPop()) {
+                    Navigator.of(context).pop();
+                  } else {
+                    context.go(AppRoutes.homeAlias);
+                  }
+                },
+              ),
+            )
+          : null,
+      body: Row(
+        children: [
+          // Left sidebar — profile header (sticky)
+          SizedBox(
+            width: SojornBreakpoints.sidebarWidth,
+            child: SingleChildScrollView(
+              padding: EdgeInsets.only(top: _isOwnProfileMode ? MediaQuery.of(context).padding.top : 0),
+              child: _ProfileHeader(
+                profile: _profile!,
+                stats: _stats,
+                isFollowing: _isFollowing,
+                isFriend: _isFriend,
+                followStatus: _followStatus,
+                isPrivate: _isPrivate,
+                isFollowActionLoading: _isFollowActionLoading,
+                isOwnProfile: _isOwnProfile,
+                onFollowToggle: _toggleFollow,
+                onMessageTap: _openMessage,
+                onSettingsTap: _openSettings,
+                onPrivacyTap: _openPrivacyMenu,
+                onAvatarTap: _isOwnProfile ? _showAvatarActions : null,
+                onCustomizeLayoutTap: _isOwnProfile ? _openLayoutEditor : null,
+                onConnectionsTap: _isOwnProfile ? _navigateToConnections : null,
+              ),
+            ),
+          ),
+          const VerticalDivider(width: 1, thickness: 1),
+          // Right side — tabbed content
+          Expanded(
+            child: Column(
+              children: [
+                Material(
+                  color: AppTheme.scaffoldBg,
+                  child: TabBar(
+                    controller: _tabController,
+                    labelColor: AppTheme.navyText,
+                    unselectedLabelColor: AppTheme.navyText.withValues(alpha: 0.6),
+                    indicatorColor: AppTheme.royalPurple,
+                    indicatorWeight: 3,
+                    labelStyle: AppTheme.labelMedium,
+                    tabs: [
+                      const Tab(text: 'Posts'),
+                      const Tab(text: 'Saved'),
+                      const Tab(text: 'Chains'),
+                      if (!_isOwnProfileMode) const Tab(text: 'About'),
+                    ],
+                  ),
+                ),
+                Expanded(child: _buildTabBarView()),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildMobileProfile() {
     // Own profile: no top AppBar (SliverAppBar only, like the old ProfileScreen)
     if (_isOwnProfileMode) {
       return Scaffold(
@@ -952,6 +1076,7 @@ class _UnifiedProfileScreenState extends ConsumerState<UnifiedProfileScreen>
           onSettingsTap: _openSettings,
           onPrivacyTap: _openPrivacyMenu,
           onAvatarTap: _isOwnProfile ? _showAvatarActions : null,
+          onCustomizeLayoutTap: _isOwnProfile ? _openLayoutEditor : null,
           onConnectionsTap: _isOwnProfile ? _navigateToConnections : null,
         ),
       ),
@@ -1230,6 +1355,16 @@ class _UnifiedProfileScreenState extends ConsumerState<UnifiedProfileScreen>
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
+          // MySpace-style profile widgets
+          if (_profileLayout != null && _profileLayout!.widgets.isNotEmpty) ...[
+            ProfileWidgetRenderer(
+              layout: _profileLayout!,
+              isOwnProfile: _isOwnProfile,
+            ),
+            const SizedBox(height: AppTheme.spacingLg),
+            const Divider(),
+            const SizedBox(height: AppTheme.spacingLg),
+          ],
           if (profile.bio != null && profile.bio!.isNotEmpty) ...[
             Text(
               'Bio',
@@ -1493,6 +1628,7 @@ class _ProfileHeader extends StatelessWidget {
   final VoidCallback onSettingsTap;
   final VoidCallback onPrivacyTap;
   final VoidCallback? onAvatarTap;
+  final VoidCallback? onCustomizeLayoutTap;
   final void Function(int tabIndex)? onConnectionsTap;
 
   const _ProfileHeader({
@@ -1509,6 +1645,7 @@ class _ProfileHeader extends StatelessWidget {
     required this.onSettingsTap,
     required this.onPrivacyTap,
     this.onAvatarTap,
+    this.onCustomizeLayoutTap,
     this.onConnectionsTap,
   });
 
@@ -1629,6 +1766,14 @@ class _ProfileHeader extends StatelessWidget {
                         label: 'Edit Profile',
                         icon: Icons.edit_outlined,
                         onPressed: onSettingsTap,
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: _GradientOutlinedButton(
+                        label: 'Customize',
+                        icon: Icons.dashboard_customize_outlined,
+                        onPressed: onCustomizeLayoutTap ?? () {},
                       ),
                     ),
                     const SizedBox(width: 8),

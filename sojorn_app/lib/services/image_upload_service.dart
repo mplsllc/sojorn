@@ -91,6 +91,7 @@ class ImageUploadService {
     }
 
     // Strip metadata (GPS, device info, timestamps) before upload
+    debugPrint('[UPLOAD] Uploading video: ${videoFile.path}');
     final sanitized = await MediaSanitizer.sanitizeVideo(videoFile);
 
     // Use Go API upload endpoint with R2 integration
@@ -126,8 +127,10 @@ class ImageUploadService {
       final responseData = jsonDecode(response.body) as Map<String, dynamic>;
       // Return publicUrl or signedUrl depending on your function response
       final url = (responseData['publicUrl'] ?? responseData['signedUrl']) as String;
+      debugPrint('[UPLOAD] Video upload complete: ${_fixR2Url(url)}');
       return _fixR2Url(url);
     } catch (e) {
+      debugPrint('[UPLOAD] Video upload failed: $e');
       throw UploadException('Video upload failed: $e');
     }
   }
@@ -504,6 +507,7 @@ class ImageUploadService {
     UploadProgressCallback? onProgress,
   }) async {
     try {
+      debugPrint('[UPLOAD] Uploading image: $fileName (${(fileBytes.length / 1024).toStringAsFixed(1)} KB, $contentType)');
       final uri = Uri.parse('${ApiConfig.baseUrl}/upload');
       final request = http.MultipartRequest('POST', uri);
 
@@ -528,6 +532,7 @@ class ImageUploadService {
       if (response.statusCode != 200) {
         final errorData = jsonDecode(response.body) as Map<String, dynamic>;
         final errorMsg = errorData['error'] ?? 'Unknown error';
+        debugPrint('[UPLOAD] Image upload failed: $errorMsg (status=${response.statusCode})');
         throw UploadException('Upload failed: $errorMsg');
       }
 
@@ -536,10 +541,12 @@ class ImageUploadService {
       final publicUrl = (signedUrl ?? responseData['publicUrl']) as String;
 
       onProgress?.call(1.0);
-      
+
+      debugPrint('[UPLOAD] Image upload complete: ${_fixR2Url(publicUrl)}');
       // FORCE FIX: Ensure custom domain is used even if backend returns raw R2 URL
       return _fixR2Url(publicUrl);
     } catch (e, stack) {
+      debugPrint('[UPLOAD] Upload error: $e');
       throw UploadException(e.toString());
     }
   }

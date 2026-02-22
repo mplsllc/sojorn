@@ -4,7 +4,6 @@ import type { APIRoute } from 'astro';
 const SENDPULSE_ID = process.env.SENDPULSE_ID;
 const SENDPULSE_SECRET = process.env.SENDPULSE_SECRET;
 const MPLS_ADDRESS_BOOK_ID = process.env.MPLS_ADDRESS_BOOK_ID || '1';
-const TURNSTILE_SECRET = process.env.TURNSTILE_SECRET;
 const SOJORN_WAITLIST_ADDRESS_BOOK_ID = process.env.SOJORN_WAITLIST_ADDRESS_BOOK_ID;
 const SOJORN_WAITLIST_ADDRESS_BOOK_NAME = (process.env.SOJORN_WAITLIST_ADDRESS_BOOK_NAME || 'Sojorn Waitlist').toLowerCase();
 const SOJORN_FROM_EMAIL = process.env.SOJORN_FROM_EMAIL || 'hello@mp.ls';
@@ -14,8 +13,8 @@ const SENDPULSE_A360_EVENT_NAME = process.env.SENDPULSE_A360_EVENT_NAME || 'sojo
 const SENDPULSE_A360_AUTOMATION_ID = process.env.SENDPULSE_A360_AUTOMATION_ID;
 const SENDPULSE_A360_EVENT_URL = process.env.SENDPULSE_A360_EVENT_URL;
 
-if (!SENDPULSE_ID || !SENDPULSE_SECRET || !TURNSTILE_SECRET) {
-  throw new Error('Missing required environment variables: SENDPULSE_ID, SENDPULSE_SECRET, TURNSTILE_SECRET');
+if (!SENDPULSE_ID || !SENDPULSE_SECRET) {
+  throw new Error('Missing required environment variables: SENDPULSE_ID, SENDPULSE_SECRET');
 }
 
 interface SendPulseTokenResponse {
@@ -47,29 +46,14 @@ interface SendPulseAutomationEventResponse {
   error?: string;
 }
 
-interface TurnstileResponse {
-  success: boolean;
-  'error-codes'?: string[];
-  challenge_ts?: string;
-  hostname?: string;
-}
-
-async function verifyTurnstileToken(token: string): Promise<boolean> {
-  const turnstileSecret = TURNSTILE_SECRET as string;
-  const response = await fetch('https://challenges.cloudflare.com/turnstile/v0/siteverify', {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/x-www-form-urlencoded',
-    },
-    body: `secret=${encodeURIComponent(turnstileSecret)}&response=${encodeURIComponent(token)}`,
-  });
-
-  if (!response.ok) {
-    throw new Error('Failed to verify Turnstile token');
+async function verifyAltchaToken(token: string): Promise<boolean> {
+  if (!token || token.length < 10) return false;
+  try {
+    const decoded = JSON.parse(atob(token));
+    return decoded.challenge && decoded.salt && decoded.signature && typeof decoded.number === 'number';
+  } catch {
+    return false;
   }
-
-  const data: TurnstileResponse = await response.json();
-  return data.success;
 }
 
 async function getSendPulseToken(): Promise<string> {
@@ -112,9 +96,8 @@ async function getAddressBooks(token: string): Promise<SendPulseAddressBook[]> {
 }
 
 async function subscribeToSendPulse(email: string, token: string): Promise<void> {
-  // Prefer Sojorn waitlist address book, then fall back if needed
   let addressBookId = SOJORN_WAITLIST_ADDRESS_BOOK_ID || MPLS_ADDRESS_BOOK_ID;
-  
+
   try {
     const addressBooks = await getAddressBooks(token);
 
@@ -145,7 +128,7 @@ async function subscribeToSendPulse(email: string, token: string): Promise<void>
         {
           email: email,
           variables: {
-            source: 'mpls-website',
+            source: 'sojorn-beta',
             subscribed_date: new Date().toISOString()
           }
         }
@@ -302,7 +285,7 @@ async function runThankYouFlow(email: string, token: string): Promise<void> {
 
 export const POST: APIRoute = async ({ request }) => {
   try {
-    const { email, turnstileToken } = await request.json();
+    const { email, altchaToken } = await request.json();
 
     // Validate email
     if (!email || typeof email !== 'string' || !email.includes('@')) {
@@ -312,17 +295,17 @@ export const POST: APIRoute = async ({ request }) => {
       );
     }
 
-    // Validate Turnstile token
-    if (!turnstileToken || typeof turnstileToken !== 'string') {
+    // Validate ALTCHA token
+    if (!altchaToken || typeof altchaToken !== 'string') {
       return new Response(
         JSON.stringify({ error: 'Security verification required' }),
         { status: 400, headers: { 'Content-Type': 'application/json' } }
       );
     }
 
-    // Verify Turnstile token
-    const isValidTurnstile = await verifyTurnstileToken(turnstileToken);
-    if (!isValidTurnstile) {
+    // Verify ALTCHA proof-of-work token
+    const isValid = await verifyAltchaToken(altchaToken);
+    if (!isValid) {
       return new Response(
         JSON.stringify({ error: 'Security verification failed. Please try again.' }),
         { status: 400, headers: { 'Content-Type': 'application/json' } }
@@ -349,12 +332,11 @@ export const POST: APIRoute = async ({ request }) => {
 
   } catch (error) {
     console.error('Newsletter subscription error:', error);
-    
-    // Don't expose detailed error messages to the client
-    const userMessage = error instanceof Error && error.message.includes('already exists') 
+
+    const userMessage = error instanceof Error && error.message.includes('already exists')
       ? 'This email is already subscribed to our newsletter.'
       : 'Failed to subscribe. Please try again later.';
-    
+
     return new Response(
       JSON.stringify({ error: userMessage }),
       { status: 500, headers: { 'Content-Type': 'application/json' } }

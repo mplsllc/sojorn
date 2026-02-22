@@ -1,53 +1,64 @@
 <script lang="ts">
-  import Turnstile from './Turnstile.svelte';
+  import { onMount } from 'svelte';
 
   let email = '';
   let isSubmitting = false;
   let message = '';
   let messageType: 'success' | 'error' = 'success';
-  let turnstileToken = '';
-  let turnstileComponent: Turnstile;
+  let altchaToken: string | null = null;
+  let altchaStatus: 'loading' | 'ready' | 'error' = 'loading';
   const INVALID_EMAIL_MESSAGE = 'Please enter a valid email address';
 
-  const TURNSTILE_SITE_KEY = '0x4AAAAAACZFIzt7kzHHfSBF';
+  async function solveAltcha(): Promise<string | null> {
+    try {
+      const res = await fetch('https://api.sojorn.net/api/v1/auth/altcha-challenge');
+      if (!res.ok) return null;
+      const data = await res.json();
+      const challenge = data.challenge;
+      const salt = data.salt;
+      const algorithm = data.algorithm || 'SHA-256';
+      const signature = data.signature;
+      const maxNumber = data.maxnumber || 100000;
 
-  function handleTurnstileSuccess(token: string) {
-    turnstileToken = token;
-    // Auto-submit after invisible Turnstile completes
-    subscribe();
-  }
-
-  function resetTurnstile() {
-    turnstileToken = '';
-    if (turnstileComponent) {
-      turnstileComponent.reset();
+      for (let n = 0; n <= maxNumber; n++) {
+        const input = salt + n;
+        const encoded = new TextEncoder().encode(input);
+        const hashBuffer = await crypto.subtle.digest('SHA-256', encoded);
+        const hashArray = Array.from(new Uint8Array(hashBuffer));
+        const hashHex = hashArray.map((b) => b.toString(16).padStart(2, '0')).join('');
+        if (hashHex === challenge) {
+          const payload = JSON.stringify({ algorithm, challenge, number: n, salt, signature });
+          return btoa(payload);
+        }
+      }
+      return null;
+    } catch {
+      return null;
     }
   }
 
+  onMount(() => {
+    solveAltcha().then((token) => {
+      if (token) {
+        altchaToken = token;
+        altchaStatus = 'ready';
+      } else {
+        altchaStatus = 'error';
+      }
+    });
+  });
+
   async function subscribe() {
-    // Basic email validation
     if (!email || !email.includes('@') || !email.includes('.')) {
       message = INVALID_EMAIL_MESSAGE;
       messageType = 'error';
       return;
     }
 
-    // For invisible Turnstile, trigger it if not already completed
-    if (!turnstileToken) {
-      if (turnstileComponent && turnstileComponent.getResponse) {
-        // Try to get the response first (in case it's already completed)
-        const response = turnstileComponent.getResponse();
-        if (response) {
-          turnstileToken = response;
-        } else {
-          // Trigger the invisible Turnstile challenge
-          return; // Let the Turnstile callback handle the submission
-        }
-      } else {
-        message = 'Security verification not ready';
-        messageType = 'error';
-        return;
-      }
+    if (!altchaToken) {
+      message = 'Security verification not ready. Please wait or reload the page.';
+      messageType = 'error';
+      return;
     }
 
     isSubmitting = true;
@@ -56,31 +67,34 @@
     try {
       const response = await fetch('/api/newsletter', {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({ 
-          email,
-          turnstileToken 
-        }),
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email, altchaToken }),
       });
 
       const data = await response.json();
 
       if (response.ok) {
-        message = 'Thank you for subscribing! Check your email for confirmation.';
+        message = "You're in! We'll notify you when the beta opens.";
         messageType = 'success';
         email = '';
-        resetTurnstile();
+        // Re-solve for next submission
+        altchaToken = null;
+        altchaStatus = 'loading';
+        solveAltcha().then((token) => {
+          if (token) {
+            altchaToken = token;
+            altchaStatus = 'ready';
+          } else {
+            altchaStatus = 'error';
+          }
+        });
       } else {
         message = data.error || 'Something went wrong. Please try again.';
         messageType = 'error';
-        resetTurnstile();
       }
-    } catch (error) {
+    } catch {
       message = 'Network error. Please try again.';
       messageType = 'error';
-      resetTurnstile();
     } finally {
       isSubmitting = false;
     }
@@ -113,7 +127,7 @@
       />
       <button
         type="submit"
-        disabled={isSubmitting}
+        disabled={isSubmitting || altchaStatus !== 'ready'}
         class="px-6 py-3 rounded-lg bg-brand-700 text-white font-semibold hover:bg-brand-800 focus:outline-none focus:ring-2 focus:ring-brand-700 focus:ring-offset-2 transition-all disabled:opacity-50 disabled:cursor-not-allowed whitespace-nowrap"
       >
         {#if isSubmitting}
@@ -134,14 +148,16 @@
       By clicking <span class="font-semibold">Subscribe</span>, you agree to the <a href="/terms" target="_blank" rel="noopener noreferrer" class="underline underline-offset-2 hover:text-zinc-800">Terms of Use</a> and consent to receive beta signup emails.
     </p>
 
-    <!-- Turnstile Widget -->
-    <Turnstile 
-      bind:this={turnstileComponent}
-      sitekey={TURNSTILE_SITE_KEY}
-      callback={handleTurnstileSuccess}
-      theme="auto"
-      size="invisible"
-    />
+    <!-- ALTCHA verification status -->
+    <div class="my-1">
+      {#if altchaStatus === 'loading'}
+        <p class="text-xs text-zinc-500">Verifying...</p>
+      {:else if altchaStatus === 'ready'}
+        <p class="text-xs text-green-600">&#10003; Verified</p>
+      {:else}
+        <p class="text-xs text-red-500">Verification failed. <button type="button" on:click={() => location.reload()} class="underline">Retry</button></p>
+      {/if}
+    </div>
   </form>
 
   {#if message}

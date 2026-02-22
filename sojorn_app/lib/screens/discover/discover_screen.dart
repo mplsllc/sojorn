@@ -94,6 +94,7 @@ class _DiscoverScreenState extends ConsumerState<DiscoverScreen> {
   @override
   void initState() {
     super.initState();
+    debugPrint('[DISCOVER] initState${widget.initialQuery != null ? " query=${widget.initialQuery}" : ""}');
     loadRecentSearches();
     loadDiscoverData();
 
@@ -115,17 +116,20 @@ class _DiscoverScreenState extends ConsumerState<DiscoverScreen> {
   }
 
   Future<void> loadDiscoverData() async {
+    debugPrint('[DISCOVER] Loading discover data...');
     setState(() => isLoadingDiscover = true);
     try {
       final apiService = ref.read(apiServiceProvider);
       final response = await apiService.get('/discover');
       if (!mounted) return;
-      
+
       setState(() {
         discoverData = DiscoverData.fromJson(response);
         isLoadingDiscover = false;
       });
+      debugPrint('[DISCOVER] Loaded: ${discoverData?.popularPosts.length ?? 0} popular posts, ${discoverData?.topTags.length ?? 0} tags');
     } catch (e) {
+      debugPrint('[DISCOVER] Load error: $e');
       if (mounted) {
         setState(() => isLoadingDiscover = false);
       }

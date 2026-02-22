@@ -24,7 +24,7 @@ class AudioTrack {
 /// Two-tab screen for picking background audio.
 ///
 /// Tab 1 (Device): opens the file picker for local audio files.
-/// Tab 2 (Library): browses the Funkwhale library via the Go proxy.
+/// Tab 2 (Library): browses the Freesound library via the Go proxy.
 ///
 /// Navigator.push returns an [AudioTrack] when the user picks a track,
 /// or null if they cancelled.
@@ -46,6 +46,12 @@ class _AudioLibraryScreenState extends ConsumerState<AudioLibraryScreen>
   bool _unavailable = false;
   String? _previewingId;
   VideoPlayerController? _previewController;
+  String? _activeTag; // tag filter for browsing categories
+
+  static const _popularTags = [
+    'ambient', 'nature', 'electronic', 'percussion', 'piano',
+    'guitar', 'bass', 'synth', 'vocal', 'cinematic', 'lofi',
+  ];
 
   @override
   void initState() {
@@ -62,15 +68,17 @@ class _AudioLibraryScreenState extends ConsumerState<AudioLibraryScreen>
     super.dispose();
   }
 
-  Future<void> _fetchTracks(String q) async {
+  Future<void> _fetchTracks(String q, {String? tag}) async {
     setState(() { _loading = true; _unavailable = false; });
     try {
       final api = ref.read(apiServiceProvider);
-      final data = await api.callGoApi('/audio/library', method: 'GET', queryParams: {'q': q});
-      final results = (data['results'] as List?)?.cast<Map<String, dynamic>>() ?? [];
+      final params = <String, String>{'q': q};
+      if (tag != null && tag.isNotEmpty) params['tags'] = tag;
+      final data = await api.callGoApi('/audio/library', method: 'GET', queryParams: params);
+      // Freesound proxy returns "tracks" array
+      final results = (data['tracks'] as List?)?.cast<Map<String, dynamic>>() ?? [];
       setState(() {
         _tracks = results;
-        // 503 is returned as an empty list with an "error" key
         _unavailable = data['error'] != null && results.isEmpty;
       });
     } catch (_) {
@@ -114,9 +122,12 @@ class _AudioLibraryScreenState extends ConsumerState<AudioLibraryScreen>
   void _useTrack(Map<String, dynamic> track) {
     final id = track['id']?.toString() ?? '';
     final title = (track['title'] as String?) ?? 'Unknown Track';
-    final artist = (track['artist']?['name'] as String?) ?? '';
+    final artist = (track['artist'] as String?) ?? '';
     final displayTitle = artist.isNotEmpty ? '$title — $artist' : title;
-    final listenUrl = '${ApiConfig.baseUrl}/audio/library/$id/listen';
+    // Use listen_url from response if available, otherwise build it
+    final listenUrl = (track['listen_url'] as String?) != null
+        ? '${ApiConfig.baseUrl}${track['listen_url']}'
+        : '${ApiConfig.baseUrl}/audio/library/$id/listen';
     Navigator.of(context).pop(AudioTrack(path: listenUrl, title: displayTitle));
   }
 
@@ -181,12 +192,13 @@ class _AudioLibraryScreenState extends ConsumerState<AudioLibraryScreen>
           child: TextField(
             controller: _searchController,
             decoration: InputDecoration(
-              hintText: 'Search tracks...',
+              hintText: 'Search sounds...',
               prefixIcon: const Icon(Icons.search),
               suffixIcon: IconButton(
                 icon: const Icon(Icons.clear),
                 onPressed: () {
                   _searchController.clear();
+                  _activeTag = null;
                   _fetchTracks('');
                 },
               ),
@@ -194,9 +206,33 @@ class _AudioLibraryScreenState extends ConsumerState<AudioLibraryScreen>
               contentPadding: const EdgeInsets.symmetric(vertical: 10, horizontal: 16),
             ),
             textInputAction: TextInputAction.search,
-            onSubmitted: _fetchTracks,
+            onSubmitted: (q) => _fetchTracks(q, tag: _activeTag),
           ),
         ),
+        // Tag chips for browsing categories
+        SizedBox(
+          height: 36,
+          child: ListView.separated(
+            scrollDirection: Axis.horizontal,
+            padding: const EdgeInsets.symmetric(horizontal: 12),
+            itemCount: _popularTags.length,
+            separatorBuilder: (_, __) => const SizedBox(width: 6),
+            itemBuilder: (context, i) {
+              final tag = _popularTags[i];
+              final isActive = _activeTag == tag;
+              return FilterChip(
+                label: Text(tag, style: TextStyle(fontSize: 12, fontWeight: isActive ? FontWeight.w700 : FontWeight.w500)),
+                selected: isActive,
+                onSelected: (selected) {
+                  setState(() => _activeTag = selected ? tag : null);
+                  _fetchTracks(_searchController.text, tag: selected ? tag : null);
+                },
+                visualDensity: VisualDensity.compact,
+              );
+            },
+          ),
+        ),
+        const SizedBox(height: 8),
         Expanded(child: _libraryBody()),
       ],
     );
@@ -214,12 +250,12 @@ class _AudioLibraryScreenState extends ConsumerState<AudioLibraryScreen>
               Icon(Icons.cloud_off, size: 48, color: Colors.grey),
               SizedBox(height: 16),
               Text(
-                'Music library coming soon',
+                'Sound library unavailable',
                 style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600),
               ),
               SizedBox(height: 8),
               Text(
-                'Use the Device tab to add your own audio, or check back after the library is deployed.',
+                'Use the Device tab to add your own audio, or try again later.',
                 textAlign: TextAlign.center,
                 style: TextStyle(color: Colors.grey),
               ),
@@ -238,16 +274,22 @@ class _AudioLibraryScreenState extends ConsumerState<AudioLibraryScreen>
         final track = _tracks[i];
         final id = track['id']?.toString() ?? '';
         final title = (track['title'] as String?) ?? 'Unknown';
-        final artist = (track['artist']?['name'] as String?) ?? '';
-        final duration = track['duration'] as int? ?? 0;
-        final mins = (duration ~/ 60).toString().padLeft(2, '0');
-        final secs = (duration % 60).toString().padLeft(2, '0');
+        final artist = (track['artist'] as String?) ?? '';
+        final durationSec = ((track['duration'] as num?) ?? 0).toInt();
+        final mins = (durationSec ~/ 60).toString().padLeft(2, '0');
+        final secs = (durationSec % 60).toString().padLeft(2, '0');
+        final license = (track['license'] as String?) ?? '';
         final isPreviewing = _previewingId == id;
 
         return ListTile(
           leading: const Icon(Icons.music_note),
           title: Text(title, maxLines: 1, overflow: TextOverflow.ellipsis),
-          subtitle: Text('$artist  •  $mins:$secs', style: const TextStyle(fontSize: 12)),
+          subtitle: Text(
+            [if (artist.isNotEmpty) artist, '$mins:$secs', if (license.isNotEmpty) license.split('/').last].join('  •  '),
+            style: const TextStyle(fontSize: 12),
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+          ),
           trailing: Row(
             mainAxisSize: MainAxisSize.min,
             children: [

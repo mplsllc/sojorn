@@ -5,6 +5,7 @@
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import '../theme/app_theme.dart';
+import '../theme/tokens.dart';
 
 class AppScaffold extends StatelessWidget {
   final String title;
@@ -34,22 +35,10 @@ class AppScaffold extends StatelessWidget {
     this.bottom,
   });
 
-  // Responsive breakpoints and margins (moved from AppTheme)
-  static const double _breakpointTablet = 600.0;
-  static const double _breakpointDesktop = 1200.0;
-  static const double _marginMobile = AppTheme.spacingMd; // 16.0
-  static const double _marginTablet = AppTheme.spacingLg; // 24.0
-  static const double _marginDesktop = AppTheme.spacingLg * 2; // 48.0
-  static const double _maxContentWidth = 720.0;
-
   double _horizontalPadding(double width) {
-    if (width < _breakpointTablet) {
-      return _marginMobile;
-    }
-    if (width < _breakpointDesktop) {
-      return _marginTablet;
-    }
-    return _marginDesktop;
+    if (SojornBreakpoints.isMobile(width)) return AppTheme.spacingMd;
+    if (width < SojornBreakpoints.desktop) return AppTheme.spacingLg;
+    return AppTheme.spacingLg * 2;
   }
 
   @override
@@ -72,7 +61,7 @@ class AppScaffold extends StatelessWidget {
                 alignment: Alignment.topCenter,
                 child: ConstrainedBox(
                   constraints: const BoxConstraints(
-                    maxWidth: _maxContentWidth,
+                    maxWidth: SojornBreakpoints.maxContentWidth,
                   ),
                   child: body,
                 ),

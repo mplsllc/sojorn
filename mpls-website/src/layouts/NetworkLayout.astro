@@ -6,7 +6,6 @@ interface Props {
 }
 
 const { title = 'mp.ls | Digital Command Center' } = Astro.props;
-const isProd = import.meta.env.PROD;
 ---
 
 <!doctype html>
@@ -23,17 +22,6 @@ const isProd = import.meta.env.PROD;
 		<meta name="apple-mobile-web-app-title" content="MPLS LLC" />
 		<link rel="manifest" href="/site.webmanifest" />
 		<title>{title}</title>
-		{isProd && (
-			<>
-				<script async src="https://www.googletagmanager.com/gtag/js?id=G-HXNPNL6C2G"></script>
-				<script is:inline>
-					window.dataLayer = window.dataLayer || [];
-					function gtag(){dataLayer.push(arguments);}
-					gtag('js', new Date());
-					gtag('config', 'G-HXNPNL6C2G');
-				</script>
-			</>
-		)}
 	</head>
 	<body class="min-h-screen antialiased">
 		<!-- Main Content -->
