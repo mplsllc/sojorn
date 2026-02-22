@@ -115,6 +115,8 @@ class BeaconScreenState extends ConsumerState<BeaconScreen> with TickerProviderS
   bool _isDetectingNeighborhood = false;
   bool _neighborhoodDetected = false;
   bool _homeNeighborhoodChecked = false;
+  bool _canChangeNeighborhood = true;
+  String? _nextChangeDate;
 
   // Sheet size tracking (for toggle button and tap-outside-to-close overlay)
   double _sheetSize = 0.15;
@@ -224,8 +226,10 @@ class BeaconScreenState extends ConsumerState<BeaconScreen> with TickerProviderS
         }
         // Fetch weather for current location
         _fetchWeather(position.latitude, position.longitude);
-        // Detect neighborhood
-        if (!_neighborhoodDetected) _detectNeighborhood(position.latitude, position.longitude);
+        // Only detect neighborhood for first-time users (not yet onboarded)
+        if (!_neighborhoodDetected && _homeNeighborhoodChecked) {
+          _detectNeighborhood(position.latitude, position.longitude);
+        }
       }
     } catch (e) {
       if (mounted) {
@@ -244,7 +248,7 @@ class BeaconScreenState extends ConsumerState<BeaconScreen> with TickerProviderS
   }
 
   Future<void> _detectNeighborhood(double lat, double lng) async {
-    if (_isDetectingNeighborhood) return;
+    if (_neighborhoodDetected || _isDetectingNeighborhood) return;
     debugPrint('[Beacon] detectNeighborhood lat=${lat.toStringAsFixed(4)} lng=${lng.toStringAsFixed(4)}');
     setState(() => _isDetectingNeighborhood = true);
     try {
@@ -280,29 +284,38 @@ class BeaconScreenState extends ConsumerState<BeaconScreen> with TickerProviderS
   }
 
   /// Check if the user already completed the neighborhood onboarding.
+  /// If onboarded: load saved neighborhood, skip GPS detection entirely.
+  /// If not onboarded: wait for GPS, then auto-show the picker.
   Future<void> _checkHomeNeighborhood() async {
     try {
       final mine = await ApiService.instance.getMyNeighborhood();
-      if (mine != null && mounted) {
-        final onboarded = mine['onboarded'] == true;
-        final hasHood = mine['neighborhood'] != null;
+      if (mine == null || !mounted) return;
 
+      final onboarded = mine['onboarded'] == true;
+      final hood = mine['neighborhood'] as Map<String, dynamic>?;
+      final canChange = mine['can_change'] as bool? ?? true;
+      final nextChange = mine['next_change_allowed_at'] as String?;
+
+      if (onboarded && hood != null) {
+        // User already chose a neighborhood — load it and skip GPS detect
+        final name = hood['name'] as String? ?? '';
+        final city = hood['city'] as String? ?? '';
         setState(() {
+          _neighborhood = mine;
+          _neighborhoodDetected = true;
           _homeNeighborhoodChecked = true;
-          if (hasHood) {
-            _neighborhood = mine;
-            _neighborhoodDetected = true;
+          _canChangeNeighborhood = canChange;
+          _nextChangeDate = nextChange;
+          if (name.isNotEmpty) {
+            _locationName = city.isNotEmpty ? '$name, $city' : name;
           }
         });
-
-        // If user hasn't completed onboarding, the picker will be shown
-        // once GPS detection finishes (or immediately if GPS was already done)
-        if (!onboarded && _neighborhoodDetected) {
-          Future.delayed(const Duration(milliseconds: 600), () {
-            if (mounted) _showNeighborhoodPicker();
-          });
-        }
+        return; // Done — no GPS detect needed for neighborhood
       }
+
+      // Not onboarded: wait for GPS location, then show picker
+      setState(() => _homeNeighborhoodChecked = true);
+      // GPS detection will fire from _getCurrentLocation and trigger the picker
     } catch (_) {
       // Network error — don't block the screen
     }
@@ -339,6 +352,10 @@ class BeaconScreenState extends ConsumerState<BeaconScreen> with TickerProviderS
           setState(() => _locationName = city.isNotEmpty ? '$name, $city' : name);
         }
       }
+      // Refresh saved neighborhood state (cooldown, next change date)
+      _checkHomeNeighborhood();
+      // Reload board for new neighborhood
+      _loadBoardEntries();
     }
   }
 
@@ -1388,9 +1405,12 @@ class BeaconScreenState extends ConsumerState<BeaconScreen> with TickerProviderS
                         child: Text('ADMIN', style: TextStyle(color: AppTheme.brightNavy, fontSize: 10, fontWeight: FontWeight.bold)),
                       ),
                     IconButton(
-                      onPressed: _showNeighborhoodPicker,
-                      icon: Icon(Icons.tune, size: 18, color: SojornColors.textDisabled),
-                      tooltip: 'Neighborhood settings',
+                      onPressed: () => _showNeighborhoodPicker(
+                        isChangeMode: true,
+                        nextChangeDate: _canChangeNeighborhood ? null : _nextChangeDate,
+                      ),
+                      icon: Icon(Icons.swap_horiz_rounded, size: 20, color: SojornColors.textDisabled),
+                      tooltip: 'Change neighborhood',
                     ),
                   ],
                 ),

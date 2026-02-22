@@ -3,7 +3,6 @@
 // See LICENSE file for details
 
 import 'dart:convert';
-import 'dart:typed_data';
 import 'package:crypto/crypto.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
@@ -28,9 +27,10 @@ class AltchaWidget extends StatefulWidget {
 }
 
 class _AltchaWidgetState extends State<AltchaWidget> {
-  bool _isLoading = true;
+  bool _isLoading = false;
   bool _isSolving = false;
   bool _isVerified = false;
+  bool _challengeReady = false;
   String? _errorMessage;
   Map<String, dynamic>? _challengeData;
 
@@ -45,6 +45,7 @@ class _AltchaWidgetState extends State<AltchaWidget> {
       _isLoading = true;
       _isVerified = false;
       _isSolving = false;
+      _challengeReady = false;
       _errorMessage = null;
     });
 
@@ -54,12 +55,13 @@ class _AltchaWidgetState extends State<AltchaWidget> {
 
       if (response.statusCode == 200) {
         final data = json.decode(response.body);
-        setState(() {
-          _challengeData = data;
-          _isLoading = false;
-        });
-        // Auto-solve in the background
-        _solveChallenge(data);
+        if (mounted) {
+          setState(() {
+            _challengeData = data;
+            _isLoading = false;
+            _challengeReady = true;
+          });
+        }
       } else {
         _setError('Failed to load challenge (${response.statusCode})');
       }
@@ -73,10 +75,16 @@ class _AltchaWidgetState extends State<AltchaWidget> {
       setState(() {
         _isLoading = false;
         _isSolving = false;
+        _challengeReady = false;
         _errorMessage = msg;
       });
       widget.onError?.call(msg);
     }
+  }
+
+  void _onCheckboxTapped() {
+    if (_isSolving || _isVerified || !_challengeReady || _challengeData == null) return;
+    _solveChallenge(_challengeData!);
   }
 
   Future<void> _solveChallenge(Map<String, dynamic> data) async {
@@ -131,15 +139,13 @@ class _AltchaWidgetState extends State<AltchaWidget> {
       return _buildContainer(
         borderColor: Colors.red.withValues(alpha: 0.5),
         child: Row(
-          mainAxisSize: MainAxisSize.min,
           children: [
             const Icon(Icons.error_outline, color: Colors.red, size: 20),
-            const SizedBox(width: 8),
-            Flexible(
+            const SizedBox(width: 10),
+            Expanded(
               child: Text(_errorMessage!,
                   style: const TextStyle(color: Colors.red, fontSize: 13)),
             ),
-            const SizedBox(width: 8),
             TextButton(
               onPressed: _loadChallenge,
               child: const Text('Retry'),
@@ -149,65 +155,72 @@ class _AltchaWidgetState extends State<AltchaWidget> {
       );
     }
 
-    if (_isLoading || _isSolving) {
-      return _buildContainer(
-        borderColor: AppTheme.egyptianBlue.withValues(alpha: 0.3),
+    return _buildContainer(
+      borderColor: _isVerified
+          ? AppTheme.success.withValues(alpha: 0.5)
+          : AppTheme.egyptianBlue.withValues(alpha: 0.2),
+      child: InkWell(
+        onTap: (_challengeReady && !_isSolving && !_isVerified) ? _onCheckboxTapped : null,
+        borderRadius: BorderRadius.circular(8),
         child: Row(
-          mainAxisSize: MainAxisSize.min,
           children: [
-            const SizedBox(
-              width: 18, height: 18,
-              child: CircularProgressIndicator(strokeWidth: 2),
+            // Checkbox area
+            SizedBox(
+              width: 24,
+              height: 24,
+              child: _isSolving
+                  ? const Padding(
+                      padding: EdgeInsets.all(2),
+                      child: CircularProgressIndicator(strokeWidth: 2),
+                    )
+                  : _isVerified
+                      ? Icon(Icons.check_box, color: AppTheme.success, size: 24)
+                      : Icon(
+                          Icons.check_box_outline_blank,
+                          color: (_challengeReady && !_isLoading)
+                              ? AppTheme.navyBlue.withValues(alpha: 0.6)
+                              : AppTheme.navyBlue.withValues(alpha: 0.2),
+                          size: 24,
+                        ),
             ),
             const SizedBox(width: 10),
-            Text(
-              _isLoading ? 'Loading verification...' : 'Verifying...',
-              style: TextStyle(
-                color: Colors.grey[400],
-                fontSize: 13,
+            Expanded(
+              child: Text(
+                _isLoading
+                    ? 'Loading...'
+                    : _isSolving
+                        ? 'Verifying...'
+                        : _isVerified
+                            ? 'Verified'
+                            : 'I\'m not a robot',
+                style: TextStyle(
+                  color: _isVerified
+                      ? AppTheme.success
+                      : AppTheme.navyText.withValues(alpha: 0.7),
+                  fontSize: 14,
+                  fontWeight: _isVerified ? FontWeight.w600 : FontWeight.w400,
+                ),
               ),
+            ),
+            // Small branding
+            Icon(
+              Icons.shield_outlined,
+              size: 16,
+              color: AppTheme.navyBlue.withValues(alpha: 0.25),
             ),
           ],
         ),
-      );
-    }
-
-    if (_isVerified) {
-      return _buildContainer(
-        borderColor: AppTheme.success.withValues(alpha: 0.5),
-        child: Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Icon(Icons.check_circle, color: AppTheme.success, size: 20),
-            const SizedBox(width: 8),
-            Text('Verified',
-                style: TextStyle(color: AppTheme.success, fontSize: 13)),
-          ],
-        ),
-      );
-    }
-
-    // Fallback (shouldn't normally reach here since we auto-solve)
-    return _buildContainer(
-      borderColor: AppTheme.egyptianBlue.withValues(alpha: 0.3),
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          const Icon(Icons.security, color: Colors.blue, size: 20),
-          const SizedBox(width: 8),
-          const Text('Waiting for verification...',
-              style: TextStyle(color: Colors.grey, fontSize: 13)),
-        ],
       ),
     );
   }
 
   Widget _buildContainer({required Color borderColor, required Widget child}) {
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
       decoration: BoxDecoration(
-        border: Border.all(color: borderColor, width: 1),
-        borderRadius: BorderRadius.circular(8),
+        color: AppTheme.cardSurface,
+        border: Border.all(color: borderColor, width: 1.5),
+        borderRadius: BorderRadius.circular(12),
       ),
       child: child,
     );

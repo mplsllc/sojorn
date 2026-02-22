@@ -58,6 +58,15 @@ class _NeighborhoodPickerSheetState extends State<NeighborhoodPickerSheet> {
   String? _gpsError;
   String? _selectedId;
 
+  bool get _cooldownActive {
+    if (!widget.isChangeMode || widget.nextChangeDate == null) return false;
+    try {
+      return DateTime.parse(widget.nextChangeDate!).isAfter(DateTime.now());
+    } catch (_) {
+      return false;
+    }
+  }
+
   @override
   void initState() {
     super.initState();
@@ -250,21 +259,28 @@ class _NeighborhoodPickerSheetState extends State<NeighborhoodPickerSheet> {
                     ),
                     textAlign: TextAlign.center,
                   ),
-                  if (widget.isChangeMode && widget.nextChangeDate != null) ...[
-                    const SizedBox(height: 4),
+                  if (widget.isChangeMode && _cooldownActive && widget.nextChangeDate != null) ...[
+                    const SizedBox(height: 8),
                     Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
                       decoration: BoxDecoration(
                         color: SojornColors.nsfwWarningIcon.withValues(alpha: 0.1),
-                        borderRadius: BorderRadius.circular(8),
+                        borderRadius: BorderRadius.circular(10),
                       ),
-                      child: Text(
-                        '⏱ Next change allowed: ${_formatDate(widget.nextChangeDate!)}',
-                        style: TextStyle(
-                          color: SojornColors.nsfwWarningIcon,
-                          fontSize: 12,
-                          fontWeight: FontWeight.w600,
-                        ),
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Icon(Icons.lock_clock, size: 16, color: SojornColors.nsfwWarningIcon),
+                          const SizedBox(width: 6),
+                          Text(
+                            'Next change: ${_formatDate(widget.nextChangeDate!)}',
+                            style: TextStyle(
+                              color: SojornColors.nsfwWarningIcon,
+                              fontSize: 12,
+                              fontWeight: FontWeight.w600,
+                            ),
+                          ),
+                        ],
                       ),
                     ),
                   ],
@@ -402,8 +418,10 @@ class _NeighborhoodPickerSheetState extends State<NeighborhoodPickerSheet> {
         final isSelected = _selectedId == id;
 
         return GestureDetector(
-          onTap: _isChoosing ? null : () => _chooseNeighborhood(hood),
-          child: AnimatedContainer(
+          onTap: (_isChoosing || _cooldownActive) ? null : () => _chooseNeighborhood(hood),
+          child: Opacity(
+            opacity: _cooldownActive ? 0.5 : 1.0,
+            child: AnimatedContainer(
             duration: const Duration(milliseconds: 200),
             padding: const EdgeInsets.all(16),
             decoration: BoxDecoration(
@@ -498,6 +516,7 @@ class _NeighborhoodPickerSheetState extends State<NeighborhoodPickerSheet> {
                   ),
               ],
             ),
+          ),
           ),
         );
       },

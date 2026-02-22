@@ -124,10 +124,20 @@ class SecureChatService {
 
       try {
         _wsChannel = WebSocketChannel.connect(wsUrl);
+        // Wait for the connection to actually establish
+        try {
+          await _wsChannel!.ready;
+        } catch (e) {
+          debugPrint('[WS] Connection failed: $e');
+          _wsChannel = null;
+          _isReconnecting = false;
+          _scheduleReconnect();
+          return;
+        }
         _isReconnecting = false;
         _reconnectAttempts = 0; // Reset on successful connect
         _startHeartbeat();
-        
+
         _wsChannel!.stream.listen((message) {
             _lastHeartbeat = DateTime.now();
             if (message is String) {
@@ -206,10 +216,16 @@ class SecureChatService {
 
   void _scheduleReconnect() {
     _reconnectAttempts++;
+    // Give up after 10 attempts — user can trigger reconnect manually
+    if (_reconnectAttempts > 10) {
+      debugPrint('[WS] Max reconnect attempts reached, giving up');
+      return;
+    }
     // Exponential backoff: 2s, 4s, 8s, 16s, 32s, 60s cap
     final delay = (_reconnectAttempts < 6)
         ? Duration(seconds: 1 << _reconnectAttempts) // 2, 4, 8, 16, 32
         : Duration(seconds: _maxReconnectDelay);
+    debugPrint('[WS] Reconnect attempt $_reconnectAttempts in ${delay.inSeconds}s');
     Future.delayed(delay, connectRealtime);
   }
 
