@@ -34,6 +34,7 @@ import 'providers/header_state_provider.dart';
 import 'services/chat_backup_manager.dart';
 import 'providers/vault_provider.dart';
 import 'routes/app_routes.dart';
+import 'package:flutter_web_plugins/url_strategy.dart';
 
 Future<void> _firebaseMessagingBackgroundHandler(RemoteMessage message) async {
   await Firebase.initializeApp();
@@ -55,7 +56,7 @@ void main() {
       // ── Global error handlers for freeze/crash diagnosis ──────────────
       FlutterError.onError = (FlutterErrorDetails details) {
         FlutterError.presentError(details);
-        FirebaseCrashlytics.instance.recordFlutterFatalError(details);
+        if (!kIsWeb) FirebaseCrashlytics.instance.recordFlutterFatalError(details);
         debugPrint('\n╔══ FLUTTER ERROR ══════════════════════════════════');
         debugPrint('║ ${DateTime.now().toIso8601String()}');
         debugPrint('║ Library: ${details.library}');
@@ -72,7 +73,7 @@ void main() {
       };
 
       PlatformDispatcher.instance.onError = (error, stack) {
-        FirebaseCrashlytics.instance.recordError(error, stack, fatal: true);
+        if (!kIsWeb) FirebaseCrashlytics.instance.recordError(error, stack, fatal: true);
         debugPrint('\n╔══ PLATFORM ERROR ═════════════════════════════════');
         debugPrint('║ ${DateTime.now().toIso8601String()}');
         debugPrint('║ Error: $error');
@@ -108,6 +109,7 @@ void main() {
         });
       }
 
+      usePathUrlStrategy();
       runApp(
         const ProviderScope(
           child: sojornApp(),
@@ -115,7 +117,7 @@ void main() {
       );
     },
     (error, stackTrace) {
-      FirebaseCrashlytics.instance.recordError(error, stackTrace, fatal: false);
+      if (!kIsWeb) FirebaseCrashlytics.instance.recordError(error, stackTrace, fatal: false);
       debugPrint('\n╔══ UNCAUGHT ASYNC ERROR ═══════════════════════════');
       debugPrint('║ ${DateTime.now().toIso8601String()}');
       debugPrint('║ Error: $error');

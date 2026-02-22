@@ -713,6 +713,8 @@ class _QuipsFeedScreenState extends ConsumerState<QuipsFeedScreen>
               onTogglePause: _toggleUserPause,
               onNotInterested: () => _handleNotInterested(quip),
               onFollow: quip.authorId.isNotEmpty ? () => _toggleFollow(quip) : null,
+              onScrollUp: _currentIndex > 0 ? () => _pageController.previousPage(duration: const Duration(milliseconds: 300), curve: Curves.easeInOut) : null,
+              onScrollDown: _currentIndex < _quips.length - 1 ? () => _pageController.nextPage(duration: const Duration(milliseconds: 300), curve: Curves.easeInOut) : null,
             ),
           );
         },

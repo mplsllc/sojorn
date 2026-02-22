@@ -31,6 +31,8 @@ class QuipVideoItem extends StatefulWidget {
   final VoidCallback onNotInterested;
   final bool isFollowing;
   final VoidCallback? onFollow;
+  final VoidCallback? onScrollUp;
+  final VoidCallback? onScrollDown;
 
   const QuipVideoItem({
     super.key,
@@ -49,6 +51,8 @@ class QuipVideoItem extends StatefulWidget {
     required this.onTogglePause,
     required this.onNotInterested,
     this.onFollow,
+    this.onScrollUp,
+    this.onScrollDown,
   });
 
   @override
@@ -350,7 +354,29 @@ class _QuipVideoItemState extends State<QuipVideoItem>
               color: SojornColors.basicWhite, size: 28),
           onTap: _showMoreSheet,
         ),
+        const SizedBox(height: 32),
+        // Up/Down navigation arrows
+        if (widget.onScrollUp != null || widget.onScrollDown != null) ...[
+          _buildArrowBtn(Icons.keyboard_arrow_up, widget.onScrollUp),
+          const SizedBox(height: 8),
+          _buildArrowBtn(Icons.keyboard_arrow_down, widget.onScrollDown),
+        ],
       ],
+    );
+  }
+
+  Widget _buildArrowBtn(IconData icon, VoidCallback? onTap) {
+    return GestureDetector(
+      onTap: onTap,
+      behavior: HitTestBehavior.opaque,
+      child: Container(
+        padding: const EdgeInsets.all(8),
+        decoration: const BoxDecoration(
+          color: Colors.black38,
+          shape: BoxShape.circle,
+        ),
+        child: Icon(icon, color: Colors.white, size: 22),
+      ),
     );
   }
 

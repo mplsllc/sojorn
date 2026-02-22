@@ -32,6 +32,7 @@ import '../screens/secure_chat/secure_chat_loader_screen.dart' deferred as chat_
 import '../screens/post/threaded_conversation_screen.dart' deferred as threaded_lib;
 import '../screens/clusters/clusters_screen.dart' deferred as clusters_lib;
 import '../screens/clusters/group_screen.dart' deferred as group_screen_lib;
+import '../screens/discover/discover_screen.dart' deferred as discover_lib;
 
 /// App routing config (GoRouter).
 class AppRoutes {
@@ -173,6 +174,30 @@ class AppRoutes {
                     ),
                   ),
                 ],
+              ),
+            ],
+          ),
+          // Branch 4: Discover (desktop shell only — mobile uses a sheet)
+          StatefulShellBranch(
+            routes: [
+              GoRoute(
+                path: '/discover',
+                builder: (_, __) => _deferred(
+                  discover_lib.loadLibrary,
+                  () => discover_lib.DiscoverScreen(),
+                ),
+              ),
+            ],
+          ),
+          // Branch 5: Messages (desktop shell only — mobile uses a sheet)
+          StatefulShellBranch(
+            routes: [
+              GoRoute(
+                path: '/messages',
+                builder: (_, __) => _deferred(
+                  secure_chat_lib.loadLibrary,
+                  () => secure_chat_lib.SecureChatFullScreen(),
+                ),
               ),
             ],
           ),

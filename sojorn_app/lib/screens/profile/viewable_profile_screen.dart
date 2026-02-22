@@ -908,49 +908,64 @@ class _UnifiedProfileScreenState extends ConsumerState<UnifiedProfileScreen>
   Widget _buildDesktopProfile() {
     return Scaffold(
       backgroundColor: AppTheme.scaffoldBg,
-      appBar: !_isOwnProfileMode
-          ? AppBar(
-              title: Text('@${_profile!.handle}'),
-              leading: IconButton(
-                icon: const Icon(Icons.arrow_back),
-                onPressed: () {
-                  if (Navigator.of(context).canPop()) {
-                    Navigator.of(context).pop();
-                  } else {
-                    context.go(AppRoutes.homeAlias);
-                  }
-                },
-              ),
-            )
-          : null,
-      body: Row(
+      body: Column(
         children: [
-          // Left sidebar — profile header (sticky)
+          // ── Profile header banner (full width, fixed height) ────────────
           SizedBox(
-            width: SojornBreakpoints.sidebarWidth,
-            child: SingleChildScrollView(
-              padding: EdgeInsets.only(top: _isOwnProfileMode ? MediaQuery.of(context).padding.top : 0),
-              child: _ProfileHeader(
-                profile: _profile!,
-                stats: _stats,
-                isFollowing: _isFollowing,
-                isFriend: _isFriend,
-                followStatus: _followStatus,
-                isPrivate: _isPrivate,
-                isFollowActionLoading: _isFollowActionLoading,
-                isOwnProfile: _isOwnProfile,
-                onFollowToggle: _toggleFollow,
-                onMessageTap: _openMessage,
-                onSettingsTap: _openSettings,
-                onPrivacyTap: _openPrivacyMenu,
-                onAvatarTap: _isOwnProfile ? _showAvatarActions : null,
-                onCustomizeLayoutTap: _isOwnProfile ? _openLayoutEditor : null,
-                onConnectionsTap: _isOwnProfile ? _navigateToConnections : null,
-              ),
+            height: 260,
+            child: Stack(
+              fit: StackFit.passthrough,
+              children: [
+                _ProfileHeader(
+                  profile: _profile!,
+                  stats: _stats,
+                  isFollowing: _isFollowing,
+                  isFriend: _isFriend,
+                  followStatus: _followStatus,
+                  isPrivate: _isPrivate,
+                  isFollowActionLoading: _isFollowActionLoading,
+                  isOwnProfile: _isOwnProfile,
+                  onFollowToggle: _toggleFollow,
+                  onMessageTap: _openMessage,
+                  onSettingsTap: _openSettings,
+                  onPrivacyTap: _openPrivacyMenu,
+                  onAvatarTap: _isOwnProfile ? _showAvatarActions : null,
+                  onCustomizeLayoutTap: _isOwnProfile ? _openLayoutEditor : null,
+                  onConnectionsTap: _isOwnProfile ? _navigateToConnections : null,
+                ),
+                // Back button for viewing others' profiles
+                if (!_isOwnProfileMode)
+                  Positioned(
+                    top: MediaQuery.of(context).padding.top + 4,
+                    left: 8,
+                    child: IconButton(
+                      icon: const Icon(Icons.arrow_back, color: Colors.white),
+                      onPressed: () {
+                        if (Navigator.of(context).canPop()) {
+                          Navigator.of(context).pop();
+                        } else {
+                          context.go(AppRoutes.homeAlias);
+                        }
+                      },
+                    ),
+                  ),
+              ],
             ),
           ),
-          const VerticalDivider(width: 1, thickness: 1),
-          // Right side — tabbed content
+          // ── Profile widget banner (if layout has widgets) ───────────────
+          if (_profileLayout != null && _profileLayout!.widgets.isNotEmpty)
+            Container(
+              color: AppTheme.cardSurface,
+              constraints: const BoxConstraints(maxHeight: 200),
+              child: SingleChildScrollView(
+                padding: const EdgeInsets.symmetric(horizontal: SojornSpacing.lg, vertical: SojornSpacing.md),
+                child: ProfileWidgetRenderer(
+                  layout: _profileLayout!,
+                  isOwnProfile: _isOwnProfile,
+                ),
+              ),
+            ),
+          // ── Tab bar + content ───────────────────────────────────────────
           Expanded(
             child: Column(
               children: [
@@ -989,6 +1004,8 @@ class _UnifiedProfileScreenState extends ConsumerState<UnifiedProfileScreen>
           headerSliverBuilder: (context, innerBoxIsScrolled) {
             return [
               _buildSliverAppBar(_profile!),
+              if (_profileLayout != null && _profileLayout!.widgets.isNotEmpty)
+                SliverToBoxAdapter(child: _buildProfileWidgetBanner()),
               _buildSliverTabBar(),
             ];
           },
@@ -1017,10 +1034,23 @@ class _UnifiedProfileScreenState extends ConsumerState<UnifiedProfileScreen>
         headerSliverBuilder: (context, innerBoxIsScrolled) {
           return [
             _buildSliverAppBar(_profile!),
+            if (_profileLayout != null && _profileLayout!.widgets.isNotEmpty)
+              SliverToBoxAdapter(child: _buildProfileWidgetBanner()),
             _buildSliverTabBar(),
           ];
         },
         body: _buildTabBarView(),
+      ),
+    );
+  }
+
+  Widget _buildProfileWidgetBanner() {
+    return Container(
+      color: AppTheme.cardSurface,
+      padding: const EdgeInsets.symmetric(horizontal: SojornSpacing.lg, vertical: SojornSpacing.md),
+      child: ProfileWidgetRenderer(
+        layout: _profileLayout!,
+        isOwnProfile: _isOwnProfile,
       ),
     );
   }
@@ -1355,16 +1385,6 @@ class _UnifiedProfileScreenState extends ConsumerState<UnifiedProfileScreen>
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          // MySpace-style profile widgets
-          if (_profileLayout != null && _profileLayout!.widgets.isNotEmpty) ...[
-            ProfileWidgetRenderer(
-              layout: _profileLayout!,
-              isOwnProfile: _isOwnProfile,
-            ),
-            const SizedBox(height: AppTheme.spacingLg),
-            const Divider(),
-            const SizedBox(height: AppTheme.spacingLg),
-          ],
           if (profile.bio != null && profile.bio!.isNotEmpty) ...[
             Text(
               'Bio',
@@ -1655,24 +1675,26 @@ class _ProfileHeader extends StatelessWidget {
     final flag = getCountryFlag(profile.originCountry ?? 'US');
     final hasBanner = (profile.coverUrl ?? '').isNotEmpty;
     return Stack(
-      fit: StackFit.expand,
+      fit: StackFit.passthrough,
       children: [
         // Background: banner image or gradient
         if (hasBanner)
-          SignedMediaImage(url: profile.coverUrl!, fit: BoxFit.cover)
+          Positioned.fill(child: SignedMediaImage(url: profile.coverUrl!, fit: BoxFit.cover))
         else
-          Container(decoration: BoxDecoration(gradient: _generateGradient(profile.handle))),
+          Positioned.fill(child: Container(decoration: BoxDecoration(gradient: _generateGradient(profile.handle)))),
         // Dark gradient overlay for text readability over banner
         if (hasBanner)
-          Container(
-            decoration: BoxDecoration(
-              gradient: LinearGradient(
-                begin: Alignment.topCenter,
-                end: Alignment.bottomCenter,
-                colors: [
-                  Colors.black.withValues(alpha: 0.35),
-                  Colors.black.withValues(alpha: 0.70),
-                ],
+          Positioned.fill(
+            child: Container(
+              decoration: BoxDecoration(
+                gradient: LinearGradient(
+                  begin: Alignment.topCenter,
+                  end: Alignment.bottomCenter,
+                  colors: [
+                    Colors.black.withValues(alpha: 0.35),
+                    Colors.black.withValues(alpha: 0.70),
+                  ],
+                ),
               ),
             ),
           ),
@@ -1763,20 +1785,20 @@ class _ProfileHeader extends StatelessWidget {
                   children: [
                     Expanded(
                       child: _GradientOutlinedButton(
-                        label: 'Edit Profile',
+                        label: 'Edit',
                         icon: Icons.edit_outlined,
                         onPressed: onSettingsTap,
                       ),
                     ),
-                    const SizedBox(width: 8),
+                    const SizedBox(width: 6),
                     Expanded(
                       child: _GradientOutlinedButton(
-                        label: 'Customize',
+                        label: 'Layout',
                         icon: Icons.dashboard_customize_outlined,
                         onPressed: onCustomizeLayoutTap ?? () {},
                       ),
                     ),
-                    const SizedBox(width: 8),
+                    const SizedBox(width: 6),
                     Expanded(
                       child: _GradientOutlinedButton(
                         label: 'Share',
@@ -2040,13 +2062,15 @@ class _GradientOutlinedButton extends StatelessWidget {
       icon: Icon(icon, size: 14, color: Colors.white),
       label: Text(
         label,
-        style: const TextStyle(color: Colors.white, fontSize: 13, fontWeight: FontWeight.w600),
+        style: const TextStyle(color: Colors.white, fontSize: 12, fontWeight: FontWeight.w600),
+        overflow: TextOverflow.ellipsis,
+        maxLines: 1,
       ),
       style: OutlinedButton.styleFrom(
         foregroundColor: Colors.white,
         side: BorderSide(color: Colors.white.withValues(alpha: 0.6), width: 1),
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-        padding: const EdgeInsets.symmetric(vertical: 8),
+        padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 8),
         tapTargetSize: MaterialTapTargetSize.shrinkWrap,
         visualDensity: VisualDensity.compact,
       ),

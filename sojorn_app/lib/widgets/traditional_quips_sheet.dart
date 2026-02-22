@@ -375,7 +375,7 @@ class _TraditionalQuipsSheetState extends ConsumerState<TraditionalQuipsSheet> {
                     ),
                   ),
                 ] else ...[
-                  // Clean Quips-style header: "X Comments" + close X
+                  // Clean Quips-style header: "X Comments" (no close button - swipe to dismiss)
                   Expanded(
                     child: Padding(
                       padding: const EdgeInsets.only(left: 12),
@@ -388,10 +388,6 @@ class _TraditionalQuipsSheetState extends ConsumerState<TraditionalQuipsSheet> {
                         ),
                       ),
                     ),
-                  ),
-                  IconButton(
-                    onPressed: () => Navigator.pop(context),
-                    icon: Icon(Icons.close, color: AppTheme.navyBlue),
                   ),
                 ],
               ],

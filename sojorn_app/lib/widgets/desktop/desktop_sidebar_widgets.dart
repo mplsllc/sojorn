@@ -12,6 +12,144 @@ import '../../theme/app_theme.dart';
 import '../../theme/tokens.dart';
 import '../media/sojorn_avatar.dart';
 
+
+// ─── Flip Card Widget (wraps sidebar widgets with settings flip) ─────────────
+
+class _FlipCard extends StatefulWidget {
+  final Widget front;
+  final Widget Function(VoidCallback flipBack) back;
+
+  const _FlipCard({required this.front, required this.back});
+
+  @override
+  State<_FlipCard> createState() => _FlipCardState();
+}
+
+class _FlipCardState extends State<_FlipCard> with SingleTickerProviderStateMixin {
+  late final AnimationController _ctrl;
+  late final Animation<double> _anim;
+  bool _isBack = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _ctrl = AnimationController(vsync: this, duration: const Duration(milliseconds: 350));
+    _anim = CurvedAnimation(parent: _ctrl, curve: Curves.easeInOut);
+  }
+
+  @override
+  void dispose() {
+    _ctrl.dispose();
+    super.dispose();
+  }
+
+  void _flip() {
+    setState(() => _isBack = !_isBack);
+    _isBack ? _ctrl.forward() : _ctrl.reverse();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return AnimatedBuilder(
+      animation: _anim,
+      builder: (ctx, _) {
+        final angle = _anim.value * 3.14159265;
+        final isFrontVisible = _anim.value < 0.5;
+        final transform = Matrix4.identity()
+          ..setEntry(3, 2, 0.001)
+          ..rotateY(angle);
+
+        Widget face;
+        if (isFrontVisible) {
+          face = Stack(
+            key: const ValueKey('front'),
+            children: [
+              widget.front,
+              Positioned(
+                top: 8,
+                right: 8,
+                child: GestureDetector(
+                  onTap: _flip,
+                  child: Container(
+                    width: 26,
+                    height: 26,
+                    decoration: BoxDecoration(
+                      color: Colors.black.withValues(alpha: 0.06),
+                      shape: BoxShape.circle,
+                    ),
+                    child: Icon(Icons.tune, size: 14, color: Colors.grey.shade400),
+                  ),
+                ),
+              ),
+            ],
+          );
+        } else {
+          face = Transform(
+            key: const ValueKey('back'),
+            transform: Matrix4.rotationY(3.14159265),
+            alignment: Alignment.center,
+            child: widget.back(_flip),
+          );
+        }
+
+        return Transform(
+          transform: transform,
+          alignment: Alignment.center,
+          child: face,
+        );
+      },
+    );
+  }
+}
+
+// ─── Settings back panel helper ────────────────────────────────────────────
+
+Widget _settingsBackPanel({
+  required VoidCallback onDone,
+  required String title,
+  required List<Widget> children,
+}) {
+  return Container(
+    decoration: BoxDecoration(
+      color: AppTheme.cardSurface,
+      borderRadius: BorderRadius.circular(SojornRadii.card),
+    ),
+    padding: const EdgeInsets.all(16),
+    child: Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Row(
+          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          children: [
+            Text(
+              title,
+              style: TextStyle(
+                color: AppTheme.navyText,
+                fontSize: 14,
+                fontWeight: FontWeight.w800,
+              ),
+            ),
+            GestureDetector(
+              onTap: onDone,
+              child: Container(
+                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+                decoration: BoxDecoration(
+                  gradient: LinearGradient(colors: [AppTheme.brightNavy, AppTheme.royalPurple]),
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                child: const Text('Done', style: TextStyle(color: Colors.white, fontSize: 12, fontWeight: FontWeight.w700)),
+              ),
+            ),
+          ],
+        ),
+        const SizedBox(height: 12),
+        ...children,
+      ],
+    ),
+  );
+}
+
 // ─── Desktop Profile Card (Left Sidebar) ────────────────────────────────────
 
 class DesktopProfileCard extends StatelessWidget {
@@ -46,51 +184,50 @@ class DesktopProfileCard extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          // ── Vibrant gradient header with username overlay ──
-          _buildHeader(),
-          // ── Avatar + info below header ──
-          Padding(
-            padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.center,
-              children: [
-                // Avatar overlapping the header
-                Transform.translate(
-                  offset: const Offset(0, -32),
-                  child: GestureDetector(
-                    onTap: onProfileTap,
-                    child: Container(
-                      decoration: BoxDecoration(
-                        borderRadius: BorderRadius.circular(20),
-                        border: Border.all(
-                          color: AppTheme.cardSurface,
-                          width: 3,
+          // ── Header with avatar floating to top-right ──
+          Stack(
+            clipBehavior: Clip.none,
+            children: [
+              _buildHeader(),
+              // Avatar at top-right, overlapping the header bottom edge
+              Positioned(
+                top: 48,
+                right: 14,
+                child: GestureDetector(
+                  onTap: onProfileTap,
+                  child: Container(
+                    decoration: BoxDecoration(
+                      borderRadius: BorderRadius.circular(18),
+                      border: Border.all(color: AppTheme.cardSurface, width: 3),
+                      boxShadow: [
+                        BoxShadow(
+                          color: AppTheme.royalPurple.withValues(alpha: 0.35),
+                          blurRadius: 12,
+                          spreadRadius: 1,
                         ),
-                        boxShadow: [
-                          BoxShadow(
-                            color: AppTheme.royalPurple.withValues(alpha: 0.35),
-                            blurRadius: 16,
-                            spreadRadius: 2,
-                          ),
-                          BoxShadow(
-                            color: AppTheme.brightNavy.withValues(alpha: 0.20),
-                            blurRadius: 24,
-                            spreadRadius: 4,
-                          ),
-                        ],
-                      ),
-                      child: SojornAvatar(
-                        displayName: profile.displayName,
-                        avatarUrl: profile.avatarUrl,
-                        size: 64,
-                      ),
+                      ],
+                    ),
+                    child: SojornAvatar(
+                      displayName: profile.displayName,
+                      avatarUrl: profile.avatarUrl,
+                      size: 58,
                     ),
                   ),
                 ),
-                // Name & handle
-                Transform.translate(
-                  offset: const Offset(0, -18),
+              ),
+            ],
+          ),
+          // ── Name, handle, bio, stats, button ──
+          Padding(
+            padding: const EdgeInsets.fromLTRB(16, 14, 16, 16),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                // Name + handle, right-padded to avoid avatar overlap
+                Padding(
+                  padding: const EdgeInsets.only(right: 76),
                   child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       GestureDetector(
                         onTap: onProfileTap,
@@ -114,53 +251,52 @@ class DesktopProfileCard extends StatelessWidget {
                           fontWeight: FontWeight.w500,
                         ),
                       ),
-                      if (profile.bio != null && profile.bio!.isNotEmpty) ...[
-                        const SizedBox(height: 8),
-                        Text(
-                          profile.bio!,
-                          style: TextStyle(
-                            color: AppTheme.navyText.withValues(alpha: 0.65),
-                            fontSize: 12,
-                            height: 1.4,
-                          ),
-                          maxLines: 3,
-                          overflow: TextOverflow.ellipsis,
-                          textAlign: TextAlign.center,
-                        ),
-                      ],
-                      const SizedBox(height: 14),
-                      // Stats row
-                      Row(
-                        mainAxisAlignment: MainAxisAlignment.center,
-                        children: [
-                          _buildStat('Posts', stats['posts'] ?? 0),
-                          _buildDivider(),
-                          _buildStat('Followers', stats['followers'] ?? 0),
-                          _buildDivider(),
-                          _buildStat('Following', stats['following'] ?? 0),
-                        ],
-                      ),
-                      const SizedBox(height: 14),
-                      // Edit profile button
-                      if (onEditTap != null)
-                        SizedBox(
-                          width: double.infinity,
-                          child: OutlinedButton(
-                            onPressed: onEditTap,
-                            style: OutlinedButton.styleFrom(
-                              foregroundColor: AppTheme.royalPurple,
-                              side: BorderSide(color: AppTheme.royalPurple.withValues(alpha: 0.3)),
-                              shape: RoundedRectangleBorder(
-                                borderRadius: BorderRadius.circular(10),
-                              ),
-                              padding: const EdgeInsets.symmetric(vertical: 8),
-                            ),
-                            child: const Text('Edit Profile', style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600)),
-                          ),
-                        ),
                     ],
                   ),
                 ),
+                if (profile.bio != null && profile.bio!.isNotEmpty) ...[
+                  const SizedBox(height: 8),
+                  Text(
+                    profile.bio!,
+                    style: TextStyle(
+                      color: AppTheme.navyText.withValues(alpha: 0.65),
+                      fontSize: 12,
+                      height: 1.4,
+                    ),
+                    maxLines: 2,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                ],
+                const SizedBox(height: 14),
+                // Stats row
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.start,
+                  children: [
+                    _buildStat('Posts', stats['posts'] ?? 0),
+                    _buildDivider(),
+                    _buildStat('Followers', stats['followers'] ?? 0),
+                    _buildDivider(),
+                    _buildStat('Following', stats['following'] ?? 0),
+                  ],
+                ),
+                const SizedBox(height: 14),
+                // Edit profile button
+                if (onEditTap != null)
+                  SizedBox(
+                    width: double.infinity,
+                    child: OutlinedButton(
+                      onPressed: onEditTap,
+                      style: OutlinedButton.styleFrom(
+                        foregroundColor: AppTheme.royalPurple,
+                        side: BorderSide(color: AppTheme.royalPurple.withValues(alpha: 0.3)),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(10),
+                        ),
+                        padding: const EdgeInsets.symmetric(vertical: 8),
+                      ),
+                      child: const Text('Edit Profile', style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600)),
+                    ),
+                  ),
               ],
             ),
           ),
@@ -323,7 +459,7 @@ class _GradientPatternPainter extends CustomPainter {
 
 // ─── Top 8 Friends Grid ─────────────────────────────────────────────────────
 
-class Top8FriendsGrid extends StatelessWidget {
+class Top8FriendsGrid extends StatefulWidget {
   final List<Map<String, dynamic>> friends;
   final VoidCallback? onViewAll;
   final void Function(String userId)? onFriendTap;
@@ -336,10 +472,51 @@ class Top8FriendsGrid extends StatelessWidget {
   });
 
   @override
-  Widget build(BuildContext context) {
-    if (friends.isEmpty) return const SizedBox.shrink();
+  State<Top8FriendsGrid> createState() => _Top8FriendsGridState();
+}
 
-    return Container(
+class _Top8FriendsGridState extends State<Top8FriendsGrid> {
+  int _maxCount = 8;
+
+  Widget _buildSettings(VoidCallback flipBack) {
+    return _settingsBackPanel(
+      onDone: flipBack,
+      title: 'Top Friends',
+      children: [
+        Text('Show how many?', style: TextStyle(color: AppTheme.navyText.withValues(alpha: 0.6), fontSize: 12)),
+        const SizedBox(height: 8),
+        Row(
+          children: [4, 8].map((count) {
+            final isSelected = _maxCount == count;
+            return Padding(
+              padding: const EdgeInsets.only(right: 8),
+              child: GestureDetector(
+                onTap: () => setState(() => _maxCount = count),
+                child: Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
+                  decoration: BoxDecoration(
+                    color: isSelected ? AppTheme.royalPurple : AppTheme.royalPurple.withValues(alpha: 0.08),
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  child: Text('$count', style: TextStyle(
+                    color: isSelected ? Colors.white : AppTheme.royalPurple,
+                    fontWeight: FontWeight.w700,
+                    fontSize: 13,
+                  )),
+                ),
+              ),
+            );
+          }).toList(),
+        ),
+      ],
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    if (widget.friends.isEmpty) return const SizedBox.shrink();
+
+    final frontCard = Container(
       decoration: BoxDecoration(
         color: AppTheme.cardSurface,
         borderRadius: BorderRadius.circular(SojornRadii.card),
@@ -366,9 +543,9 @@ class Top8FriendsGrid extends StatelessWidget {
                   fontWeight: FontWeight.w800,
                 ),
               ),
-              if (onViewAll != null)
+              if (widget.onViewAll != null)
                 GestureDetector(
-                  onTap: onViewAll,
+                  onTap: widget.onViewAll,
                   child: Text(
                     'View all',
                     style: TextStyle(
@@ -390,15 +567,15 @@ class Top8FriendsGrid extends StatelessWidget {
               crossAxisSpacing: 6,
               childAspectRatio: 0.75,
             ),
-            itemCount: friends.length.clamp(0, 8),
+            itemCount: widget.friends.length.clamp(0, _maxCount),
             itemBuilder: (context, index) {
-              final friend = friends[index];
+              final friend = widget.friends[index];
               final name = friend['display_name'] as String? ?? friend['handle'] as String? ?? '?';
               final avatar = friend['avatar_url'] as String?;
-              final userId = friend['id'] as String? ?? '';
+              final handle = friend['handle'] as String? ?? '';
 
               return GestureDetector(
-                onTap: () => onFriendTap?.call(userId),
+                onTap: () => widget.onFriendTap?.call(handle),
                 child: Column(
                   children: [
                     Container(
@@ -437,6 +614,11 @@ class Top8FriendsGrid extends StatelessWidget {
           ),
         ],
       ),
+    );
+
+    return _FlipCard(
+      front: frontCard,
+      back: _buildSettings,
     );
   }
 }
@@ -514,11 +696,11 @@ class WhosOnlineList extends StatelessWidget {
   Widget _buildOnlineUser(Map<String, dynamic> user) {
     final name = user['display_name'] as String? ?? user['handle'] as String? ?? '?';
     final avatar = user['avatar_url'] as String?;
-    final userId = user['id'] as String? ?? '';
+    final handle = user['handle'] as String? ?? '';
     final status = user['status'] as String? ?? 'online';
 
     return InkWell(
-      onTap: () => onUserTap?.call(userId),
+      onTap: () => onUserTap?.call(handle),
       borderRadius: BorderRadius.circular(8),
       child: Padding(
         padding: const EdgeInsets.symmetric(vertical: 6, horizontal: 4),

@@ -60,6 +60,7 @@ class PostMedia extends StatelessWidget {
     // For video posts, prefer thumbnailUrl (poster frame) over imageUrl (which
     // may be the .mp4 itself) so we never feed a video file to SignedMediaImage.
     final bool isVideo = post?.hasVideoContent == true;
+    final bool isDesktop = MediaQuery.of(context).size.width >= 900;
     final String? displayUrl = (isVideo && post?.thumbnailUrl?.isNotEmpty == true)
         ? post!.thumbnailUrl
         : (post?.imageUrl?.isNotEmpty == true)
@@ -69,6 +70,25 @@ class PostMedia extends StatelessWidget {
                 : null;
 
     if (displayUrl != null) {
+      // Choose image layout strategy:
+      // - Video in feed: 4:5 aspect ratio (TikTok-style)
+      // - Desktop non-video: natural ratio (full width, height = natural)
+      // - Everything else: constrained max-height
+      Widget imageContent;
+      if (isVideo && mode == PostViewMode.feed) {
+        imageContent = AspectRatio(
+          aspectRatio: 4 / 5,
+          child: _buildMediaContent(displayUrl, true),
+        );
+      } else if (!isVideo && isDesktop) {
+        imageContent = _buildDesktopNaturalImage(displayUrl);
+      } else {
+        imageContent = ConstrainedBox(
+          constraints: BoxConstraints(maxHeight: _imageHeight),
+          child: _buildMediaContent(displayUrl, isVideo),
+        );
+      }
+
       return Padding(
         padding: const EdgeInsets.only(top: AppTheme.spacingSm),
         child: Column(
@@ -78,8 +98,6 @@ class PostMedia extends StatelessWidget {
               borderRadius: BorderRadius.circular(AppTheme.radiusMd),
               child: Container(
                 width: double.infinity,
-                // For videos in feed mode, use a more vertical 4:5 aspect ratio
-                // For other modes or non-videos, use the constrained height logic
                 child: InkWell(
                   onTap: isVideo
                       ? (onVideoTap ?? () {
@@ -87,19 +105,8 @@ class PostMedia extends StatelessWidget {
                           context.go(url);
                         })
                       : onTap,
-
-
-                  child: (isVideo && mode == PostViewMode.feed)
-                      ? AspectRatio(
-                          aspectRatio: 4 / 5,
-                          child: _buildMediaContent(displayUrl, true),
-                        )
-                      : ConstrainedBox(
-                          constraints: BoxConstraints(maxHeight: _imageHeight),
-                          child: _buildMediaContent(displayUrl, isVideo),
-                        ),
+                  child: imageContent,
                 ),
-
               ),
             ),
           ],
@@ -116,6 +123,34 @@ class PostMedia extends StatelessWidget {
       child: ClipRRect(
         borderRadius: BorderRadius.circular(AppTheme.radiusMd),
         child: child,
+      ),
+    );
+  }
+
+  /// Desktop: renders image at its natural aspect ratio (full width, height = natural).
+  Widget _buildDesktopNaturalImage(String displayUrl) {
+    return SignedMediaImage(
+      url: displayUrl,
+      fit: BoxFit.fitWidth,
+      loadingBuilder: (context) => Container(
+        height: 300,
+        color: AppTheme.mediaLoadingBg,
+        child: const Center(child: CircularProgressIndicator()),
+      ),
+      errorBuilder: (context, error, stackTrace) => Container(
+        height: 200,
+        color: AppTheme.mediaErrorBg,
+        child: Center(
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              const Icon(Icons.broken_image, size: 48, color: SojornColors.basicWhite),
+              const SizedBox(height: 8),
+              Text('Error: $error',
+                  style: const TextStyle(color: SojornColors.basicWhite, fontSize: 10)),
+            ],
+          ),
+        ),
       ),
     );
   }

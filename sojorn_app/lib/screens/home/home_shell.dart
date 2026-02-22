@@ -99,16 +99,16 @@ class _HomeShellState extends ConsumerState<HomeShell> with WidgetsBindingObserv
   Future<void> _loadDesktopSidebarData() async {
     try {
       final profileData = await ApiService.instance.getProfile();
-      final profile = Profile.fromJson(profileData);
-      final followers = await ApiService.instance.getFollowers(profile.id);
+      final profile = profileData['profile'] as Profile;
+      final stats = profileData['stats'] as ProfileStats;
       final following = await ApiService.instance.getFollowing(profile.id);
       if (mounted) {
         setState(() {
           _desktopProfile = profile;
           _desktopStats = {
-            'posts': profileData['post_count'] as int? ?? 0,
-            'followers': followers.length,
-            'following': following.length,
+            'posts': stats.posts,
+            'followers': stats.followers,
+            'following': stats.following,
           };
           // Use following as "friends" for Top 8 (mutual follows could be added later)
           _desktopFriends = following.take(8).toList();
@@ -368,26 +368,65 @@ class _HomeShellState extends ConsumerState<HomeShell> with WidgetsBindingObserv
                 mainAxisAlignment: MainAxisAlignment.center,
                 children: [
                   _buildDesktopNavItem(Icons.home_outlined, Icons.home, 'Home', 0, currentIndex),
-                  _buildDesktopNavItem(Icons.music_note_outlined, Icons.music_note, 'Music', 1, currentIndex),
-                  _buildDesktopNavItem(Icons.explore_outlined, Icons.explore, 'Discover', -1, currentIndex),
+                  _buildDesktopNavItem(Icons.video_collection_outlined, Icons.video_collection, 'Quips', 1, currentIndex),
+                  _buildDesktopNavItem(Icons.sensors_outlined, Icons.sensors, 'Beacons', 2, currentIndex),
+                  _buildDesktopNavItem(Icons.explore_outlined, Icons.explore, 'Discover', 4, currentIndex),
                   _buildDesktopNavItem(Icons.person_outline, Icons.person, 'Profile', 3, currentIndex),
-                  _buildDesktopNavItem(Icons.mail_outline, Icons.mail, 'Messages', -2, currentIndex),
+                  _buildDesktopNavItem(Icons.mail_outline, Icons.mail, 'Messages', 5, currentIndex),
                 ],
               ),
             ),
             // ── Right: Create, Notifications, Avatar ──────────
             DesktopCreateButton(
-              onPost: () => Navigator.of(context).push(
-                MaterialPageRoute(builder: (_) => const ComposeScreen()),
-              ),
+              onPost: () {
+                final isDesktop = MediaQuery.of(context).size.width >= 900;
+                if (isDesktop) {
+                  showGeneralDialog(
+                    context: context,
+                    barrierDismissible: true,
+                    barrierColor: Colors.black38,
+                    barrierLabel: 'Close',
+                    transitionDuration: const Duration(milliseconds: 250),
+                    pageBuilder: (ctx, anim, _) => const SizedBox.shrink(),
+                    transitionBuilder: (ctx, anim, _, child) {
+                      final slide = CurvedAnimation(parent: anim, curve: Curves.easeOut);
+                      return Align(
+                        alignment: Alignment.centerRight,
+                        child: SlideTransition(
+                          position: Tween<Offset>(begin: const Offset(1, 0), end: Offset.zero).animate(slide),
+                          child: Material(
+                            elevation: 16,
+                            child: SafeArea(
+                              child: SizedBox(
+                                width: 520,
+                                height: double.infinity,
+                                child: const ComposeScreen(),
+                              ),
+                            ),
+                          ),
+                        ),
+                      );
+                    },
+                  );
+                } else {
+                  Navigator.of(context).push(MaterialPageRoute(builder: (_) => const ComposeScreen()));
+                }
+              },
               onQuip: () => Navigator.of(context).push(
                 MaterialPageRoute(builder: (_) => const QuipCreationFlow()),
               ),
               onBeacon: () {
-                widget.navigationShell.goBranch(2);
-                WidgetsBinding.instance.addPostFrameCallback((_) {
+                // If not already on the beacon branch, navigate there first then trigger create
+                final currentIndex = widget.navigationShell.currentIndex;
+                if (currentIndex != 2) {
+                  widget.navigationShell.goBranch(2);
+                  // Wait for branch to mount before triggering create
+                  Future.delayed(const Duration(milliseconds: 200), () {
+                    if (mounted) BeaconScreen.globalKey.currentState?.onCreateAction();
+                  });
+                } else {
                   BeaconScreen.globalKey.currentState?.onCreateAction();
-                });
+                }
               },
             ),
             const SizedBox(width: 8),
@@ -411,16 +450,78 @@ class _HomeShellState extends ConsumerState<HomeShell> with WidgetsBindingObserv
               ),
               tooltip: 'Notifications',
               onPressed: () {
-                Navigator.of(context, rootNavigator: true).push(
-                  MaterialPageRoute(builder: (_) => const NotificationsScreen()),
-                );
+                final isDesktop = MediaQuery.of(context).size.width >= 900;
+                if (isDesktop) {
+                  showGeneralDialog(
+                    context: context,
+                    barrierDismissible: true,
+                    barrierColor: Colors.black26,
+                    barrierLabel: 'Close',
+                    transitionDuration: const Duration(milliseconds: 250),
+                    pageBuilder: (ctx, anim, _) => const SizedBox.shrink(),
+                    transitionBuilder: (ctx, anim, _, child) {
+                      final slide = CurvedAnimation(parent: anim, curve: Curves.easeOut);
+                      return Align(
+                        alignment: Alignment.centerRight,
+                        child: SlideTransition(
+                          position: Tween<Offset>(begin: const Offset(1, 0), end: Offset.zero).animate(slide),
+                          child: Material(
+                            elevation: 16,
+                            child: SafeArea(
+                              child: SizedBox(
+                                width: 380,
+                                height: double.infinity,
+                                child: const NotificationsScreen(),
+                              ),
+                            ),
+                          ),
+                        ),
+                      );
+                    },
+                  );
+                } else {
+                  Navigator.of(context, rootNavigator: true).push(
+                    MaterialPageRoute(builder: (_) => const NotificationsScreen()),
+                  );
+                }
               },
             ),
             const SizedBox(width: 4),
-            // User avatar
+            // User avatar with dropdown menu
             if (_desktopProfile != null)
-              GestureDetector(
-                onTap: () => widget.navigationShell.goBranch(3),
+              PopupMenuButton<String>(
+                offset: const Offset(0, 44),
+                onSelected: (value) {
+                  switch (value) {
+                    case 'profile':
+                      widget.navigationShell.goBranch(3);
+                    case 'settings':
+                      context.push('/settings');
+                    case 'privacy':
+                      context.push('/settings/privacy');
+                    case 'signout':
+                      context.push('/logout');
+                  }
+                },
+                itemBuilder: (_) => [
+                  const PopupMenuItem(
+                    value: 'profile',
+                    child: Row(children: [Icon(Icons.person_outline, size: 18), SizedBox(width: 10), Text('My Profile')]),
+                  ),
+                  const PopupMenuItem(
+                    value: 'settings',
+                    child: Row(children: [Icon(Icons.settings_outlined, size: 18), SizedBox(width: 10), Text('Settings')]),
+                  ),
+                  const PopupMenuItem(
+                    value: 'privacy',
+                    child: Row(children: [Icon(Icons.lock_outline, size: 18), SizedBox(width: 10), Text('Privacy')]),
+                  ),
+                  const PopupMenuDivider(),
+                  const PopupMenuItem(
+                    value: 'signout',
+                    child: Row(children: [Icon(Icons.logout, size: 18, color: Colors.red), SizedBox(width: 10), Text('Sign Out', style: TextStyle(color: Colors.red))]),
+                  ),
+                ],
                 child: SojornAvatar(
                   displayName: _desktopProfile!.displayName,
                   avatarUrl: _desktopProfile!.avatarUrl,
@@ -434,32 +535,17 @@ class _HomeShellState extends ConsumerState<HomeShell> with WidgetsBindingObserv
   }
 
   Widget _buildDesktopNavItem(IconData icon, IconData activeIcon, String label, int index, int currentIndex) {
-    final isActive = index >= 0 && index == currentIndex;
-    final isSpecial = index < 0; // -1 = Discover, -2 = Messages
+    final isActive = index == currentIndex;
+    final isMessages = index == 5;
 
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 2),
       child: InkWell(
-        onTap: () {
-          if (index == -1) {
-            Navigator.of(context, rootNavigator: true).push(
-              MaterialPageRoute(builder: (_) => const DiscoverScreen()),
-            );
-          } else if (index == -2) {
-            Navigator.of(context, rootNavigator: true).push(
-              MaterialPageRoute(
-                builder: (_) => const SecureChatFullScreen(),
-                fullscreenDialog: true,
-              ),
-            );
-          } else {
-            widget.navigationShell.goBranch(index, initialLocation: index == currentIndex);
-          }
-        },
+        onTap: () => widget.navigationShell.goBranch(index, initialLocation: index == currentIndex),
         borderRadius: BorderRadius.circular(8),
         hoverColor: AppTheme.royalPurple.withValues(alpha: 0.06),
         child: Container(
-          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 6),
           decoration: BoxDecoration(
             border: Border(
               bottom: BorderSide(
@@ -472,7 +558,7 @@ class _HomeShellState extends ConsumerState<HomeShell> with WidgetsBindingObserv
             mainAxisAlignment: MainAxisAlignment.center,
             mainAxisSize: MainAxisSize.min,
             children: [
-              index == -2
+              isMessages
                   ? Consumer(
                       builder: (context, ref, child) {
                         final badge = ref.watch(currentBadgeProvider);
@@ -490,7 +576,7 @@ class _HomeShellState extends ConsumerState<HomeShell> with WidgetsBindingObserv
                     )
                   : Icon(
                       isActive ? activeIcon : icon,
-                      color: isActive ? AppTheme.royalPurple : (isSpecial ? SojornColors.bottomNavUnselected : SojornColors.bottomNavUnselected),
+                      color: isActive ? AppTheme.royalPurple : SojornColors.bottomNavUnselected,
                       size: 20,
                     ),
               const SizedBox(height: 2),
@@ -510,13 +596,18 @@ class _HomeShellState extends ConsumerState<HomeShell> with WidgetsBindingObserv
   }
 
   void _openDashboardEditor() {
-    DashboardEditorSheet.show(
-      context,
-      layout: _dashboardLayout,
-      onSaved: (newLayout) {
-        setState(() => _dashboardLayout = newLayout);
-      },
-    );
+    // Navigate to home first so the user can see the dashboard being edited
+    widget.navigationShell.goBranch(0);
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      DashboardEditorSheet.show(
+        context,
+        layout: _dashboardLayout,
+        onSaved: (newLayout) {
+          setState(() => _dashboardLayout = newLayout);
+        },
+      );
+    });
   }
 
   Widget _buildDesktop3Column(int currentIndex) {
@@ -590,14 +681,14 @@ class _HomeShellState extends ConsumerState<HomeShell> with WidgetsBindingObserv
         return Top8FriendsGrid(
           friends: _desktopFriends,
           onViewAll: () => widget.navigationShell.goBranch(3),
-          onFriendTap: (userId) => context.push('/u/$userId'),
+          onFriendTap: (handle) => context.push('/u/$handle'),
         );
       case DashboardWidgetType.upcomingEvents:
         return const UpcomingEventsWidget();
       case DashboardWidgetType.whosOnline:
         return WhosOnlineList(
           onlineUsers: _desktopOnlineUsers,
-          onUserTap: (userId) => context.push('/u/$userId'),
+          onUserTap: (handle) => context.push('/u/$handle'),
         );
       case DashboardWidgetType.nowPlaying:
         return const NowPlayingCard(
