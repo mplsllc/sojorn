@@ -4056,7 +4056,7 @@ func (h *AdminHandler) AdminListGroups(c *gin.Context) {
 	}
 
 	query := `
-		SELECT g.id, g.name, g.description, g.is_private, g.status,
+		SELECT g.id, g.name, g.description, g.is_private, g.is_active,
 		       g.created_at, g.key_version, g.key_rotation_needed,
 		       COUNT(DISTINCT gm.user_id) AS member_count,
 		       COUNT(DISTINCT gp.post_id)  AS post_count
@@ -4087,7 +4087,7 @@ func (h *AdminHandler) AdminListGroups(c *gin.Context) {
 		Name               string    `json:"name"`
 		Description        string    `json:"description"`
 		IsPrivate          bool      `json:"is_private"`
-		Status             string    `json:"status"`
+		IsActive           bool      `json:"is_active"`
 		CreatedAt          time.Time `json:"created_at"`
 		KeyVersion         int       `json:"key_version"`
 		KeyRotationNeeded  bool      `json:"key_rotation_needed"`
@@ -4098,7 +4098,7 @@ func (h *AdminHandler) AdminListGroups(c *gin.Context) {
 	var groups []groupRow
 	for rows.Next() {
 		var g groupRow
-		if err := rows.Scan(&g.ID, &g.Name, &g.Description, &g.IsPrivate, &g.Status,
+		if err := rows.Scan(&g.ID, &g.Name, &g.Description, &g.IsPrivate, &g.IsActive,
 			&g.CreatedAt, &g.KeyVersion, &g.KeyRotationNeeded, &g.MemberCount, &g.PostCount); err != nil {
 			continue
 		}
@@ -4111,7 +4111,7 @@ func (h *AdminHandler) AdminListGroups(c *gin.Context) {
 func (h *AdminHandler) AdminGetGroup(c *gin.Context) {
 	groupID := c.Param("id")
 	row := h.pool.QueryRow(c.Request.Context(), `
-		SELECT g.id, g.name, g.description, g.is_private, g.status, g.created_at,
+		SELECT g.id, g.name, g.description, g.is_private, g.is_active, g.created_at,
 		       g.key_version, g.key_rotation_needed,
 		       COUNT(DISTINCT gm.user_id) AS member_count,
 		       COUNT(DISTINCT gp.post_id)  AS post_count
@@ -4127,14 +4127,14 @@ func (h *AdminHandler) AdminGetGroup(c *gin.Context) {
 		Name              string    `json:"name"`
 		Description       string    `json:"description"`
 		IsPrivate         bool      `json:"is_private"`
-		Status            string    `json:"status"`
+		IsActive          bool      `json:"is_active"`
 		CreatedAt         time.Time `json:"created_at"`
 		KeyVersion        int       `json:"key_version"`
 		KeyRotationNeeded bool      `json:"key_rotation_needed"`
 		MemberCount       int       `json:"member_count"`
 		PostCount         int       `json:"post_count"`
 	}
-	if err := row.Scan(&g.ID, &g.Name, &g.Description, &g.IsPrivate, &g.Status, &g.CreatedAt,
+	if err := row.Scan(&g.ID, &g.Name, &g.Description, &g.IsPrivate, &g.IsActive, &g.CreatedAt,
 		&g.KeyVersion, &g.KeyRotationNeeded, &g.MemberCount, &g.PostCount); err != nil {
 		c.JSON(http.StatusNotFound, gin.H{"error": "group not found"})
 		return
@@ -4146,7 +4146,7 @@ func (h *AdminHandler) AdminGetGroup(c *gin.Context) {
 func (h *AdminHandler) AdminDeleteGroup(c *gin.Context) {
 	groupID := c.Param("id")
 	_, err := h.pool.Exec(c.Request.Context(),
-		`UPDATE groups SET status = 'inactive' WHERE id = $1`, groupID)
+		`UPDATE groups SET is_active = false WHERE id = $1`, groupID)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
