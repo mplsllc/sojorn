@@ -110,6 +110,9 @@ class ApiService {
     switch (method.toUpperCase()) {
       case 'GET':
         return await _httpClient.get(uri, headers: headers);
+      case 'PUT':
+        return await _httpClient.put(uri,
+            headers: headers, body: jsonEncode(body));
       case 'PATCH':
         return await _httpClient.patch(uri,
             headers: headers, body: jsonEncode(body));
