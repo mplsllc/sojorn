@@ -12,7 +12,7 @@ import '../../services/secure_chat_service.dart';
 import '../security/encryption_hub_screen.dart';
 import '../../theme/app_theme.dart';
 import '../../theme/tokens.dart';
-import '../../widgets/media/signed_media_image.dart';
+import '../../widgets/media/sojorn_avatar.dart';
 import '../home/full_screen_shell.dart';
 import 'secure_chat_screen.dart';
 import 'new_conversation_sheet.dart';
@@ -34,10 +34,14 @@ class _SecureChatFullScreenState extends State<SecureChatFullScreen>
   bool _isLoading = true;
   bool _isInitializing = false;
   String? _error;
-  SecureConversation? _selectedConversation;
 
   Timer? _pollTimer;
   StreamSubscription? _changesSub;
+
+  // Search + filter state
+  final _searchCtrl = TextEditingController();
+  String _searchQuery = '';
+  bool _filterUnread = false;
 
   @override
   void initState() {
@@ -84,6 +88,7 @@ class _SecureChatFullScreenState extends State<SecureChatFullScreen>
     WidgetsBinding.instance.removeObserver(this);
     _stopPolling();
     _changesSub?.cancel();
+    _searchCtrl.dispose();
     super.dispose();
   }
 
@@ -138,161 +143,30 @@ class _SecureChatFullScreenState extends State<SecureChatFullScreen>
   }
 
   void _showNewConversationSheet() {
-    final isDesktop = MediaQuery.of(context).size.width >= 900;
-    if (isDesktop) {
-      showDialog(
-        context: context,
-        builder: (ctx) => Dialog(
-          insetPadding: const EdgeInsets.symmetric(horizontal: 80, vertical: 40),
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(SojornRadii.modal),
-          ),
-          clipBehavior: Clip.antiAlias,
-          child: ConstrainedBox(
-            constraints: BoxConstraints(
-              maxWidth: 480,
-              maxHeight: MediaQuery.of(context).size.height - 80,
-            ),
-            child: NewConversationSheet(
-              onConversationStarted: (conversation) {
-                Navigator.pop(ctx); // Close dialog
-                setState(() => _selectedConversation = conversation);
-                _loadConversations(); // Refresh list
-              },
-            ),
-          ),
-        ),
-      );
-    } else {
-      showModalBottomSheet(
-        context: context,
-        isScrollControlled: true,
-        backgroundColor: SojornColors.transparent,
-        builder: (context) => NewConversationSheet(
-          onConversationStarted: (conversation) {
-            Navigator.pop(context);
-            Navigator.push(
-              context,
-              MaterialPageRoute(
-                builder: (context) => SecureChatScreen(conversation: conversation),
-              ),
-            );
-          },
-        ),
-      );
-    }
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: SojornColors.transparent,
+      builder: (ctx) => NewConversationSheet(
+        onConversationStarted: (conversation) {
+          Navigator.pop(ctx);
+          _openConversation(conversation);
+        },
+      ),
+    );
+  }
+
+  void _openConversation(SecureConversation conversation) {
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (_) => SecureChatScreen(conversation: conversation),
+      ),
+    );
   }
 
   @override
   Widget build(BuildContext context) {
-    final isDesktop = MediaQuery.of(context).size.width >= 900;
-    if (isDesktop) {
-      return Column(
-        children: [
-          // Compact header for desktop
-          Container(
-            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-            decoration: BoxDecoration(
-              color: AppTheme.cardSurface,
-              border: Border(
-                bottom: BorderSide(color: AppTheme.royalPurple.withValues(alpha: 0.08)),
-              ),
-            ),
-            child: Row(
-              children: [
-                Text(
-                  'Messages',
-                  style: GoogleFonts.literata(
-                    fontWeight: FontWeight.w600,
-                    color: AppTheme.navyBlue,
-                    fontSize: 18,
-                  ),
-                ),
-                const SizedBox(width: 8),
-                Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
-                  decoration: BoxDecoration(
-                    color: AppTheme.brightNavy.withValues(alpha: 0.1),
-                    borderRadius: BorderRadius.circular(12),
-                  ),
-                  child: Text(
-                    'E2E encrypted',
-                    style: GoogleFonts.inter(
-                      color: AppTheme.brightNavy,
-                      fontSize: 10,
-                      fontWeight: FontWeight.w500,
-                    ),
-                  ),
-                ),
-                const Spacer(),
-                IconButton(
-                  icon: Icon(Icons.edit_outlined, color: AppTheme.brightNavy, size: 20),
-                  onPressed: _showNewConversationSheet,
-                  tooltip: 'New conversation',
-                ),
-              ],
-            ),
-          ),
-          // Master-detail: conversation list + selected chat
-          Expanded(
-            child: Row(
-              children: [
-                // Conversation list (left)
-                SizedBox(
-                  width: 340,
-                  child: Container(
-                    decoration: BoxDecoration(
-                      border: Border(
-                        right: BorderSide(color: AppTheme.royalPurple.withValues(alpha: 0.08)),
-                      ),
-                    ),
-                    child: _buildBody(desktopOnTap: (conversation) {
-                      setState(() => _selectedConversation = conversation);
-                    }),
-                  ),
-                ),
-                // Selected conversation (right)
-                Expanded(
-                  child: _selectedConversation != null
-                      ? SecureChatScreen(
-                          key: ValueKey(_selectedConversation!.id),
-                          conversation: _selectedConversation!,
-                          embeddedMode: true,
-                        )
-                      : Center(
-                          child: Column(
-                            mainAxisSize: MainAxisSize.min,
-                            children: [
-                              Icon(Icons.chat_bubble_outline,
-                                  size: 48, color: AppTheme.navyText.withValues(alpha: 0.15)),
-                              const SizedBox(height: 12),
-                              Text(
-                                'Select a conversation',
-                                style: TextStyle(
-                                  color: AppTheme.navyText.withValues(alpha: 0.4),
-                                  fontSize: 14,
-                                ),
-                              ),
-                              const SizedBox(height: 16),
-                              TextButton.icon(
-                                onPressed: _showNewConversationSheet,
-                                icon: const Icon(Icons.add, size: 18),
-                                label: const Text('Start a new conversation'),
-                                style: TextButton.styleFrom(
-                                  foregroundColor: AppTheme.brightNavy,
-                                ),
-                              ),
-                            ],
-                          ),
-                        ),
-                ),
-              ],
-            ),
-          ),
-        ],
-      );
-    }
-
     return FullScreenShell(
       title: Row(
         children: [
@@ -415,13 +289,9 @@ class _SecureChatFullScreenState extends State<SecureChatFullScreen>
     );
   }
 
-  Widget _buildBody({void Function(SecureConversation)? desktopOnTap}) {
+  Widget _buildBody() {
     if (_isLoading && _conversations.isEmpty) {
-      return Center(
-        child: CircularProgressIndicator(
-          valueColor: AlwaysStoppedAnimation<Color>(AppTheme.brightNavy),
-        ),
-      );
+      return const Center(child: CircularProgressIndicator());
     }
 
     if (_error != null) {
@@ -431,29 +301,13 @@ class _SecureChatFullScreenState extends State<SecureChatFullScreen>
           child: Column(
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
-              Icon(
-                Icons.error_outline,
-                size: 64,
-                color: SojornColors.destructive,
-              ),
+              Icon(Icons.error_outline, size: 64, color: SojornColors.destructive),
               const SizedBox(height: 16),
-              Text(
-                'Something went wrong',
-                style: GoogleFonts.literata(
-                  fontSize: 20,
-                  fontWeight: FontWeight.w600,
-                  color: AppTheme.navyBlue,
-                ),
-              ),
+              Text('Something went wrong',
+                style: GoogleFonts.literata(fontSize: 20, fontWeight: FontWeight.w600, color: AppTheme.navyBlue)),
               const SizedBox(height: 8),
-              Text(
-                _error!,
-                textAlign: TextAlign.center,
-                style: GoogleFonts.inter(
-                  fontSize: 14,
-                  color: AppTheme.textSecondary,
-                ),
-              ),
+              Text(_error!, textAlign: TextAlign.center,
+                style: GoogleFonts.inter(fontSize: 14, color: AppTheme.textSecondary)),
               const SizedBox(height: 24),
               ElevatedButton(
                 onPressed: _loadConversations,
@@ -462,7 +316,7 @@ class _SecureChatFullScreenState extends State<SecureChatFullScreen>
                   foregroundColor: SojornColors.basicWhite,
                   padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
                 ),
-                child: Text('Try Again'),
+                child: const Text('Try Again'),
               ),
             ],
           ),
@@ -470,78 +324,149 @@ class _SecureChatFullScreenState extends State<SecureChatFullScreen>
       );
     }
 
-    if (_conversations.isEmpty) {
-      return Center(
-        child: Padding(
-          padding: const EdgeInsets.all(24),
-          child: Column(
-            mainAxisAlignment: MainAxisAlignment.center,
+    // Apply search + unread filter
+    final visible = _conversations.where((c) {
+      if (_filterUnread && (c.unreadCount == null || c.unreadCount! == 0)) return false;
+      if (_searchQuery.isNotEmpty) {
+        final q = _searchQuery.toLowerCase();
+        final name = (c.otherUserDisplayName ?? '').toLowerCase();
+        final handle = (c.otherUserHandle ?? '').toLowerCase();
+        if (!name.contains(q) && !handle.contains(q)) return false;
+      }
+      return true;
+    }).toList();
+
+    return Column(
+      children: [
+        // ── Search bar ───────────────────────────────────────────────
+        Padding(
+          padding: const EdgeInsets.fromLTRB(16, 12, 16, 8),
+          child: TextField(
+            controller: _searchCtrl,
+            onChanged: (v) => setState(() => _searchQuery = v.trim()),
+            style: GoogleFonts.inter(fontSize: 14, color: AppTheme.navyBlue),
+            decoration: InputDecoration(
+              hintText: 'Search conversations…',
+              hintStyle: GoogleFonts.inter(color: AppTheme.textDisabled, fontSize: 14),
+              prefixIcon: Icon(Icons.search, size: 18, color: AppTheme.textDisabled),
+              suffixIcon: _searchQuery.isNotEmpty
+                  ? IconButton(
+                      icon: Icon(Icons.clear, size: 16, color: AppTheme.textDisabled),
+                      onPressed: () {
+                        _searchCtrl.clear();
+                        setState(() => _searchQuery = '');
+                      },
+                    )
+                  : null,
+              contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+              filled: true,
+              fillColor: AppTheme.cardSurface,
+              enabledBorder: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(12),
+                borderSide: BorderSide(color: AppTheme.border),
+              ),
+              focusedBorder: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(12),
+                borderSide: BorderSide(color: AppTheme.brightNavy, width: 1.5),
+              ),
+            ),
+          ),
+        ),
+
+        // ── Filter chips ─────────────────────────────────────────────
+        Padding(
+          padding: const EdgeInsets.fromLTRB(16, 0, 16, 8),
+          child: Row(
             children: [
-              Icon(
-                Icons.lock,
-                size: 64,
-                color: AppTheme.brightNavy.withValues(alpha: 0.3),
-              ),
-              const SizedBox(height: 16),
-              Text(
-                'No messages yet',
-                style: GoogleFonts.literata(
-                  fontSize: 20,
-                  fontWeight: FontWeight.w600,
-                  color: AppTheme.navyBlue,
-                ),
-              ),
-              const SizedBox(height: 8),
-              Text(
-                'Start a secure conversation with someone',
-                textAlign: TextAlign.center,
-                style: GoogleFonts.inter(
-                  fontSize: 14,
-                  color: AppTheme.textSecondary,
-                ),
-              ),
-              const SizedBox(height: 24),
-              ElevatedButton(
-                onPressed: _showNewConversationSheet,
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: AppTheme.brightNavy,
-                  foregroundColor: SojornColors.basicWhite,
-                  padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
-                ),
-                child: Text('Start Conversation'),
+              _filterChip('All', !_filterUnread, () => setState(() => _filterUnread = false)),
+              const SizedBox(width: 8),
+              _filterChip(
+                'Unread${_conversations.any((c) => (c.unreadCount ?? 0) > 0) ? ' (${_conversations.where((c) => (c.unreadCount ?? 0) > 0).length})' : ''}',
+                _filterUnread,
+                () => setState(() => _filterUnread = true),
               ),
             ],
           ),
         ),
-      );
-    }
 
-    return RefreshIndicator(
-      onRefresh: _loadConversations,
-      color: AppTheme.brightNavy,
-      child: ListView.builder(
-        padding: const EdgeInsets.symmetric(vertical: 8),
-        itemCount: _conversations.length,
-        itemBuilder: (context, index) {
-          final conversation = _conversations[index];
-          return _ConversationTile(
-            conversation: conversation,
-            isSelected: desktopOnTap != null && _selectedConversation?.id == conversation.id,
-            onTap: () {
-              if (desktopOnTap != null) {
-                desktopOnTap(conversation);
-              } else {
-                Navigator.push(
-                  context,
-                  MaterialPageRoute(
-                    builder: (context) => SecureChatScreen(conversation: conversation),
+        // ── List ─────────────────────────────────────────────────────
+        Expanded(
+          child: _conversations.isEmpty
+              ? Center(
+                  child: Padding(
+                    padding: const EdgeInsets.all(24),
+                    child: Column(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        Icon(Icons.lock, size: 56, color: AppTheme.brightNavy.withValues(alpha: 0.2)),
+                        const SizedBox(height: 16),
+                        Text('No messages yet',
+                          style: GoogleFonts.literata(fontSize: 20, fontWeight: FontWeight.w600, color: AppTheme.navyBlue)),
+                        const SizedBox(height: 8),
+                        Text('Start a secure conversation with someone',
+                          textAlign: TextAlign.center,
+                          style: GoogleFonts.inter(fontSize: 14, color: AppTheme.textSecondary)),
+                        const SizedBox(height: 24),
+                        ElevatedButton(
+                          onPressed: _showNewConversationSheet,
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: AppTheme.brightNavy,
+                            foregroundColor: SojornColors.basicWhite,
+                            padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
+                          ),
+                          child: const Text('Start Conversation'),
+                        ),
+                      ],
+                    ),
                   ),
-                );
-              }
-            },
-            onDelete: () => _confirmDeleteConversation(conversation),
-          );
-        },
+                )
+              : visible.isEmpty
+                  ? Center(
+                      child: Text(
+                        _searchQuery.isNotEmpty ? 'No matches for "$_searchQuery"' : 'No unread conversations',
+                        style: GoogleFonts.inter(color: AppTheme.textSecondary, fontSize: 14),
+                      ),
+                    )
+                  : RefreshIndicator(
+                      onRefresh: _loadConversations,
+                      color: AppTheme.brightNavy,
+                      child: ListView.builder(
+                        padding: const EdgeInsets.only(bottom: 80),
+                        itemCount: visible.length,
+                        itemBuilder: (context, index) {
+                          final conv = visible[index];
+                          return _ConversationTile(
+                            conversation: conv,
+                            onTap: () => _openConversation(conv),
+                            onDelete: () => _confirmDeleteConversation(conv),
+                          );
+                        },
+                      ),
+                    ),
+        ),
+      ],
+    );
+  }
+
+  Widget _filterChip(String label, bool selected, VoidCallback onTap) {
+    return GestureDetector(
+      onTap: onTap,
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 150),
+        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 6),
+        decoration: BoxDecoration(
+          color: selected ? AppTheme.brightNavy : AppTheme.cardSurface,
+          borderRadius: BorderRadius.circular(20),
+          border: Border.all(
+            color: selected ? AppTheme.brightNavy : AppTheme.border,
+          ),
+        ),
+        child: Text(label,
+          style: GoogleFonts.inter(
+            fontSize: 13,
+            fontWeight: FontWeight.w500,
+            color: selected ? Colors.white : AppTheme.textSecondary,
+          )),
       ),
     );
   }
@@ -614,13 +539,10 @@ class _ConversationTile extends StatefulWidget {
   final SecureConversation conversation;
   final VoidCallback onTap;
   final VoidCallback onDelete;
-  final bool isSelected;
-
   const _ConversationTile({
     required this.conversation,
     required this.onTap,
     required this.onDelete,
-    this.isSelected = false,
   });
 
   @override
@@ -659,16 +581,9 @@ class _ConversationTileState extends State<_ConversationTile> {
         child: Container(
           margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
           decoration: BoxDecoration(
-            color: widget.isSelected
-                ? AppTheme.royalPurple.withValues(alpha: 0.08)
-                : AppTheme.cardSurface,
+            color: AppTheme.cardSurface,
             borderRadius: BorderRadius.circular(12),
-            border: Border.all(
-              color: widget.isSelected
-                  ? AppTheme.royalPurple.withValues(alpha: 0.3)
-                  : AppTheme.navyBlue.withValues(alpha: 0.1),
-              width: widget.isSelected ? 1.5 : 1,
-            ),
+            border: Border.all(color: AppTheme.navyBlue.withValues(alpha: 0.1)),
           ),
           child: Material(
             color: SojornColors.transparent,
@@ -679,42 +594,14 @@ class _ConversationTileState extends State<_ConversationTile> {
                 padding: const EdgeInsets.all(16),
                 child: Row(
                   children: [
-                    // Avatar
-                    Container(
-                      width: 56,
-                      height: 56,
-                      decoration: BoxDecoration(
-                        color: AppTheme.brightNavy.withValues(alpha: 0.1),
-                        borderRadius: BorderRadius.circular(28),
-                      ),
-                      child: widget.conversation.otherUserAvatarUrl != null
-                          ? ClipRRect(
-                              borderRadius: BorderRadius.circular(28),
-                              child: SignedMediaImage(
-                                url: widget.conversation.otherUserAvatarUrl!,
-                                width: 56,
-                                height: 56,
-                                fit: BoxFit.cover,
-                              ),
-                            )
-                          : Center(
-                              child: Text(
-                                (widget.conversation.otherUserDisplayName ??
-                                            '@${widget.conversation.otherUserHandle ?? 'Unknown'}')
-                                        .isNotEmpty
-                                    ? (widget.conversation.otherUserDisplayName ??
-                                            '@${widget.conversation.otherUserHandle ?? 'Unknown'}')[0]
-                                        .toUpperCase()
-                                    : '?',
-                                style: GoogleFonts.inter(
-                                  color: AppTheme.navyBlue,
-                                  fontWeight: FontWeight.bold,
-                                  fontSize: 20,
-                                ),
-                              ),
-                            ),
+                    // Avatar — rounded square per design system
+                    SojornAvatar(
+                      displayName: widget.conversation.otherUserDisplayName ??
+                          '@${widget.conversation.otherUserHandle ?? 'Unknown'}',
+                      avatarUrl: widget.conversation.otherUserAvatarUrl,
+                      size: 52,
                     ),
-                    const SizedBox(width: 16),
+                    const SizedBox(width: 14),
                     // Content
                     Expanded(
                       child: Column(
@@ -729,53 +616,40 @@ class _ConversationTileState extends State<_ConversationTile> {
                                   style: GoogleFonts.literata(
                                     fontWeight: FontWeight.w600,
                                     color: AppTheme.navyBlue,
-                                    fontSize: 16,
+                                    fontSize: 15,
                                   ),
                                   overflow: TextOverflow.ellipsis,
                                 ),
                               ),
-                              if (widget.conversation.lastMessageAt != null)
-                                Text(
-                                  timeago.format(widget.conversation.lastMessageAt!),
-                                  style: GoogleFonts.inter(
-                                    color: AppTheme.textDisabled,
-                                    fontSize: 12,
-                                  ),
-                                ),
+                              Text(
+                                timeago.format(widget.conversation.lastMessageAt),
+                                style: GoogleFonts.inter(color: AppTheme.textDisabled, fontSize: 12),
+                              ),
                             ],
                           ),
                           const SizedBox(height: 4),
                           Row(
                             children: [
-                              Icon(
-                                Icons.lock,
-                                size: 12,
-                                color: AppTheme.brightNavy.withValues(alpha: 0.5),
-                              ),
+                              Icon(Icons.lock, size: 11,
+                                color: AppTheme.brightNavy.withValues(alpha: 0.4)),
                               const SizedBox(width: 4),
                               Expanded(
-                                  child: Text(
-                                    widget.conversation.lastMessageAt != null
-                                        ? 'Encrypted message'
-                                        : 'Start a conversation',
-                                    style: GoogleFonts.inter(
-                                      color: widget.conversation.lastMessageAt != null
-                                          ? AppTheme.textSecondary
-                                          : AppTheme.textDisabled,
-                                      fontSize: 13,
-                                      fontStyle: widget.conversation.lastMessageAt != null
-                                          ? FontStyle.italic
-                                          : FontStyle.normal,
-                                    ),
-                                    overflow: TextOverflow.ellipsis,
-                                    maxLines: 1,
+                                child: Text(
+                                  'Encrypted message',
+                                  style: GoogleFonts.inter(
+                                    color: AppTheme.textSecondary,
+                                    fontSize: 13,
+                                    fontStyle: FontStyle.italic,
                                   ),
+                                  overflow: TextOverflow.ellipsis,
+                                  maxLines: 1,
                                 ),
-                              ],
-                            ),
-                          ],
-                        ),
+                              ),
+                            ],
+                          ),
+                        ],
                       ),
+                    ),
                       // Unread badge
                       if (widget.conversation.unreadCount != null && widget.conversation.unreadCount! > 0)
                         Container(
