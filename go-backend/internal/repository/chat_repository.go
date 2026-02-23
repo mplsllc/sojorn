@@ -26,8 +26,8 @@ func NewChatRepository(pool *pgxpool.Pool) *ChatRepository {
 func (r *ChatRepository) CreateMessage(ctx context.Context, senderID, receiverID, conversationID uuid.UUID, ciphertext, iv, keyVersion, messageHeader string) (*models.EncryptedMessage, error) {
 	var msg models.EncryptedMessage
 	err := r.pool.QueryRow(ctx, `
-		INSERT INTO public.secure_messages (conversation_id, sender_id, receiver_id, ciphertext, iv, key_version, message_header, created_at)
-		VALUES ($1, $2, $3, $4, $5, $6, $7, NOW())
+		INSERT INTO public.secure_messages (conversation_id, sender_id, receiver_id, ciphertext, iv, key_version, message_header, message_type, created_at)
+		VALUES ($1, $2, $3, $4, $5, $6, $7, 1, NOW())
 		RETURNING id, created_at
 	`, conversationID, senderID, receiverID, ciphertext, iv, keyVersion, messageHeader).Scan(&msg.ID, &msg.CreatedAt)
 
@@ -211,8 +211,8 @@ func (r *ChatRepository) GetMessageInfo(ctx context.Context, messageID uuid.UUID
 // GetConversationParticipants retrieves both participant IDs from a conversation
 func (r *ChatRepository) GetConversationParticipants(ctx context.Context, conversationID uuid.UUID, participant1ID, participant2ID *uuid.UUID) error {
 	return r.pool.QueryRow(ctx, `
-		SELECT participant1_id, participant2_id 
-		FROM public.encrypted_conversations 
+		SELECT participant_a, participant_b
+		FROM public.encrypted_conversations
 		WHERE id = $1
 	`, conversationID).Scan(participant1ID, participant2ID)
 }
