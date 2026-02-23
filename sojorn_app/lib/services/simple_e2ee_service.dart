@@ -192,30 +192,35 @@ class SimpleE2EEService {
 
 
 
-    // 1. Try Local Storage
+    // 1. Try Local Storage — MUST be separated from backend sync so that a network
+    //    failure during backend calls doesn't cause silent fallthrough to step 3,
+    //    which would falsely set _needsVaultRestore on any offline condition.
+    bool localKeysLoaded = false;
     try {
-      final loaded = await _loadKeysFromLocal(userId);
-      if (loaded) {
-        // Test if keys are working by attempting a simple encrypt/decrypt
-        if (await _testKeyCompatibility()) {
-          // Check if keys exist on backend, upload if not
+      localKeysLoaded = await _loadKeysFromLocal(userId);
+    } catch (e) {
+      if (kDebugMode) debugPrint('[E2EE] Local key load error: $e');
+    }
+
+    if (localKeysLoaded) {
+      if (await _testKeyCompatibility()) {
+        // Keys are valid locally. Best-effort: sync state with backend.
+        // Network failures here are non-fatal — the app works with local keys.
+        try {
           if (await _checkKeysExistOnBackend()) {
             final backendValid = await _validateBackendKeyBundle(userId);
-            if (!backendValid) {
-              await _uploadExistingKeys();
-              return;
-            }
-            return;
+            if (!backendValid) await _uploadExistingKeys();
           } else {
             await _uploadExistingKeys();
-            return;
           }
-        } else {
-          await initiateKeyRecovery(userId);
-          return;
+        } catch (e) {
+          if (kDebugMode) debugPrint('[E2EE] Backend key sync skipped (offline): $e');
         }
+        return; // Always return when local keys are valid, regardless of backend sync
+      } else {
+        await initiateKeyRecovery(userId);
+        return;
       }
-    } catch (e) {
     }
 
     // 2. Try Cloud Restore (legacy path — profile-based encrypted key)
@@ -241,10 +246,10 @@ class SimpleE2EEService {
         return; // Do NOT generate new keys — VaultSetupGate will prompt
       }
     } catch (e) {
-      if (kDebugMode) debugPrint('[E2EE] Could not check vault status: $e');
-      // If we can't reach the server, don't generate new keys either —
-      // better to wait than to silently overwrite a backup.
-      _needsVaultRestore = true;
+      if (kDebugMode) debugPrint('[E2EE] Could not check vault status (offline?): $e');
+      // Network unavailable — leave _needsVaultRestore false and return without
+      // generating keys. The VaultSetupGate will stay transparent; on next app
+      // resume/init the check will run again once connectivity is restored.
       return;
     }
 
