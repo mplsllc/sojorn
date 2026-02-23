@@ -372,6 +372,7 @@ func (r *PostRepository) GetPostsByAuthor(ctx context.Context, authorID string, 
 			Handle:      p.AuthorHandle,
 			DisplayName: p.AuthorDisplayName,
 			AvatarURL:   p.AuthorAvatarURL,
+			TrustTier:   p.AuthorTrustTier,
 		}
 		posts = append(posts, p)
 	}
@@ -471,6 +472,7 @@ func (r *PostRepository) GetPostByID(ctx context.Context, postID string, userID 
 		Handle:      p.AuthorHandle,
 		DisplayName: p.AuthorDisplayName,
 		AvatarURL:   p.AuthorAvatarURL,
+		TrustTier:   p.AuthorTrustTier,
 	}
 
 	// Always load reactions (counts and users), but only load user-specific reactions if userID is provided
@@ -703,11 +705,13 @@ func (r *PostRepository) GetSavedPosts(ctx context.Context, userID string, limit
 			EXISTS(SELECT 1 FROM public.post_likes WHERE post_id = p.id AND user_id = $1::uuid) as is_liked,
 			COALESCE(p.is_nsfw, FALSE) as is_nsfw,
 			COALESCE(p.nsfw_reason, '') as nsfw_reason,
-			p.link_preview_url, p.link_preview_title, p.link_preview_description, p.link_preview_image_url, p.link_preview_site_name
+			p.link_preview_url, p.link_preview_title, p.link_preview_description, p.link_preview_image_url, p.link_preview_site_name,
+		COALESCE(t.tier, 'new_user') as author_trust_tier
 		FROM public.post_saves ps
 		JOIN public.posts p ON ps.post_id = p.id
 		JOIN public.profiles pr ON p.author_id = pr.id
 		LEFT JOIN public.post_metrics m ON p.id = m.post_id
+		LEFT JOIN public.trust_state t ON p.author_id = t.user_id
 		WHERE ps.user_id = $1::uuid AND p.deleted_at IS NULL
 		  AND (COALESCE(p.is_nsfw, FALSE) = FALSE OR $4 = TRUE)
 		ORDER BY ps.created_at DESC
@@ -728,6 +732,7 @@ func (r *PostRepository) GetSavedPosts(ctx context.Context, userID string, limit
 			&p.LikeCount, &p.CommentCount, &p.IsLiked,
 			&p.IsNSFW, &p.NSFWReason,
 			&p.LinkPreviewURL, &p.LinkPreviewTitle, &p.LinkPreviewDescription, &p.LinkPreviewImageURL, &p.LinkPreviewSiteName,
+			&p.AuthorTrustTier,
 		)
 		if err != nil {
 			return nil, err
@@ -737,6 +742,7 @@ func (r *PostRepository) GetSavedPosts(ctx context.Context, userID string, limit
 			Handle:      p.AuthorHandle,
 			DisplayName: p.AuthorDisplayName,
 			AvatarURL:   p.AuthorAvatarURL,
+			TrustTier:   p.AuthorTrustTier,
 		}
 		posts = append(posts, p)
 	}
@@ -758,11 +764,13 @@ func (r *PostRepository) GetLikedPosts(ctx context.Context, userID string, limit
 			TRUE as is_liked,
 			COALESCE(p.is_nsfw, FALSE) as is_nsfw,
 			COALESCE(p.nsfw_reason, '') as nsfw_reason,
-			p.link_preview_url, p.link_preview_title, p.link_preview_description, p.link_preview_image_url, p.link_preview_site_name
+			p.link_preview_url, p.link_preview_title, p.link_preview_description, p.link_preview_image_url, p.link_preview_site_name,
+		COALESCE(t.tier, 'new_user') as author_trust_tier
 		FROM public.post_likes pl
 		JOIN public.posts p ON pl.post_id = p.id
 		JOIN public.profiles pr ON p.author_id = pr.id
 		LEFT JOIN public.post_metrics m ON p.id = m.post_id
+		LEFT JOIN public.trust_state t ON p.author_id = t.user_id
 		WHERE pl.user_id = $1::uuid AND p.deleted_at IS NULL
 		  AND (COALESCE(p.is_nsfw, FALSE) = FALSE OR $4 = TRUE)
 		ORDER BY pl.created_at DESC
@@ -783,6 +791,7 @@ func (r *PostRepository) GetLikedPosts(ctx context.Context, userID string, limit
 			&p.LikeCount, &p.CommentCount, &p.IsLiked,
 			&p.IsNSFW, &p.NSFWReason,
 			&p.LinkPreviewURL, &p.LinkPreviewTitle, &p.LinkPreviewDescription, &p.LinkPreviewImageURL, &p.LinkPreviewSiteName,
+			&p.AuthorTrustTier,
 		)
 		if err != nil {
 			return nil, err
@@ -792,6 +801,7 @@ func (r *PostRepository) GetLikedPosts(ctx context.Context, userID string, limit
 			Handle:      p.AuthorHandle,
 			DisplayName: p.AuthorDisplayName,
 			AvatarURL:   p.AuthorAvatarURL,
+			TrustTier:   p.AuthorTrustTier,
 		}
 		posts = append(posts, p)
 	}
@@ -909,6 +919,7 @@ func (r *PostRepository) GetPostChain(ctx context.Context, rootID string, showNS
 			Handle:      p.AuthorHandle,
 			DisplayName: p.AuthorDisplayName,
 			AvatarURL:   p.AuthorAvatarURL,
+			TrustTier:   p.AuthorTrustTier,
 		}
 		posts = append(posts, p)
 	}
@@ -929,12 +940,14 @@ func (r *PostRepository) SearchPosts(ctx context.Context, query string, viewerID
 			pr.handle as author_handle, pr.display_name as author_display_name, COALESCE(pr.avatar_url, '') as author_avatar_url,
 			COALESCE(m.like_count, 0) as like_count, COALESCE(m.comment_count, 0) as comment_count,
 			CASE WHEN $3 != '' THEN EXISTS(SELECT 1 FROM public.post_likes WHERE post_id = p.id AND user_id = $3::uuid) ELSE FALSE END as is_liked,
-			p.link_preview_url, p.link_preview_title, p.link_preview_description, p.link_preview_image_url, p.link_preview_site_name
+			p.link_preview_url, p.link_preview_title, p.link_preview_description, p.link_preview_image_url, p.link_preview_site_name,
+		COALESCE(t.tier, 'new_user') as author_trust_tier
 		FROM public.posts p
 		JOIN public.profiles pr ON p.author_id = pr.id
 		LEFT JOIN public.post_metrics m ON p.id = m.post_id
+		LEFT JOIN public.trust_state t ON p.author_id = t.user_id
 		WHERE (
-			p.body % $1 OR p.body ILIKE '%' || $1 || '%' 
+			p.body % $1 OR p.body ILIKE '%' || $1 || '%'
 			OR $1 = ANY(p.tags)
 		) 
 		  AND p.deleted_at IS NULL AND p.status = 'active'
@@ -989,6 +1002,7 @@ func (r *PostRepository) SearchPosts(ctx context.Context, query string, viewerID
 			&p.AuthorHandle, &p.AuthorDisplayName, &p.AuthorAvatarURL,
 			&p.LikeCount, &p.CommentCount, &p.IsLiked,
 			&p.LinkPreviewURL, &p.LinkPreviewTitle, &p.LinkPreviewDescription, &p.LinkPreviewImageURL, &p.LinkPreviewSiteName,
+			&p.AuthorTrustTier,
 		)
 		if err != nil {
 			return nil, err
@@ -998,6 +1012,7 @@ func (r *PostRepository) SearchPosts(ctx context.Context, query string, viewerID
 			Handle:      p.AuthorHandle,
 			DisplayName: p.AuthorDisplayName,
 			AvatarURL:   p.AuthorAvatarURL,
+			TrustTier:   p.AuthorTrustTier,
 		}
 		posts = append(posts, p)
 	}
@@ -1223,10 +1238,12 @@ func (r *PostRepository) GetPostFocusContext(ctx context.Context, postID string,
 			p.allow_chain, p.visibility,
 			COALESCE(p.is_nsfw, FALSE) as is_nsfw,
 			COALESCE(p.nsfw_reason, '') as nsfw_reason,
-			p.link_preview_url, p.link_preview_title, p.link_preview_description, p.link_preview_image_url, p.link_preview_site_name
+			p.link_preview_url, p.link_preview_title, p.link_preview_description, p.link_preview_image_url, p.link_preview_site_name,
+		COALESCE(t.tier, 'new_user') as author_trust_tier
 		FROM public.posts p
 		JOIN public.profiles pr ON p.author_id = pr.id
 		LEFT JOIN public.post_metrics m ON p.id = m.post_id
+		LEFT JOIN public.trust_state t ON p.author_id = t.user_id
 		WHERE p.chain_parent_id = $1::uuid AND p.deleted_at IS NULL AND p.status = 'active'
 		  AND (
 		      p.author_id = CASE WHEN $2 != '' THEN $2::uuid ELSE NULL END
@@ -1255,6 +1272,7 @@ func (r *PostRepository) GetPostFocusContext(ctx context.Context, postID string,
 			&p.AllowChain, &p.Visibility,
 			&p.IsNSFW, &p.NSFWReason,
 			&p.LinkPreviewURL, &p.LinkPreviewTitle, &p.LinkPreviewDescription, &p.LinkPreviewImageURL, &p.LinkPreviewSiteName,
+			&p.AuthorTrustTier,
 		)
 		if err != nil {
 			return nil, fmt.Errorf("failed to scan child post: %w", err)
@@ -1264,6 +1282,7 @@ func (r *PostRepository) GetPostFocusContext(ctx context.Context, postID string,
 			Handle:      p.AuthorHandle,
 			DisplayName: p.AuthorDisplayName,
 			AvatarURL:   p.AuthorAvatarURL,
+			TrustTier:   p.AuthorTrustTier,
 		}
 
 		// Always load reactions for child post
@@ -1297,6 +1316,7 @@ func (r *PostRepository) GetPostFocusContext(ctx context.Context, postID string,
 				&p.AllowChain, &p.Visibility,
 				&p.IsNSFW, &p.NSFWReason,
 				&p.LinkPreviewURL, &p.LinkPreviewTitle, &p.LinkPreviewDescription, &p.LinkPreviewImageURL, &p.LinkPreviewSiteName,
+				&p.AuthorTrustTier,
 			)
 			if err != nil {
 				return nil, fmt.Errorf("failed to scan parent child post: %w", err)
@@ -1306,6 +1326,7 @@ func (r *PostRepository) GetPostFocusContext(ctx context.Context, postID string,
 				Handle:      p.AuthorHandle,
 				DisplayName: p.AuthorDisplayName,
 				AvatarURL:   p.AuthorAvatarURL,
+				TrustTier:   p.AuthorTrustTier,
 			}
 
 			// Always load reactions for parent child post
@@ -1547,10 +1568,12 @@ func (r *PostRepository) GetPopularPublicPosts(ctx context.Context, viewerID str
 			COALESCE(m.like_count, 0) as like_count, COALESCE(m.comment_count, 0) as comment_count,
 			CASE WHEN ($2::text) != '' THEN EXISTS(SELECT 1 FROM public.post_likes WHERE post_id = p.id AND user_id = $2::text::uuid) ELSE FALSE END as is_liked,
 			p.allow_chain, p.visibility,
-			p.link_preview_url, p.link_preview_title, p.link_preview_description, p.link_preview_image_url, p.link_preview_site_name
+			p.link_preview_url, p.link_preview_title, p.link_preview_description, p.link_preview_image_url, p.link_preview_site_name,
+		COALESCE(t.tier, 'new_user') as author_trust_tier
 		FROM public.posts p
 		JOIN public.profiles pr ON p.author_id = pr.id
 		LEFT JOIN public.post_metrics m ON p.id = m.post_id
+		LEFT JOIN public.trust_state t ON p.author_id = t.user_id
 		WHERE p.deleted_at IS NULL AND p.status = 'active'
 		  AND pr.is_private = FALSE
 		  AND p.visibility = 'public'
@@ -1573,6 +1596,7 @@ func (r *PostRepository) GetPopularPublicPosts(ctx context.Context, viewerID str
 			&p.LikeCount, &p.CommentCount, &p.IsLiked,
 			&p.AllowChain, &p.Visibility,
 			&p.LinkPreviewURL, &p.LinkPreviewTitle, &p.LinkPreviewDescription, &p.LinkPreviewImageURL, &p.LinkPreviewSiteName,
+			&p.AuthorTrustTier,
 		)
 		if err != nil {
 			return nil, err
@@ -1582,6 +1606,7 @@ func (r *PostRepository) GetPopularPublicPosts(ctx context.Context, viewerID str
 			Handle:      p.AuthorHandle,
 			DisplayName: p.AuthorDisplayName,
 			AvatarURL:   p.AuthorAvatarURL,
+			TrustTier:   p.AuthorTrustTier,
 		}
 		posts = append(posts, p)
 	}
