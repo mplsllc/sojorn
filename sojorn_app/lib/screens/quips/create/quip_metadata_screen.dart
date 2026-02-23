@@ -1,8 +1,9 @@
 // Copyright (c) 2026 MPLS LLC
-// Licensed under the Apache License, Version 2.0
-// See LICENSE file for details
+// Licensed under the GNU Affero General Public License v3.0 (AGPL-3.0)
+// See LICENSE file in the project root for full license text.
 
 import 'dart:io';
+import 'package:cross_file/cross_file.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:video_player/video_player.dart';
@@ -54,7 +55,7 @@ class _QuipMetadataScreenState extends ConsumerState<QuipMetadataScreen> {
     // Let's pass the chosen timestamp to startUpload.
     
     uploadNotifier.startUpload(
-      widget.videoFile, 
+      XFile(widget.videoFile.path),
       _captionController.text.trim(),
       thumbnailTimestampMs: _coverTimestamp,
     );

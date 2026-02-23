@@ -155,11 +155,13 @@ func (r *PostRepository) GetFeed(ctx context.Context, userID string, categorySlu
 			COALESCE(p.is_nsfw, FALSE) as is_nsfw,
 			COALESCE(p.nsfw_reason, '') as nsfw_reason,
 			p.link_preview_url, p.link_preview_title, p.link_preview_description, p.link_preview_image_url, p.link_preview_site_name,
-			p.overlay_json
+			p.overlay_json,
+			COALESCE(t.tier, 'new_user') as author_trust_tier
 		FROM public.posts p
 		JOIN public.profiles pr ON p.author_id = pr.id
 		LEFT JOIN public.post_metrics m ON p.id = m.post_id
 		LEFT JOIN public.categories c ON p.category_id = c.id
+		LEFT JOIN public.trust_state t ON p.author_id = t.user_id
 		WHERE p.deleted_at IS NULL AND p.status = 'active'
 		  AND p.chain_parent_id IS NULL
 		  AND COALESCE(p.is_beacon, FALSE) = FALSE
@@ -237,6 +239,7 @@ func (r *PostRepository) GetFeed(ctx context.Context, userID string, categorySlu
 			&p.IsNSFW, &p.NSFWReason,
 			&p.LinkPreviewURL, &p.LinkPreviewTitle, &p.LinkPreviewDescription, &p.LinkPreviewImageURL, &p.LinkPreviewSiteName,
 			&p.OverlayJSON,
+			&p.AuthorTrustTier,
 		)
 		if err != nil {
 			return nil, err
@@ -246,6 +249,7 @@ func (r *PostRepository) GetFeed(ctx context.Context, userID string, categorySlu
 			Handle:      p.AuthorHandle,
 			DisplayName: p.AuthorDisplayName,
 			AvatarURL:   p.AuthorAvatarURL,
+			TrustTier:   p.AuthorTrustTier,
 		}
 		posts = append(posts, p)
 	}
@@ -294,10 +298,12 @@ func (r *PostRepository) GetPostsByAuthor(ctx context.Context, authorID string, 
 			CASE WHEN ($4::text) != '' THEN COALESCE((SELECT jsonb_agg(emoji) FROM public.post_reactions WHERE post_id = p.id AND user_id = $4::text::uuid), '[]'::jsonb) ELSE '[]'::jsonb END as my_reactions,
 			COALESCE(p.is_nsfw, FALSE) as is_nsfw,
 			COALESCE(p.nsfw_reason, '') as nsfw_reason,
-			p.link_preview_url, p.link_preview_title, p.link_preview_description, p.link_preview_image_url, p.link_preview_site_name
+			p.link_preview_url, p.link_preview_title, p.link_preview_description, p.link_preview_image_url, p.link_preview_site_name,
+			COALESCE(t.tier, 'new_user') as author_trust_tier
 		FROM public.posts p
 		JOIN public.profiles pr ON p.author_id = pr.id
 		LEFT JOIN public.post_metrics m ON p.id = m.post_id
+		LEFT JOIN public.trust_state t ON p.author_id = t.user_id
 		WHERE p.author_id = $1::uuid AND p.deleted_at IS NULL AND p.status = 'active'
 		  AND p.is_beacon = FALSE
 		  AND (
@@ -356,6 +362,7 @@ func (r *PostRepository) GetPostsByAuthor(ctx context.Context, authorID string, 
 			&p.LikeCount, &p.CommentCount, &p.IsLiked, &p.AllowChain, &p.Visibility, &p.Reactions, &p.MyReactions,
 			&p.IsNSFW, &p.NSFWReason,
 			&p.LinkPreviewURL, &p.LinkPreviewTitle, &p.LinkPreviewDescription, &p.LinkPreviewImageURL, &p.LinkPreviewSiteName,
+			&p.AuthorTrustTier,
 		)
 		if err != nil {
 			return nil, err
@@ -401,10 +408,12 @@ func (r *PostRepository) GetPostByID(ctx context.Context, postID string, userID 
 			COALESCE(p.is_nsfw, FALSE) as is_nsfw,
 			COALESCE(p.nsfw_reason, '') as nsfw_reason,
 			p.link_preview_url, p.link_preview_title, p.link_preview_description, p.link_preview_image_url, p.link_preview_site_name,
-			p.overlay_json
+			p.overlay_json,
+			COALESCE(t.tier, 'new_user') as author_trust_tier
 		FROM public.posts p
 		JOIN public.profiles pr ON p.author_id = pr.id
 		LEFT JOIN public.post_metrics m ON p.id = m.post_id
+		LEFT JOIN public.trust_state t ON p.author_id = t.user_id
 		WHERE p.id = $1::uuid AND p.deleted_at IS NULL
 		  AND (
 		      -- Author always sees their own posts
@@ -452,6 +461,7 @@ func (r *PostRepository) GetPostByID(ctx context.Context, postID string, userID 
 		&p.IsNSFW, &p.NSFWReason,
 		&p.LinkPreviewURL, &p.LinkPreviewTitle, &p.LinkPreviewDescription, &p.LinkPreviewImageURL, &p.LinkPreviewSiteName,
 		&p.OverlayJSON,
+		&p.AuthorTrustTier,
 	)
 	if err != nil {
 		return nil, err
@@ -859,16 +869,19 @@ func (r *PostRepository) GetPostChain(ctx context.Context, rootID string, showNS
 				AND c.post_id IN (SELECT id FROM object_chain)
 		)
 		SELECT 
-			id, author_id, category_id, body, image_url, video_url, thumbnail_url, duration_ms, tags, created_at, chain_parent_id, level,
-			author_handle, author_display_name, author_avatar_url,
-			like_count, comment_count, is_nsfw, nsfw_reason, FALSE as is_liked
-		FROM object_chain
+			oc.id, oc.author_id, oc.category_id, oc.body, oc.image_url, oc.video_url, oc.thumbnail_url, oc.duration_ms, oc.tags, oc.created_at, oc.chain_parent_id, oc.level,
+			oc.author_handle, oc.author_display_name, oc.author_avatar_url,
+			oc.like_count, oc.comment_count, oc.is_nsfw, oc.nsfw_reason, FALSE as is_liked,
+			COALESCE(t.tier, 'new_user') as author_trust_tier
+		FROM object_chain oc
+		LEFT JOIN public.trust_state t ON oc.author_id = t.user_id
 		UNION ALL
 		SELECT
-			id, author_id, category_id, body, image_url, video_url, thumbnail_url, duration_ms, tags, created_at, chain_parent_id, level,
-			author_handle, author_display_name, author_avatar_url,
-			like_count, comment_count, is_nsfw, nsfw_reason, FALSE as is_liked
-		FROM comments_chain
+			cc.id, cc.author_id, cc.category_id, cc.body, cc.image_url, cc.video_url, cc.thumbnail_url, cc.duration_ms, cc.tags, cc.created_at, cc.chain_parent_id, cc.level,
+			cc.author_handle, cc.author_display_name, cc.author_avatar_url,
+			cc.like_count, cc.comment_count, cc.is_nsfw, cc.nsfw_reason, FALSE as is_liked,
+			'new_user'::text as author_trust_tier
+		FROM comments_chain cc
 		ORDER BY level ASC, created_at ASC;
 	`
 	rows, err := r.pool.Query(ctx, query, rootID, showNSFW)
@@ -886,6 +899,7 @@ func (r *PostRepository) GetPostChain(ctx context.Context, rootID string, showNS
 			&p.ID, &p.AuthorID, &p.CategoryID, &p.Body, &p.ImageURL, &p.VideoURL, &p.ThumbnailURL, &p.DurationMS, &p.Tags, &p.CreatedAt, &p.ChainParentID, &level,
 			&p.AuthorHandle, &p.AuthorDisplayName, &p.AuthorAvatarURL,
 			&p.LikeCount, &p.CommentCount, &p.IsNSFW, &p.NSFWReason, &p.IsLiked,
+			&p.AuthorTrustTier,
 		)
 		if err != nil {
 			return nil, err

@@ -1,6 +1,6 @@
 // Copyright (c) 2026 MPLS LLC
-// Licensed under the Apache License, Version 2.0
-// See LICENSE file for details
+// Licensed under the GNU Affero General Public License v3.0 (AGPL-3.0)
+// See LICENSE file in the project root for full license text.
 
 import 'dart:ui';
 import 'package:flutter/material.dart';
@@ -593,6 +593,27 @@ class _ThreadedConversationScreenState extends ConsumerState<ThreadedConversatio
                   fontSize: 14,
                   fontWeight: FontWeight.w500,
                 ),
+              ),
+              const SizedBox(height: 4),
+              // Timestamp + visibility — matches the feed card metadata line.
+              Row(
+                children: [
+                  Icon(Icons.schedule_outlined, size: 12, color: AppTheme.navyText.withValues(alpha: 0.4)),
+                  const SizedBox(width: 3),
+                  Text(
+                    timeago.format(post.createdAt),
+                    style: GoogleFonts.inter(
+                      color: AppTheme.navyText.withValues(alpha: 0.4),
+                      fontSize: 12,
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  Icon(
+                    post.visibility == 'followers' ? Icons.people_outline : Icons.public,
+                    size: 12,
+                    color: AppTheme.navyText.withValues(alpha: 0.4),
+                  ),
+                ],
               ),
             ],
           ),

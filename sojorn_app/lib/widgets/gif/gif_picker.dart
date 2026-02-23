@@ -1,6 +1,6 @@
 // Copyright (c) 2026 MPLS LLC
-// Licensed under the Apache License, Version 2.0
-// See LICENSE file for details
+// Licensed under the GNU Affero General Public License v3.0 (AGPL-3.0)
+// See LICENSE file in the project root for full license text.
 
 import 'dart:convert';
 import 'package:cached_network_image/cached_network_image.dart';
@@ -232,16 +232,25 @@ class _MemeTabState extends State<_MemeTab>
     }
   }
 
-  /// Searches Reddit's search API across gif-centric subreddits for the given keyword.
+  /// Searches Reddit for GIFs matching [query] within gif-centric subreddits.
+  ///
+  /// Uses Reddit's multireddit search with `restrict_sr=true` so the keyword
+  /// never becomes a subreddit name. A realistic browser User-Agent is required
+  /// — Reddit 429s bare UA strings and returns an HTML redirect, not JSON.
   Future<List<_GifItem>> _searchGifSubreddits(String query) async {
     final subreddit = _defaultSubreddits.join('+');
     final uri = Uri.parse(
         'https://www.reddit.com/r/$subreddit/search.json'
-        '?q=${Uri.encodeComponent(query)}&sort=top&restrict_sr=1&limit=25&type=link');
-    final resp = await http
-        .get(uri, headers: {'User-Agent': 'SojornApp/1.0'})
-        .timeout(const Duration(seconds: 10));
+        '?q=${Uri.encodeComponent(query)}'
+        '&sort=relevance&restrict_sr=true&limit=25&type=link&t=year');
+    final resp = await http.get(uri, headers: {
+      // Reddit blocks bare User-Agents with 429 / HTML redirect.
+      'User-Agent': 'Mozilla/5.0 (compatible; Sojorn/1.0; +https://sojorn.net)',
+      'Accept': 'application/json',
+    }).timeout(const Duration(seconds: 10));
     if (resp.statusCode != 200) return [];
+    // Guard: Reddit sometimes returns HTML (rate-limit / login redirect).
+    if (!resp.body.trimLeft().startsWith('{')) return [];
     final data = jsonDecode(resp.body) as Map<String, dynamic>;
     final children =
         ((data['data'] as Map<String, dynamic>)['children'] as List?) ?? [];
@@ -339,8 +348,16 @@ class _RetroTabState extends State<_RetroTab>
   String _loadedQuery = '';
 
   static const _defaultQuery = 'space';
-  static final _gifUrlRegex = RegExp(
-      r'https://blob\.gifcities\.org/gifcities/[A-Za-z0-9_\-]+\.gif',
+
+  // GifCities (Internet Archive) serves GIFs from two URL formats:
+  //   1. blob.gifcities.org — their primary CDN
+  //   2. web.archive.org/web/... — Wayback Machine GeoCity originals
+  // Split into two RegExp objects to avoid raw-string single-quote termination.
+  static final _blobGifRegex = RegExp(
+      r'https://blob\.gifcities\.org/gifcities/[A-Za-z0-9_.\-/%]+\.gif',
+      caseSensitive: false);
+  static final _archiveGifRegex = RegExp(
+      r'https://web\.archive\.org/web/\d+/[^\s"<>]+\.gif',
       caseSensitive: false);
 
   @override
@@ -434,11 +451,14 @@ class _RetroTabState extends State<_RetroTab>
               'User-Agent': 'Mozilla/5.0 (compatible; SojornApp/1.0)',
             })
             .timeout(const Duration(seconds: 10));
-        final matches = _gifUrlRegex.allMatches(resp.body);
-        if (matches.isNotEmpty) {
+        final allMatches = [
+          ..._blobGifRegex.allMatches(resp.body),
+          ..._archiveGifRegex.allMatches(resp.body),
+        ];
+        if (allMatches.isNotEmpty) {
           final unique = <String>{};
           final result = <_GifItem>[];
-          for (final m in matches) {
+          for (final m in allMatches) {
             final url = m.group(0)!;
             if (unique.add(url)) result.add(_GifItem(url: url, title: ''));
           }

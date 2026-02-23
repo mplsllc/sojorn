@@ -9,7 +9,7 @@ Component                License                  License File
 ─────────────────────    ───────────────────────   ─────────────────────
 Go API Engine            BSL 1.1                   go-backend/LICENSE
 AI Gateway               BSL 1.1                   ai-gateway/LICENSE
-Flutter App              Apache License 2.0        sojorn_app/LICENSE
+Flutter App              AGPL-3.0                  sojorn_app/LICENSE
 Admin Panel              AGPL-3.0                  admin/LICENSE
 Website                  AGPL-3.0                  website/LICENSE
 
@@ -26,18 +26,17 @@ release (Change Date: 2030-02-21 for the initial release).
 
 For commercial licensing inquiries: hello@sojorn.net
 
-Apache License 2.0 Components
-──────────────────────────────
-
-The Flutter mobile/web application is licensed under the Apache License 2.0.
-You may use, modify, and distribute it freely under the terms of that license.
-
 AGPL-3.0 Components
 ────────────────────
 
-The Admin Panel and Website are licensed under the GNU Affero General Public
-License v3.0. If you modify and deploy these components as a network service,
-you must make your modified source code available.
+The Flutter App, Admin Panel, and Website are licensed under the GNU Affero
+General Public License v3.0. If you modify and deploy these components as a
+network service, you must make your modified source code available to users.
+
+The Flutter App license was changed from Apache License 2.0 to AGPL-3.0 in
+February 2026. This change enables direct code sharing with the community of
+AGPL-licensed open source social platforms (Mastodon, Misskey, Pixelfed, etc.)
+while ensuring improvements flow back to the commons.
 
 All Source Code
 ───────────────

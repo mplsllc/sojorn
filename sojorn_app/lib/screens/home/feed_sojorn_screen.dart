@@ -1,11 +1,12 @@
 // Copyright (c) 2026 MPLS LLC
-// Licensed under the Apache License, Version 2.0
-// See LICENSE file for details
+// Licensed under the GNU Affero General Public License v3.0 (AGPL-3.0)
+// See LICENSE file in the project root for full license text.
 
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:geolocator/geolocator.dart';
 import 'package:share_plus/share_plus.dart';
 import '../../providers/api_provider.dart';
 import '../../providers/feed_refresh_provider.dart';
@@ -41,11 +42,72 @@ class _FeedsojornScreenState extends ConsumerState<FeedsojornScreen> {
   final PageController _pageController = PageController();
   late final AdIntegrationService _adService;
 
+  // Positions in the feed where beacon alert cards are injected.
+  static const List<int> _alertInjectionPositions = [2, 7];
+
   @override
   void initState() {
     super.initState();
     _adService = AdIntegrationService(ref.read);
     _loadPosts();
+    _loadNearbyAlerts();
+  }
+
+  /// Fetches geo-alerts within 2 km and injects them into the feed.
+  /// Runs fire-and-forget — the feed loads even if this fails.
+  Future<void> _loadNearbyAlerts() async {
+    try {
+      // Check location permission — skip silently if not granted.
+      final permission = await Geolocator.checkPermission();
+      if (permission == LocationPermission.denied ||
+          permission == LocationPermission.deniedForever) return;
+
+      final position = await Geolocator.getCurrentPosition(
+        locationSettings: const LocationSettings(
+          accuracy: LocationAccuracy.low,
+        ),
+      ).timeout(const Duration(seconds: 5));
+
+      final apiService = ref.read(apiServiceProvider);
+      final alerts = await apiService.fetchNearbyBeacons(
+        lat: position.latitude,
+        long: position.longitude,
+        radius: 2000, // 2 km — only hyperlocal alerts in the feed
+      );
+
+      // Keep only active geo-alerts, sorted by severity (critical first) then recency.
+      final filtered = alerts
+          .where((p) => p.isBeaconPost && (p.beaconType?.isGeoAlert ?? false))
+          .toList()
+        // Sort by recency — most recent safety alerts surface first.
+        ..sort((a, b) => b.createdAt.compareTo(a.createdAt));
+
+      // Cap at 2 injected alerts so the feed doesn't feel like a siren.
+      final capped = filtered.take(_alertInjectionPositions.length).toList();
+
+      if (!mounted || capped.isEmpty) { return; }
+      _setStateIfMounted(() {
+        _feedItems = _injectAlerts(_feedItems, capped);
+      });
+    } catch (_) {
+      // Silent fail — beacon alerts are ambient, never blocking.
+    }
+  }
+
+  /// Injects beacon alert posts into the feed at [_alertInjectionPositions].
+  List<Post> _injectAlerts(List<Post> base, List<Post> alerts) {
+    final result = List<Post>.from(base);
+    // Remove any previously injected alert posts first.
+    result.removeWhere((p) => p.isBeaconPost);
+    for (var i = 0; i < alerts.length; i++) {
+      final pos = _alertInjectionPositions[i];
+      if (pos <= result.length) {
+        result.insert(pos, alerts[i]);
+      } else {
+        result.add(alerts[i]);
+      }
+    }
+    return result;
   }
 
   @override
@@ -98,7 +160,8 @@ class _FeedsojornScreenState extends ConsumerState<FeedsojornScreen> {
       _setStateIfMounted(() {
         if (refresh) {
           _posts = posts;
-          _feedItems = batchItems;
+          // Re-inject any previously loaded beacon alerts into the fresh feed.
+          _feedItems = _injectAlerts(batchItems, []);
         } else {
           _posts.addAll(posts);
           _feedItems.addAll(batchItems);
@@ -118,6 +181,9 @@ class _FeedsojornScreenState extends ConsumerState<FeedsojornScreen> {
         _isLoading = false;
       });
     }
+    // Re-fetch alerts on manual refresh so the most current local safety
+    // information always appears in the freshly loaded feed.
+    if (refresh) _loadNearbyAlerts();
   }
 
   void _onPageChanged(int page) {
@@ -242,9 +308,28 @@ class _FeedsojornScreenState extends ConsumerState<FeedsojornScreen> {
           itemCount: _feedItems.length,
           itemBuilder: (context, index) {
             final post = _feedItems[index];
-            // Check if this is a sponsored post
+            // Sponsored posts get their own full-screen branded slide.
             if (post.isSponsored) {
               return _SponsoredPostSlide(post: post);
+            }
+            // Beacon geo-alerts get an urgent inline alert card that
+            // surfaces hyperlocal safety information without leaving the feed.
+            if (post.isBeaconPost) {
+              return _BeaconAlertFeedSlide(
+                post: post,
+                onViewMap: () {
+                  // Navigate to the Beacons tab (index 2 in the shell).
+                  // The NavigationShellScope is an InheritedWidget ancestor.
+                  final nav = Navigator.of(context, rootNavigator: true);
+                  nav.popUntil((r) => r.isFirst);
+                },
+                onDismiss: () {
+                  if (!mounted) return;
+                  setState(() {
+                    _feedItems.removeAt(index);
+                  });
+                },
+              );
             }
             // Regular post
             return sojornSwipeablePost(
@@ -409,6 +494,251 @@ class _EmptyState extends StatelessWidget {
               textAlign: TextAlign.center,
             ),
           ],
+        ),
+      ),
+    );
+  }
+}
+
+/// A full-screen beacon alert slide inserted into the home feed.
+///
+/// Surfaces hyperlocal safety/community alerts from within 2 km without
+/// the user having to switch to the Beacons tab. The card's left-edge color
+/// and icon match the BeaconType taxonomy, so the visual language is
+/// identical to what users see on the Beacon map.
+class _BeaconAlertFeedSlide extends StatelessWidget {
+  final Post post;
+  final VoidCallback onViewMap;
+  final VoidCallback onDismiss;
+
+  const _BeaconAlertFeedSlide({
+    required this.post,
+    required this.onViewMap,
+    required this.onDismiss,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final beacon = post.toBeacon();
+    final typeColor = post.beaconType?.color ?? AppTheme.error;
+    final isRecent = beacon.isRecent;
+
+    return Container(
+      color: const Color(0xFF0A0A12),
+      child: SafeArea(
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 24),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              // ── Ambient Label ───────────────────────────────────────────
+              Row(
+                children: [
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                    decoration: BoxDecoration(
+                      color: typeColor.withValues(alpha: 0.15),
+                      borderRadius: BorderRadius.circular(20),
+                      border: Border.all(color: typeColor.withValues(alpha: 0.4)),
+                    ),
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Icon(Icons.sensors, size: 12, color: typeColor),
+                        const SizedBox(width: 5),
+                        Text(
+                          'NEARBY BEACON',
+                          style: TextStyle(
+                            color: typeColor,
+                            fontSize: 10,
+                            fontWeight: FontWeight.w800,
+                            letterSpacing: 1.2,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                  const Spacer(),
+                  // Dismiss button
+                  GestureDetector(
+                    onTap: onDismiss,
+                    child: Container(
+                      padding: const EdgeInsets.all(6),
+                      decoration: BoxDecoration(
+                        color: Colors.white.withValues(alpha: 0.08),
+                        shape: BoxShape.circle,
+                      ),
+                      child: Icon(Icons.close, size: 16,
+                          color: Colors.white.withValues(alpha: 0.6)),
+                    ),
+                  ),
+                ],
+              ),
+
+              const Spacer(),
+
+              // ── Main Alert Card ─────────────────────────────────────────
+              Container(
+                padding: const EdgeInsets.all(20),
+                decoration: BoxDecoration(
+                  color: const Color(0xFF141420),
+                  borderRadius: BorderRadius.circular(20),
+                  border: Border(
+                    left: BorderSide(color: typeColor, width: 4),
+                    top: BorderSide(color: typeColor.withValues(alpha: 0.2)),
+                    right: BorderSide(color: typeColor.withValues(alpha: 0.2)),
+                    bottom: BorderSide(color: typeColor.withValues(alpha: 0.2)),
+                  ),
+                ),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    // Type row
+                    Row(
+                      children: [
+                        Container(
+                          width: 40, height: 40,
+                          decoration: BoxDecoration(
+                            color: typeColor.withValues(alpha: 0.15),
+                            borderRadius: BorderRadius.circular(12),
+                          ),
+                          child: Icon(post.beaconType?.icon ?? Icons.warning,
+                              color: typeColor, size: 22),
+                        ),
+                        const SizedBox(width: 12),
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                post.beaconType?.displayName ?? 'Alert',
+                                style: TextStyle(
+                                  color: typeColor,
+                                  fontSize: 13,
+                                  fontWeight: FontWeight.w700,
+                                  letterSpacing: 0.3,
+                                ),
+                              ),
+                              const SizedBox(height: 2),
+                              Row(
+                                children: [
+                                  Icon(Icons.schedule, size: 11,
+                                      color: Colors.white.withValues(alpha: 0.4)),
+                                  const SizedBox(width: 3),
+                                  Text(
+                                    beacon.getTimeAgo(),
+                                    style: TextStyle(
+                                      color: Colors.white.withValues(alpha: 0.4),
+                                      fontSize: 11,
+                                    ),
+                                  ),
+                                  const SizedBox(width: 10),
+                                  Icon(Icons.location_on, size: 11,
+                                      color: Colors.white.withValues(alpha: 0.4)),
+                                  const SizedBox(width: 3),
+                                  Text(
+                                    beacon.getFormattedDistance(),
+                                    style: TextStyle(
+                                      color: Colors.white.withValues(alpha: 0.4),
+                                      fontSize: 11,
+                                    ),
+                                  ),
+                                  if (isRecent) ...[
+                                    const SizedBox(width: 8),
+                                    Container(
+                                      padding: const EdgeInsets.symmetric(
+                                          horizontal: 6, vertical: 2),
+                                      decoration: BoxDecoration(
+                                        color: SojornColors.destructive
+                                            .withValues(alpha: 0.15),
+                                        borderRadius: BorderRadius.circular(4),
+                                      ),
+                                      child: const Text('LIVE',
+                                          style: TextStyle(
+                                            color: SojornColors.destructive,
+                                            fontSize: 9,
+                                            fontWeight: FontWeight.w800,
+                                          )),
+                                    ),
+                                  ],
+                                ],
+                              ),
+                            ],
+                          ),
+                        ),
+                      ],
+                    ),
+
+                    // Body text
+                    if (post.body.isNotEmpty) ...[
+                      const SizedBox(height: 16),
+                      Text(
+                        post.body,
+                        style: const TextStyle(
+                          color: Colors.white,
+                          fontSize: 15,
+                          height: 1.5,
+                        ),
+                        maxLines: 5,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                    ],
+                  ],
+                ),
+              ),
+
+              const SizedBox(height: 20),
+
+              // ── Actions ─────────────────────────────────────────────────
+              Row(
+                children: [
+                  Expanded(
+                    child: FilledButton.icon(
+                      onPressed: onViewMap,
+                      icon: const Icon(Icons.map_outlined, size: 16),
+                      label: const Text('View on Map'),
+                      style: FilledButton.styleFrom(
+                        backgroundColor: typeColor,
+                        foregroundColor: Colors.white,
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(12),
+                        ),
+                        padding: const EdgeInsets.symmetric(vertical: 14),
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: 10),
+                  OutlinedButton(
+                    onPressed: onDismiss,
+                    style: OutlinedButton.styleFrom(
+                      foregroundColor: Colors.white.withValues(alpha: 0.6),
+                      side: BorderSide(
+                          color: Colors.white.withValues(alpha: 0.15)),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                      padding: const EdgeInsets.symmetric(
+                          vertical: 14, horizontal: 20),
+                    ),
+                    child: const Text('Dismiss'),
+                  ),
+                ],
+              ),
+
+              const SizedBox(height: 8),
+
+              // Swipe hint
+              Center(
+                child: Text(
+                  'Swipe to continue your feed',
+                  style: TextStyle(
+                    color: Colors.white.withValues(alpha: 0.25),
+                    fontSize: 11,
+                  ),
+                ),
+              ),
+            ],
+          ),
         ),
       ),
     );

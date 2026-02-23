@@ -1,11 +1,13 @@
 // Copyright (c) 2026 MPLS LLC
-// Licensed under the Apache License, Version 2.0
-// See LICENSE file for details
+// Licensed under the GNU Affero General Public License v3.0 (AGPL-3.0)
+// See LICENSE file in the project root for full license text.
 
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import '../../models/event.dart';
 import '../../models/profile.dart';
+import '../../models/trust_state.dart';
+import '../../models/trust_tier.dart';
 import '../../services/api_service.dart';
 import '../../theme/app_theme.dart';
 import '../../theme/tokens.dart';
@@ -231,6 +233,46 @@ class DesktopProfileCard extends StatelessWidget {
                     maxLines: 2,
                     overflow: TextOverflow.ellipsis,
                   ),
+                ],
+                // Status line — AIM-style ephemeral presence text.
+                if (profile.statusText != null && profile.statusText!.isNotEmpty) ...[
+                  const SizedBox(height: 6),
+                  Row(
+                    children: [
+                      Container(
+                        width: 7,
+                        height: 7,
+                        decoration: BoxDecoration(
+                          color: const Color(0xFF43A047),
+                          shape: BoxShape.circle,
+                          boxShadow: [
+                            BoxShadow(
+                              color: const Color(0xFF43A047).withValues(alpha: 0.4),
+                              blurRadius: 4,
+                            ),
+                          ],
+                        ),
+                      ),
+                      const SizedBox(width: 6),
+                      Expanded(
+                        child: Text(
+                          profile.statusText!,
+                          style: TextStyle(
+                            color: AppTheme.navyText.withValues(alpha: 0.55),
+                            fontSize: 11,
+                            fontStyle: FontStyle.italic,
+                          ),
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      ),
+                    ],
+                  ),
+                ],
+                // Harmony trust badge — visible reward for community contribution.
+                if (profile.trustState != null) ...[
+                  const SizedBox(height: 8),
+                  _TrustBadge(trustState: profile.trustState!),
                 ],
                 const SizedBox(height: 14),
                 // Stats row
@@ -553,7 +595,10 @@ class _Top8FriendsGridState extends State<Top8FriendsGrid> {
               crossAxisCount: 4,
               mainAxisSpacing: 10,
               crossAxisSpacing: 6,
-              childAspectRatio: 0.72,
+              // 0.68 gives each cell ~2px extra headroom so floating-point
+              // rounding in avatar sizing never produces the "OVERFLOWED BY
+              // 0.23px" Flutter debug overlay that appeared in edit mode.
+              childAspectRatio: 0.68,
             ),
             itemCount: widget.friends.length.clamp(0, _maxCount),
             itemBuilder: (context, index) {
@@ -569,7 +614,7 @@ class _Top8FriendsGridState extends State<Top8FriendsGrid> {
                     // Calculate avatar size to fit within the cell, leaving room for text
                     final avatarSize = (constraints.maxWidth * 0.78).clamp(28.0, 42.0);
                     return Column(
-                      mainAxisSize: MainAxisSize.min,
+                      mainAxisSize: MainAxisSize.max,
                       mainAxisAlignment: MainAxisAlignment.center,
                       children: [
                         Container(
@@ -1289,4 +1334,68 @@ class _WaveformPainter extends CustomPainter {
 
   @override
   bool shouldRepaint(covariant CustomPainter oldDelegate) => false;
+}
+
+/// Compact trust tier badge — sidebar profile card + full profile pages.
+class _TrustBadge extends StatelessWidget {
+  final TrustState trustState;
+  const _TrustBadge({required this.trustState});
+
+  @override
+  Widget build(BuildContext context) {
+    final (emoji, label, color) = switch (trustState.tier) {
+      TrustTier.established => ('🌳', 'Established', const Color(0xFF43A047)),
+      TrustTier.trusted     => ('🌿', 'Trusted',     const Color(0xFF26A69A)),
+      TrustTier.new_user    => ('🌱', 'New',         const Color(0xFF78909C)),
+    };
+    final score = trustState.harmonyScore;
+
+    return Row(
+      children: [
+        Container(
+          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+          decoration: BoxDecoration(
+            color: color.withValues(alpha: 0.12),
+            borderRadius: BorderRadius.circular(20),
+            border: Border.all(color: color.withValues(alpha: 0.3)),
+          ),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Text(emoji, style: const TextStyle(fontSize: 11)),
+              const SizedBox(width: 4),
+              Text(label,
+                  style: TextStyle(
+                      color: color,
+                      fontSize: 11,
+                      fontWeight: FontWeight.w700)),
+            ],
+          ),
+        ),
+        const SizedBox(width: 8),
+        Expanded(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              ClipRRect(
+                borderRadius: BorderRadius.circular(2),
+                child: LinearProgressIndicator(
+                  value: (score / 100).clamp(0.0, 1.0),
+                  minHeight: 4,
+                  backgroundColor: color.withValues(alpha: 0.12),
+                  valueColor: AlwaysStoppedAnimation(color),
+                ),
+              ),
+              const SizedBox(height: 2),
+              Text('Harmony $score%',
+                  style: TextStyle(
+                      color: AppTheme.navyText.withValues(alpha: 0.4),
+                      fontSize: 9,
+                      fontWeight: FontWeight.w500)),
+            ],
+          ),
+        ),
+      ],
+    );
+  }
 }

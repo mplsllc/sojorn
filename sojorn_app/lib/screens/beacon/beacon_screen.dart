@@ -1,6 +1,6 @@
 // Copyright (c) 2026 MPLS LLC
-// Licensed under the Apache License, Version 2.0
-// See LICENSE file for details
+// Licensed under the GNU Affero General Public License v3.0 (AGPL-3.0)
+// See LICENSE file in the project root for full license text.
 
 import 'dart:async';
 import 'dart:ui';
@@ -2240,8 +2240,25 @@ class BeaconScreenState extends ConsumerState<BeaconScreen> with TickerProviderS
           size: 36,
         ),
         title: Text(g['name'] ?? '', style: TextStyle(color: SojornColors.postContent, fontSize: 13, fontWeight: FontWeight.w600)),
-        subtitle: Text('${g['member_count'] ?? 0} members · ${g['type'] ?? ''}',
-          style: TextStyle(color: SojornColors.textDisabled, fontSize: 11)),
+        subtitle: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            if ((g['description'] as String?)?.isNotEmpty == true) ...[
+              Text(
+                g['description'] as String,
+                maxLines: 2,
+                overflow: TextOverflow.ellipsis,
+                style: TextStyle(color: SojornColors.postContentLight, fontSize: 11),
+              ),
+              const SizedBox(height: 2),
+            ],
+            Text(
+              '${g['member_count'] ?? 0} member${(g['member_count'] ?? 0) == 1 ? '' : 's'} · ${g['type'] ?? ''}',
+              style: TextStyle(color: SojornColors.textDisabled, fontSize: 11),
+            ),
+          ],
+        ),
         onTap: () {
           final cluster = Cluster.fromJson(g);
           _navigateToCluster(cluster);
@@ -2326,12 +2343,15 @@ class BeaconScreenState extends ConsumerState<BeaconScreen> with TickerProviderS
                   padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
                   child: Row(
                     children: [
-                      _buildGroupCategoryChip(null, 'All', Icons.grid_view, AppTheme.brightNavy),
+                      _buildGroupCategoryChip(null, 'All', Icons.grid_view, AppTheme.brightNavy, _clusters.length),
                       const SizedBox(width: 6),
-                      ...GroupCategory.values.map((cat) => Padding(
-                        padding: const EdgeInsets.only(right: 6),
-                        child: _buildGroupCategoryChip(cat, cat.displayName, cat.icon, cat.color),
-                      )),
+                      ...GroupCategory.values.map((cat) {
+                        final count = _clusters.where((c) => c.category == cat).length;
+                        return Padding(
+                          padding: const EdgeInsets.only(right: 6),
+                          child: _buildGroupCategoryChip(cat, cat.displayName, cat.icon, cat.color, count),
+                        );
+                      }),
                     ],
                   ),
                 ),
@@ -2426,7 +2446,7 @@ class BeaconScreenState extends ConsumerState<BeaconScreen> with TickerProviderS
     );
   }
 
-  Widget _buildGroupCategoryChip(GroupCategory? category, String label, IconData icon, Color color) {
+  Widget _buildGroupCategoryChip(GroupCategory? category, String label, IconData icon, Color color, int count) {
     final isSelected = _selectedGroupCategory == category;
     final selectedColor = AppTheme.navyBlue;
     return Material(
@@ -2447,6 +2467,26 @@ class BeaconScreenState extends ConsumerState<BeaconScreen> with TickerProviderS
             ),
             const SizedBox(width: 6),
             Text(label),
+            if (count > 0) ...[
+              const SizedBox(width: 4),
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1),
+                decoration: BoxDecoration(
+                  color: isSelected
+                      ? SojornColors.basicWhite.withValues(alpha: 0.25)
+                      : AppTheme.navyBlue.withValues(alpha: 0.10),
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                child: Text(
+                  '$count',
+                  style: TextStyle(
+                    fontSize: 10,
+                    fontWeight: FontWeight.w700,
+                    color: isSelected ? SojornColors.basicWhite : AppTheme.navyBlue,
+                  ),
+                ),
+              ),
+            ],
           ],
         ),
         labelStyle: TextStyle(
@@ -2507,14 +2547,27 @@ class BeaconScreenState extends ConsumerState<BeaconScreen> with TickerProviderS
         ),
         child: Row(
           children: [
+            // Avatar: real image if set, otherwise category icon on branded bg.
+            if (cluster.avatarUrl != null && cluster.avatarUrl!.isNotEmpty)
+              ClipRRect(
+                borderRadius: BorderRadius.circular(12),
+                child: SojornAvatar(
+                  displayName: cluster.name,
+                  avatarUrl: cluster.avatarUrl,
+                  size: 42,
+                ),
+              )
+            else
             Container(
               width: 42, height: 42,
               decoration: BoxDecoration(
-                color: isCapsule ? capsuleGreen.withValues(alpha: 0.1) : AppTheme.brightNavy.withValues(alpha: 0.08),
+                color: isCapsule
+                    ? capsuleGreen.withValues(alpha: 0.1)
+                    : cluster.category.color.withValues(alpha: 0.12),
                 borderRadius: BorderRadius.circular(12),
               ),
               child: Icon(
-                isCapsule ? Icons.lock : Icons.location_on,
+                isCapsule ? Icons.lock : cluster.category.icon,
                 color: isCapsule ? capsuleGreen : AppTheme.brightNavy,
                 size: 20,
               ),
@@ -2748,6 +2801,18 @@ class BeaconScreenState extends ConsumerState<BeaconScreen> with TickerProviderS
                       ],
                     ],
                   ),
+                  // ── Crowd-verification buttons ──────────────────────
+                  // Inspired by Ushahidi's incident verification UI —
+                  // turning Beacons from passive broadcasts into a
+                  // crowdsourced ground-truth system.
+                  if (!isOfficial) ...[
+                    const SizedBox(height: 8),
+                    _BeaconVoteRow(
+                      post: post,
+                      beacon: beacon,
+                      apiService: ref.read(apiServiceProvider),
+                    ),
+                  ],
                 ],
               ),
             ),
@@ -3679,6 +3744,240 @@ class _WeatherDetailSheet extends StatelessWidget {
           Text(wx.getTimeAgo(),
             style: TextStyle(color: SojornColors.textDisabled, fontSize: 11)),
         ],
+      ),
+    );
+  }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Beacon crowd-verification vote buttons
+//
+// Inspired by Ushahidi's incident verification UI. Turns every beacon from a
+// passive one-way broadcast into a crowdsourced ground-truth signal.
+//
+// Three actions:
+//   ✓ Confirm  — "I see this too"   → POST /beacons/:id/vouch
+//   ✗ Not there — "Gone / wrong"    → POST /beacons/:id/report
+//   + Context  — Add more detail    → opens a text sheet that appends a comment
+//
+// Vote state is optimistic — UI updates instantly, server sync happens async.
+// ─────────────────────────────────────────────────────────────────────────────
+class _BeaconVoteRow extends StatefulWidget {
+  final Post post;
+  final Beacon beacon;
+  final dynamic apiService; // ApiService — avoid circular import by using dynamic
+
+  const _BeaconVoteRow({
+    required this.post,
+    required this.beacon,
+    required this.apiService,
+  });
+
+  @override
+  State<_BeaconVoteRow> createState() => _BeaconVoteRowState();
+}
+
+class _BeaconVoteRowState extends State<_BeaconVoteRow> {
+  late String? _myVote;         // 'vouch', 'report', or null
+  late int _vouchCount;
+  late int _reportCount;
+  bool _busy = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _myVote = widget.beacon.userVote;
+    _vouchCount = widget.beacon.vouchCount ?? 0;
+    _reportCount = widget.beacon.reportCount ?? 0;
+  }
+
+  Future<void> _cast(String vote) async {
+    if (_busy) return;
+    final wasSameVote = _myVote == vote;
+
+    // Optimistic update
+    setState(() {
+      _busy = true;
+      if (wasSameVote) {
+        // Toggle off
+        if (vote == 'vouch') _vouchCount = (_vouchCount - 1).clamp(0, 9999);
+        if (vote == 'report') _reportCount = (_reportCount - 1).clamp(0, 9999);
+        _myVote = null;
+      } else {
+        // Switch or new vote
+        if (_myVote == 'vouch') _vouchCount = (_vouchCount - 1).clamp(0, 9999);
+        if (_myVote == 'report') _reportCount = (_reportCount - 1).clamp(0, 9999);
+        if (vote == 'vouch') _vouchCount++;
+        if (vote == 'report') _reportCount++;
+        _myVote = vote;
+      }
+    });
+
+    try {
+      if (wasSameVote) {
+        await widget.apiService.removeBeaconVote(widget.post.id);
+      } else if (vote == 'vouch') {
+        await widget.apiService.vouchBeacon(widget.post.id);
+      } else {
+        await widget.apiService.reportBeacon(widget.post.id);
+      }
+    } catch (_) {
+      // Revert on failure
+      if (mounted) {
+        setState(() {
+          _myVote = widget.beacon.userVote;
+          _vouchCount = widget.beacon.vouchCount ?? 0;
+          _reportCount = widget.beacon.reportCount ?? 0;
+        });
+      }
+    } finally {
+      if (mounted) setState(() => _busy = false);
+    }
+  }
+
+  void _addContext() {
+    final ctrl = TextEditingController();
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (ctx) => Padding(
+        padding: EdgeInsets.only(bottom: MediaQuery.of(ctx).viewInsets.bottom),
+        child: Container(
+          decoration: BoxDecoration(
+            color: AppTheme.cardSurface,
+            borderRadius: const BorderRadius.vertical(top: Radius.circular(20)),
+          ),
+          padding: const EdgeInsets.fromLTRB(16, 16, 16, 32),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text('Add context', style: TextStyle(fontSize: 16, fontWeight: FontWeight.w700, color: AppTheme.navyBlue)),
+              const SizedBox(height: 4),
+              Text('Help neighbors understand this alert better.', style: TextStyle(fontSize: 12, color: AppTheme.navyText.withValues(alpha: 0.55))),
+              const SizedBox(height: 12),
+              TextField(
+                controller: ctrl,
+                autofocus: true,
+                maxLength: 280,
+                decoration: const InputDecoration(hintText: 'What else should people know?'),
+              ),
+              const SizedBox(height: 8),
+              SizedBox(
+                width: double.infinity,
+                child: FilledButton(
+                  onPressed: () async {
+                    final text = ctrl.text.trim();
+                    if (text.isEmpty) return;
+                    Navigator.pop(ctx);
+                    try {
+                      // Post a reply chain on the beacon post with the context
+                      await widget.apiService.createPost(body: text, chainParentId: widget.post.id, visibility: 'public');
+                    } catch (_) {}
+                  },
+                  style: FilledButton.styleFrom(backgroundColor: AppTheme.brightNavy),
+                  child: const Text('Submit'),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final isVouched   = _myVote == 'vouch';
+    final isReported  = _myVote == 'report';
+
+    return Row(
+      children: [
+        // Confirm button
+        _VoteChip(
+          label: _vouchCount > 0 ? 'Confirmed ($_vouchCount)' : 'Confirm',
+          icon: Icons.check_circle_outline,
+          activeIcon: Icons.check_circle,
+          isActive: isVouched,
+          activeColor: const Color(0xFF43A047),
+          onTap: () => _cast('vouch'),
+        ),
+        const SizedBox(width: 6),
+        // Not there button
+        _VoteChip(
+          label: 'Not there',
+          icon: Icons.cancel_outlined,
+          activeIcon: Icons.cancel,
+          isActive: isReported,
+          activeColor: SojornColors.destructive,
+          onTap: () => _cast('report'),
+        ),
+        const SizedBox(width: 6),
+        // Add context button
+        _VoteChip(
+          label: 'Add context',
+          icon: Icons.add_comment_outlined,
+          activeIcon: Icons.add_comment,
+          isActive: false,
+          activeColor: AppTheme.egyptianBlue,
+          onTap: _addContext,
+        ),
+      ],
+    );
+  }
+}
+
+class _VoteChip extends StatelessWidget {
+  final String label;
+  final IconData icon;
+  final IconData activeIcon;
+  final bool isActive;
+  final Color activeColor;
+  final VoidCallback onTap;
+
+  const _VoteChip({
+    required this.label,
+    required this.icon,
+    required this.activeIcon,
+    required this.isActive,
+    required this.activeColor,
+    required this.onTap,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return GestureDetector(
+      onTap: onTap,
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 150),
+        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+        decoration: BoxDecoration(
+          color: isActive ? activeColor.withValues(alpha: 0.12) : AppTheme.scaffoldBg,
+          borderRadius: BorderRadius.circular(20),
+          border: Border.all(
+            color: isActive ? activeColor.withValues(alpha: 0.5) : AppTheme.navyBlue.withValues(alpha: 0.12),
+          ),
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(
+              isActive ? activeIcon : icon,
+              size: 12,
+              color: isActive ? activeColor : AppTheme.navyText.withValues(alpha: 0.5),
+            ),
+            const SizedBox(width: 4),
+            Text(
+              label,
+              style: TextStyle(
+                fontSize: 11,
+                fontWeight: isActive ? FontWeight.w700 : FontWeight.w500,
+                color: isActive ? activeColor : AppTheme.navyText.withValues(alpha: 0.55),
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }

@@ -182,6 +182,7 @@ func (h *UserHandler) UpdateProfile(c *gin.Context) {
 		EncryptedPrivateKey *string  `json:"encrypted_private_key"`
 		IsPrivate           *bool    `json:"is_private"`
 		IsOfficial          *bool    `json:"is_official"`
+		StatusText          *string  `json:"status_text"`
 	}
 
 	if err := c.ShouldBindJSON(&req); err != nil {
@@ -226,6 +227,7 @@ func (h *UserHandler) UpdateProfile(c *gin.Context) {
 		EncryptedPrivateKey: req.EncryptedPrivateKey,
 		IsPrivate:           req.IsPrivate,
 		IsOfficial:          req.IsOfficial,
+		StatusText:          req.StatusText,
 	}
 
 	err := h.repo.UpdateProfile(c.Request.Context(), profile)

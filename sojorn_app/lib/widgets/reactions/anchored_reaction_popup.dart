@@ -1,6 +1,6 @@
 // Copyright (c) 2026 MPLS LLC
-// Licensed under the Apache License, Version 2.0
-// See LICENSE file for details
+// Licensed under the GNU Affero General Public License v3.0 (AGPL-3.0)
+// See LICENSE file in the project root for full license text.
 
 import 'dart:math' show min;
 
@@ -233,6 +233,8 @@ class _AnchoredReactionPopupState extends ConsumerState<AnchoredReactionPopup>
                       HapticFeedback.selectionClick();
                       Navigator.of(context).pop();
                       widget.onReaction(emoji);
+                      // Record for the "Recently Used" tray (Misskey pattern).
+                      ref.read(recentReactionsProvider.notifier).recordUse(emoji);
                     },
                     child: AnimatedContainer(
                       duration: const Duration(milliseconds: 120),
@@ -301,10 +303,65 @@ class _AnchoredReactionPopupState extends ConsumerState<AnchoredReactionPopup>
     final tabOrder = package.tabOrder;
     final reactionSets = package.reactionSets;
     final counts = widget.reactionCounts ?? {};
+    // Misskey-pattern: persistently-cached recently-used tray.
+    final recentList = ref.watch(recentReactionsProvider);
 
     return Column(
       key: const ValueKey('expanded'),
       children: [
+        // ── Recently Used tray ─────────────────────────────────────────
+        if (recentList.isNotEmpty && !_isSearching) ...[
+          Padding(
+            padding: const EdgeInsets.fromLTRB(10, 8, 10, 0),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text('Recent',
+                    style: GoogleFonts.inter(
+                        fontSize: 10,
+                        fontWeight: FontWeight.w700,
+                        color: AppTheme.navyText.withValues(alpha: 0.4),
+                        letterSpacing: 0.5)),
+                const SizedBox(height: 4),
+                SingleChildScrollView(
+                  scrollDirection: Axis.horizontal,
+                  child: Row(
+                    children: recentList.map((r) {
+                      final isActive = widget.myReactions.contains(r);
+                      return GestureDetector(
+                        onTap: () {
+                          HapticFeedback.selectionClick();
+                          Navigator.of(context).pop();
+                          widget.onReaction(r);
+                          ref.read(recentReactionsProvider.notifier).recordUse(r);
+                        },
+                        child: AnimatedContainer(
+                          duration: const Duration(milliseconds: 120),
+                          margin: const EdgeInsets.only(right: 4),
+                          padding: const EdgeInsets.all(6),
+                          decoration: BoxDecoration(
+                            color: isActive
+                                ? AppTheme.royalPurple.withValues(alpha: 0.12)
+                                : Colors.transparent,
+                            borderRadius: BorderRadius.circular(8),
+                            border: isActive
+                                ? Border.all(color: AppTheme.royalPurple.withValues(alpha: 0.3))
+                                : null,
+                          ),
+                          child: (r.startsWith('https://') || r.startsWith('asset:'))
+                              ? _buildImageReaction(r)
+                              : Text(r, style: const TextStyle(fontSize: 22)),
+                        ),
+                      );
+                    }).toList(),
+                  ),
+                ),
+                const SizedBox(height: 6),
+                Divider(height: 1, color: AppTheme.navyBlue.withValues(alpha: 0.08)),
+              ],
+            ),
+          ),
+        ],
         // ── Header ────────────────────────────────────────────────────
         Padding(
           padding: const EdgeInsets.fromLTRB(14, 10, 6, 4),
@@ -449,6 +506,7 @@ class _AnchoredReactionPopupState extends ConsumerState<AnchoredReactionPopup>
             Navigator.of(context).pop();
             final result = reaction.startsWith('assets/') ? 'asset:$reaction' : reaction;
             widget.onReaction(result);
+            ref.read(recentReactionsProvider.notifier).recordUse(result);
           },
           borderRadius: BorderRadius.circular(10),
           child: Container(

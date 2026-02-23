@@ -51,6 +51,10 @@ func main() {
 	}
 	defer dbPool.Close()
 
+	// Background service context — cancelled when the server shuts down.
+	bgCtx, bgCancel := context.WithCancel(context.Background())
+	defer bgCancel()
+
 	if err := dbPool.Ping(context.Background()); err != nil {
 		log.Fatal().Err(err).Msg("Unable to ping database")
 	}
@@ -249,6 +253,10 @@ func main() {
 
 	// Dashboard layout handler (customizable home page widgets)
 	dashboardLayoutHandler := handlers.NewDashboardLayoutHandler(dbPool)
+
+	// Harmony Score calculator — daily trust recalculation (Discourse-inspired, clean-room)
+	harmonyCalc := services.NewHarmonyCalculator(dbPool)
+	harmonyCalc.ScheduleDailyRecalculation(bgCtx)
 
 	r.GET("/ws", wsHandler.ServeWS)
 

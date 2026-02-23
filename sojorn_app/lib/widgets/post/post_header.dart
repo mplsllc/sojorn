@@ -1,11 +1,12 @@
 // Copyright (c) 2026 MPLS LLC
-// Licensed under the Apache License, Version 2.0
-// See LICENSE file for details
+// Licensed under the GNU Affero General Public License v3.0 (AGPL-3.0)
+// See LICENSE file in the project root for full license text.
 
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../services/auth_service.dart';
 import '../../models/post.dart';
+import '../../models/trust_tier.dart';
 import '../../providers/api_provider.dart';
 import '../../theme/app_theme.dart';
 import '../../theme/tokens.dart';
@@ -225,6 +226,11 @@ class _PostHeaderState extends ConsumerState<PostHeader> {
                       visibility: _visibility,
                       onTap: _isOwner ? _showPrivacySheet : null,
                     ),
+                    // Harmony tier badge — only shown for trusted/established.
+                    // new_user is the default, showing it adds noise without signal.
+                    if (widget.post.author?.trustState?.tier != null &&
+                        widget.post.author!.trustState!.tier != TrustTier.new_user)
+                      _TierChip(tier: widget.post.author!.trustState!.tier),
                     if (widget.post.isEdited) ...[
                       Text(
                         '·',
@@ -294,15 +300,54 @@ class _PrivacyOption extends StatelessWidget {
     required this.onChanged,
   });
 
+  static const _descriptions = {
+    'public':    'Anyone can see this post',
+    'followers': 'Only your followers can see this',
+    'private':   'Only you can see this',
+  };
+
   @override
   Widget build(BuildContext context) {
     return RadioListTile<String>(
       value: value,
       groupValue: groupValue,
-      title: Text(label),
+      title: Text(label, style: const TextStyle(fontWeight: FontWeight.w600)),
+      subtitle: Text(
+        _descriptions[value] ?? '',
+        style: TextStyle(fontSize: 12, color: AppTheme.navyText.withValues(alpha: 0.55)),
+      ),
+      contentPadding: const EdgeInsets.symmetric(horizontal: 0),
       onChanged: (value) {
         if (value != null) onChanged(value);
       },
+    );
+  }
+}
+
+/// Inline trust tier chip shown in the post author metadata row.
+/// Kept deliberately tiny (10px, pill shape) so it informs without crowding.
+class _TierChip extends StatelessWidget {
+  final TrustTier tier;
+  const _TierChip({required this.tier});
+
+  @override
+  Widget build(BuildContext context) {
+    final (emoji, color) = switch (tier) {
+      TrustTier.established => ('🌳', const Color(0xFF43A047)),
+      TrustTier.trusted     => ('🌿', const Color(0xFF26A69A)),
+      TrustTier.new_user    => ('🌱', const Color(0xFF78909C)),
+    };
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1),
+      decoration: BoxDecoration(
+        color: color.withValues(alpha: 0.10),
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(color: color.withValues(alpha: 0.25)),
+      ),
+      child: Text(
+        emoji,
+        style: const TextStyle(fontSize: 10),
+      ),
     );
   }
 }

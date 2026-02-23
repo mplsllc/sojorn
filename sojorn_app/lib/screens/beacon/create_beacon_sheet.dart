@@ -1,6 +1,6 @@
 // Copyright (c) 2026 MPLS LLC
-// Licensed under the Apache License, Version 2.0
-// See LICENSE file for details
+// Licensed under the GNU Affero General Public License v3.0 (AGPL-3.0)
+// See LICENSE file in the project root for full license text.
 
 import 'dart:io';
 import 'package:flutter/material.dart';
@@ -49,15 +49,20 @@ class _CreateBeaconSheetState extends ConsumerState<CreateBeaconSheet> {
   late final MapController _mapController;
 
   final List<BeaconType> _types = [
-    // Geo-Alerts (map)
+    // ── Geo-Alerts (shown on the map) ────────────────────────────────────
+    BeaconType.safety,
     BeaconType.suspiciousActivity,
     BeaconType.hazard,
     BeaconType.fire,
+    BeaconType.utilityAlert,
+    BeaconType.packageTheft,
+    BeaconType.noiseReport,
+    BeaconType.development,
     BeaconType.officialPresence,
-    BeaconType.safety,
     BeaconType.checkpoint,
     BeaconType.taskForce,
-    // Discussion (board)
+    // ── Discussion (shown on the neighborhood board) ──────────────────────
+    BeaconType.communityGood,
     BeaconType.community,
     BeaconType.lostPet,
     BeaconType.question,
@@ -202,6 +207,16 @@ class _CreateBeaconSheetState extends ConsumerState<CreateBeaconSheet> {
         return 'Date, time, location, what to expect or bring?';
       case BeaconType.resource:
         return 'What are you offering or looking for? How to pick up?';
+      case BeaconType.utilityAlert:
+        return 'What service is affected? Is it restored yet? Approximate area?';
+      case BeaconType.packageTheft:
+        return 'What time? Any description of vehicle or person? Ring camera footage?';
+      case BeaconType.noiseReport:
+        return 'What kind of noise? Address or landmark? Still ongoing?';
+      case BeaconType.development:
+        return 'What\'s being built or changed? Permit posted? Expected timeline?';
+      case BeaconType.communityGood:
+        return 'What\'s available, open, or happening? Where and until when?';
       case BeaconType.camera:
       case BeaconType.sign:
       case BeaconType.weatherStation:

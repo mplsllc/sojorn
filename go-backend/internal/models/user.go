@@ -56,10 +56,13 @@ type Profile struct {
 	EncryptedPrivateKey    *string   `json:"encrypted_private_key" db:"encrypted_private_key"`
 	HasCompletedOnboarding bool      `json:"has_completed_onboarding" db:"has_completed_onboarding"`
 	Role                   string    `json:"role" db:"role"`
-	BirthMonth             int       `json:"birth_month" db:"birth_month"`
-	BirthYear              int       `json:"birth_year" db:"birth_year"`
-	CreatedAt              time.Time `json:"created_at" db:"created_at"`
-	UpdatedAt              time.Time `json:"updated_at" db:"updated_at"`
+	BirthMonth             int        `json:"birth_month" db:"birth_month"`
+	BirthYear              int        `json:"birth_year" db:"birth_year"`
+	// AIM-style ephemeral presence line — max 80 chars.
+	StatusText             *string    `json:"status_text,omitempty" db:"status_text"`
+	StatusUpdatedAt        *time.Time `json:"status_updated_at,omitempty" db:"status_updated_at"`
+	CreatedAt              time.Time  `json:"created_at" db:"created_at"`
+	UpdatedAt              time.Time  `json:"updated_at" db:"updated_at"`
 
 	// Computed fields (not stored in DB)
 	FollowerCount  *int `json:"follower_count,omitempty" db:"-"`

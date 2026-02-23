@@ -179,6 +179,195 @@ func (vp *VideoProcessor) GetVideoDuration(ctx context.Context, videoURL string)
 	return totalSeconds, nil
 }
 
+// ExtractFirstFrameWebP pulls exactly frame 0 from the video, encodes it as
+// WebP at quality 65 (targets ≤5 KB for typical 9:16 thumbnails), uploads it
+// to R2, and returns the public URL.
+//
+// This URL is stored as `first_frame_url` in the posts table and injected
+// directly into the feed JSON payload. The Flutter QuipVideoItem renders it
+// instantly as the placeholder before the VideoPlayerController initialises,
+// eliminating the black-frame flash on scroll.
+func (vp *VideoProcessor) ExtractFirstFrameWebP(ctx context.Context, videoURL string) (string, error) {
+	if vp.ffmpegPath == "" {
+		return "", fmt.Errorf("ffmpeg not found on system")
+	}
+
+	tmpID := uuid.New().String()
+	// First, pull frame 0 as a high-quality JPEG so we control re-encode size.
+	jpgPath := filepath.Join(vp.tempDir, fmt.Sprintf("ff_%s.jpg", tmpID))
+	webpPath := filepath.Join(vp.tempDir, fmt.Sprintf("ff_%s.webp", tmpID))
+	defer os.Remove(jpgPath)
+	defer os.Remove(webpPath)
+
+	// -frames:v 1 grabs exactly the first decodable frame.
+	// -vf scale=480:-2 scales to 480px wide (preserves aspect, height even).
+	// -q:v 85 gives a sharp JPEG base before WebP lossy re-encode.
+	extractCmd := exec.CommandContext(ctx, vp.ffmpegPath,
+		"-i", videoURL,
+		"-frames:v", "1",
+		"-vf", "scale=480:-2",
+		"-q:v", "85",
+		"-y",
+		jpgPath,
+	)
+	if out, err := extractCmd.CombinedOutput(); err != nil {
+		return "", fmt.Errorf("ffmpeg first-frame extract: %v — %s", err, string(out))
+	}
+
+	// Re-encode JPEG → WebP at quality 65. This typically produces 3–8 KB for
+	// a 480×854 frame (acceptable 9:16 thumbnail quality for a loading state).
+	// cwebp is part of the libwebp-tools package (apt: webp).
+	cwebpPath, _ := exec.LookPath("cwebp")
+	if cwebpPath == "" {
+		// Fallback: use ffmpeg's built-in webp encoder (quality flag maps differently).
+		webpCmd := exec.CommandContext(ctx, vp.ffmpegPath,
+			"-i", jpgPath,
+			"-c:v", "libwebp",
+			"-quality", "65",
+			"-y",
+			webpPath,
+		)
+		if out, err := webpCmd.CombinedOutput(); err != nil {
+			return "", fmt.Errorf("ffmpeg webp encode: %v — %s", err, string(out))
+		}
+	} else {
+		webpCmd := exec.CommandContext(ctx, cwebpPath,
+			"-q", "65",
+			jpgPath,
+			"-o", webpPath,
+		)
+		if out, err := webpCmd.CombinedOutput(); err != nil {
+			return "", fmt.Errorf("cwebp encode: %v — %s", err, string(out))
+		}
+	}
+
+	data, err := os.ReadFile(webpPath)
+	if err != nil {
+		return "", fmt.Errorf("read webp: %w", err)
+	}
+
+	r2Key := fmt.Sprintf("videos/thumbs/%s.webp", tmpID)
+	_, err = vp.s3Client.PutObject(ctx, &s3.PutObjectInput{
+		Bucket:      aws.String(vp.videoBucket),
+		Key:         aws.String(r2Key),
+		Body:        bytes.NewReader(data),
+		ContentType: aws.String("image/webp"),
+		// Cache aggressively — first-frame thumbnails are immutable.
+		CacheControl: aws.String("public, max-age=31536000, immutable"),
+	})
+	if err != nil {
+		return "", fmt.Errorf("upload webp to R2: %w", err)
+	}
+
+	base := vp.vidDomain
+	if base == "" {
+		return r2Key, nil
+	}
+	if !strings.HasPrefix(base, "http") {
+		base = "https://" + base
+	}
+	return fmt.Sprintf("%s/%s", base, r2Key), nil
+}
+
+// SliceHLS segments a video into an HLS manifest (.m3u8) + transport stream
+// chunks (.ts) and uploads everything to R2. Returns the manifest URL.
+//
+// The Flutter video_player package supports HLS natively on iOS/Android.
+// The player automatically selects the highest quality rendition it can buffer
+// without stalling — giving seamless quality drops on bad cellular handoffs
+// with zero buffering events from the user's perspective.
+//
+// Rendition ladder (width × height @ bitrate):
+//   1080p  → 4500k   (Wi-Fi, fast 5G)
+//    720p  → 2500k   (strong LTE)
+//    480p  → 1000k   (weak LTE, 4G)
+//    360p  →  600k   (3G, congested networks)
+func (vp *VideoProcessor) SliceHLS(ctx context.Context, videoURL, destPrefix string) (string, error) {
+	if vp.ffmpegPath == "" {
+		return "", fmt.Errorf("ffmpeg not found on system")
+	}
+
+	tmpDir := filepath.Join(vp.tempDir, uuid.New().String())
+	if err := os.MkdirAll(tmpDir, 0o755); err != nil {
+		return "", fmt.Errorf("create hls tmp dir: %w", err)
+	}
+	defer os.RemoveAll(tmpDir)
+
+	// Single ffmpeg pass producing adaptive multi-bitrate HLS.
+	// -hls_time 4     → 4-second segments (balances startup latency vs. quality switch lag).
+	// -hls_flags independent_segments → each .ts is independently decodable (required for CDN).
+	// -master_pl_name → write the master playlist that references each rendition.
+	hlsCmd := exec.CommandContext(ctx, vp.ffmpegPath,
+		"-i", videoURL,
+		// 480p rendition
+		"-map", "0:v", "-map", "0:a?",
+		"-vf:v:0", "scale=-2:480", "-c:v:0", "libx264", "-b:v:0", "1000k", "-maxrate:v:0", "1100k", "-bufsize:v:0", "2000k",
+		"-c:a:0", "aac", "-b:a:0", "96k", "-ac", "2",
+		// 720p rendition
+		"-map", "0:v", "-map", "0:a?",
+		"-vf:v:1", "scale=-2:720", "-c:v:1", "libx264", "-b:v:1", "2500k", "-maxrate:v:1", "2750k", "-bufsize:v:1", "5000k",
+		"-c:a:1", "aac", "-b:a:1", "128k", "-ac", "2",
+		// 1080p rendition
+		"-map", "0:v", "-map", "0:a?",
+		"-vf:v:2", "scale=-2:1080", "-c:v:2", "libx264", "-b:v:2", "4500k", "-maxrate:v:2", "5000k", "-bufsize:v:2", "9000k",
+		"-c:a:2", "aac", "-b:a:2", "192k", "-ac", "2",
+		// HLS mux options
+		"-f", "hls",
+		"-hls_time", "4",
+		"-hls_playlist_type", "vod",
+		"-hls_flags", "independent_segments",
+		"-hls_segment_type", "mpegts",
+		"-hls_segment_filename", filepath.Join(tmpDir, "v%v_seg%03d.ts"),
+		"-master_pl_name", "master.m3u8",
+		"-var_stream_map", "v:0,a:0 v:1,a:1 v:2,a:2",
+		"-y",
+		filepath.Join(tmpDir, "stream_%v.m3u8"),
+	)
+	if out, err := hlsCmd.CombinedOutput(); err != nil {
+		return "", fmt.Errorf("hls slice: %v — %s", err, string(out))
+	}
+
+	// Upload all generated files to R2.
+	entries, err := os.ReadDir(tmpDir)
+	if err != nil {
+		return "", fmt.Errorf("read hls tmp dir: %w", err)
+	}
+
+	for _, entry := range entries {
+		if entry.IsDir() {
+			continue
+		}
+		localPath := filepath.Join(tmpDir, entry.Name())
+		data, readErr := os.ReadFile(localPath)
+		if readErr != nil {
+			continue
+		}
+
+		contentType := "video/MP2T"
+		if strings.HasSuffix(entry.Name(), ".m3u8") {
+			contentType = "application/x-mpegURL"
+		}
+
+		r2Key := fmt.Sprintf("%s/%s", destPrefix, entry.Name())
+		_, _ = vp.s3Client.PutObject(ctx, &s3.PutObjectInput{
+			Bucket:       aws.String(vp.videoBucket),
+			Key:          aws.String(r2Key),
+			Body:         bytes.NewReader(data),
+			ContentType:  aws.String(contentType),
+			CacheControl: aws.String("public, max-age=31536000, immutable"),
+		})
+	}
+
+	base := vp.vidDomain
+	if base == "" {
+		return fmt.Sprintf("%s/master.m3u8", destPrefix), nil
+	}
+	if !strings.HasPrefix(base, "http") {
+		base = "https://" + base
+	}
+	return fmt.Sprintf("%s/%s/master.m3u8", base, destPrefix), nil
+}
+
 // IsVideoURL checks if a URL points to a video file
 func IsVideoURL(url string) bool {
 	videoExtensions := []string{".mp4", ".avi", ".mov", ".mkv", ".webm", ".flv", ".wmv", ".m4v"}

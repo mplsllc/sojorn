@@ -1,6 +1,6 @@
 // Copyright (c) 2026 MPLS LLC
-// Licensed under the Apache License, Version 2.0
-// See LICENSE file for details
+// Licensed under the GNU Affero General Public License v3.0 (AGPL-3.0)
+// See LICENSE file in the project root for full license text.
 
 import 'package:flutter/material.dart';
 import 'package:flutter/foundation.dart';
@@ -383,11 +383,48 @@ class _HomeShellState extends ConsumerState<HomeShell> with WidgetsBindingObserv
             const _OpenCommandPaletteIntent(),
         LogicalKeySet(LogicalKeyboardKey.control, LogicalKeyboardKey.keyK):
             const _OpenCommandPaletteIntent(),
+        // J / K  — vim-style next / previous post in any feed ListView.
+        LogicalKeySet(LogicalKeyboardKey.keyJ): const _ScrollFeedIntent(forward: true),
+        LogicalKeySet(LogicalKeyboardKey.keyK): const _ScrollFeedIntent(forward: false),
+        // /  — jump to Discover (search).
+        LogicalKeySet(LogicalKeyboardKey.slash): const _FocusSearchIntent(),
+        // Esc — dismiss dialogs / slide panels.
+        LogicalKeySet(LogicalKeyboardKey.escape): const _DismissTopIntent(),
       },
       child: Actions(
         actions: <Type, Action<Intent>>{
           _OpenCommandPaletteIntent: CallbackAction<_OpenCommandPaletteIntent>(
             onInvoke: (_) { _showCommandPalette(); return null; },
+          ),
+          _ScrollFeedIntent: CallbackAction<_ScrollFeedIntent>(
+            onInvoke: (intent) {
+              final ctrl = PrimaryScrollController.maybeOf(context);
+              if (ctrl != null && ctrl.hasClients) {
+                final delta = intent.forward ? 320.0 : -320.0;
+                ctrl.animateTo(
+                  (ctrl.offset + delta).clamp(
+                    ctrl.position.minScrollExtent,
+                    ctrl.position.maxScrollExtent,
+                  ),
+                  duration: const Duration(milliseconds: 220),
+                  curve: Curves.easeOut,
+                );
+              }
+              return null;
+            },
+          ),
+          _FocusSearchIntent: CallbackAction<_FocusSearchIntent>(
+            onInvoke: (_) {
+              widget.navigationShell.goBranch(4);
+              return null;
+            },
+          ),
+          _DismissTopIntent: CallbackAction<_DismissTopIntent>(
+            onInvoke: (_) {
+              final nav = Navigator.of(context, rootNavigator: false);
+              if (nav.canPop()) nav.pop();
+              return null;
+            },
           ),
         },
         child: Focus(
@@ -1533,4 +1570,17 @@ class _DesktopNavItemState extends State<_DesktopNavItem> {
 
 class _OpenCommandPaletteIntent extends Intent {
   const _OpenCommandPaletteIntent();
+}
+
+class _ScrollFeedIntent extends Intent {
+  final bool forward;
+  const _ScrollFeedIntent({required this.forward});
+}
+
+class _FocusSearchIntent extends Intent {
+  const _FocusSearchIntent();
+}
+
+class _DismissTopIntent extends Intent {
+  const _DismissTopIntent();
 }

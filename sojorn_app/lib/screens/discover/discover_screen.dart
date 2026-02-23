@@ -1,6 +1,6 @@
 // Copyright (c) 2026 MPLS LLC
-// Licensed under the Apache License, Version 2.0
-// See LICENSE file for details
+// Licensed under the GNU Affero General Public License v3.0 (AGPL-3.0)
+// See LICENSE file in the project root for full license text.
 
 import 'dart:async';
 import '../../models/profile.dart';
@@ -199,8 +199,16 @@ class _DiscoverScreenState extends ConsumerState<DiscoverScreen> {
   }
 
   Future<void> performSearch(String query) async {
-    final normalizedQuery = query.trim();
+    var normalizedQuery = query.trim();
     if (normalizedQuery.isEmpty) return;
+
+    // Hashtag taps pass the full "#tag" string. The backend's hashtag table
+    // stores tags without the "#" prefix, so strip it before sending so the
+    // ILIKE and tag-table lookups both match correctly.
+    // The search bar still displays the original string with "#" to the user.
+    final apiQuery = normalizedQuery.startsWith('#')
+        ? normalizedQuery.substring(1)
+        : normalizedQuery;
     final requestId = ++_searchEpoch;
 
     setState(() {
@@ -210,7 +218,7 @@ class _DiscoverScreenState extends ConsumerState<DiscoverScreen> {
 
     try {
       final apiService = ref.read(apiServiceProvider);
-      final results = await apiService.search(normalizedQuery);
+      final results = await apiService.search(apiQuery);
       if (!mounted || requestId != _searchEpoch) return;
 
       if (results.users.isNotEmpty) {
@@ -243,12 +251,16 @@ class _DiscoverScreenState extends ConsumerState<DiscoverScreen> {
     }
   }
 
+  // Content type filter — filters search results and the discover browse view.
+  String _contentFilter = 'all';
+
   void clearSearch() {
     searchController.clear();
     setState(() {
       searchResults = null;
       hasSearched = false;
       isLoadingSearch = false;
+      _contentFilter = 'all';
     });
     focusNode.unfocus();
   }
@@ -306,26 +318,80 @@ class _DiscoverScreenState extends ConsumerState<DiscoverScreen> {
   }
 
   Widget _buildHeader() {
+    const filters = [
+      ('all', 'All', Icons.apps_outlined),
+      ('posts', 'Posts', Icons.article_outlined),
+      ('people', 'People', Icons.person_outlined),
+      ('hashtags', 'Hashtags', Icons.tag),
+      ('groups', 'Groups', Icons.group_outlined),
+    ];
+
     return Container(
-      padding: const EdgeInsets.fromLTRB(16, 12, 16, 12),
       decoration: BoxDecoration(
         color: AppTheme.cardSurface,
         boxShadow: [
-          BoxShadow(
-            color: const Color(0x0D000000),
-            blurRadius: 10,
-            offset: const Offset(0, 2),
-          ),
+          BoxShadow(color: const Color(0x0D000000), blurRadius: 10, offset: const Offset(0, 2)),
         ],
       ),
-      child: Row(
+      child: Column(
         children: [
-          Expanded(child: _buildSearchField()),
-          if (hasSearched)
-            IconButton(
-              icon: Icon(Icons.close, color: AppTheme.egyptianBlue),
-              onPressed: clearSearch,
+          Padding(
+            padding: const EdgeInsets.fromLTRB(16, 12, 16, 8),
+            child: Row(
+              children: [
+                Expanded(child: _buildSearchField()),
+                if (hasSearched)
+                  IconButton(
+                    icon: Icon(Icons.close, color: AppTheme.egyptianBlue),
+                    onPressed: clearSearch,
+                  ),
+              ],
             ),
+          ),
+          // Content type filter chips — persistent below the search bar.
+          SizedBox(
+            height: 36,
+            child: ListView(
+              scrollDirection: Axis.horizontal,
+              padding: const EdgeInsets.fromLTRB(12, 0, 12, 8),
+              children: filters.map((f) {
+                final (key, label, icon) = f;
+                final selected = _contentFilter == key;
+                return Padding(
+                  padding: const EdgeInsets.only(right: 6),
+                  child: FilterChip(
+                    label: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Icon(icon, size: 13,
+                            color: selected ? Colors.white : AppTheme.egyptianBlue),
+                        const SizedBox(width: 4),
+                        Text(label),
+                      ],
+                    ),
+                    selected: selected,
+                    onSelected: (_) => setState(() => _contentFilter = key),
+                    selectedColor: AppTheme.brightNavy,
+                    backgroundColor: AppTheme.scaffoldBg,
+                    labelStyle: TextStyle(
+                      color: selected ? Colors.white : AppTheme.egyptianBlue,
+                      fontSize: 12,
+                      fontWeight: selected ? FontWeight.w700 : FontWeight.w500,
+                    ),
+                    side: BorderSide(
+                      color: selected
+                          ? AppTheme.brightNavy
+                          : AppTheme.egyptianBlue.withValues(alpha: 0.3),
+                    ),
+                    showCheckmark: false,
+                    padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 0),
+                    visualDensity: VisualDensity.compact,
+                    materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                  ),
+                );
+              }).toList(),
+            ),
+          ),
         ],
       ),
     );
@@ -417,17 +483,40 @@ class _DiscoverScreenState extends ConsumerState<DiscoverScreen> {
                   return Padding(
                     padding: const EdgeInsets.only(right: 10),
                     child: ActionChip(
-                      label: Text('#${tag.displayName}'),
-                      labelStyle: TextStyle(
-                        color: AppTheme.royalPurple,
-                        fontWeight: FontWeight.w600,
-                        fontSize: 14,
+                      label: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Text('#${tag.displayName}',
+                              style: TextStyle(
+                                color: AppTheme.royalPurple,
+                                fontWeight: FontWeight.w600,
+                                fontSize: 14,
+                              )),
+                          if (tag.useCount > 0) ...[
+                            const SizedBox(width: 6),
+                            Container(
+                              padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                              decoration: BoxDecoration(
+                                color: AppTheme.royalPurple.withValues(alpha: 0.15),
+                                borderRadius: BorderRadius.circular(10),
+                              ),
+                              child: Text(
+                                tag.useCount >= 1000
+                                    ? '${(tag.useCount / 1000).toStringAsFixed(1)}k'
+                                    : '${tag.useCount}',
+                                style: TextStyle(
+                                  fontSize: 11,
+                                  fontWeight: FontWeight.w700,
+                                  color: AppTheme.royalPurple,
+                                ),
+                              ),
+                            ),
+                          ],
+                        ],
                       ),
-                      backgroundColor: AppTheme.royalPurple.withValues(alpha: 0.1),
-                      side: BorderSide.none,
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(20),
-                      ),
+                      backgroundColor: AppTheme.royalPurple.withValues(alpha: 0.08),
+                      side: BorderSide(color: AppTheme.royalPurple.withValues(alpha: 0.2)),
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
                       onPressed: () => _navigateToHashtag(tag.name),
                     ),
                   );
@@ -515,28 +604,42 @@ class _DiscoverScreenState extends ConsumerState<DiscoverScreen> {
         (searchResults!.users.isEmpty &&
             searchResults!.tags.isEmpty &&
             searchResults!.posts.isEmpty)) {
+      final isHashtag = searchController.text.trim().startsWith('#');
       return Center(
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            Icon(Icons.search_off,
-                size: 64, color: AppTheme.egyptianBlue.withValues(alpha: 0.5)),
+            Icon(
+              isHashtag ? Icons.tag : Icons.search_off,
+              size: 64,
+              color: AppTheme.egyptianBlue.withValues(alpha: 0.5),
+            ),
             const SizedBox(height: 16),
-            Text('No results found',
-                style: AppTheme.headlineSmall
-                    .copyWith(color: AppTheme.navyText.withValues(alpha: 0.7))),
+            Text(
+              isHashtag ? 'No posts with this hashtag yet' : 'No results found',
+              style: AppTheme.headlineSmall
+                  .copyWith(color: AppTheme.navyText.withValues(alpha: 0.7)),
+            ),
             const SizedBox(height: 8),
-            Text('Try a different search term',
-                style: AppTheme.bodyMedium.copyWith(color: AppTheme.egyptianBlue)),
+            Text(
+              isHashtag
+                  ? 'Be the first to post ${searchController.text.trim()}'
+                  : 'Try a different search term',
+              style: AppTheme.bodyMedium.copyWith(color: AppTheme.egyptianBlue),
+            ),
           ],
         ),
       );
     }
 
+    final showPeople   = _contentFilter == 'all' || _contentFilter == 'people';
+    final showHashtags = _contentFilter == 'all' || _contentFilter == 'hashtags';
+    final showPosts    = _contentFilter == 'all' || _contentFilter == 'posts';
+
     return ListView(
       padding: const EdgeInsets.symmetric(vertical: 16),
       children: [
-        if (searchResults!.users.isNotEmpty) ...[
+        if (showPeople && searchResults!.users.isNotEmpty) ...[
           _buildSectionHeader('People', icon: Icons.people),
           SizedBox(
             height: 100,
@@ -544,15 +647,12 @@ class _DiscoverScreenState extends ConsumerState<DiscoverScreen> {
               scrollDirection: Axis.horizontal,
               padding: const EdgeInsets.symmetric(horizontal: 16),
               itemCount: searchResults!.users.length,
-              itemBuilder: (context, index) {
-                final user = searchResults!.users[index];
-                return _buildUserResultItem(user);
-              },
+              itemBuilder: (context, index) => _buildUserResultItem(searchResults!.users[index]),
             ),
           ),
           const SizedBox(height: 24),
         ],
-        if (searchResults!.tags.isNotEmpty) ...[
+        if (showHashtags && searchResults!.tags.isNotEmpty) ...[
           _buildSectionHeader('Hashtags', icon: Icons.tag),
           ...searchResults!.tags.map((tag) => Padding(
                 padding: const EdgeInsets.symmetric(horizontal: 16),
@@ -560,13 +660,27 @@ class _DiscoverScreenState extends ConsumerState<DiscoverScreen> {
               )),
           const SizedBox(height: 24),
         ],
-        if (searchResults!.posts.isNotEmpty) ...[
+        if (showPosts && searchResults!.posts.isNotEmpty) ...[
           _buildSectionHeader('Posts', icon: Icons.article),
           ...searchResults!.posts.map((post) => Padding(
                 padding: const EdgeInsets.symmetric(horizontal: 16),
                 child: _buildPostResultItem(post),
               )),
         ],
+        // If the active filter has no results for this query, say so clearly.
+        if (!showPeople && !showHashtags && !showPosts ||
+            (showPeople && searchResults!.users.isEmpty &&
+             showHashtags && searchResults!.tags.isEmpty &&
+             showPosts && searchResults!.posts.isEmpty))
+          Center(
+            child: Padding(
+              padding: const EdgeInsets.only(top: 48),
+              child: Text(
+                'No ${_contentFilter == 'all' ? '' : '$_contentFilter '}results',
+                style: AppTheme.bodyMedium.copyWith(color: AppTheme.egyptianBlue),
+              ),
+            ),
+          ),
       ],
     );
   }

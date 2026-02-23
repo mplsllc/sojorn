@@ -1,6 +1,6 @@
 // Copyright (c) 2026 MPLS LLC
-// Licensed under the Apache License, Version 2.0
-// See LICENSE file for details
+// Licensed under the GNU Affero General Public License v3.0 (AGPL-3.0)
+// See LICENSE file in the project root for full license text.
 
 import 'package:flutter/material.dart';
 import 'package:sojorn/models/profile_widgets.dart';
@@ -56,13 +56,12 @@ class _DraggableWidgetGridState extends State<DraggableWidgetGrid> {
   }
 
   void _onWidgetReordered(int oldIndex, int newIndex) {
+    if (!widget.isEditable) return;
     if (oldIndex == newIndex) return;
 
     setState(() {
-      final widget = _widgets.removeAt(oldIndex);
-      _widgets.insert(newIndex, widget);
-      
-      // Update order values
+      final moved = _widgets.removeAt(oldIndex);
+      _widgets.insert(newIndex, moved);
       for (int i = 0; i < _widgets.length; i++) {
         _widgets[i] = _widgets[i].copyWith(order: i);
       }
@@ -248,6 +247,15 @@ class _DraggableWidgetGridState extends State<DraggableWidgetGrid> {
         break;
       case ProfileWidgetType.quote:
         _showQuoteEdit(widget, index);
+        break;
+      // Read-only or non-editable types — no editor available yet.
+      case ProfileWidgetType.pinnedPosts:
+      case ProfileWidgetType.musicWidget:
+      case ProfileWidgetType.photoGrid:
+      case ProfileWidgetType.bio:
+      case ProfileWidgetType.stats:
+      case ProfileWidgetType.beaconActivity:
+      case ProfileWidgetType.featuredFriends:
         break;
     }
   }
@@ -530,7 +538,7 @@ class _DraggableWidgetGridState extends State<DraggableWidgetGrid> {
         Expanded(
           child: ReorderableListView.builder(
             key: _gridKey,
-            onReorder: widget.isEditable ? _onWidgetReordered : null,
+            onReorder: _onWidgetReordered,
             itemCount: _widgets.length,
             itemBuilder: (context, index) {
               final pw = _widgets[index];

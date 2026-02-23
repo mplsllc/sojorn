@@ -1,6 +1,6 @@
 // Copyright (c) 2026 MPLS LLC
-// Licensed under the Apache License, Version 2.0
-// See LICENSE file for details
+// Licensed under the GNU Affero General Public License v3.0 (AGPL-3.0)
+// See LICENSE file in the project root for full license text.
 
 import 'dart:ui';
 import 'package:flutter/material.dart';
@@ -23,6 +23,7 @@ import 'post/post_view_mode.dart';
 import 'chain_quote_widget.dart';
 import '../routes/app_routes.dart';
 import 'modals/sanctuary_sheet.dart';
+
 
 
 /// Unified Post Card - Single Source of Truth for post display.
@@ -74,7 +75,6 @@ class sojornPostCard extends ConsumerStatefulWidget {
 
 class _sojornPostCardState extends ConsumerState<sojornPostCard> {
   bool _nsfwRevealed = false;
-  bool _hovering = false;
 
   Post get post => widget.post;
   PostViewMode get mode => widget.mode;
@@ -148,35 +148,16 @@ class _sojornPostCardState extends ConsumerState<sojornPostCard> {
 
     final isDesktop = MediaQuery.of(context).size.width >= 900;
 
+    // _HoverShell owns all hover/shadow state. When the mouse enters/exits,
+    // only the thin AnimatedDecoratedBox shadow layer repaints. The card
+    // content tree is behind its own RepaintBoundary and is never diffed.
     return GestureDetector(
       onSecondaryTapDown: isDesktop
           ? (details) => _showContextMenu(context, details.globalPosition)
           : null,
-      child: MouseRegion(
-      onEnter: isDesktop ? (_) => setState(() => _hovering = true) : null,
-      onExit: isDesktop ? (_) => setState(() => _hovering = false) : null,
-      child: Material(
-      color: SojornColors.transparent,
-      child: AnimatedContainer(
-        duration: const Duration(milliseconds: 200),
-        curve: Curves.easeOut,
-        margin: EdgeInsets.only(bottom: _isThread ? 4 : 16),
-        decoration: BoxDecoration(
-          color: AppTheme.cardSurface,
-          borderRadius: BorderRadius.circular(_isThread ? 12 : 20),
-          border: _isThread
-              ? Border.all(color: AppTheme.navyBlue.withValues(alpha: 0.06), width: 1)
-              : Border.all(color: AppTheme.navyBlue.withValues(alpha: 0.1), width: 1),
-          boxShadow: _isThread
-              ? []
-              : [
-                  BoxShadow(
-                    color: AppTheme.brightNavy.withValues(alpha: _hovering && isDesktop ? 0.18 : 0.12),
-                    blurRadius: _hovering && isDesktop ? 28 : 20,
-                    offset: Offset(0, _hovering && isDesktop ? 10 : 6),
-                  ),
-                ],
-        ),
+      child: _HoverShell(
+        isDesktop: isDesktop,
+        isThread: _isThread,
         child: ClipRRect(
           borderRadius: BorderRadius.circular(_isThread ? 12 : 20),
           child: Container(
@@ -491,16 +472,20 @@ class _sojornPostCardState extends ConsumerState<sojornPostCard> {
 
 
 
-                // Actions section - with padding
+                // Actions section — isolated behind RepaintBoundary so that
+                // reaction animations (pulsing icons, counter increments) never
+                // dirty the parent card layout layer.
                 const SizedBox(height: 10),
                 Padding(
                   padding: EdgeInsets.symmetric(horizontal: _padding.left),
-                  child: PostActions(
-                    post: post,
-                    onChain: onChain,
-                    onPostChanged: onPostChanged,
-                    isThreadView: _effectiveThreadView,
-                    showReactions: _effectiveThreadView,
+                  child: RepaintBoundary(
+                    child: PostActions(
+                      post: post,
+                      onChain: onChain,
+                      onPostChanged: onPostChanged,
+                      isThreadView: _effectiveThreadView,
+                      showReactions: _effectiveThreadView,
+                    ),
                   ),
                 ),
                 const SizedBox(height: 2),
@@ -509,8 +494,6 @@ class _sojornPostCardState extends ConsumerState<sojornPostCard> {
           ),
         ),
       ),
-    ),
-    ),
     );
   }
 
@@ -549,6 +532,102 @@ class _sojornPostCardState extends ConsumerState<sojornPostCard> {
           isDestructive: true,
         ),
       ],
+    );
+  }
+}
+
+/// Isolates hover-driven shadow animation behind a [RepaintBoundary].
+///
+/// Problem solved: the old [AnimatedContainer] + [MouseRegion] + [Material]
+/// stack lived INSIDE [sojornPostCard.build], so every mouse-enter/exit event
+/// called setState on the card state, causing Flutter to diff the entire
+/// ~500-node widget tree and mark the whole card dirty.
+///
+/// Solution: move all hover state into this leaf widget. The outer card body
+/// is passed as [child] and is automatically placed behind its own
+/// RepaintBoundary — meaning the Skia raster layer for the card content is
+/// cached and never redrawn on hover events. Only the animated shadow layer
+/// (a single [DecoratedBox] draw call) is repainted.
+class _HoverShell extends StatefulWidget {
+  final Widget child;
+  final bool isDesktop;
+  final bool isThread;
+
+  const _HoverShell({
+    required this.child,
+    required this.isDesktop,
+    required this.isThread,
+  });
+
+  @override
+  State<_HoverShell> createState() => _HoverShellState();
+}
+
+class _HoverShellState extends State<_HoverShell>
+    with SingleTickerProviderStateMixin {
+  late final AnimationController _ctrl;
+  late final Animation<double> _shadowAnim;
+
+  @override
+  void initState() {
+    super.initState();
+    _ctrl = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 180),
+    );
+    _shadowAnim = CurvedAnimation(parent: _ctrl, curve: Curves.easeOut);
+  }
+
+  @override
+  void dispose() {
+    _ctrl.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return MouseRegion(
+      onEnter: widget.isDesktop ? (_) => _ctrl.forward() : null,
+      onExit: widget.isDesktop ? (_) => _ctrl.reverse() : null,
+      child: AnimatedBuilder(
+        animation: _shadowAnim,
+        builder: (context, child) {
+          return Container(
+            margin: EdgeInsets.only(bottom: widget.isThread ? 4 : 16),
+            decoration: BoxDecoration(
+              color: AppTheme.cardSurface,
+              borderRadius: BorderRadius.circular(widget.isThread ? 12 : 20),
+              border: widget.isThread
+                  ? Border.all(
+                      color: AppTheme.navyBlue.withValues(alpha: 0.06),
+                      width: 1,
+                    )
+                  : Border.all(
+                      color: AppTheme.navyBlue.withValues(alpha: 0.1),
+                      width: 1,
+                    ),
+              boxShadow: widget.isThread
+                  ? const []
+                  : [
+                      BoxShadow(
+                        color: AppTheme.brightNavy.withValues(
+                          alpha: 0.12 + _shadowAnim.value * 0.06,
+                        ),
+                        blurRadius: 20 + _shadowAnim.value * 8,
+                        offset: Offset(0, 6 + _shadowAnim.value * 4),
+                      ),
+                    ],
+            ),
+            // RepaintBoundary ensures the child's raster layer is cached.
+            // When _shadowAnim fires, only the outer Container is recomposited;
+            // the card content subtree below this boundary is untouched.
+            child: RepaintBoundary(child: child),
+          );
+        },
+        // child is hoisted outside AnimatedBuilder so it is never rebuilt
+        // during animation — Flutter re-uses the same Element subtree.
+        child: widget.child,
+      ),
     );
   }
 }

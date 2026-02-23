@@ -1,8 +1,9 @@
 // Copyright (c) 2026 MPLS LLC
-// Licensed under the Apache License, Version 2.0
-// See LICENSE file for details
+// Licensed under the GNU Affero General Public License v3.0 (AGPL-3.0)
+// See LICENSE file in the project root for full license text.
 
 import 'trust_state.dart';
+import 'trust_tier.dart';
 
 /// User profile model matching backend profiles table
 class Profile {
@@ -27,6 +28,10 @@ class Profile {
   final bool hasCompletedOnboarding;
   final int birthMonth;
   final int birthYear;
+  /// AIM-style presence line: "at the coffee shop", "working from home", etc.
+  /// Null = no status. Max 80 chars enforced server-side.
+  final String? statusText;
+  final DateTime? statusUpdatedAt;
 
   Profile({
     required this.id,
@@ -50,6 +55,8 @@ class Profile {
     this.hasCompletedOnboarding = false,
     this.birthMonth = 0,
     this.birthYear = 0,
+    this.statusText,
+    this.statusUpdatedAt,
   });
 
   factory Profile.fromJson(Map<String, dynamic> json) {
@@ -76,9 +83,19 @@ class Profile {
           ? DateTime.parse(createdAtValue)
           : DateTime.fromMillisecondsSinceEpoch(0),
       updatedAt: updatedAtValue != null ? DateTime.parse(updatedAtValue) : null,
+      // Full trust_state object (own profile API) → parse as-is.
+      // Flat trust_tier string (author embedded in post/feed) → synthesise a
+      // minimal TrustState so the Harmony badge can render without a full fetch.
       trustState: json['trust_state'] != null
           ? TrustState.fromJson(json['trust_state'] as Map<String, dynamic>)
-          : null,
+          : json['trust_tier'] != null
+              ? TrustState(
+                  userId: json['id'] as String? ?? '',
+                  tier: TrustTier.fromString(json['trust_tier'] as String),
+                  harmonyScore: 0,
+                  postsToday: 0,
+                )
+              : null,
       location: json['location'] as String?,
       website: json['website'] as String?,
       interests: interests,
@@ -91,6 +108,10 @@ class Profile {
       hasCompletedOnboarding: json['has_completed_onboarding'] as bool? ?? false,
       birthMonth: json['birth_month'] as int? ?? 0,
       birthYear: json['birth_year'] as int? ?? 0,
+      statusText: json['status_text'] as String?,
+      statusUpdatedAt: json['status_updated_at'] != null
+          ? DateTime.tryParse(json['status_updated_at'] as String)
+          : null,
     );
   }
 
@@ -117,6 +138,8 @@ class Profile {
       'has_completed_onboarding': hasCompletedOnboarding,
       'birth_month': birthMonth,
       'birth_year': birthYear,
+      if (statusText != null) 'status_text': statusText,
+      if (statusUpdatedAt != null) 'status_updated_at': statusUpdatedAt!.toIso8601String(),
     };
   }
 
@@ -142,6 +165,8 @@ class Profile {
     bool? hasCompletedOnboarding,
     int? birthMonth,
     int? birthYear,
+    String? statusText,
+    DateTime? statusUpdatedAt,
   }) {
     return Profile(
       id: id ?? this.id,
@@ -165,6 +190,8 @@ class Profile {
       hasCompletedOnboarding: hasCompletedOnboarding ?? this.hasCompletedOnboarding,
       birthMonth: birthMonth ?? this.birthMonth,
       birthYear: birthYear ?? this.birthYear,
+      statusText: statusText ?? this.statusText,
+      statusUpdatedAt: statusUpdatedAt ?? this.statusUpdatedAt,
     );
   }
 }

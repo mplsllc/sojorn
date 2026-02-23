@@ -1,6 +1,6 @@
 // Copyright (c) 2026 MPLS LLC
-// Licensed under the Apache License, Version 2.0
-// See LICENSE file for details
+// Licensed under the GNU Affero General Public License v3.0 (AGPL-3.0)
+// See LICENSE file in the project root for full license text.
 
 import 'package:flutter/material.dart';
 import '../services/api_service.dart';
@@ -31,7 +31,7 @@ class _SuggestedUsersSectionState extends State<SuggestedUsersSection> {
   Future<void> _loadSuggestions() async {
     setState(() => _isLoading = true);
     try {
-      final api = ApiService();
+      final api = ApiService.instance;
       final suggestions = await api.getSuggestedUsers(limit: 10);
       if (mounted) {
         setState(() {
@@ -180,7 +180,7 @@ class __SuggestedUserCardState extends State<_SuggestedUserCard> {
       onTap: () {
         Navigator.of(context).push(
           MaterialPageRoute(
-            builder: (_) => ViewableProfileScreen(userId: userId),
+            builder: (_) => UnifiedProfileScreen(handle: userId),
           ),
         );
       },

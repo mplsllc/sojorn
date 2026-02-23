@@ -1,6 +1,6 @@
 // Copyright (c) 2026 MPLS LLC
-// Licensed under the Apache License, Version 2.0
-// See LICENSE file for details
+// Licensed under the GNU Affero General Public License v3.0 (AGPL-3.0)
+// See LICENSE file in the project root for full license text.
 
 import 'dart:async';
 
@@ -1199,6 +1199,24 @@ class _UnifiedProfileScreenState extends ConsumerState<UnifiedProfileScreen>
                   ),
                   textAlign: TextAlign.center,
                 ),
+                const SizedBox(height: 20),
+                FilledButton.icon(
+                  onPressed: () => Navigator.of(context).push(
+                    MaterialPageRoute(
+                      builder: (_) => const ComposeScreen(),
+                      fullscreenDialog: true,
+                    ),
+                  ),
+                  icon: const Icon(Icons.link, size: 16),
+                  label: const Text('Start a Chain'),
+                  style: FilledButton.styleFrom(
+                    backgroundColor: AppTheme.royalPurple,
+                    foregroundColor: Colors.white,
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(10),
+                    ),
+                  ),
+                ),
               ],
             ),
           ),
@@ -1885,6 +1903,41 @@ class _ProfileHeader extends StatelessWidget {
                   ),
                 ),
               ],
+              // ── Status line (AIM-style presence) ───────────────────────
+              if (profile.statusText != null && profile.statusText!.isNotEmpty) ...[
+                const SizedBox(height: 8),
+                Row(
+                  children: [
+                    Container(
+                      width: 7, height: 7,
+                      decoration: BoxDecoration(
+                        color: const Color(0xFF43A047),
+                        shape: BoxShape.circle,
+                        boxShadow: [BoxShadow(color: const Color(0xFF43A047).withValues(alpha: 0.5), blurRadius: 5)],
+                      ),
+                    ),
+                    const SizedBox(width: 6),
+                    Flexible(
+                      child: Text(
+                        profile.statusText!,
+                        style: TextStyle(
+                          color: Colors.white.withValues(alpha: 0.75),
+                          fontSize: 12,
+                          fontStyle: FontStyle.italic,
+                          shadows: [Shadow(color: Colors.black.withValues(alpha: 0.4), blurRadius: 4)],
+                        ),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                    ),
+                  ],
+                ),
+              ],
+              // ── Harmony trust badge ─────────────────────────────────────
+              if (profile.trustState != null) ...[
+                const SizedBox(height: 8),
+                _ProfileTrustBadge(trustState: profile.trustState!),
+              ],
             ],
           ),
         ),
@@ -2526,5 +2579,52 @@ class _SliverTabBarDelegate extends SliverPersistentHeaderDelegate {
   @override
   bool shouldRebuild(_SliverTabBarDelegate oldDelegate) {
     return false;
+  }
+}
+
+/// Harmony trust badge rendered in the profile header (gradient banner context).
+/// Uses white-tinted palette so it reads over any banner color.
+class _ProfileTrustBadge extends StatelessWidget {
+  final TrustState trustState;
+  const _ProfileTrustBadge({required this.trustState});
+
+  @override
+  Widget build(BuildContext context) {
+    final (emoji, label) = switch (trustState.tier) {
+      TrustTier.established => ('🌳', 'Established'),
+      TrustTier.trusted     => ('🌿', 'Trusted'),
+      TrustTier.new_user    => ('🌱', 'New'),
+    };
+    final score = trustState.harmonyScore;
+
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Container(
+          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+          decoration: BoxDecoration(
+            color: Colors.white.withValues(alpha: 0.15),
+            borderRadius: BorderRadius.circular(20),
+            border: Border.all(color: Colors.white.withValues(alpha: 0.25)),
+          ),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Text(emoji, style: const TextStyle(fontSize: 11)),
+              const SizedBox(width: 4),
+              Text(
+                '$label · Harmony $score%',
+                style: const TextStyle(
+                  color: Colors.white,
+                  fontSize: 11,
+                  fontWeight: FontWeight.w600,
+                  shadows: [Shadow(color: Colors.black38, blurRadius: 4)],
+                ),
+              ),
+            ],
+          ),
+        ),
+      ],
+    );
   }
 }

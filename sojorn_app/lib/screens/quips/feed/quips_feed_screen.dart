@@ -1,6 +1,6 @@
 // Copyright (c) 2026 MPLS LLC
-// Licensed under the Apache License, Version 2.0
-// See LICENSE file for details
+// Licensed under the GNU Affero General Public License v3.0 (AGPL-3.0)
+// See LICENSE file in the project root for full license text.
 
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -622,7 +622,9 @@ class _QuipsFeedScreenState extends ConsumerState<QuipsFeedScreen>
           Expanded(
             child: Center(
               child: Container(
-                constraints: const BoxConstraints(maxWidth: 520),
+                // 680px fills desktop viewports better than the old 520px,
+                // which left ~400px of dead space on each side of the video.
+                constraints: const BoxConstraints(maxWidth: 680),
                 child: AspectRatio(
                   aspectRatio: 9 / 16,
                   child: ClipRRect(

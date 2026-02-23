@@ -1,6 +1,6 @@
 // Copyright (c) 2026 MPLS LLC
-// Licensed under the Apache License, Version 2.0
-// See LICENSE file for details
+// Licensed under the GNU Affero General Public License v3.0 (AGPL-3.0)
+// See LICENSE file in the project root for full license text.
 
 import 'package:flutter/material.dart';
 import '../theme/tokens.dart';
@@ -64,8 +64,15 @@ enum BeaconType {
   sign('sign', 'Road Sign', 'MN DOT electronic road sign', Icons.signpost, Color(0xFFFFAB00), BeaconMode.geoAlert),
   weatherStation('weather_station', 'Weather Station', 'MN DOT road weather sensor', Icons.cloud, Color(0xFF42A5F5), BeaconMode.geoAlert),
 
+  // ── Additional geo-alerts ──────────────────────────────────────────────
+  utilityAlert('utility_alert', 'Utility Alert', 'Power outage, water main break, gas leak', Icons.power_off, Color(0xFFE91E63), BeaconMode.geoAlert),
+  packageTheft('package_theft', 'Package Theft', 'Porch pirate / stolen delivery', Icons.inventory_2, Color(0xFF795548), BeaconMode.geoAlert),
+  noiseReport('noise_report', 'Noise Report', 'Construction noise, loud event, fireworks', Icons.volume_up, Color(0xFFFF7043), BeaconMode.geoAlert),
+  development('development', 'Development', 'New construction, road closures, zoning', Icons.construction, Color(0xFF607D8B), BeaconMode.geoAlert),
+
   // ── Discussion (rendered on the Neighborhood Board) ───────────────────
   community('community', 'Community Event', 'Helpful (Food drives, Meetups)', Icons.volunteer_activism, Color(0xFF009688), BeaconMode.discussion),
+  communityGood('community_good', 'Community Good', 'Free items, open gardens, local wins', Icons.favorite, Color(0xFF43A047), BeaconMode.discussion),
   lostPet('lost_pet', 'Lost Pet', 'Help find a missing pet', Icons.pets, Color(0xFF8D6E63), BeaconMode.discussion),
   question('question', 'General Question', 'Ask your neighborhood something', Icons.help_outline, Color(0xFF78909C), BeaconMode.discussion),
   event('event', 'Local Event', 'Share an upcoming event nearby', Icons.event, Color(0xFF7E57C2), BeaconMode.discussion),

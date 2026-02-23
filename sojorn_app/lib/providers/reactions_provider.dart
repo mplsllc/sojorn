@@ -1,6 +1,6 @@
 // Copyright (c) 2026 MPLS LLC
-// Licensed under the Apache License, Version 2.0
-// See LICENSE file for details
+// Licensed under the GNU Affero General Public License v3.0 (AGPL-3.0)
+// See LICENSE file in the project root for full license text.
 
 import 'dart:convert';
 
@@ -8,6 +8,7 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:http/http.dart' as http;
+import 'package:shared_preferences/shared_preferences.dart';
 
 const _cdnBase = 'https://reactions.sojorn.net';
 
@@ -144,3 +145,47 @@ const _defaultEmoji = [
   '😍', '🤣', '😊', '👌', '🙌', '💪',
   '🎯', '⭐', '✨', '🌟', '💫', '☀️',
 ];
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Recently-Used Reactions (Misskey-inspired)
+//
+// Misskey keeps a persistent "recently used" tray at the top of the reaction
+// picker so your most-used emojis are always one tap away. We replicate this
+// with a SharedPreferences-backed LRU list, capped at 8 entries.
+// ─────────────────────────────────────────────────────────────────────────────
+
+const _recentReactionsKey = 'recent_reactions_v1';
+const _recentReactionsMaxSize = 8;
+
+/// Provides the current recently-used reaction list.
+final recentReactionsProvider =
+    NotifierProvider<RecentReactionsNotifier, List<String>>(
+  RecentReactionsNotifier.new,
+);
+
+class RecentReactionsNotifier extends Notifier<List<String>> {
+  @override
+  List<String> build() {
+    // Load async on first build — state starts empty and updates when ready.
+    Future.microtask(_load);
+    return [];
+  }
+
+  Future<void> _load() async {
+    final prefs = await SharedPreferences.getInstance();
+    final saved = prefs.getStringList(_recentReactionsKey) ?? [];
+    state = saved;
+  }
+
+  /// Records a reaction use — inserts at front, deduplicates, caps at 8.
+  /// Call this wherever a user picks a reaction in the app.
+  Future<void> recordUse(String reaction) async {
+    final updated = [
+      reaction,
+      ...state.where((r) => r != reaction),
+    ].take(_recentReactionsMaxSize).toList();
+    state = updated;
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setStringList(_recentReactionsKey, updated);
+  }
+}

@@ -1,6 +1,6 @@
 // Copyright (c) 2026 MPLS LLC
-// Licensed under the Apache License, Version 2.0
-// See LICENSE file for details
+// Licensed under the GNU Affero General Public License v3.0 (AGPL-3.0)
+// See LICENSE file in the project root for full license text.
 
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
@@ -282,6 +282,45 @@ class _GroupChatTabState extends State<GroupChatTab> {
     }
   }
 
+  /// Interleaves date-separator sentinels into the message list.
+  ///
+  /// Returns a flat list of either [Map<String, dynamic>] (message) or
+  /// [DateTime] (date separator label). The ListView renders each type
+  /// differently so users can see "Today", "Yesterday", or "Mar 15" headers
+  /// between groups of messages from different days.
+  List<dynamic> _buildChatItems() {
+    final items = <dynamic>[];
+    DateTime? lastDate;
+    for (final msg in _messages) {
+      final rawDate = msg['created_at']?.toString();
+      DateTime? msgDate;
+      if (rawDate != null) {
+        try {
+          final local = DateTime.parse(rawDate).toLocal();
+          msgDate = DateTime(local.year, local.month, local.day);
+        } catch (_) {}
+      }
+      if (msgDate != null && msgDate != lastDate) {
+        items.add(msgDate); // date separator sentinel
+        lastDate = msgDate;
+      }
+      items.add(msg);
+    }
+    return items;
+  }
+
+  /// Human-readable date label for a chat separator.
+  String _dateSeparatorLabel(DateTime date) {
+    final now = DateTime.now();
+    final today = DateTime(now.year, now.month, now.day);
+    final yesterday = today.subtract(const Duration(days: 1));
+    if (date == today) return 'Today';
+    if (date == yesterday) return 'Yesterday';
+    // e.g. "Feb 21"
+    const months = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+    return '${months[date.month - 1]} ${date.day}${date.year != today.year ? ', ${date.year}' : ''}';
+  }
+
   @override
   Widget build(BuildContext context) {
     return Column(
@@ -305,22 +344,32 @@ class _GroupChatTabState extends State<GroupChatTab> {
                     )
                   : RefreshIndicator(
                       onRefresh: _loadMessages,
-                      child: ListView.builder(
-                        controller: _scrollCtrl,
-                        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-                        itemCount: _messages.length,
-                        itemBuilder: (_, i) {
-                          final msg = _messages[i];
-                          final isMine = msg['author_id']?.toString() == widget.currentUserId;
-                          return _ChatBubble(
-                            message: msg,
-                            isMine: isMine,
-                            isEncrypted: widget.isEncrypted,
-                            timeStr: _timeStr(msg['created_at']?.toString()),
-                            gifUrl: msg['gif_url'] as String?,
-                            onReport: (!isMine && widget.isEncrypted)
-                                ? () => _reportMessage(msg)
-                                : null,
+                      child: Builder(
+                        builder: (_) {
+                          final items = _buildChatItems();
+                          return ListView.builder(
+                            controller: _scrollCtrl,
+                            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                            itemCount: items.length,
+                            itemBuilder: (_, i) {
+                              final item = items[i];
+                              // Date separator sentinel
+                              if (item is DateTime) {
+                                return _DateSeparator(label: _dateSeparatorLabel(item));
+                              }
+                              final msg = item as Map<String, dynamic>;
+                              final isMine = msg['author_id']?.toString() == widget.currentUserId;
+                              return _ChatBubble(
+                                message: msg,
+                                isMine: isMine,
+                                isEncrypted: widget.isEncrypted,
+                                timeStr: _timeStr(msg['created_at']?.toString()),
+                                gifUrl: msg['gif_url'] as String?,
+                                onReport: (!isMine && widget.isEncrypted)
+                                    ? () => _reportMessage(msg)
+                                    : null,
+                              );
+                            },
                           );
                         },
                       ),
@@ -371,79 +420,169 @@ class _ChatBubble extends StatelessWidget {
     final body = message['body'] as String? ?? '';
     final handle = message['author_handle'] as String? ?? '';
     final displayName = message['author_display_name'] as String? ?? handle;
+    final avatarUrl = message['author_avatar_url'] as String?;
 
-    return Align(
-      alignment: isMine ? Alignment.centerRight : Alignment.centerLeft,
-      child: GestureDetector(
-        onLongPress: onReport,
-        child: Container(
-        margin: const EdgeInsets.symmetric(vertical: 3),
-        constraints: BoxConstraints(maxWidth: MediaQuery.of(context).size.width * 0.78),
-        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
-        decoration: BoxDecoration(
-          color: isMine
-              ? (isEncrypted ? const Color(0xFFE8F5E9) : AppTheme.brightNavy.withValues(alpha: 0.08))
-              : AppTheme.cardSurface,
-          borderRadius: BorderRadius.only(
-            topLeft: const Radius.circular(16),
-            topRight: const Radius.circular(16),
-            bottomLeft: Radius.circular(isMine ? 16 : 4),
-            bottomRight: Radius.circular(isMine ? 4 : 16),
-          ),
-          border: isMine ? null : Border.all(color: AppTheme.navyBlue.withValues(alpha: 0.06)),
+    // Color scheme: mine = brand blue + white text / others = light gray + dark text.
+    final bubbleBg = isMine
+        ? (isEncrypted ? const Color(0xFF2E7D32) : AppTheme.brightNavy)
+        : const Color(0xFFF1F5F9);
+    final textColor = isMine ? Colors.white : SojornColors.postContent;
+    final metaColor = isMine
+        ? Colors.white.withValues(alpha: 0.65)
+        : SojornColors.textDisabled;
+
+    Widget bubble = Container(
+      margin: const EdgeInsets.symmetric(vertical: 2),
+      constraints: BoxConstraints(maxWidth: MediaQuery.of(context).size.width * 0.72),
+      padding: const EdgeInsets.symmetric(horizontal: 13, vertical: 9),
+      decoration: BoxDecoration(
+        color: bubbleBg,
+        borderRadius: BorderRadius.only(
+          topLeft: const Radius.circular(16),
+          topRight: const Radius.circular(16),
+          bottomLeft: Radius.circular(isMine ? 16 : 4),
+          bottomRight: Radius.circular(isMine ? 4 : 16),
         ),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            // Always show sender name
-            Padding(
-              padding: const EdgeInsets.only(bottom: 3),
-              child: Row(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Text(
-                    isMine ? 'You' : (displayName.isNotEmpty ? displayName : handle),
-                    style: TextStyle(
-                      color: isMine
-                          ? (isEncrypted ? const Color(0xFF4CAF50) : AppTheme.brightNavy)
-                          : AppTheme.navyBlue,
-                      fontSize: 11,
-                      fontWeight: FontWeight.w600,
-                    ),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          // Sender name + time
+          Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              if (!isMine) ...[
+                Text(
+                  displayName.isNotEmpty ? displayName : handle,
+                  style: TextStyle(
+                    color: AppTheme.navyBlue,
+                    fontSize: 11,
+                    fontWeight: FontWeight.w700,
                   ),
-                  if (handle.isNotEmpty && !isMine) ...[
-                    const SizedBox(width: 4),
-                    Text('@$handle', style: TextStyle(color: SojornColors.textDisabled, fontSize: 10)),
-                  ],
-                  const SizedBox(width: 6),
-                  Text(timeStr, style: TextStyle(color: SojornColors.textDisabled, fontSize: 10)),
-                ],
+                ),
+                const SizedBox(width: 4),
+              ],
+              Text(timeStr, style: TextStyle(color: metaColor, fontSize: 10)),
+            ],
+          ),
+          const SizedBox(height: 3),
+          if (body.isNotEmpty)
+            Text(body, style: TextStyle(color: textColor, fontSize: 14, height: 1.35)),
+          if (gifUrl != null) ...[
+            if (body.isNotEmpty) const SizedBox(height: 6),
+            ClipRRect(
+              borderRadius: BorderRadius.circular(10),
+              child: CachedNetworkImage(
+                imageUrl: ApiConfig.needsProxy(gifUrl!)
+                    ? ApiConfig.proxyImageUrl(gifUrl!)
+                    : gifUrl!,
+                width: 200,
+                fit: BoxFit.cover,
+                placeholder: (_, __) => Container(
+                  width: 200, height: 120,
+                  color: AppTheme.navyBlue.withValues(alpha: 0.05),
+                  child: Icon(Icons.gif_outlined, color: AppTheme.textSecondary, size: 32),
+                ),
+                errorWidget: (_, __, ___) => const SizedBox.shrink(),
               ),
             ),
-            if (body.isNotEmpty)
-              Text(body, style: TextStyle(color: SojornColors.postContent, fontSize: 14, height: 1.35)),
-            if (gifUrl != null) ...[
-              if (body.isNotEmpty) const SizedBox(height: 6),
-              ClipRRect(
-                borderRadius: BorderRadius.circular(10),
-                child: CachedNetworkImage(
-                  imageUrl: ApiConfig.needsProxy(gifUrl!)
-                      ? ApiConfig.proxyImageUrl(gifUrl!)
-                      : gifUrl!,
-                  width: 200,
-                  fit: BoxFit.cover,
-                  placeholder: (_, __) => Container(
-                    width: 200, height: 120,
-                    color: AppTheme.navyBlue.withValues(alpha: 0.05),
-                    child: Icon(Icons.gif_outlined, color: AppTheme.textSecondary, size: 32),
-                  ),
-                  errorWidget: (_, __, ___) => const SizedBox.shrink(),
-                ),
-              ),
+          ],
+        ],
+      ),
+    );
+
+    return GestureDetector(
+      onLongPress: onReport,
+      child: Padding(
+        padding: EdgeInsets.only(
+          left: isMine ? 48 : 0,
+          right: isMine ? 0 : 48,
+          top: 2, bottom: 2,
+        ),
+        child: Row(
+          crossAxisAlignment: CrossAxisAlignment.end,
+          mainAxisAlignment: isMine ? MainAxisAlignment.end : MainAxisAlignment.start,
+          children: [
+            // Avatar for other users' messages
+            if (!isMine) ...[
+              _MiniAvatar(handle: handle, avatarUrl: avatarUrl),
+              const SizedBox(width: 6),
             ],
+            Flexible(child: bubble),
           ],
         ),
-        ),
+      ),
+    );
+  }
+}
+
+/// 28px rounded-square avatar for chat bubbles.
+class _MiniAvatar extends StatelessWidget {
+  final String handle;
+  final String? avatarUrl;
+  const _MiniAvatar({required this.handle, this.avatarUrl});
+
+  @override
+  Widget build(BuildContext context) {
+    final initial = handle.isNotEmpty ? handle[0].toUpperCase() : '?';
+    final hue = (handle.hashCode % 360).toDouble();
+    final bg = HSLColor.fromAHSL(1.0, hue, 0.45, 0.55).toColor();
+    return Container(
+      width: 28, height: 28,
+      decoration: BoxDecoration(color: bg, borderRadius: BorderRadius.circular(8)),
+      child: avatarUrl != null && avatarUrl!.isNotEmpty
+          ? ClipRRect(
+              borderRadius: BorderRadius.circular(8),
+              child: CachedNetworkImage(
+                imageUrl: avatarUrl!,
+                width: 28, height: 28,
+                fit: BoxFit.cover,
+                errorWidget: (_, __, ___) => Center(
+                  child: Text(initial,
+                      style: const TextStyle(color: Colors.white, fontSize: 12, fontWeight: FontWeight.w700)),
+                ),
+              ),
+            )
+          : Center(
+              child: Text(initial,
+                  style: const TextStyle(color: Colors.white, fontSize: 12, fontWeight: FontWeight.w700)),
+            ),
+    );
+  }
+}
+
+/// Horizontal date separator — "Today", "Yesterday", or "Mar 15".
+class _DateSeparator extends StatelessWidget {
+  final String label;
+  const _DateSeparator({required this.label});
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 12),
+      child: Row(
+        children: [
+          Expanded(child: Divider(color: AppTheme.navyBlue.withValues(alpha: 0.1), thickness: 1)),
+          const SizedBox(width: 12),
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 3),
+            decoration: BoxDecoration(
+              color: AppTheme.scaffoldBg,
+              borderRadius: BorderRadius.circular(12),
+              border: Border.all(color: AppTheme.navyBlue.withValues(alpha: 0.1)),
+            ),
+            child: Text(
+              label,
+              style: TextStyle(
+                fontSize: 11,
+                fontWeight: FontWeight.w600,
+                color: AppTheme.navyText.withValues(alpha: 0.45),
+              ),
+            ),
+          ),
+          const SizedBox(width: 12),
+          Expanded(child: Divider(color: AppTheme.navyBlue.withValues(alpha: 0.1), thickness: 1)),
+        ],
       ),
     );
   }

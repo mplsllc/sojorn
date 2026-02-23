@@ -1,6 +1,6 @@
 // Copyright (c) 2026 MPLS LLC
-// Licensed under the Apache License, Version 2.0
-// See LICENSE file for details
+// Licensed under the GNU Affero General Public License v3.0 (AGPL-3.0)
+// See LICENSE file in the project root for full license text.
 
 import 'package:flutter/material.dart';
 import 'package:cached_network_image/cached_network_image.dart';
@@ -177,7 +177,7 @@ class ProfileWidgetRenderer extends StatelessWidget {
                 Text(
                   currentTrack['artist'] ?? 'Unknown Artist',
                   style: TextStyle(
-                    color: theme.textColor.withOpacity(0.7),
+                    color: theme.textColor.withValues(alpha: 0.7),
                     fontSize: 10,
                   ),
                 ),
@@ -535,10 +535,10 @@ class ProfileWidgetRenderer extends StatelessWidget {
             const SizedBox(height: 8),
             Text(
               '— $author',
+              textAlign: TextAlign.right,
               style: TextStyle(
-                color: theme.textColor.withOpacity(0.7),
+                color: theme.textColor.withValues(alpha: 0.7),
                 fontSize: 10,
-                textAlign: TextAlign.right,
               ),
             ),
           ],
@@ -690,11 +690,11 @@ class ProfileWidgetRenderer extends StatelessWidget {
       case 'instagram':
         return Colors.purple;
       case 'facebook':
-        return Colors.blue.shade(700);
+        return const Color(0xFF1877F2);
       case 'github':
         return Colors.black;
       case 'linkedin':
-        return Colors.blue.shade(800);
+        return const Color(0xFF0077B5);
       case 'youtube':
         return Colors.red;
       case 'tiktok':

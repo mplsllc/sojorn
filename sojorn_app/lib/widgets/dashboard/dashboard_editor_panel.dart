@@ -1,6 +1,6 @@
 // Copyright (c) 2026 MPLS LLC
-// Licensed under the Apache License, Version 2.0
-// See LICENSE file for details
+// Licensed under the GNU Affero General Public License v3.0 (AGPL-3.0)
+// See LICENSE file in the project root for full license text.
 
 import 'package:flutter/material.dart';
 import '../../models/dashboard_widgets.dart';
@@ -380,7 +380,12 @@ class _WidgetTile extends StatelessWidget {
               height: 28,
               child: Switch(
                 value: widget.isEnabled,
+                // Active: brand purple thumb on lighter purple track.
                 activeColor: AppTheme.royalPurple,
+                activeTrackColor: AppTheme.royalPurple.withValues(alpha: 0.35),
+                // Inactive: clearly neutral grey so on/off is unambiguous at a glance.
+                inactiveThumbColor: const Color(0xFFCBD5E1),
+                inactiveTrackColor: const Color(0xFFE2E8F0),
                 onChanged: onToggle,
               ),
             ),

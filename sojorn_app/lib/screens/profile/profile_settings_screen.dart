@@ -1,12 +1,13 @@
 // Copyright (c) 2026 MPLS LLC
-// Licensed under the Apache License, Version 2.0
-// See LICENSE file for details
+// Licensed under the GNU Affero General Public License v3.0 (AGPL-3.0)
+// See LICENSE file in the project root for full license text.
 
 import 'dart:io';
 import 'dart:ui';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:image_picker/image_picker.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import '../../models/profile.dart';
 import '../../models/profile_privacy_settings.dart';
 import '../../providers/api_provider.dart';
@@ -34,6 +35,7 @@ import '../security/encryption_hub_screen.dart';
 import '../../widgets/neighborhood/neighborhood_picker_sheet.dart';
 import '../../widgets/desktop/desktop_dialog_helper.dart';
 import '../../widgets/desktop/desktop_slide_panel.dart';
+import '../../models/trust_tier.dart';
 
 class ProfileSettingsScreen extends ConsumerStatefulWidget {
   final Profile? profile;
@@ -134,6 +136,14 @@ class _ProfileSettingsScreenState extends ConsumerState<ProfileSettingsScreen> {
                          title: 'Profile',
                          subtitle: 'Name, handle, bio, avatar',
                          onTap: () => _showIdentityEditor(profile),
+                       ),
+                       _buildEditTile(
+                         icon: Icons.circle_outlined,
+                         title: 'Status',
+                         subtitle: profile.statusText?.isNotEmpty == true
+                             ? profile.statusText!
+                             : 'Set a status — "at the coffee shop"',
+                         onTap: () => _showStatusEditor(profile),
                        ),
                        _buildEditTile(
                          icon: Icons.lock,
@@ -1115,6 +1125,85 @@ class _ProfileSettingsScreenState extends ConsumerState<ProfileSettingsScreen> {
     );
   }
 
+  void _showStatusEditor(Profile profile) {
+    final ctrl = TextEditingController(text: profile.statusText ?? '');
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: SojornColors.transparent,
+      builder: (ctx) => Padding(
+        padding: EdgeInsets.only(bottom: MediaQuery.of(ctx).viewInsets.bottom),
+        child: Container(
+          decoration: BoxDecoration(
+            color: AppTheme.scaffoldBg,
+            borderRadius: const BorderRadius.vertical(top: Radius.circular(28)),
+          ),
+          padding: const EdgeInsets.fromLTRB(24, 20, 24, 32),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text('Your Status', style: AppTheme.textTheme.headlineSmall),
+              const SizedBox(height: 4),
+              Text(
+                'A short line that shows on your profile — tell people what you\'re up to.',
+                style: AppTheme.bodyMedium.copyWith(
+                    color: AppTheme.navyText.withValues(alpha: 0.55)),
+              ),
+              const SizedBox(height: 16),
+              TextField(
+                controller: ctrl,
+                autofocus: true,
+                maxLength: 80,
+                decoration: InputDecoration(
+                  hintText: 'at the coffee shop',
+                  prefixIcon: const Text('🟢 ', style: TextStyle(fontSize: 18)),
+                  prefixIconConstraints: const BoxConstraints(minWidth: 40, minHeight: 0),
+                  counterText: '',
+                ),
+              ),
+              const SizedBox(height: 16),
+              Row(
+                children: [
+                  if ((profile.statusText ?? '').isNotEmpty)
+                    TextButton(
+                      onPressed: () async {
+                        Navigator.pop(ctx);
+                        await ref.read(settingsProvider.notifier)
+                            .updateProfile(profile.copyWith(statusText: ''));
+                        if (!mounted) return;
+                        context.showSuccess('Status cleared');
+                      },
+                      style: TextButton.styleFrom(foregroundColor: AppTheme.error),
+                      child: const Text('Clear'),
+                    ),
+                  const Spacer(),
+                  FilledButton(
+                    onPressed: () async {
+                      final text = ctrl.text.trim();
+                      Navigator.pop(ctx);
+                      try {
+                        await ref.read(settingsProvider.notifier)
+                            .updateProfile(profile.copyWith(statusText: text));
+                        if (!mounted) return;
+                        context.showSuccess('Status updated');
+                      } catch (_) {
+                        if (!mounted) return;
+                        context.showError('Could not save status');
+                      }
+                    },
+                    style: FilledButton.styleFrom(backgroundColor: AppTheme.brightNavy),
+                    child: const Text('Save'),
+                  ),
+                ],
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
   void _showNotificationEditor() {
     final state = ref.read(settingsProvider);
     final userSettings = state.user;
@@ -1137,14 +1226,44 @@ class _ProfileSettingsScreenState extends ConsumerState<ProfileSettingsScreen> {
             SwitchListTile(
               title: const Text('All Notifications'),
               value: userSettings.notificationsEnabled,
-              onChanged: (v) => ref.read(settingsProvider.notifier).updateUser(userSettings.copyWith(notificationsEnabled: v)),
+              onChanged: (v) => ref.read(settingsProvider.notifier).updateUser(
+                  userSettings.copyWith(notificationsEnabled: v)),
             ),
             SwitchListTile(
               title: const Text('Pause Mode (Equanimity)'),
               subtitle: const Text('Mute all alerts for deep focus'),
               value: !userSettings.pushNotifications,
-              onChanged: (v) => ref.read(settingsProvider.notifier).updateUser(userSettings.copyWith(pushNotifications: !v)),
+              onChanged: (v) => ref.read(settingsProvider.notifier).updateUser(
+                  userSettings.copyWith(pushNotifications: !v)),
             ),
+            if (userSettings.notificationsEnabled) ...[
+              const Divider(height: 24),
+              Align(
+                alignment: Alignment.centerLeft,
+                child: Text('Notify me about',
+                    style: AppTheme.textTheme.labelMedium
+                        ?.copyWith(fontWeight: FontWeight.w700)),
+              ),
+              const SizedBox(height: 8),
+              // Per-type toggles. These preferences are stored locally via
+              // SharedPreferences until the backend gains per-type columns.
+              _NotifToggle(prefKey: 'notif_likes',    label: 'Likes & reactions',       icon: Icons.favorite_border),
+              _NotifToggle(prefKey: 'notif_comments', label: 'Comments & replies',       icon: Icons.chat_bubble_outline),
+              _NotifToggle(prefKey: 'notif_follows',  label: 'New followers',             icon: Icons.person_add_outlined),
+              _NotifToggle(prefKey: 'notif_groups',   label: 'Group & board activity',   icon: Icons.group_outlined),
+              _NotifToggle(prefKey: 'notif_beacons',  label: 'Nearby Beacon alerts',     icon: Icons.sensors, defaultOn: true),
+              _NotifToggle(prefKey: 'notif_messages', label: 'Direct messages',           icon: Icons.mail_outline, defaultOn: true),
+              const Divider(height: 24),
+              Align(
+                alignment: Alignment.centerLeft,
+                child: Text('Quiet hours',
+                    style: AppTheme.textTheme.labelMedium
+                        ?.copyWith(fontWeight: FontWeight.w700)),
+              ),
+              _NotifToggle(prefKey: 'notif_quiet',
+                  label: 'Enable quiet hours (10 pm – 8 am)',
+                  icon: Icons.bedtime_outlined),
+            ],
             const SizedBox(height: 48),
           ],
         ),
@@ -1729,5 +1848,58 @@ class _ProfileSettingsScreenState extends ConsumerState<ProfileSettingsScreen> {
     await authService.signOut();
     if (!mounted) return;
     Navigator.of(context).popUntil((route) => route.isFirst);
+  }
+}
+
+/// Self-contained per-notification-type toggle backed by SharedPreferences.
+/// Uses a FutureBuilder to load the initial value and saves changes instantly.
+class _NotifToggle extends StatefulWidget {
+  final String prefKey;
+  final String label;
+  final IconData icon;
+  final bool defaultOn;
+
+  const _NotifToggle({
+    required this.prefKey,
+    required this.label,
+    required this.icon,
+    this.defaultOn = false,
+  });
+
+  @override
+  State<_NotifToggle> createState() => _NotifToggleState();
+}
+
+class _NotifToggleState extends State<_NotifToggle> {
+  bool? _value;
+
+  @override
+  void initState() {
+    super.initState();
+    SharedPreferences.getInstance().then((prefs) {
+      if (mounted) {
+        setState(() {
+          _value = prefs.getBool(widget.prefKey) ?? widget.defaultOn;
+        });
+      }
+    });
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final value = _value;
+    if (value == null) return const SizedBox(height: 48);
+    return SwitchListTile(
+      secondary: Icon(widget.icon, size: 20, color: AppTheme.egyptianBlue),
+      title: Text(widget.label, style: const TextStyle(fontSize: 14)),
+      value: value,
+      dense: true,
+      contentPadding: const EdgeInsets.symmetric(horizontal: 4),
+      onChanged: (v) async {
+        setState(() => _value = v);
+        final prefs = await SharedPreferences.getInstance();
+        await prefs.setBool(widget.prefKey, v);
+      },
+    );
   }
 }

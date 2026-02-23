@@ -64,6 +64,7 @@ type Post struct {
 	AuthorHandle      string `json:"-" db:"author_handle"`
 	AuthorDisplayName string `json:"-" db:"author_display_name"`
 	AuthorAvatarURL   string `json:"-" db:"author_avatar_url"`
+	AuthorTrustTier   string `json:"-" db:"author_trust_tier"`
 	LikeCount         int    `json:"like_count" db:"like_count"`
 	CommentCount      int    `json:"comment_count" db:"comment_count"`
 	IsLiked           bool   `json:"is_liked" db:"is_liked"`
@@ -83,6 +84,9 @@ type AuthorProfile struct {
 	Handle      string    `json:"handle"`
 	DisplayName string    `json:"display_name"`
 	AvatarURL   string    `json:"avatar_url"`
+	// TrustTier surfaces the Harmony Score tier next to the author name.
+	// Values match TrustTier.value on the backend: "new_user", "trusted", "established".
+	TrustTier   string    `json:"trust_tier,omitempty"`
 }
 
 type PostMetrics struct {
