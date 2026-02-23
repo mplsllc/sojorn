@@ -81,6 +81,7 @@ class Post {
   final BeaconType? beaconType;
   final double? confidenceScore;
   final bool? isActiveBeacon;
+  final bool? isPriority;
   final String? beaconStatusColor;
   final String? severity;
   final String? incidentStatus;
@@ -160,6 +161,7 @@ class Post {
     this.beaconType,
     this.confidenceScore,
     this.isActiveBeacon,
+    this.isPriority,
     this.beaconStatusColor,
     this.severity,
     this.incidentStatus,
@@ -319,6 +321,7 @@ class Post {
       beaconType: json['beacon_type'] != null ? BeaconType.fromString(json['beacon_type'] as String) : null,
       confidenceScore: _parseDouble(json['confidence_score']),
       isActiveBeacon: json['is_active_beacon'] as bool?,
+      isPriority: json['is_priority'] as bool?,
       beaconStatusColor: json['status_color'] as String?,
       severity: json['severity'] as String?,
       incidentStatus: json['incident_status'] as String?,

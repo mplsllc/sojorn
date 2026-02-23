@@ -32,6 +32,7 @@ type Post struct {
 	Long           *float64   `json:"long,omitempty"`
 	Confidence     float64    `json:"confidence_score" db:"confidence_score"`
 	IsActiveBeacon bool       `json:"is_active_beacon" db:"is_active_beacon"`
+	IsPriority     bool       `json:"is_priority" db:"is_priority"`
 	Severity       string     `json:"severity" db:"severity"`
 	IncidentStatus string     `json:"incident_status" db:"incident_status"`
 	Radius          int     `json:"radius" db:"radius"`

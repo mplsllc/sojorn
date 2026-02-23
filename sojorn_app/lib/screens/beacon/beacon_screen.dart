@@ -187,10 +187,11 @@ class BeaconScreenState extends ConsumerState<BeaconScreen> with TickerProviderS
     if (mounted) {
       setState(() => _locationPermissionGranted = status.isGranted);
       if (status.isGranted) {
-        final hadBeacons = _beacons.isNotEmpty || _officialPosts.isNotEmpty;
         await _getCurrentLocation(forceCenter: !_suppressAutoCenterOnUser);
         // Only reload beacons if neighborhood didn't already pre-load them
-        if (!hadBeacons) {
+        // AND no load is currently in-flight (_isLoading covers the race where
+        // _checkHomeNeighborhood called _loadBeacons but it hasn't finished yet).
+        if (_beacons.isEmpty && _officialPosts.isEmpty && !_isLoading) {
           await _loadBeacons();
         }
       }
@@ -441,7 +442,13 @@ class BeaconScreenState extends ConsumerState<BeaconScreen> with TickerProviderS
       if (mounted) {
         setState(() {
           _beacons = beacons.where((p) => p.isBeaconPost).toList()
-            ..sort((a, b) => (a.distanceMeters ?? 0).compareTo(b.distanceMeters ?? 0));
+            ..sort((a, b) {
+              // Priority beacons (3+ vouches) float to top, then by distance
+              final aPriority = a.isPriority ?? false;
+              final bPriority = b.isPriority ?? false;
+              if (aPriority != bPriority) return aPriority ? -1 : 1;
+              return (a.distanceMeters ?? 0).compareTo(b.distanceMeters ?? 0);
+            });
           _officialPosts = [...official, ...iced].where((p) => p.isBeaconPost).toList();
           _cameraPosts = cameras.where((p) => p.isBeaconPost).map((p) => p.toBeacon()).toList();
           _signPosts = signs.where((p) => p.isBeaconPost).map((p) => p.toBeacon()).toList();

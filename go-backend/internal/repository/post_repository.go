@@ -640,7 +640,7 @@ func (r *PostRepository) GetNearbyBeacons(ctx context.Context, lat float64, long
 	query := `
 		SELECT 
 			p.id, p.category_id, p.body, COALESCE(p.image_url, ''), p.tags, p.created_at,
-			p.beacon_type, p.confidence_score, p.is_active_beacon,
+			p.beacon_type, p.confidence_score, p.is_active_beacon, COALESCE(p.is_priority, FALSE) as is_priority,
 			ST_Y(p.location::geometry) as lat, ST_X(p.location::geometry) as long,
 			COALESCE(p.severity, 'medium') as severity,
 			COALESCE(p.incident_status, 'active') as incident_status,
@@ -653,7 +653,7 @@ func (r *PostRepository) GetNearbyBeacons(ctx context.Context, lat float64, long
 		  AND ST_DWithin(p.location, ST_SetSRID(ST_Point($2, $1), 4326)::geography, $3)
 		  AND p.status = 'active'
 		  AND COALESCE(p.incident_status, 'active') = 'active'
-		ORDER BY p.created_at DESC
+		ORDER BY p.is_priority DESC, p.created_at DESC
 	`
 	rows, err := r.pool.Query(ctx, query, lat, long, radius)
 	if err != nil {
@@ -667,7 +667,7 @@ func (r *PostRepository) GetNearbyBeacons(ctx context.Context, lat float64, long
 		var vouchCount, reportCount int
 		err := rows.Scan(
 			&p.ID, &p.CategoryID, &p.Body, &p.ImageURL, &p.Tags, &p.CreatedAt,
-			&p.BeaconType, &p.Confidence, &p.IsActiveBeacon, &p.Lat, &p.Long,
+			&p.BeaconType, &p.Confidence, &p.IsActiveBeacon, &p.IsPriority, &p.Lat, &p.Long,
 			&p.Severity, &p.IncidentStatus, &p.Radius,
 			&vouchCount, &reportCount, &p.DistanceMeters,
 		)
@@ -1066,16 +1066,19 @@ func (r *PostRepository) VouchBeacon(ctx context.Context, beaconID string, userI
 		return fmt.Errorf("failed to vouch for beacon: %w", err)
 	}
 
-	// Update beacon confidence score based on vouches
+	// Update confidence score and auto-elevate to priority when vouches >= 3
 	updateQuery := `
-		UPDATE public.posts 
+		UPDATE public.posts
 		SET confidence_score = (
 			SELECT COALESCE(
 				0.5 + (COUNT(*) * 0.1), -- Base 0.5 + 0.1 per vouch
 				0.5
-			) 
-			FROM public.beacon_vouches 
+			)
+			FROM public.beacon_vouches
 			WHERE beacon_id = $1::uuid
+		),
+		is_priority = (
+			(SELECT COUNT(*) FROM public.beacon_vouches WHERE beacon_id = $1::uuid) >= 3
 		)
 		WHERE id = $1::uuid
 	`
