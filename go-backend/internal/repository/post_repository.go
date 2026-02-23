@@ -1148,6 +1148,37 @@ func (r *PostRepository) RemoveBeaconVote(ctx context.Context, beaconID string, 
 	return nil
 }
 
+// ResolveBeacon marks a beacon as resolved or false_alarm (community action — no user linkage).
+// Beacons are fully anonymous; any authenticated user can mark one resolved.
+// Setting is_active_beacon=false removes it from the live map immediately.
+func (r *PostRepository) ResolveBeacon(ctx context.Context, beaconID, status string) error {
+	if status != "resolved" && status != "false_alarm" {
+		return fmt.Errorf("invalid status: must be resolved or false_alarm")
+	}
+
+	var isBeacon bool
+	err := r.pool.QueryRow(ctx,
+		"SELECT is_beacon FROM public.posts WHERE id = $1::uuid AND deleted_at IS NULL",
+		beaconID,
+	).Scan(&isBeacon)
+	if err != nil {
+		return fmt.Errorf("beacon not found: %w", err)
+	}
+	if !isBeacon {
+		return fmt.Errorf("post is not a beacon")
+	}
+
+	_, err = r.pool.Exec(ctx, `
+		UPDATE public.posts
+		SET incident_status = $2, is_active_beacon = false
+		WHERE id = $1::uuid
+	`, beaconID, status)
+	if err != nil {
+		return fmt.Errorf("failed to resolve beacon: %w", err)
+	}
+	return nil
+}
+
 // GetPostFocusContext retrieves minimal data for Focus-Context view
 // Returns: Target Post, Direct Parent (if any), and Direct Children (1st layer only)
 func (r *PostRepository) GetPostFocusContext(ctx context.Context, postID string, userID string, showNSFW bool) (*models.FocusContext, error) {

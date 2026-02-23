@@ -314,6 +314,10 @@ class ApiService {
     };
   }
 
+  Future<Map<String, dynamic>> getTrustState() async {
+    return await _callGoApi('/profile/trust-state', method: 'GET');
+  }
+
   Future<Map<String, dynamic>> getProfileById(String userId) async {
     final data = await _callGoApi(
       '/profiles/$userId',
@@ -1553,6 +1557,16 @@ class ApiService {
     await callGoApi(
       '/beacons/$beaconId/vouch',
       method: 'DELETE',
+    );
+  }
+
+  /// Community action — marks a beacon resolved or false_alarm.
+  /// Beacons are anonymous; no user linkage tracked.
+  Future<void> resolveBeacon(String beaconId, String status) async {
+    await callGoApi(
+      '/beacons/$beaconId/resolve',
+      method: 'POST',
+      body: {'status': status},
     );
   }
 

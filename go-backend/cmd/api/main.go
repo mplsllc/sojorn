@@ -391,6 +391,7 @@ func main() {
 			authorized.GET("/beacons/iced", icedHandler.GetIcedAlerts)
 			authorized.POST("/beacons/:id/vouch", postHandler.VouchBeacon)
 			authorized.POST("/beacons/:id/report", postHandler.ReportBeacon)
+			authorized.POST("/beacons/:id/resolve", postHandler.ResolveBeacon)
 			authorized.DELETE("/beacons/:id/vouch", postHandler.RemoveBeaconVote)
 			authorized.GET("/categories", categoryHandler.GetCategories)
 			authorized.POST("/categories/settings", categoryHandler.SetUserCategorySettings)

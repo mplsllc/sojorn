@@ -840,7 +840,11 @@ class _UpcomingEventsWidgetState extends State<UpcomingEventsWidget> {
 
   Future<void> _loadEvents() async {
     try {
-      final raw = await ApiService.instance.fetchMyEvents(limit: 10);
+      var raw = await ApiService.instance.fetchMyEvents(limit: 10);
+      // Fallback: if the user has no personal RSVPs, show community events
+      if (raw.isEmpty) {
+        raw = await ApiService.instance.fetchUpcomingEvents(limit: 10);
+      }
       final events = raw.map((e) => GroupEvent.fromJson(e)).toList();
       if (!mounted) return;
       final now = DateTime.now();

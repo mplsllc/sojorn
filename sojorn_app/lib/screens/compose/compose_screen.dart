@@ -14,6 +14,8 @@ import '../../models/image_filter.dart';
 import '../../models/post.dart';
 import '../../models/sojorn_media_result.dart';
 import '../../models/tone_analysis.dart';
+import '../../models/trust_state.dart';
+import '../../models/trust_tier.dart';
 import '../../providers/api_provider.dart';
 import '../../providers/feed_refresh_provider.dart';
 import '../../services/api_service.dart';
@@ -50,6 +52,10 @@ class _ComposeScreenState extends ConsumerState<ComposeScreen> {
   bool _popped = false;
   String? _errorMessage;
   String? _blockedMessage;
+
+  // Harmony — posts remaining today
+  int? _postsRemaining;
+  TrustTier? _trustTier;
   final int _maxCharacters = 500;
   bool _allowChain = true;
   bool _isNsfw = false;
@@ -102,6 +108,21 @@ class _ComposeScreenState extends ConsumerState<ComposeScreen> {
       if (!mounted) return;
       _bodyFocusNode.requestFocus();
     });
+    _loadTrustState();
+  }
+
+  Future<void> _loadTrustState() async {
+    try {
+      final data = await ApiService.instance.getTrustState();
+      if (!mounted) return;
+      final state = TrustState.fromJson(data);
+      setState(() {
+        _trustTier = state.tier;
+        _postsRemaining = state.remainingPosts;
+      });
+    } catch (_) {
+      // Non-critical — compose still works without it
+    }
   }
 
   /// Detect URLs in text and fetch a preview after a pause in typing.
@@ -673,6 +694,7 @@ class _ComposeScreenState extends ConsumerState<ComposeScreen> {
         child: Column(
           children: [
             _buildVisibilityRow(),
+            _buildPostsRemainingBanner(),
             _buildBlockedBanner(),
             if (_errorMessage != null)
               Container(
@@ -785,6 +807,37 @@ class _ComposeScreenState extends ConsumerState<ComposeScreen> {
             ),
           );
         },
+      ),
+    );
+  }
+
+  Widget _buildPostsRemainingBanner() {
+    final remaining = _postsRemaining;
+    final tier = _trustTier;
+    // Only show when near or at the daily limit
+    if (remaining == null || tier == null) return const SizedBox.shrink();
+    if (remaining > 5) return const SizedBox.shrink();
+
+    final isAtLimit = remaining == 0;
+    final color = isAtLimit ? AppTheme.error : SojornColors.nsfwWarningIcon;
+    final icon = isAtLimit ? Icons.block : Icons.info_outline;
+    final message = isAtLimit
+        ? 'Daily post limit reached (${tier.postLimit} posts). Resets at midnight.'
+        : '$remaining post${remaining == 1 ? '' : 's'} remaining today (${tier.displayName} tier)';
+
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 7),
+      color: color.withValues(alpha: 0.08),
+      child: Row(
+        children: [
+          Icon(icon, size: 14, color: color),
+          const SizedBox(width: 7),
+          Expanded(
+            child: Text(message,
+                style: TextStyle(color: color, fontSize: 12, fontWeight: FontWeight.w500)),
+          ),
+        ],
       ),
     );
   }

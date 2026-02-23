@@ -1258,6 +1258,32 @@ func (h *PostHandler) RemoveBeaconVote(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{"message": "Beacon vote removed successfully"})
 }
 
+// ResolveBeacon is a community action — any authenticated user can mark a beacon
+// resolved or as a false alarm. Beacons are anonymous; no user linkage is tracked.
+func (h *PostHandler) ResolveBeacon(c *gin.Context) {
+	beaconID := c.Param("id")
+
+	var req struct {
+		Status string `json:"status" binding:"required"`
+	}
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "status is required (resolved or false_alarm)"})
+		return
+	}
+
+	err := h.postRepo.ResolveBeacon(c.Request.Context(), beaconID, req.Status)
+	if err != nil {
+		if err.Error() == "post is not a beacon" {
+			c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+			return
+		}
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to resolve beacon", "details": err.Error()})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{"message": "Beacon resolved", "status": req.Status})
+}
+
 func (h *PostHandler) ToggleReaction(c *gin.Context) {
 	postID := c.Param("id")
 	userIDStr, _ := c.Get("user_id")

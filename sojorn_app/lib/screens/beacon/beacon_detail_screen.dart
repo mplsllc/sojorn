@@ -25,6 +25,7 @@ class _BeaconDetailScreenState extends ConsumerState<BeaconDetailScreen>
   late Animation<double> _pulseAnimation;
   bool _isVouching = false;
   bool _isReporting = false;
+  bool _isResolving = false;
 
   @override
   void initState() {
@@ -500,6 +501,20 @@ class _BeaconDetailScreenState extends ConsumerState<BeaconDetailScreen>
                     ),
                   ),
                 ),
+                const SizedBox(height: 8),
+                // Resolved — tertiary community action
+                SizedBox(
+                  width: double.infinity,
+                  height: 40,
+                  child: TextButton.icon(
+                    onPressed: _isResolving ? null : _resolveBeacon,
+                    icon: _isResolving
+                        ? const SizedBox(width: 14, height: 14, child: CircularProgressIndicator(strokeWidth: 2))
+                        : const Icon(Icons.check_circle_outline, size: 16),
+                    label: Text(_isResolving ? 'Marking resolved...' : 'Situation resolved',
+                      style: const TextStyle(fontSize: 13)),
+                  ),
+                ),
               ],
             ),
     );
@@ -548,6 +563,32 @@ class _BeaconDetailScreenState extends ConsumerState<BeaconDetailScreen>
       }
     } finally {
       if (mounted) setState(() => _isReporting = false);
+    }
+  }
+
+  Future<void> _resolveBeacon() async {
+    final apiService = ref.read(apiServiceProvider);
+    setState(() => _isResolving = true);
+
+    try {
+      await apiService.resolveBeacon(_post.id, 'resolved');
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Beacon marked as resolved. Thanks for the update!'),
+            backgroundColor: Color(0xFF388E3C),
+          ),
+        );
+        Navigator.of(context).pop();
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Something went wrong: $e'), backgroundColor: SojornColors.destructive),
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _isResolving = false);
     }
   }
 }
