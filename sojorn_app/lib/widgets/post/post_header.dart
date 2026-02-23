@@ -332,11 +332,8 @@ class _TierChip extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final (emoji, color) = switch (tier) {
-      TrustTier.established => ('🌳', const Color(0xFF43A047)),
-      TrustTier.trusted     => ('🌿', const Color(0xFF26A69A)),
-      TrustTier.new_user    => ('🌱', const Color(0xFF78909C)),
-    };
+    final emoji = tier.emoji;
+    final color = tier.color;
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1),
       decoration: BoxDecoration(

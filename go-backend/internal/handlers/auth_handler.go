@@ -497,8 +497,8 @@ func (h *AuthHandler) RefreshSession(c *gin.Context) {
 		return
 	}
 
-	_ = h.repo.RevokeRefreshToken(c.Request.Context(), req.RefreshToken)
-
+	// Generate new tokens BEFORE revoking old one — prevents permanent
+	// lockout if generation or storage fails after revocation.
 	newAccessToken, err := h.generateToken(rt.UserID)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to generate token", "details": err.Error()})
@@ -511,6 +511,9 @@ func (h *AuthHandler) RefreshSession(c *gin.Context) {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to save session", "details": err.Error()})
 		return
 	}
+
+	// Only revoke old token after new one is safely stored.
+	_ = h.repo.RevokeRefreshToken(c.Request.Context(), req.RefreshToken)
 
 	c.JSON(http.StatusOK, models.TokenPair{
 		AccessToken:  newAccessToken,

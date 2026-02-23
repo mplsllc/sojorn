@@ -8,6 +8,7 @@ import 'package:go_router/go_router.dart';
 import 'package:latlong2/latlong.dart';
 import '../services/auth_service.dart';
 import '../services/api_service.dart';
+import '../models/event.dart';
 
 // ── Eager (critical path) ─────────────────────────────────────────────
 import '../screens/home/feed_personal_screen.dart';
@@ -22,6 +23,8 @@ import '../screens/admin/moderation_queue_screen.dart';
 import '../screens/admin/admin_content_tools_screen.dart';
 
 // ── Deferred (code-split for web) ─────────────────────────────────────
+import '../screens/neighborhood/neighborhood_screen.dart' deferred as neighborhood_lib;
+import '../screens/groups/groups_screen.dart' deferred as groups_lib;
 import '../screens/beacon/beacon_screen.dart' deferred as beacon_lib;
 import '../screens/quips/create/quip_creation_flow.dart' deferred as quip_create_lib;
 import '../screens/quips/feed/quips_feed_screen.dart' deferred as quips_feed_lib;
@@ -31,8 +34,9 @@ import '../screens/secure_chat/secure_chat_full_screen.dart' deferred as secure_
 import '../screens/secure_chat/secure_chat_loader_screen.dart' deferred as chat_loader_lib;
 import '../screens/post/threaded_conversation_screen.dart' deferred as threaded_lib;
 import '../screens/clusters/clusters_screen.dart' deferred as clusters_lib;
-import '../screens/clusters/group_screen.dart' deferred as group_screen_lib;
 import '../screens/discover/discover_screen.dart' deferred as discover_lib;
+import '../screens/events/event_detail_screen.dart' deferred as event_detail_lib;
+import '../screens/events/event_discovery_screen.dart' deferred as event_discovery_lib;
 
 /// App routing config (GoRouter).
 class AppRoutes {
@@ -119,6 +123,26 @@ class AppRoutes {
           () => clusters_lib.ClustersScreen(),
         ),
       ),
+      GoRoute(
+        path: '/events',
+        parentNavigatorKey: rootNavigatorKey,
+        builder: (_, __) => _deferred(
+          event_discovery_lib.loadLibrary,
+          () => event_discovery_lib.EventDiscoveryScreen(),
+        ),
+      ),
+      GoRoute(
+        path: '/events/:groupId/:eventId',
+        parentNavigatorKey: rootNavigatorKey,
+        builder: (_, state) => _deferred(
+          event_detail_lib.loadLibrary,
+          () => event_detail_lib.EventDetailScreen(
+            groupId: state.pathParameters['groupId'] ?? '',
+            eventId: state.pathParameters['eventId'] ?? '',
+            initialEvent: state.extra is GroupEvent ? state.extra as GroupEvent : null,
+          ),
+        ),
+      ),
       StatefulShellRoute.indexedStack(
         builder: (context, state, navigationShell) => AuthGate(
           authenticatedChild: HomeShell(navigationShell: navigationShell),
@@ -197,6 +221,30 @@ class AppRoutes {
                 builder: (_, __) => _deferred(
                   secure_chat_lib.loadLibrary,
                   () => secure_chat_lib.SecureChatFullScreen(),
+                ),
+              ),
+            ],
+          ),
+          // Branch 6: Neighborhood (desktop shell only)
+          StatefulShellBranch(
+            routes: [
+              GoRoute(
+                path: '/neighborhood',
+                builder: (_, __) => _deferred(
+                  neighborhood_lib.loadLibrary,
+                  () => neighborhood_lib.NeighborhoodScreen(),
+                ),
+              ),
+            ],
+          ),
+          // Branch 7: Groups (desktop shell only)
+          StatefulShellBranch(
+            routes: [
+              GoRoute(
+                path: '/groups',
+                builder: (_, __) => _deferred(
+                  groups_lib.loadLibrary,
+                  () => groups_lib.GroupsScreen(),
                 ),
               ),
             ],

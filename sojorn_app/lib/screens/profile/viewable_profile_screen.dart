@@ -3,8 +3,14 @@
 // See LICENSE file in the project root for full license text.
 
 import 'dart:async';
+import 'dart:io';
+import 'dart:typed_data';
 
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
+import 'package:image_picker/image_picker.dart';
+import 'package:path_provider/path_provider.dart';
+import 'package:pro_image_editor/pro_image_editor.dart';
 import 'package:go_router/go_router.dart';
 import '../../routes/app_routes.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -24,18 +30,20 @@ import '../../widgets/media/signed_media_image.dart';
 import '../compose/compose_screen.dart';
 import '../secure_chat/secure_chat_screen.dart';
 import '../../services/auth_service.dart';
+import '../../services/image_upload_service.dart';
 import '../../services/secure_chat_service.dart';
+import '../../models/sojorn_media_result.dart';
 import '../post/post_detail_screen.dart';
 import 'profile_settings_screen.dart';
-import 'profile_layout_editor.dart';
 import 'followers_following_screen.dart';
 import '../../widgets/desktop/desktop_dialog_helper.dart';
 import '../../widgets/desktop/desktop_slide_panel.dart';
 import '../../models/profile_widgets.dart';
 import '../../widgets/harmony_explainer_modal.dart';
-import '../../widgets/follow_button.dart';
 import '../../widgets/media/sojorn_avatar.dart';
 import '../../widgets/profile_widgets/profile_widget_renderer.dart';
+import '../../widgets/composer/composer_bar.dart';
+import '../../utils/snackbar_ext.dart';
 
 /// Unified profile screen - handles both own profile and viewing others.
 ///
@@ -86,6 +94,14 @@ class _UnifiedProfileScreenState extends ConsumerState<UnifiedProfileScreen>
 
   ProfileLayout? _profileLayout;
   bool _isLayoutLoading = false;
+  bool _isBannerUploading = false;
+  double _bannerUploadProgress = 0.0;
+  final ImagePicker _imagePicker = ImagePicker();
+  final ImageUploadService _imageUploadService = ImageUploadService();
+
+  // Inline composer state
+  bool _composerExpanded = false;
+  final _composerFocusNode = FocusNode();
 
   /// True when no handle was provided (bottom-nav profile tab)
   bool get _isOwnProfileMode => widget.handle == null;
@@ -144,6 +160,7 @@ class _UnifiedProfileScreenState extends ConsumerState<UnifiedProfileScreen>
   void dispose() {
     _authSubscription?.cancel();
     _tabController.dispose();
+    _composerFocusNode.dispose();
     super.dispose();
   }
 
@@ -166,7 +183,7 @@ class _UnifiedProfileScreenState extends ConsumerState<UnifiedProfileScreen>
       final isFollowedBy = data['is_followed_by'] as bool? ?? false;
       final isFriend = data['is_friend'] as bool? ?? false;
       final isPrivate = data['is_private'] as bool? ?? false;
-      debugPrint('[PROFILE] Loaded @${profile.handle} — posts=${stats.posts}, followers=${stats.followers}, following=${stats.following}, isPrivate=$isPrivate');
+      debugPrint('[PROFILE] Loaded @${profile.handle} — posts=${stats.posts}, followers=${stats.followers}, following=${stats.following}, isPrivate=$isPrivate, coverUrl=${profile.coverUrl}');
       final currentUserId = AuthService.instance.currentUser?.id;
       final isOwnProfile = _isOwnProfileMode ||
           (currentUserId != null &&
@@ -232,22 +249,7 @@ class _UnifiedProfileScreenState extends ConsumerState<UnifiedProfileScreen>
     }
   }
 
-  Future<void> _openLayoutEditor() async {
-    final isDesktop = MediaQuery.of(context).size.width >= 900;
-    if (isDesktop) {
-      openDesktopSlidePanel(
-        context,
-        width: 520,
-        child: const ProfileLayoutEditor(),
-      );
-    } else {
-      await Navigator.of(context, rootNavigator: true).push(
-        MaterialPageRoute(builder: (_) => const ProfileLayoutEditor()),
-      );
-    }
-    // Refresh layout after editing
-    _loadProfileLayout();
-  }
+
 
   bool _shouldAutoCreateProfile(dynamic error) {
     final errorStr = error.toString().toLowerCase();
@@ -850,6 +852,167 @@ class _UnifiedProfileScreenState extends ConsumerState<UnifiedProfileScreen>
     );
   }
 
+  void _showBannerActions() {
+    final hasBanner = (_profile?.coverUrl ?? '').isNotEmpty;
+    showDialog(
+      context: context,
+      builder: (ctx) {
+        return AlertDialog(
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(SojornRadii.modal),
+          ),
+          title: Text(hasBanner ? 'Cover Photo' : 'Add Cover Photo',
+              style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w700)),
+          contentPadding: const EdgeInsets.fromLTRB(0, 12, 0, 0),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              if (hasBanner)
+                ListTile(
+                  leading: const Icon(Icons.visibility),
+                  title: const Text('View cover photo'),
+                  onTap: () {
+                    Navigator.of(ctx).pop();
+                    _viewBannerFullscreen();
+                  },
+                ),
+              ListTile(
+                leading: const Icon(Icons.photo_library),
+                title: Text(hasBanner ? 'Choose from gallery' : 'Choose from gallery'),
+                onTap: () {
+                  Navigator.of(ctx).pop();
+                  _pickAndUploadBanner();
+                },
+              ),
+              if (hasBanner)
+                ListTile(
+                  leading: Icon(Icons.delete_outline, color: AppTheme.error),
+                  title: Text('Remove cover photo', style: TextStyle(color: AppTheme.error)),
+                  onTap: () {
+                    Navigator.of(ctx).pop();
+                    _removeBanner();
+                  },
+                ),
+            ],
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(ctx).pop(),
+              child: const Text('Cancel'),
+            ),
+          ],
+        );
+      },
+    );
+  }
+
+  void _viewBannerFullscreen() {
+    final url = _profile?.coverUrl;
+    if (url == null || url.isEmpty) return;
+    showDialog(
+      context: context,
+      builder: (ctx) => Dialog(
+        backgroundColor: Colors.black,
+        insetPadding: const EdgeInsets.all(24),
+        child: GestureDetector(
+          onTap: () => Navigator.of(ctx).pop(),
+          child: InteractiveViewer(
+            child: SignedMediaImage(url: url, fit: BoxFit.contain),
+          ),
+        ),
+      ),
+    );
+  }
+
+  /// Banner resolution: 1440×480 (3:1 ratio), matching the 720×200 display at 2x
+  Future<void> _pickAndUploadBanner() async {
+    final file = await _imagePicker.pickImage(source: ImageSource.gallery);
+    if (file == null || !mounted) return;
+
+    final bytes = await file.readAsBytes();
+    if (!mounted) return;
+
+    // Open editor locked to 3:1 banner crop with resolution hint
+    final result = await Navigator.push<SojornMediaResult>(
+      context,
+      MaterialPageRoute(
+        builder: (_) => _BannerImageEditor(imageBytes: bytes, imageName: file.name),
+      ),
+    );
+
+    if (result == null || !mounted) return;
+
+    setState(() {
+      _isBannerUploading = true;
+      _bannerUploadProgress = 0.0;
+    });
+
+    void onProgress(double p) {
+      if (mounted) setState(() => _bannerUploadProgress = p);
+    }
+
+    try {
+      final String url;
+      if (result.bytes != null) {
+        url = await _imageUploadService.uploadImageBytes(
+          result.bytes!,
+          fileName: result.name ?? 'banner.jpg',
+          maxWidth: 1440,
+          maxHeight: 480,
+          quality: 90,
+          onProgress: onProgress,
+        );
+      } else {
+        url = await _imageUploadService.uploadImage(
+          File(result.filePath!),
+          maxWidth: 1440,
+          maxHeight: 480,
+          quality: 90,
+          onProgress: onProgress,
+        );
+      }
+
+      // Update profile with new cover URL
+      if (mounted) setState(() => _bannerUploadProgress = 0.95);
+      await ref.read(apiServiceProvider).updateProfile(coverUrl: url);
+
+      if (mounted) {
+        setState(() {
+          _profile = _profile?.copyWith(coverUrl: url);
+          _isBannerUploading = false;
+          _bannerUploadProgress = 0.0;
+        });
+      }
+    } catch (e) {
+      if (mounted) {
+        setState(() {
+          _isBannerUploading = false;
+          _bannerUploadProgress = 0.0;
+        });
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Banner upload failed: $e')),
+        );
+      }
+    }
+  }
+
+  Future<void> _removeBanner() async {
+    try {
+      await ref.read(apiServiceProvider).updateProfile(coverUrl: '');
+      if (mounted) {
+        setState(() {
+          _profile = _profile?.copyWith(coverUrl: '');
+        });
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Failed to remove banner: $e')),
+        );
+      }
+    }
+  }
+
   void _showAvatarPreview(Profile profile) {
     showDialog(
       context: context,
@@ -924,89 +1087,802 @@ class _UnifiedProfileScreenState extends ConsumerState<UnifiedProfileScreen>
   }
 
   Widget _buildDesktopProfile() {
+    final profile = _profile!;
+    final hasBanner = (profile.coverUrl ?? '').isNotEmpty;
+    final flag = getCountryFlag(profile.originCountry ?? 'US');
+
+    return SingleChildScrollView(
+      child: Center(
+        child: ConstrainedBox(
+          constraints: const BoxConstraints(maxWidth: 960),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              // ══════════════════════════════════════════════════════════════
+              // BANNER + AVATAR + UNIFIED INFO CARD (overlapping via Stack)
+              // ══════════════════════════════════════════════════════════════
+              SizedBox(
+                height: 260,
+                child: Stack(
+                  clipBehavior: Clip.none,
+                  children: [
+                    // Banner image
+                    Positioned.fill(
+                      child: ClipRRect(
+                        borderRadius: const BorderRadius.vertical(bottom: Radius.circular(16)),
+                        child: Stack(
+                          fit: StackFit.expand,
+                          children: [
+                            if (hasBanner)
+                              SignedMediaImage(url: profile.coverUrl!, fit: BoxFit.cover)
+                            else
+                              Container(decoration: BoxDecoration(gradient: _ProfileHeader._generateGradientStatic(profile.handle))),
+                            // Gradient overlay
+                            Container(
+                              decoration: BoxDecoration(
+                                gradient: LinearGradient(
+                                  begin: Alignment.topCenter,
+                                  end: Alignment.bottomCenter,
+                                  colors: [Colors.transparent, Colors.black.withValues(alpha: 0.5)],
+                                  stops: const [0.3, 1.0],
+                                ),
+                              ),
+                            ),
+                            // Banner upload overlay with progress
+                            if (_isBannerUploading)
+                              Container(
+                                color: Colors.black.withValues(alpha: 0.5),
+                                child: Center(
+                                  child: Column(
+                                    mainAxisSize: MainAxisSize.min,
+                                    children: [
+                                      SizedBox(
+                                        width: 44,
+                                        height: 44,
+                                        child: Stack(
+                                          alignment: Alignment.center,
+                                          children: [
+                                            CircularProgressIndicator(
+                                              value: _bannerUploadProgress > 0 ? _bannerUploadProgress : null,
+                                              strokeWidth: 3,
+                                              color: Colors.white,
+                                              backgroundColor: Colors.white.withValues(alpha: 0.2),
+                                            ),
+                                            if (_bannerUploadProgress > 0)
+                                              Text(
+                                                '${(_bannerUploadProgress * 100).toInt()}%',
+                                                style: const TextStyle(color: Colors.white, fontSize: 10, fontWeight: FontWeight.w700),
+                                              ),
+                                          ],
+                                        ),
+                                      ),
+                                      const SizedBox(height: 10),
+                                      const Text('Uploading cover...', style: TextStyle(color: Colors.white, fontSize: 12)),
+                                    ],
+                                  ),
+                                ),
+                              ),
+                            // Edit cover button (own profile)
+                            if (_isOwnProfile && !_isBannerUploading)
+                              Positioned(
+                                top: 12,
+                                right: 12,
+                                child: _buildChipButton(
+                                  icon: Icons.camera_alt_outlined,
+                                  label: hasBanner ? 'Edit Cover' : 'Add Cover',
+                                  onTap: _showBannerActions,
+                                ),
+                              ),
+                            // Back button (viewing others)
+                            if (!_isOwnProfileMode)
+                              Positioned(
+                                top: 12,
+                                left: 12,
+                                child: _buildChipButton(
+                                  icon: Icons.arrow_back,
+                                  label: 'Back',
+                                  onTap: () {
+                                    if (Navigator.of(context).canPop()) {
+                                      Navigator.of(context).pop();
+                                    } else {
+                                      context.go(AppRoutes.homeAlias);
+                                    }
+                                  },
+                                ),
+                              ),
+                          ],
+                        ),
+                      ),
+                    ),
+
+                    // Avatar (overlapping banner bottom)
+                    Positioned(
+                      bottom: -48,
+                      left: 40,
+                      child: GestureDetector(
+                        onTap: _isOwnProfile ? _showAvatarActions : () => _showAvatarPreview(profile),
+                        child: Container(
+                          decoration: BoxDecoration(
+                            shape: BoxShape.circle,
+                            border: Border.all(color: AppTheme.cardSurface, width: 4),
+                            boxShadow: [BoxShadow(color: Colors.black.withValues(alpha: 0.15), blurRadius: 16, offset: const Offset(0, 4))],
+                          ),
+                          child: SojornAvatar(
+                            displayName: profile.displayName,
+                            avatarUrl: _resolveAvatar(profile.avatarUrl),
+                            size: 110,
+                            borderRadius: 55,
+                          ),
+                        ),
+                      ),
+                    ),
+
+                    // Unified info card (overlapping banner bottom)
+                    Positioned(
+                      bottom: -90,
+                      left: 180,
+                      right: 40,
+                      child: Container(
+                        padding: const EdgeInsets.fromLTRB(20, 14, 20, 14),
+                        decoration: BoxDecoration(
+                          color: AppTheme.cardSurface,
+                          borderRadius: BorderRadius.circular(14),
+                          boxShadow: [
+                            BoxShadow(color: Colors.black.withValues(alpha: 0.08), blurRadius: 20, offset: const Offset(0, 4)),
+                          ],
+                          border: Border.all(color: AppTheme.navyBlue.withValues(alpha: 0.06)),
+                        ),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            // Name + badge + action buttons
+                            Row(
+                              children: [
+                                Expanded(
+                                  child: Row(
+                                    children: [
+                                      Flexible(
+                                        child: Text(
+                                          profile.displayName,
+                                          style: const TextStyle(fontSize: 20, fontWeight: FontWeight.w800, color: Color(0xFF1a1a2e)),
+                                          maxLines: 1,
+                                          overflow: TextOverflow.ellipsis,
+                                        ),
+                                      ),
+                                      const SizedBox(width: 8),
+                                      if (profile.trustState != null)
+                                        _DesktopHarmonyBadge(trustState: profile.trustState!),
+                                    ],
+                                  ),
+                                ),
+                                // Action buttons
+                                if (_isOwnProfile)
+                                  Row(
+                                    mainAxisSize: MainAxisSize.min,
+                                    children: [
+                                      FilledButton.icon(
+                                        onPressed: _openSettings,
+                                        icon: const Icon(Icons.edit_outlined, size: 14),
+                                        label: const Text('Edit Profile', style: TextStyle(fontSize: 12)),
+                                        style: FilledButton.styleFrom(
+                                          backgroundColor: AppTheme.royalPurple,
+                                          foregroundColor: Colors.white,
+                                          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+                                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                                        ),
+                                      ),
+                                      const SizedBox(width: 6),
+                                      OutlinedButton.icon(
+                                        onPressed: () {},
+                                        icon: const Icon(Icons.ios_share_outlined, size: 14),
+                                        label: const Text('Share', style: TextStyle(fontSize: 12)),
+                                        style: OutlinedButton.styleFrom(
+                                          foregroundColor: AppTheme.navyText.withValues(alpha: 0.7),
+                                          side: BorderSide(color: AppTheme.navyText.withValues(alpha: 0.2)),
+                                          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                                        ),
+                                      ),
+                                    ],
+                                  )
+                                else
+                                  Row(
+                                    mainAxisSize: MainAxisSize.min,
+                                    children: [
+                                      _buildFollowButtonDesktop(),
+                                      if (_isFriend) ...[
+                                        const SizedBox(width: 6),
+                                        OutlinedButton.icon(
+                                          onPressed: _openMessage,
+                                          icon: const Icon(Icons.mail_outline, size: 14),
+                                          label: const Text('Message', style: TextStyle(fontSize: 12)),
+                                          style: OutlinedButton.styleFrom(
+                                            foregroundColor: AppTheme.navyText.withValues(alpha: 0.7),
+                                            side: BorderSide(color: AppTheme.navyText.withValues(alpha: 0.2)),
+                                            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                                          ),
+                                        ),
+                                      ],
+                                    ],
+                                  ),
+                              ],
+                            ),
+                            const SizedBox(height: 4),
+                            // Handle + location + flag
+                            Row(
+                              children: [
+                                Text(
+                                  '@${profile.handle}',
+                                  style: TextStyle(fontSize: 13, color: AppTheme.navyText.withValues(alpha: 0.55)),
+                                ),
+                                if (profile.location != null && profile.location!.isNotEmpty) ...[
+                                  Text(' · ', style: TextStyle(color: AppTheme.navyText.withValues(alpha: 0.35))),
+                                  Icon(Icons.location_on, size: 12, color: AppTheme.navyText.withValues(alpha: 0.5)),
+                                  const SizedBox(width: 2),
+                                  Flexible(
+                                    child: Text(
+                                      profile.location!,
+                                      style: TextStyle(fontSize: 12, color: AppTheme.navyText.withValues(alpha: 0.55)),
+                                      overflow: TextOverflow.ellipsis,
+                                    ),
+                                  ),
+                                ],
+                                if (flag != null) ...[
+                                  const SizedBox(width: 5),
+                                  Text(flag, style: const TextStyle(fontSize: 12)),
+                                ],
+                              ],
+                            ),
+                            // Stats row
+                            if (_stats != null) ...[
+                              Padding(
+                                padding: const EdgeInsets.only(top: 10),
+                                child: Container(
+                                  height: 1,
+                                  color: AppTheme.navyText.withValues(alpha: 0.06),
+                                ),
+                              ),
+                              Padding(
+                                padding: const EdgeInsets.only(top: 10),
+                                child: Row(
+                                  children: [
+                                    _DesktopStat(value: _stats!.posts, label: 'Posts'),
+                                    const SizedBox(width: 24),
+                                    _DesktopStat(value: _stats!.followers, label: 'Followers', onTap: () => _navigateToConnections(0)),
+                                    const SizedBox(width: 24),
+                                    _DesktopStat(value: _stats!.following, label: 'Following', onTap: () => _navigateToConnections(1)),
+                                    if (profile.trustState != null) ...[
+                                      const SizedBox(width: 16),
+                                      Container(height: 28, width: 1, color: AppTheme.navyText.withValues(alpha: 0.08)),
+                                      const SizedBox(width: 16),
+                                      GestureDetector(
+                                        onTap: () => HarmonyExplainerModal.show(context, profile.trustState!),
+                                        child: Row(
+                                          mainAxisSize: MainAxisSize.min,
+                                          children: [
+                                            Text(profile.trustState!.tier.emoji, style: const TextStyle(fontSize: 13)),
+                                            const SizedBox(width: 4),
+                                            Text('Harmony: ', style: TextStyle(fontSize: 12, color: AppTheme.navyText.withValues(alpha: 0.6))),
+                                            Text(
+                                              '${profile.trustState!.harmonyScore}%',
+                                              style: TextStyle(fontSize: 12, fontWeight: FontWeight.w700, color: profile.trustState!.tier.color),
+                                            ),
+                                          ],
+                                        ),
+                                      ),
+                                    ],
+                                  ],
+                                ),
+                              ),
+                            ],
+                          ],
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+
+              // Spacer for the overlapping card
+              const SizedBox(height: 110),
+
+              // ══════════════════════════════════════════════════════════════
+              // TABS
+              // ══════════════════════════════════════════════════════════════
+              Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 40),
+                child: TabBar(
+                  controller: _tabController,
+                  labelColor: AppTheme.royalPurple,
+                  unselectedLabelColor: AppTheme.navyText.withValues(alpha: 0.5),
+                  indicatorColor: AppTheme.royalPurple,
+                  indicatorWeight: 3,
+                  isScrollable: true,
+                  tabAlignment: TabAlignment.start,
+                  labelStyle: const TextStyle(fontSize: 15, fontWeight: FontWeight.w700),
+                  unselectedLabelStyle: const TextStyle(fontSize: 15, fontWeight: FontWeight.w500),
+                  tabs: [
+                    const Tab(text: 'Posts'),
+                    const Tab(text: 'Saved'),
+                    const Tab(text: 'Chains'),
+                    if (!_isOwnProfileMode) const Tab(text: 'About'),
+                  ],
+                ),
+              ),
+
+              Divider(height: 1, color: AppTheme.navyText.withValues(alpha: 0.08)),
+
+              // ══════════════════════════════════════════════════════════════
+              // TWO-COLUMN CONTENT: Left info sidebar + Right post feed
+              // ══════════════════════════════════════════════════════════════
+              Padding(
+                padding: const EdgeInsets.fromLTRB(40, 24, 40, 60),
+                child: Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    // ── Left column: info cards (340px) ──
+                    SizedBox(
+                      width: 340,
+                      child: _buildDesktopInfoSidebar(),
+                    ),
+                    const SizedBox(width: 24),
+                    // ── Right column: feed ──
+                    Expanded(
+                      child: _buildDesktopFeedColumn(),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildChipButton({required IconData icon, required String label, required VoidCallback onTap}) {
+    return GestureDetector(
+      onTap: onTap,
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+        decoration: BoxDecoration(
+          color: Colors.white.withValues(alpha: 0.9),
+          borderRadius: BorderRadius.circular(8),
+          boxShadow: [BoxShadow(color: Colors.black.withValues(alpha: 0.1), blurRadius: 8)],
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(icon, size: 16, color: const Color(0xFF374151)),
+            const SizedBox(width: 6),
+            Text(label, style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w600, color: Color(0xFF374151))),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildFollowButtonDesktop() {
+    final isPending = _followStatus == 'pending';
+    final label = _isFriend
+        ? 'Friends'
+        : _isFollowing
+            ? 'Following'
+            : (isPending ? 'Requested' : (_isPrivate ? 'Request' : 'Follow'));
+
+    return FilledButton(
+      onPressed: _isFollowActionLoading ? null : _toggleFollow,
+      style: FilledButton.styleFrom(
+        backgroundColor: _isFollowing ? Colors.white : AppTheme.royalPurple,
+        foregroundColor: _isFollowing ? AppTheme.royalPurple : Colors.white,
+        side: _isFollowing ? BorderSide(color: AppTheme.royalPurple, width: 2) : null,
+        padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+      ),
+      child: _isFollowActionLoading
+          ? const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2))
+          : Text(label, style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 14)),
+    );
+  }
+
+  /// Left sidebar: About card, Top 8, Now Playing, Beacon Activity
+  Widget _buildDesktopInfoSidebar() {
+    final profile = _profile!;
+
     return Column(
       children: [
-        // ── Profile header banner (fits center column) ────────────
-        SizedBox(
-          height: 180,
-          child: Stack(
-              fit: StackFit.passthrough,
-              children: [
-                _ProfileHeader(
-                  profile: _profile!,
-                  stats: _stats,
-                  isFollowing: _isFollowing,
-                  isFriend: _isFriend,
-                  followStatus: _followStatus,
-                  isPrivate: _isPrivate,
-                  isFollowActionLoading: _isFollowActionLoading,
-                  isOwnProfile: _isOwnProfile,
-                  onFollowToggle: _toggleFollow,
-                  onMessageTap: _openMessage,
-                  onSettingsTap: _openSettings,
-                  onPrivacyTap: _openPrivacyMenu,
-                  onAvatarTap: _isOwnProfile ? _showAvatarActions : null,
-                  onCustomizeLayoutTap: _isOwnProfile ? _openLayoutEditor : null,
-                  onConnectionsTap: _isOwnProfile ? _navigateToConnections : null,
+        // ── About Card ──
+        _DesktopCard(
+          title: 'About',
+          children: [
+            if ((profile.bio ?? '').isNotEmpty)
+              Padding(
+                padding: const EdgeInsets.only(bottom: 16),
+                child: Text(
+                  profile.bio!,
+                  style: TextStyle(fontSize: 14, height: 1.6, color: AppTheme.navyText.withValues(alpha: 0.85)),
                 ),
-                // Back button for viewing others' profiles
-                if (!_isOwnProfileMode)
-                  Positioned(
-                    top: MediaQuery.of(context).padding.top + 4,
-                    left: 8,
-                    child: IconButton(
-                      icon: const Icon(Icons.arrow_back, color: Colors.white),
-                      onPressed: () {
-                        if (Navigator.of(context).canPop()) {
-                          Navigator.of(context).pop();
-                        } else {
-                          context.go(AppRoutes.homeAlias);
-                        }
-                      },
-                    ),
+              )
+            else if (_isOwnProfile)
+              Padding(
+                padding: const EdgeInsets.only(bottom: 16),
+                child: GestureDetector(
+                  onTap: _openSettings,
+                  child: Text(
+                    'Add a bio to tell people about yourself...',
+                    style: TextStyle(fontSize: 14, fontStyle: FontStyle.italic, color: AppTheme.navyText.withValues(alpha: 0.35)),
                   ),
-              ],
+                ),
+              ),
+            if ((profile.location ?? '').isNotEmpty)
+              _InfoRow(icon: Icons.location_on, text: profile.location!),
+            _InfoRow(icon: Icons.calendar_today, text: 'Joined ${_formatJoinDate(profile.createdAt)}'),
+            if ((profile.website ?? '').isNotEmpty)
+              _InfoRow(
+                icon: Icons.link,
+                child: GestureDetector(
+                  onTap: () => UrlLauncherHelper.launchUrlSafely(context, profile.website!),
+                  child: Text(
+                    profile.website!,
+                    style: TextStyle(fontSize: 14, color: AppTheme.royalPurple, fontWeight: FontWeight.w600, decoration: TextDecoration.underline),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                ),
+              ),
+            // Metadata fields
+            if (profile.metadataFields.isNotEmpty) ...[
+              const SizedBox(height: 16),
+              Container(height: 1, color: AppTheme.navyText.withValues(alpha: 0.06)),
+              const SizedBox(height: 12),
+              ...profile.metadataFields.map((field) => Padding(
+                padding: const EdgeInsets.only(bottom: 8),
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    Text(field.key, style: TextStyle(fontSize: 13, color: AppTheme.navyText.withValues(alpha: 0.5), fontWeight: FontWeight.w500)),
+                    Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        if (field.verified)
+                          Icon(Icons.check, size: 14, color: const Color(0xFF16A34A)),
+                        if (field.verified) const SizedBox(width: 4),
+                        Text(
+                          field.value,
+                          style: TextStyle(
+                            fontSize: 13,
+                            fontWeight: FontWeight.w600,
+                            color: field.verified ? const Color(0xFF16A34A) : AppTheme.navyText,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ],
+                ),
+              )),
+            ],
+            // Interests
+            if ((profile.interests ?? []).isNotEmpty) ...[
+              const SizedBox(height: 12),
+              Container(height: 1, color: AppTheme.navyText.withValues(alpha: 0.06)),
+              const SizedBox(height: 12),
+              Wrap(
+                spacing: 6,
+                runSpacing: 6,
+                children: profile.interests!.map((interest) => Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                  decoration: BoxDecoration(
+                    color: AppTheme.queenPink.withValues(alpha: 0.2),
+                    borderRadius: BorderRadius.circular(16),
+                    border: Border.all(color: AppTheme.royalPurple.withValues(alpha: 0.25)),
+                  ),
+                  child: Text(interest, style: TextStyle(fontSize: 12, color: AppTheme.navyText)),
+                )).toList(),
+              ),
+            ],
+          ],
+        ),
+        const SizedBox(height: 16),
+
+        // ── Top 8 Card ──
+        _DesktopCard(
+          title: 'Top 8',
+          trailing: GestureDetector(
+            onTap: () => _navigateToConnections(0),
+            child: Text('See all friends', style: TextStyle(fontSize: 13, color: AppTheme.royalPurple, fontWeight: FontWeight.w600)),
+          ),
+          children: [
+            if (_mutualFollowers.isEmpty)
+              Center(
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(vertical: 8),
+                  child: Text('No friends yet', style: TextStyle(fontSize: 13, color: AppTheme.navyText.withValues(alpha: 0.4))),
+                ),
+              )
+            else
+              Wrap(
+                spacing: 8,
+                runSpacing: 8,
+                children: _mutualFollowers.take(8).map((f) {
+                  final name = f['display_name'] ?? f['handle'] ?? '?';
+                  final avatar = _resolveAvatar(f['avatar_url'] as String?);
+                  final handle = f['handle'] as String? ?? '';
+                  return GestureDetector(
+                    onTap: () => AppRoutes.navigateToProfile(context, handle),
+                    child: SizedBox(
+                      width: 68,
+                      child: Column(
+                        children: [
+                          SojornAvatar(displayName: name, avatarUrl: avatar.isNotEmpty ? avatar : null, size: 56, borderRadius: 28),
+                          const SizedBox(height: 4),
+                          Text(name, style: TextStyle(fontSize: 11, fontWeight: FontWeight.w600, color: AppTheme.navyText), maxLines: 1, overflow: TextOverflow.ellipsis, textAlign: TextAlign.center),
+                        ],
+                      ),
+                    ),
+                  );
+                }).toList(),
+              ),
+          ],
+        ),
+      ],
+    );
+  }
+
+  String _formatJoinDate(DateTime date) {
+    const months = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
+    return '${months[date.month - 1]} ${date.year}';
+  }
+
+  // ── Inline expanding composer ──────────────────────────────────────────
+
+  Widget _buildInlineComposer() {
+    return AnimatedContainer(
+      duration: const Duration(milliseconds: 250),
+      curve: Curves.easeInOut,
+      decoration: BoxDecoration(
+        color: AppTheme.cardSurface,
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: AppTheme.navyText.withValues(alpha: 0.08)),
+      ),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          // Top row: avatar + hint/text field
+          GestureDetector(
+            onTap: () {
+              if (!_composerExpanded) {
+                setState(() => _composerExpanded = true);
+                WidgetsBinding.instance.addPostFrameCallback((_) {
+                  _composerFocusNode.requestFocus();
+                });
+              }
+            },
+            child: Padding(
+              padding: EdgeInsets.fromLTRB(16, 14, 16, _composerExpanded ? 0 : 14),
+              child: Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  SojornAvatar(
+                    displayName: _profile!.displayName,
+                    avatarUrl: _resolveAvatar(_profile!.avatarUrl),
+                    size: 40,
+                    borderRadius: 20,
+                  ),
+                  const SizedBox(width: 14),
+                  Expanded(
+                    child: _composerExpanded
+                        ? const SizedBox.shrink()
+                        : Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+                            decoration: BoxDecoration(
+                              color: AppTheme.scaffoldBg,
+                              borderRadius: BorderRadius.circular(20),
+                            ),
+                            child: Text(
+                              "What's on your mind?",
+                              style: TextStyle(fontSize: 14, color: AppTheme.navyText.withValues(alpha: 0.4)),
+                            ),
+                          ),
+                  ),
+                  if (!_composerExpanded) ...[
+                    const SizedBox(width: 8),
+                    IconButton(
+                      onPressed: () {
+                        setState(() => _composerExpanded = true);
+                        WidgetsBinding.instance.addPostFrameCallback((_) {
+                          _composerFocusNode.requestFocus();
+                        });
+                      },
+                      icon: Icon(Icons.photo_outlined, size: 20, color: AppTheme.navyText.withValues(alpha: 0.4)),
+                      tooltip: 'Photo',
+                      padding: EdgeInsets.zero,
+                      constraints: const BoxConstraints(minWidth: 36, minHeight: 36),
+                    ),
+                  ],
+                ],
+              ),
             ),
           ),
-          // ── Profile widget banner (if layout has widgets) ───────────────
-          if (_profileLayout != null && _profileLayout!.widgets.isNotEmpty)
-            Container(
-              color: AppTheme.cardSurface,
-              constraints: const BoxConstraints(maxHeight: 200),
-              child: SingleChildScrollView(
-                padding: const EdgeInsets.symmetric(horizontal: SojornSpacing.lg, vertical: SojornSpacing.md),
-                child: ProfileWidgetRenderer(
-                  layout: _profileLayout!,
-                  isOwnProfile: _isOwnProfile,
+          // Expanded: ComposerBar with full options
+          if (_composerExpanded) ...[
+            Padding(
+              padding: const EdgeInsets.fromLTRB(16, 8, 16, 12),
+              child: ComposerBar(
+                config: const ComposerConfig(
+                  allowImages: true,
+                  allowGifs: true,
+                  hintText: "What's on your mind?",
+                  maxLines: 5,
+                ),
+                focusNode: _composerFocusNode,
+                onSend: _onComposerSend,
+              ),
+            ),
+            // Cancel row
+            Padding(
+              padding: const EdgeInsets.fromLTRB(16, 0, 16, 10),
+              child: Align(
+                alignment: Alignment.centerRight,
+                child: TextButton(
+                  onPressed: () => setState(() => _composerExpanded = false),
+                  child: Text(
+                    'Cancel',
+                    style: TextStyle(fontSize: 12, color: AppTheme.navyText.withValues(alpha: 0.5)),
+                  ),
                 ),
               ),
             ),
-          // ── Tab bar + content ───────────────────────────────────────────
-          Expanded(
+          ],
+        ],
+      ),
+    );
+  }
+
+  Future<void> _onComposerSend(String text, String? mediaUrl) async {
+    try {
+      final apiService = ref.read(apiServiceProvider);
+      final post = await apiService.publishPost(
+        body: text,
+        imageUrl: mediaUrl,
+        visibility: 'public',
+      );
+      if (mounted) {
+        setState(() {
+          _composerExpanded = false;
+          _posts.insert(0, post);
+        });
+        context.showSuccess('Post published!');
+      }
+    } catch (e) {
+      if (mounted) context.showError('Failed to post: $e');
+      rethrow;
+    }
+  }
+
+  /// Right column: composer + post feed based on active tab
+  Widget _buildDesktopFeedColumn() {
+    // About tab
+    if (_activeTab == 3 && !_isOwnProfileMode) {
+      return _buildAboutTab();
+    }
+
+    final List<Post> posts;
+    final bool isLoading;
+    final bool isLoadingMore;
+    final bool hasMore;
+    final String? error;
+    final VoidCallback onRefresh;
+    final VoidCallback onLoadMore;
+
+    if (_activeTab == 1) {
+      posts = _savedPosts; isLoading = _isSavedLoading; isLoadingMore = _isSavedLoadingMore;
+      hasMore = _hasMoreSaved; error = _savedError;
+      onRefresh = () => _loadSaved(refresh: true); onLoadMore = () => _loadSaved(refresh: false);
+    } else if (_activeTab == 2) {
+      posts = _chainedPosts; isLoading = _isChainedLoading; isLoadingMore = _isChainedLoadingMore;
+      hasMore = _hasMoreChained; error = _chainedError;
+      onRefresh = () => _loadChained(refresh: true); onLoadMore = () => _loadChained(refresh: false);
+    } else {
+      posts = _posts; isLoading = _isPostsLoading; isLoadingMore = _isPostsLoadingMore;
+      hasMore = _hasMorePosts; error = _postsError;
+      onRefresh = () => _loadPosts(refresh: true); onLoadMore = () => _loadPosts(refresh: false);
+    }
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        // Inline composer (own profile, Posts tab only)
+        if (_isOwnProfile && _activeTab == 0)
+          _buildInlineComposer(),
+        if (_isOwnProfile && _activeTab == 0) const SizedBox(height: 16),
+
+        // Chains empty state
+        if (_activeTab == 2 && posts.isEmpty && !isLoading)
+          Container(
+            padding: const EdgeInsets.all(32),
+            decoration: BoxDecoration(
+              color: AppTheme.cardSurface,
+              borderRadius: BorderRadius.circular(12),
+              border: Border.all(color: AppTheme.navyText.withValues(alpha: 0.08)),
+            ),
             child: Column(
               children: [
-                Material(
-                  color: AppTheme.scaffoldBg,
-                  child: TabBar(
-                    controller: _tabController,
-                    labelColor: AppTheme.navyText,
-                    unselectedLabelColor: AppTheme.navyText.withValues(alpha: 0.6),
-                    indicatorColor: AppTheme.royalPurple,
-                    indicatorWeight: 3,
-                    labelStyle: AppTheme.labelMedium,
-                    tabs: [
-                      const Tab(text: 'Posts'),
-                      const Tab(text: 'Saved'),
-                      const Tooltip(message: 'Posts you\'ve replied to or continued', child: Tab(text: 'Chains')),
-                      if (!_isOwnProfileMode) const Tab(text: 'About'),
-                    ],
-                  ),
+                Icon(Icons.link, size: 48, color: AppTheme.royalPurple.withValues(alpha: 0.4)),
+                const SizedBox(height: 16),
+                Text('Chains', style: TextStyle(fontSize: 18, fontWeight: FontWeight.w700, color: AppTheme.navyText)),
+                const SizedBox(height: 8),
+                Text(
+                  'Chains are threaded conversations that build on each other. When you reply to a post and others reply to your reply, it creates a Chain.',
+                  style: TextStyle(fontSize: 14, color: AppTheme.navyText.withValues(alpha: 0.6)),
+                  textAlign: TextAlign.center,
                 ),
-                Expanded(child: _buildTabBarView()),
               ],
             ),
           ),
-        ],
+
+        // Error
+        if (error != null)
+          Container(
+            padding: const EdgeInsets.all(16),
+            margin: const EdgeInsets.only(bottom: 16),
+            decoration: BoxDecoration(
+              color: AppTheme.error.withValues(alpha: 0.08),
+              borderRadius: BorderRadius.circular(12),
+            ),
+            child: Text(error, style: TextStyle(color: AppTheme.error, fontSize: 14), textAlign: TextAlign.center),
+          ),
+
+        // Loading
+        if (isLoading && posts.isEmpty)
+          const Padding(
+            padding: EdgeInsets.symmetric(vertical: 32),
+            child: Center(child: CircularProgressIndicator()),
+          ),
+
+        // Posts list
+        ...posts.map((post) => Padding(
+          padding: const EdgeInsets.only(bottom: 16),
+          child: sojornPostCard(
+            post: post,
+            onTap: () => _openPostDetail(post),
+            onChain: () => _openChainComposer(post),
+          ),
+        )),
+
+        // Load more
+        if (isLoadingMore)
+          const Padding(
+            padding: EdgeInsets.symmetric(vertical: 16),
+            child: Center(child: CircularProgressIndicator()),
+          ),
+        if (!isLoadingMore && hasMore && posts.isNotEmpty)
+          Center(
+            child: TextButton(
+              onPressed: onLoadMore,
+              child: const Text('Load more'),
+            ),
+          ),
+
+        // Empty posts
+        if (posts.isEmpty && !isLoading && _activeTab != 2)
+          Center(
+            child: Padding(
+              padding: const EdgeInsets.symmetric(vertical: 32),
+              child: Text('No posts yet', style: TextStyle(fontSize: 14, color: AppTheme.navyText.withValues(alpha: 0.5))),
+            ),
+          ),
+
+        // End indicator
+        if (posts.isNotEmpty && !hasMore)
+          Padding(
+            padding: const EdgeInsets.symmetric(vertical: 24),
+            child: Center(
+              child: Text("That's all for now", style: TextStyle(fontSize: 14, color: AppTheme.navyText.withValues(alpha: 0.35))),
+            ),
+          ),
+      ],
     );
   }
 
@@ -1066,6 +1942,8 @@ class _UnifiedProfileScreenState extends ConsumerState<UnifiedProfileScreen>
       child: ProfileWidgetRenderer(
         layout: _profileLayout!,
         isOwnProfile: _isOwnProfile,
+        stats: _stats,
+        profileId: _profile?.id,
       ),
     );
   }
@@ -1099,7 +1977,7 @@ class _UnifiedProfileScreenState extends ConsumerState<UnifiedProfileScreen>
     final topPad = MediaQuery.of(context).padding.top;
     final hasBanner = (profile.coverUrl ?? '').isNotEmpty;
     return SliverAppBar(
-      expandedHeight: topPad + (hasBanner ? 210.0 : 152.0),
+      expandedHeight: topPad + (hasBanner ? 360.0 : 320.0),
       pinned: true,
       toolbarHeight: 0,
       collapsedHeight: 0,
@@ -1121,7 +1999,9 @@ class _UnifiedProfileScreenState extends ConsumerState<UnifiedProfileScreen>
           onSettingsTap: _openSettings,
           onPrivacyTap: _openPrivacyMenu,
           onAvatarTap: _isOwnProfile ? _showAvatarActions : null,
-          onCustomizeLayoutTap: _isOwnProfile ? _openLayoutEditor : null,
+          onBannerTap: _isOwnProfile ? _showBannerActions : null,
+          isBannerUploading: _isBannerUploading,
+          bannerUploadProgress: _bannerUploadProgress,
           onConnectionsTap: _isOwnProfile ? _navigateToConnections : null,
         ),
       ),
@@ -1623,16 +2503,7 @@ class _UnifiedProfileScreenState extends ConsumerState<UnifiedProfileScreen>
     );
   }
 
-  Color _getTierColor(TrustTier tier) {
-    switch (tier) {
-      case TrustTier.established:
-        return const Color(0xFFFFD700);
-      case TrustTier.trusted:
-        return AppTheme.royalPurple;
-      case TrustTier.new_user:
-        return AppTheme.egyptianBlue;
-    }
-  }
+  Color _getTierColor(TrustTier tier) => tier.color;
 
   String _formatDate(DateTime date) {
     final now = DateTime.now();
@@ -1709,7 +2580,9 @@ class _ProfileHeader extends StatelessWidget {
   final VoidCallback onSettingsTap;
   final VoidCallback onPrivacyTap;
   final VoidCallback? onAvatarTap;
-  final VoidCallback? onCustomizeLayoutTap;
+  final VoidCallback? onBannerTap;
+  final bool isBannerUploading;
+  final double bannerUploadProgress;
   final void Function(int tabIndex)? onConnectionsTap;
 
   const _ProfileHeader({
@@ -1726,222 +2599,332 @@ class _ProfileHeader extends StatelessWidget {
     required this.onSettingsTap,
     required this.onPrivacyTap,
     this.onAvatarTap,
-    this.onCustomizeLayoutTap,
+    this.onBannerTap,
+    this.isBannerUploading = false,
+    this.bannerUploadProgress = 0.0,
     this.onConnectionsTap,
   });
 
   @override
   Widget build(BuildContext context) {
-    const avatarRadius = 40.0;
+    const bannerHeight = 200.0;
+    const avatarRadius = 44.0;
+    const avatarOverlap = 44.0;
     final flag = getCountryFlag(profile.originCountry ?? 'US');
     final hasBanner = (profile.coverUrl ?? '').isNotEmpty;
-    return Stack(
-      fit: StackFit.passthrough,
+
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        // Background: banner image or gradient
-        if (hasBanner)
-          Positioned.fill(child: SignedMediaImage(url: profile.coverUrl!, fit: BoxFit.cover))
-        else
-          Positioned.fill(child: Container(decoration: BoxDecoration(gradient: _generateGradient(profile.handle)))),
-        // Dark gradient overlay for text readability over banner
-        if (hasBanner)
-          Positioned.fill(
-            child: Container(
-              decoration: BoxDecoration(
-                gradient: LinearGradient(
-                  begin: Alignment.topCenter,
-                  end: Alignment.bottomCenter,
-                  colors: [
-                    Colors.black.withValues(alpha: 0.35),
-                    Colors.black.withValues(alpha: 0.70),
-                  ],
-                ),
-              ),
-            ),
-          ),
-        SafeArea(
-          bottom: false,
-          child: Padding(
-            padding: const EdgeInsets.fromLTRB(16, 4, 8, 8),
-            child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
+        // ── Banner (200px) ────────────────────────────────────────────────
+        SizedBox(
+          height: bannerHeight,
+          child: Stack(
+            fit: StackFit.expand,
             children: [
-              // ── Top row: avatar | info | icons ───────────────────────────
-              Row(
-                crossAxisAlignment: CrossAxisAlignment.center,
-                children: [
-                  // Avatar (tappable on own profile)
-                  GestureDetector(
-                    onTap: onAvatarTap,
-                    child: _HarmonyAvatar(profile: profile, radius: avatarRadius),
-                  ),
-                  const SizedBox(width: 16),
-                  // Name + handle + stats
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        Text(
-                          profile.displayName,
-                          style: AppTheme.headlineMedium.copyWith(
-                            color: AppTheme.white,
-                            fontSize: 17,
-                            fontWeight: FontWeight.w700,
-                          ),
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                        ),
-                        const SizedBox(height: 2),
-                        Row(
-                          children: [
-                            Text(
-                              '@${profile.handle}',
-                              style: AppTheme.bodyMedium.copyWith(
-                                fontSize: 12,
-                                color: AppTheme.white.withValues(alpha: 0.8),
-                              ),
-                            ),
-                            if (flag != null) ...[
-                              const SizedBox(width: 4),
-                              Text(flag, style: const TextStyle(fontSize: 12)),
-                            ],
-                          ],
-                        ),
-                        if (stats != null) ...[
-                          const SizedBox(height: 10),
-                          _buildInlineStats(stats!),
-                        ],
-                      ],
-                    ),
-                  ),
-                  // Settings icons (own profile only)
-                  if (isOwnProfile)
-                    Column(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        IconButton(
-                          onPressed: onPrivacyTap,
-                          icon: const Icon(Icons.lock_outline, color: Colors.white, size: 20),
-                          tooltip: 'Privacy',
-                          visualDensity: VisualDensity.compact,
-                          padding: EdgeInsets.zero,
-                        ),
-                        IconButton(
-                          onPressed: onSettingsTap,
-                          icon: const Icon(Icons.settings_outlined, color: Colors.white, size: 20),
-                          tooltip: 'Settings',
-                          visualDensity: VisualDensity.compact,
-                          padding: EdgeInsets.zero,
-                        ),
-                      ],
-                    ),
-                ],
-              ),
-              const SizedBox(height: 12),
-              // ── Action buttons ───────────────────────────────────────────
-              if (isOwnProfile)
-                Row(
-                  children: [
-                    Expanded(
-                      child: _GradientOutlinedButton(
-                        label: 'Edit',
-                        icon: Icons.edit_outlined,
-                        onPressed: onSettingsTap,
-                      ),
-                    ),
-                    const SizedBox(width: 6),
-                    Expanded(
-                      child: _GradientOutlinedButton(
-                        label: 'Layout',
-                        icon: Icons.dashboard_customize_outlined,
-                        onPressed: onCustomizeLayoutTap ?? () {},
-                      ),
-                    ),
-                    const SizedBox(width: 6),
-                    Expanded(
-                      child: _GradientOutlinedButton(
-                        label: 'Share',
-                        icon: Icons.ios_share_outlined,
-                        onPressed: () {
-                          // Share profile URL via native share sheet
-                        },
-                      ),
-                    ),
-                  ],
-                )
+              // Background: image or gradient
+              if (hasBanner)
+                SignedMediaImage(url: profile.coverUrl!, fit: BoxFit.cover)
               else
-                _buildRelationshipActions(),
-              // ── Bio section ────────────────────────────────────────────
-              if (profile.bio != null && profile.bio!.isNotEmpty) ...[
-                const SizedBox(height: 10),
-                Text(
-                  profile.bio!,
-                  style: TextStyle(
-                    color: Colors.white.withValues(alpha: 0.9),
-                    fontSize: 13,
-                    height: 1.4,
-                    shadows: [
-                      Shadow(color: Colors.black.withValues(alpha: 0.4), blurRadius: 4, offset: const Offset(0, 1)),
+                Container(decoration: BoxDecoration(gradient: _generateGradient(profile.handle))),
+              // Dark overlay for image readability
+              if (hasBanner)
+                Container(
+                  decoration: BoxDecoration(
+                    gradient: LinearGradient(
+                      begin: Alignment.topCenter,
+                      end: Alignment.bottomCenter,
+                      colors: [
+                        Colors.black.withValues(alpha: 0.15),
+                        Colors.black.withValues(alpha: 0.45),
+                      ],
+                    ),
+                  ),
+                ),
+              // Top-right: settings icons (own profile)
+              if (isOwnProfile)
+                Positioned(
+                  top: 8,
+                  right: 4,
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      IconButton(
+                        onPressed: onPrivacyTap,
+                        icon: const Icon(Icons.lock_outline, color: Colors.white, size: 20),
+                        tooltip: 'Privacy',
+                        visualDensity: VisualDensity.compact,
+                        padding: EdgeInsets.zero,
+                      ),
+                      IconButton(
+                        onPressed: onSettingsTap,
+                        icon: const Icon(Icons.settings_outlined, color: Colors.white, size: 20),
+                        tooltip: 'Settings',
+                        visualDensity: VisualDensity.compact,
+                        padding: EdgeInsets.zero,
+                      ),
                     ],
                   ),
-                  maxLines: 3,
-                  overflow: TextOverflow.ellipsis,
                 ),
-              ] else if (isOwnProfile) ...[
-                const SizedBox(height: 8),
-                GestureDetector(
-                  onTap: onSettingsTap,
-                  child: Text(
-                    'Add a bio to tell people about yourself',
-                    style: TextStyle(
-                      color: Colors.white.withValues(alpha: 0.5),
-                      fontSize: 12,
-                      fontStyle: FontStyle.italic,
+              // Banner upload loading overlay with progress
+              if (isBannerUploading)
+                Positioned.fill(
+                  child: Container(
+                    color: Colors.black.withValues(alpha: 0.5),
+                    child: Center(
+                      child: Column(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          SizedBox(
+                            width: 44,
+                            height: 44,
+                            child: Stack(
+                              alignment: Alignment.center,
+                              children: [
+                                CircularProgressIndicator(
+                                  value: bannerUploadProgress > 0 ? bannerUploadProgress : null,
+                                  strokeWidth: 3,
+                                  color: Colors.white,
+                                  backgroundColor: Colors.white.withValues(alpha: 0.2),
+                                ),
+                                if (bannerUploadProgress > 0)
+                                  Text(
+                                    '${(bannerUploadProgress * 100).toInt()}%',
+                                    style: const TextStyle(color: Colors.white, fontSize: 10, fontWeight: FontWeight.w700),
+                                  ),
+                              ],
+                            ),
+                          ),
+                          const SizedBox(height: 10),
+                          const Text('Uploading cover...', style: TextStyle(color: Colors.white, fontSize: 12)),
+                        ],
+                      ),
                     ),
                   ),
                 ),
-              ],
-              // ── Status line (AIM-style presence) ───────────────────────
-              if (profile.statusText != null && profile.statusText!.isNotEmpty) ...[
-                const SizedBox(height: 8),
-                Row(
-                  children: [
-                    Container(
-                      width: 7, height: 7,
+              // Bottom-right: edit cover chip (own profile)
+              if (isOwnProfile && !isBannerUploading)
+                Positioned(
+                  bottom: 10,
+                  right: 10,
+                  child: GestureDetector(
+                    onTap: onBannerTap,
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
                       decoration: BoxDecoration(
-                        color: const Color(0xFF43A047),
-                        shape: BoxShape.circle,
-                        boxShadow: [BoxShadow(color: const Color(0xFF43A047).withValues(alpha: 0.5), blurRadius: 5)],
+                        color: Colors.black.withValues(alpha: 0.55),
+                        borderRadius: BorderRadius.circular(20),
+                        border: Border.all(color: Colors.white.withValues(alpha: 0.3), width: 1),
+                      ),
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          const Icon(Icons.camera_alt_outlined, color: Colors.white, size: 14),
+                          const SizedBox(width: 5),
+                          Text(
+                            hasBanner ? 'Edit cover' : 'Add cover',
+                            style: const TextStyle(
+                              color: Colors.white,
+                              fontSize: 12,
+                              fontWeight: FontWeight.w600,
+                            ),
+                          ),
+                        ],
                       ),
                     ),
-                    const SizedBox(width: 6),
-                    Flexible(
-                      child: Text(
-                        profile.statusText!,
-                        style: TextStyle(
-                          color: Colors.white.withValues(alpha: 0.75),
-                          fontSize: 12,
-                          fontStyle: FontStyle.italic,
-                          shadows: [Shadow(color: Colors.black.withValues(alpha: 0.4), blurRadius: 4)],
-                        ),
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                      ),
-                    ),
-                  ],
+                  ),
                 ),
-              ],
-              // ── Harmony trust badge ─────────────────────────────────────
-              if (profile.trustState != null) ...[
-                const SizedBox(height: 8),
-                _ProfileTrustBadge(trustState: profile.trustState!),
-              ],
             ],
           ),
         ),
-      ),
+
+        // ── Info section (avatar overlaps banner) ──────────────────────────
+        Container(
+          color: AppTheme.scaffoldBg,
+          child: Stack(
+            clipBehavior: Clip.none,
+            children: [
+              // Avatar: positioned to overlap the banner above
+              Positioned(
+                top: -avatarOverlap,
+                left: 16,
+                child: GestureDetector(
+                  onTap: onAvatarTap,
+                  child: Container(
+                    decoration: BoxDecoration(
+                      borderRadius: BorderRadius.circular(SojornRadii.card + 4),
+                      border: Border.all(color: AppTheme.scaffoldBg, width: 3),
+                    ),
+                    child: _HarmonyAvatar(profile: profile, radius: avatarRadius),
+                  ),
+                ),
+              ),
+              // Content (left-padded to clear the avatar)
+              Padding(
+                padding: EdgeInsets.fromLTRB(avatarRadius * 2 + 28, 12, 16, 16),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    // ── Name + action buttons ───────────────────────────
+                    Row(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              Text(
+                                profile.displayName,
+                                style: AppTheme.headlineMedium.copyWith(
+                                  fontSize: 17,
+                                  fontWeight: FontWeight.w700,
+                                ),
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                              ),
+                              Row(
+                                children: [
+                                  Text(
+                                    '@${profile.handle}',
+                                    style: AppTheme.bodyMedium.copyWith(
+                                      fontSize: 12,
+                                      color: AppTheme.navyText.withValues(alpha: 0.55),
+                                    ),
+                                  ),
+                                  if (flag != null) ...[
+                                    const SizedBox(width: 4),
+                                    Text(flag, style: const TextStyle(fontSize: 12)),
+                                  ],
+                                ],
+                              ),
+                            ],
+                          ),
+                        ),
+                        const SizedBox(width: 8),
+                        if (isOwnProfile)
+                          Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              OutlinedButton.icon(
+                                onPressed: onSettingsTap,
+                                icon: const Icon(Icons.edit_outlined, size: 14),
+                                label: const Text(
+                                  'Edit',
+                                  style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600),
+                                ),
+                                style: OutlinedButton.styleFrom(
+                                  foregroundColor: AppTheme.royalPurple,
+                                  side: BorderSide(color: AppTheme.royalPurple.withValues(alpha: 0.6)),
+                                  shape: RoundedRectangleBorder(
+                                    borderRadius: BorderRadius.circular(20),
+                                  ),
+                                  padding: const EdgeInsets.symmetric(vertical: 6, horizontal: 10),
+                                  tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                                  visualDensity: VisualDensity.compact,
+                                ),
+                              ),
+                              const SizedBox(width: 6),
+                              OutlinedButton.icon(
+                                onPressed: () {},
+                                icon: const Icon(Icons.ios_share_outlined, size: 14),
+                                label: const Text(
+                                  'Share',
+                                  style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600),
+                                ),
+                                style: OutlinedButton.styleFrom(
+                                  foregroundColor: AppTheme.navyText.withValues(alpha: 0.65),
+                                  side: BorderSide(color: AppTheme.navyText.withValues(alpha: 0.25)),
+                                  shape: RoundedRectangleBorder(
+                                    borderRadius: BorderRadius.circular(20),
+                                  ),
+                                  padding: const EdgeInsets.symmetric(vertical: 6, horizontal: 10),
+                                  tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                                  visualDensity: VisualDensity.compact,
+                                ),
+                              ),
+                            ],
+                          )
+                        else
+                          _buildRelationshipActions(),
+                      ],
+                    ),
+                    // ── Stats ───────────────────────────────────────────
+                    if (stats != null) ...[
+                      const SizedBox(height: 8),
+                      _buildInlineStats(stats!),
+                    ],
+                    // ── Bio ─────────────────────────────────────────────
+                    if (profile.bio != null && profile.bio!.isNotEmpty) ...[
+                      const SizedBox(height: 8),
+                      Text(
+                        profile.bio!,
+                        style: AppTheme.bodyMedium.copyWith(fontSize: 13, height: 1.4),
+                        maxLines: 3,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                    ] else if (isOwnProfile) ...[
+                      const SizedBox(height: 6),
+                      GestureDetector(
+                        onTap: onSettingsTap,
+                        child: Text(
+                          'Add a bio to tell people about yourself',
+                          style: AppTheme.bodyMedium.copyWith(
+                            fontSize: 12,
+                            fontStyle: FontStyle.italic,
+                            color: AppTheme.navyText.withValues(alpha: 0.4),
+                          ),
+                        ),
+                      ),
+                    ],
+                    // ── Status line ─────────────────────────────────────
+                    if (profile.statusText != null && profile.statusText!.isNotEmpty) ...[
+                      const SizedBox(height: 6),
+                      Row(
+                        children: [
+                          Container(
+                            width: 7,
+                            height: 7,
+                            decoration: BoxDecoration(
+                              color: const Color(0xFF43A047),
+                              shape: BoxShape.circle,
+                              boxShadow: [
+                                BoxShadow(
+                                  color: const Color(0xFF43A047).withValues(alpha: 0.5),
+                                  blurRadius: 5,
+                                ),
+                              ],
+                            ),
+                          ),
+                          const SizedBox(width: 6),
+                          Flexible(
+                            child: Text(
+                              profile.statusText!,
+                              style: AppTheme.bodyMedium.copyWith(
+                                fontSize: 12,
+                                fontStyle: FontStyle.italic,
+                                color: AppTheme.navyText.withValues(alpha: 0.65),
+                              ),
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ],
+                    // ── Trust badge ─────────────────────────────────────
+                    if (profile.trustState != null) ...[
+                      const SizedBox(height: 6),
+                      _ProfileTrustBadge(trustState: profile.trustState!),
+                    ],
+                  ],
+                ),
+              ),
+            ],
+          ),
+        ),
       ],
     );
   }
@@ -1969,32 +2952,6 @@ class _ProfileHeader extends StatelessWidget {
     );
   }
 
-  Widget _buildActionRow() {
-    if (isOwnProfile) {
-      return Align(
-        alignment: Alignment.centerRight,
-        child: Wrap(
-          spacing: AppTheme.spacingSm,
-          runSpacing: AppTheme.spacingXs,
-          alignment: WrapAlignment.end,
-          children: [
-            _HeaderActionButton(
-              icon: Icons.settings_outlined,
-              label: 'Settings',
-              onPressed: onSettingsTap,
-            ),
-            _HeaderActionButton(
-              icon: Icons.lock_outline,
-              label: 'Privacy',
-              onPressed: onPrivacyTap,
-            ),
-          ],
-        ),
-      );
-    }
-    return _buildFollowButton();
-  }
-
   Widget _buildRelationshipActions() {
     return Wrap(
       spacing: AppTheme.spacingSm,
@@ -2006,8 +2963,8 @@ class _ProfileHeader extends StatelessWidget {
           OutlinedButton.icon(
             onPressed: onMessageTap,
             style: OutlinedButton.styleFrom(
-              foregroundColor: AppTheme.white,
-              side: BorderSide(color: AppTheme.white.withValues(alpha: 0.7)),
+              foregroundColor: AppTheme.royalPurple,
+              side: BorderSide(color: AppTheme.royalPurple.withValues(alpha: 0.6)),
               padding: const EdgeInsets.symmetric(
                 horizontal: AppTheme.spacingMd,
                 vertical: AppTheme.spacingSm,
@@ -2019,7 +2976,7 @@ class _ProfileHeader extends StatelessWidget {
             icon: const Icon(Icons.chat_bubble_outline, size: 16),
             label: Text(
               'Message',
-              style: AppTheme.labelMedium.copyWith(color: AppTheme.white),
+              style: AppTheme.labelMedium.copyWith(color: AppTheme.royalPurple),
             ),
           ),
       ],
@@ -2078,41 +3035,9 @@ class _ProfileHeader extends StatelessWidget {
     );
   }
 
-  Widget _buildStats(ProfileStats stats) {
-    return FittedBox(
-      fit: BoxFit.scaleDown,
-      child: Container(
-        padding: const EdgeInsets.symmetric(
-          horizontal: AppTheme.spacingMd,
-          vertical: 6,
-        ),
-        decoration: BoxDecoration(
-          color: const Color(0x59000000),
-          borderRadius: BorderRadius.circular(AppTheme.radiusMd),
-        ),
-        child: Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            _StatItem(label: 'Posts', value: stats.posts.toString()),
-            const SizedBox(width: AppTheme.spacingMd),
-            _StatItem(
-              label: 'Followers',
-              value: stats.followers.toString(),
-              onTap: onConnectionsTap != null ? () => onConnectionsTap!(0) : null,
-            ),
-            const SizedBox(width: AppTheme.spacingMd),
-            _StatItem(
-              label: 'Following',
-              value: stats.following.toString(),
-              onTap: onConnectionsTap != null ? () => onConnectionsTap!(1) : null,
-            ),
-          ],
-        ),
-      ),
-    );
-  }
+  LinearGradient _generateGradient(String seed) => _generateGradientStatic(seed);
 
-  LinearGradient _generateGradient(String seed) {
+  static LinearGradient _generateGradientStatic(String seed) {
     final hash = seed.hashCode.abs();
     final hue = (hash % 360).toDouble();
 
@@ -2146,8 +3071,8 @@ class _InlineStat extends StatelessWidget {
       children: [
         Text(
           value,
-          style: const TextStyle(
-            color: Colors.white,
+          style: TextStyle(
+            color: AppTheme.navyText,
             fontSize: 15,
             fontWeight: FontWeight.w700,
           ),
@@ -2155,107 +3080,13 @@ class _InlineStat extends StatelessWidget {
         Text(
           label,
           style: TextStyle(
-            color: Colors.white.withValues(alpha: 0.75),
+            color: AppTheme.navyText.withValues(alpha: 0.55),
             fontSize: 10,
           ),
         ),
       ],
     );
     if (onTap != null) return GestureDetector(onTap: onTap, child: content);
-    return content;
-  }
-}
-
-// ==============================================================================
-// GRADIENT OUTLINED BUTTON — for Edit Profile / Share on own profile header
-// ==============================================================================
-
-class _GradientOutlinedButton extends StatelessWidget {
-  final String label;
-  final IconData icon;
-  final VoidCallback onPressed;
-
-  const _GradientOutlinedButton({
-    required this.label,
-    required this.icon,
-    required this.onPressed,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    return OutlinedButton.icon(
-      onPressed: onPressed,
-      icon: Icon(icon, size: 14, color: Colors.white),
-      label: Text(
-        label,
-        style: const TextStyle(color: Colors.white, fontSize: 12, fontWeight: FontWeight.w600),
-        overflow: TextOverflow.ellipsis,
-        maxLines: 1,
-      ),
-      style: OutlinedButton.styleFrom(
-        foregroundColor: Colors.white,
-        side: BorderSide(color: Colors.white.withValues(alpha: 0.6), width: 1),
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-        padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 8),
-        tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-        visualDensity: VisualDensity.compact,
-      ),
-    );
-  }
-}
-
-// ==============================================================================
-// STAT ITEM — legacy centered version (kept for compatibility)
-// ==============================================================================
-
-class _StatItem extends StatelessWidget {
-  final String label;
-  final String value;
-  final VoidCallback? onTap;
-
-  const _StatItem({
-    required this.label,
-    required this.value,
-    this.onTap,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    final content = Column(
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        Text(
-          value,
-          style: AppTheme.headlineSmall.copyWith(
-            color: SojornColors.basicWhite,
-            fontSize: 16,
-            shadows: [
-              Shadow(
-                color: const Color(0x4D000000),
-                blurRadius: 4,
-              ),
-            ],
-          ),
-        ),
-        Text(
-          label,
-          style: GoogleFonts.inter(
-            fontSize: 10,
-            color: SojornColors.basicWhite.withValues(alpha: 0.85),
-            shadows: [
-              Shadow(
-                color: const Color(0x4D000000),
-                blurRadius: 2,
-              ),
-            ],
-          ),
-        ),
-      ],
-    );
-
-    if (onTap != null) {
-      return GestureDetector(onTap: onTap, child: content);
-    }
     return content;
   }
 }
@@ -2418,18 +3249,8 @@ class _HarmonyBadge extends StatelessWidget {
     Color badgeColor;
     Color textColor;
 
-    switch (tier) {
-      case TrustTier.established:
-        badgeColor = const Color(0xFFFFD700);
-        break;
-      case TrustTier.trusted:
-        badgeColor = AppTheme.royalPurple;
-        break;
-      case TrustTier.new_user:
-        badgeColor = AppTheme.egyptianBlue;
-        break;
-    }
-    textColor = tier == TrustTier.new_user ? AppTheme.white : badgeColor;
+    badgeColor = tier.color;
+    textColor = badgeColor;
 
     return Container(
       padding: const EdgeInsets.symmetric(
@@ -2465,52 +3286,12 @@ class _HarmonyBadge extends StatelessWidget {
 
   IconData _getIconForTier(TrustTier tier) {
     switch (tier) {
-      case TrustTier.established:
-        return Icons.verified;
-      case TrustTier.trusted:
-        return Icons.check_circle;
-      case TrustTier.new_user:
-        return Icons.fiber_new;
+      case TrustTier.established: return Icons.verified;
+      case TrustTier.elder:       return Icons.local_florist;
+      case TrustTier.trusted:     return Icons.check_circle;
+      case TrustTier.sprout:      return Icons.eco;
+      case TrustTier.new_user:    return Icons.fiber_new;
     }
-  }
-}
-
-// ==============================================================================
-// HEADER ACTION BUTTON
-// ==============================================================================
-
-class _HeaderActionButton extends StatelessWidget {
-  final IconData icon;
-  final String label;
-  final VoidCallback onPressed;
-
-  const _HeaderActionButton({
-    required this.icon,
-    required this.label,
-    required this.onPressed,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    return OutlinedButton.icon(
-      onPressed: onPressed,
-      style: OutlinedButton.styleFrom(
-        foregroundColor: AppTheme.white,
-        side: BorderSide(color: AppTheme.white.withValues(alpha: 0.7)),
-        padding: const EdgeInsets.symmetric(
-          horizontal: AppTheme.spacingMd,
-          vertical: AppTheme.spacingSm,
-        ),
-        shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(AppTheme.radiusMd),
-        ),
-      ),
-      icon: Icon(icon, size: 18),
-      label: Text(
-        label,
-        style: AppTheme.labelMedium.copyWith(color: AppTheme.white),
-      ),
-    );
   }
 }
 
@@ -2590,11 +3371,8 @@ class _ProfileTrustBadge extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final (emoji, label) = switch (trustState.tier) {
-      TrustTier.established => ('🌳', 'Established'),
-      TrustTier.trusted     => ('🌿', 'Trusted'),
-      TrustTier.new_user    => ('🌱', 'New'),
-    };
+    final emoji = trustState.tier.emoji;
+    final label = trustState.tier.displayName;
     final score = trustState.harmonyScore;
 
     return Row(
@@ -2625,6 +3403,262 @@ class _ProfileTrustBadge extends StatelessWidget {
           ),
         ),
       ],
+    );
+  }
+}
+
+// ==============================================================================
+// DESKTOP PROFILE HELPER WIDGETS
+// ==============================================================================
+
+class _DesktopHarmonyBadge extends StatelessWidget {
+  final TrustState trustState;
+  const _DesktopHarmonyBadge({required this.trustState});
+
+  @override
+  Widget build(BuildContext context) {
+    final tier = trustState.tier;
+    final color = tier.color;
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+      decoration: BoxDecoration(
+        color: color.withValues(alpha: 0.1),
+        border: Border.all(color: color.withValues(alpha: 0.3)),
+        borderRadius: BorderRadius.circular(20),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Text(tier.emoji, style: const TextStyle(fontSize: 15)),
+          const SizedBox(width: 6),
+          Text(
+            tier.displayName,
+            style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600, color: color),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _DesktopStat extends StatelessWidget {
+  final int value;
+  final String label;
+  final VoidCallback? onTap;
+  const _DesktopStat({required this.value, required this.label, this.onTap});
+
+  @override
+  Widget build(BuildContext context) {
+    final content = Column(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Text('$value', style: TextStyle(fontSize: 20, fontWeight: FontWeight.w700, color: AppTheme.navyText)),
+        const SizedBox(height: 2),
+        Text(label, style: TextStyle(fontSize: 12, fontWeight: FontWeight.w500, color: AppTheme.navyText.withValues(alpha: 0.5))),
+      ],
+    );
+    if (onTap != null) return GestureDetector(onTap: onTap, child: content);
+    return content;
+  }
+}
+
+class _DesktopCard extends StatelessWidget {
+  final String? title;
+  final Widget? titleWidget;
+  final Widget? trailing;
+  final List<Widget> children;
+  const _DesktopCard({this.title, this.titleWidget, this.trailing, required this.children});
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(20),
+      decoration: BoxDecoration(
+        color: AppTheme.cardSurface,
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: AppTheme.navyText.withValues(alpha: 0.08)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          if (title != null || titleWidget != null || trailing != null)
+            Padding(
+              padding: const EdgeInsets.only(bottom: 12),
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  titleWidget ?? Text(title!, style: TextStyle(fontSize: 16, fontWeight: FontWeight.w700, color: AppTheme.navyText)),
+                  if (trailing != null) trailing!,
+                ],
+              ),
+            ),
+          ...children,
+        ],
+      ),
+    );
+  }
+}
+
+class _InfoRow extends StatelessWidget {
+  final IconData icon;
+  final String? text;
+  final Widget? child;
+  const _InfoRow({required this.icon, this.text, this.child});
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 10),
+      child: Row(
+        children: [
+          SizedBox(
+            width: 20,
+            child: Icon(icon, size: 16, color: AppTheme.navyText.withValues(alpha: 0.5)),
+          ),
+          const SizedBox(width: 10),
+          Expanded(
+            child: child ?? Text(
+              text!,
+              style: TextStyle(fontSize: 14, color: AppTheme.navyText.withValues(alpha: 0.7)),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Banner Image Editor — locked to 3:1 aspect ratio (1440×480 target)
+// ─────────────────────────────────────────────────────────────────────────────
+
+class _BannerImageEditor extends StatefulWidget {
+  final Uint8List imageBytes;
+  final String? imageName;
+
+  const _BannerImageEditor({required this.imageBytes, this.imageName});
+
+  @override
+  State<_BannerImageEditor> createState() => _BannerImageEditorState();
+}
+
+class _BannerImageEditorState extends State<_BannerImageEditor> {
+  final _editorKey = GlobalKey<ProImageEditorState>();
+
+  static const Color _matteBlack = Color(0xFF0B0B0B);
+
+  ThemeData _buildEditorTheme() {
+    final baseTheme = ThemeData.dark(useMaterial3: true);
+    return baseTheme.copyWith(
+      scaffoldBackgroundColor: _matteBlack,
+      colorScheme: baseTheme.colorScheme.copyWith(
+        primary: AppTheme.brightNavy,
+        secondary: AppTheme.brightNavy,
+        surface: _matteBlack,
+        onSurface: SojornColors.basicWhite,
+      ),
+      appBarTheme: const AppBarTheme(
+        backgroundColor: _matteBlack,
+        foregroundColor: SojornColors.basicWhite,
+        elevation: 0,
+      ),
+      sliderTheme: baseTheme.sliderTheme.copyWith(
+        activeTrackColor: AppTheme.brightNavy,
+        inactiveTrackColor: SojornColors.basicWhite.withValues(alpha: 0.24),
+        thumbColor: AppTheme.brightNavy,
+      ),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      backgroundColor: _matteBlack,
+      body: Stack(
+        children: [
+          ProImageEditor.memory(
+            widget.imageBytes,
+            key: _editorKey,
+            configs: ProImageEditorConfigs(
+              theme: _buildEditorTheme(),
+              imageGeneration: const ImageGenerationConfigs(
+                maxOutputSize: Size(1440, 480),
+                jpegQuality: 85,
+                outputFormat: OutputFormat.jpg,
+              ),
+              cropRotateEditor: const CropRotateEditorConfigs(
+                initAspectRatio: 3.0,
+                aspectRatios: [
+                  AspectRatioItem(text: 'Banner (3:1)', value: 3.0),
+                ],
+              ),
+            ),
+            callbacks: ProImageEditorCallbacks(
+              mainEditorCallbacks: MainEditorCallbacks(
+                onAfterViewInit: () {
+                  // Auto-open crop editor so users go directly to crop
+                  WidgetsBinding.instance.addPostFrameCallback((_) {
+                    _editorKey.currentState?.openCropRotateEditor();
+                  });
+                },
+              ),
+              onImageEditingComplete: (Uint8List editedBytes) async {
+                if (!context.mounted) return;
+
+                if (kIsWeb) {
+                  Navigator.pop(
+                    context,
+                    SojornMediaResult.image(
+                      bytes: editedBytes,
+                      name: widget.imageName ?? 'banner.jpg',
+                    ),
+                  );
+                  return;
+                }
+
+                try {
+                  final tempDir = await getTemporaryDirectory();
+                  final ts = DateTime.now().millisecondsSinceEpoch;
+                  final file = File('${tempDir.path}/sojorn_banner_$ts.jpg');
+                  await file.writeAsBytes(editedBytes);
+
+                  if (!context.mounted) return;
+                  Navigator.pop(
+                    context,
+                    SojornMediaResult.image(filePath: file.path, name: file.path.split('/').last),
+                  );
+                } catch (_) {
+                  if (!context.mounted) return;
+                  Navigator.pop(
+                    context,
+                    SojornMediaResult.image(bytes: editedBytes, name: widget.imageName ?? 'banner.jpg'),
+                  );
+                }
+              },
+            ),
+          ),
+          // Resolution hint overlay
+          Positioned(
+            bottom: 80,
+            left: 0,
+            right: 0,
+            child: Center(
+              child: Container(
+                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                decoration: BoxDecoration(
+                  color: Colors.black54,
+                  borderRadius: BorderRadius.circular(20),
+                ),
+                child: const Text(
+                  'Banner: 1440 × 480 px (3:1)',
+                  style: TextStyle(color: Colors.white70, fontSize: 11),
+                ),
+              ),
+            ),
+          ),
+        ],
+      ),
     );
   }
 }

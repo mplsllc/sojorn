@@ -204,35 +204,19 @@ class _CurrentStateCard extends StatelessWidget {
 
   String _multiplierForTier(TrustTier tier) {
     switch (tier) {
-      case TrustTier.new_user: return '1.0';
-      case TrustTier.established: return '1.5';
-      case TrustTier.trusted: return '2.0';
+      case TrustTier.new_user:    return '1.0';
+      case TrustTier.sprout:      return '1.0';
+      case TrustTier.trusted:     return '1.5';
+      case TrustTier.elder:       return '1.75';
+      case TrustTier.established: return '2.0';
     }
   }
 
-  TrustTier? _nextTier(TrustTier tier) {
-    switch (tier) {
-      case TrustTier.new_user: return TrustTier.established;
-      case TrustTier.established: return TrustTier.trusted;
-      case TrustTier.trusted: return null;
-    }
-  }
+  TrustTier? _nextTier(TrustTier tier) => tier.next;
 
-  int _thresholdForTier(TrustTier? tier) {
-    switch (tier) {
-      case TrustTier.established: return 100;
-      case TrustTier.trusted: return 500;
-      default: return 100;
-    }
-  }
+  int _thresholdForTier(TrustTier? tier) => tier?.minScore ?? 100;
 
-  Color _colorForTier(TrustTier tier) {
-    switch (tier) {
-      case TrustTier.new_user: return AppTheme.egyptianBlue;
-      case TrustTier.established: return AppTheme.royalPurple;
-      case TrustTier.trusted: return const Color(0xFF4CAF50);
-    }
-  }
+  Color _colorForTier(TrustTier tier) => tier.color;
 }
 
 class _ProgressionChart extends StatelessWidget {

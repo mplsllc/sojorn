@@ -7,7 +7,7 @@ plugins {
 }
 
 android {
-    namespace = "com.gosojorn.app"
+    namespace = "net.sojorn.app"
     compileSdk = flutter.compileSdkVersion
     ndkVersion = flutter.ndkVersion
 
@@ -22,7 +22,7 @@ android {
 
     defaultConfig {
         // TODO: Specify your own unique Application ID (https://developer.android.com/studio/build/application-id.html).
-        applicationId = "com.gosojorn.app"
+        applicationId = "net.sojorn.app"
         // You can update the following values to match your application needs.
         // For more information, see: https://flutter.dev/to/review-gradle-config.
         minSdk = 24  // Required for ffmpeg_kit_flutter_new support

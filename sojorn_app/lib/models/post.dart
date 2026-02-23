@@ -89,6 +89,8 @@ class Post {
   final int? verificationCount;
   final int? vouchCount;
   final int? reportCount;
+  // "vouch", "report", or null — the current user's vote on this beacon.
+  final String? myVote;
 
   // Official/government source fields
   final bool? isOfficial;
@@ -169,6 +171,7 @@ class Post {
     this.verificationCount,
     this.vouchCount,
     this.reportCount,
+    this.myVote,
     this.isOfficial,
     this.officialSource,
     this.latitude,
@@ -329,6 +332,7 @@ class Post {
       verificationCount: _parseInt(json['verification_count']),
       vouchCount: _parseInt(json['vouch_count']),
       reportCount: _parseInt(json['report_count']),
+      myVote: json['my_vote'] as String?,
       isOfficial: json['is_official'] as bool?,
       officialSource: json['official_source'] as String?,
       latitude: _parseLatitude(json),
@@ -520,7 +524,7 @@ extension PostBeaconExtension on Post {
       authorAvatarUrl: author?.avatarUrl,
       vouchCount: vouchCount,
       reportCount: reportCount,
-      userVote: null,
+      userVote: myVote,
       groupId: groupId,
       severity: BeaconSeverity.fromString(severity ?? 'medium'),
       incidentStatus: BeaconIncidentStatus.fromString(incidentStatus ?? 'active'),

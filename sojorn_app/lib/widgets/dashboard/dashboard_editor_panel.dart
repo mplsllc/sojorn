@@ -112,11 +112,45 @@ class _DashboardEditorPanelState extends State<DashboardEditorPanel> {
     _fireChange();
   }
 
+  void _moveToOtherSidebar(DashboardWidgetType type, bool currentlyInLeft) {
+    setState(() {
+      final from = currentlyInLeft ? _left : _right;
+      final to = currentlyInLeft ? _right : _left;
+      final idx = from.indexWhere((w) => w.type == type);
+      if (idx < 0) return;
+      final widget = from.removeAt(idx);
+      to.add(widget.copyWith(order: to.length));
+    });
+    _fireChange();
+  }
+
+  void _updateConfig(DashboardWidgetType type, Map<String, dynamic> newConfig) {
+    setState(() {
+      for (int i = 0; i < _left.length; i++) {
+        if (_left[i].type == type) {
+          _left[i] = _left[i].copyWith(config: newConfig);
+          return;
+        }
+      }
+      for (int i = 0; i < _right.length; i++) {
+        if (_right[i].type == type) {
+          _right[i] = _right[i].copyWith(config: newConfig);
+          return;
+        }
+      }
+    });
+    _fireChange();
+  }
+
   @override
   Widget build(BuildContext context) {
     final used = _usedTypes;
-    final unusedTypes =
-        DashboardWidgetType.values.where((t) => !used.contains(t)).toList();
+    final unusedTypes = DashboardWidgetType.values
+        .where((t) =>
+            !used.contains(t) &&
+            t != DashboardWidgetType.musicPlayer &&
+            t != DashboardWidgetType.nowPlaying)
+        .toList();
 
     return Column(
       children: [
@@ -271,8 +305,11 @@ class _DashboardEditorPanelState extends State<DashboardEditorPanel> {
             key: ValueKey('${isLeft ? "L" : "R"}_${w.type.value}'),
             widget: w,
             index: index,
+            isLeft: isLeft,
             onToggle: (val) => _toggleWidget(widgets, index, val),
             onRemove: w.type.isRemovable ? () => _removeWidget(w.type) : null,
+            onMove: () => _moveToOtherSidebar(w.type, isLeft),
+            onConfigChange: (cfg) => _updateConfig(w.type, cfg),
           );
         },
       ),
@@ -316,98 +353,253 @@ class _DashboardEditorPanelState extends State<DashboardEditorPanel> {
   }
 }
 
+// Widget types that support a configurable item count.
+const _maxItemsTypes = {
+  DashboardWidgetType.upcomingEvents,
+  DashboardWidgetType.groupEvents,
+  DashboardWidgetType.friendActivity,
+  DashboardWidgetType.whosOnline,
+};
+
+const _maxItemsDefaults = {
+  DashboardWidgetType.upcomingEvents: 3,
+  DashboardWidgetType.groupEvents: 5,
+  DashboardWidgetType.friendActivity: 5,
+  DashboardWidgetType.whosOnline: 10,
+};
+
 /// Single widget row inside the editor list.
-class _WidgetTile extends StatelessWidget {
+class _WidgetTile extends StatefulWidget {
   final DashboardWidget widget;
   final int index;
+  final bool isLeft;
   final ValueChanged<bool> onToggle;
   final VoidCallback? onRemove;
+  final VoidCallback onMove;
+  final ValueChanged<Map<String, dynamic>> onConfigChange;
 
   const _WidgetTile({
     super.key,
     required this.widget,
     required this.index,
+    required this.isLeft,
     required this.onToggle,
+    required this.onMove,
+    required this.onConfigChange,
     this.onRemove,
   });
 
   @override
+  State<_WidgetTile> createState() => _WidgetTileState();
+}
+
+class _WidgetTileState extends State<_WidgetTile> {
+  bool _expanded = false;
+
+  bool get _hasSettings => _maxItemsTypes.contains(widget.widget.type);
+
+  int get _currentMaxItems =>
+      widget.widget.config['max_items'] as int? ??
+      _maxItemsDefaults[widget.widget.type] ??
+      5;
+
+  void _setMaxItems(int value) {
+    final newConfig = Map<String, dynamic>.from(widget.widget.config)
+      ..['max_items'] = value;
+    widget.onConfigChange(newConfig);
+  }
+
+  @override
   Widget build(BuildContext context) {
-    return Container(
-      decoration: BoxDecoration(
-        border: Border(
-          bottom: BorderSide(
-              color: AppTheme.royalPurple.withValues(alpha: 0.06)),
-        ),
-      ),
-      child: ListTile(
-        dense: true,
-        contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 2),
-        leading: Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            ReorderableDragStartListener(
-              index: index,
-              child: Icon(Icons.drag_indicator,
-                  size: 18,
-                  color: AppTheme.navyText.withValues(alpha: 0.3)),
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Container(
+          decoration: BoxDecoration(
+            border: Border(
+              bottom: BorderSide(
+                  color: AppTheme.royalPurple.withValues(alpha: 0.06)),
             ),
-            const SizedBox(width: 8),
-            Container(
-              width: 32,
-              height: 32,
-              decoration: BoxDecoration(
-                color: AppTheme.royalPurple.withValues(alpha: 0.1),
-                borderRadius: BorderRadius.circular(8),
-              ),
-              child: Icon(widget.type.icon,
-                  size: 16, color: AppTheme.royalPurple),
+          ),
+          child: ListTile(
+            dense: true,
+            contentPadding:
+                const EdgeInsets.symmetric(horizontal: 12, vertical: 2),
+            leading: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                ReorderableDragStartListener(
+                  index: widget.index,
+                  child: Icon(Icons.drag_indicator,
+                      size: 18,
+                      color: AppTheme.navyText.withValues(alpha: 0.3)),
+                ),
+                const SizedBox(width: 8),
+                Container(
+                  width: 32,
+                  height: 32,
+                  decoration: BoxDecoration(
+                    color: AppTheme.royalPurple.withValues(alpha: 0.1),
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  child: Icon(widget.widget.type.icon,
+                      size: 16, color: AppTheme.royalPurple),
+                ),
+              ],
             ),
-          ],
-        ),
-        title: Text(widget.type.displayName,
-            style: TextStyle(
-              color: widget.isEnabled
-                  ? AppTheme.navyText
-                  : AppTheme.navyText.withValues(alpha: 0.4),
-              fontSize: 13,
-              fontWeight: FontWeight.w600,
-            )),
-        trailing: Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            SizedBox(
-              height: 28,
-              child: Switch(
-                value: widget.isEnabled,
-                // Active: brand purple thumb on lighter purple track.
-                activeColor: AppTheme.royalPurple,
-                activeTrackColor: AppTheme.royalPurple.withValues(alpha: 0.35),
-                // Inactive: clearly neutral grey so on/off is unambiguous at a glance.
-                inactiveThumbColor: const Color(0xFFCBD5E1),
-                inactiveTrackColor: const Color(0xFFE2E8F0),
-                onChanged: onToggle,
-              ),
+            title: Text(widget.widget.type.displayName,
+                style: TextStyle(
+                  color: widget.widget.isEnabled
+                      ? AppTheme.navyText
+                      : AppTheme.navyText.withValues(alpha: 0.4),
+                  fontSize: 13,
+                  fontWeight: FontWeight.w600,
+                )),
+            trailing: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                // Move to other sidebar
+                Tooltip(
+                  message: widget.isLeft
+                      ? 'Move to Right Sidebar'
+                      : 'Move to Left Sidebar',
+                  child: IconButton(
+                    icon: Icon(
+                      widget.isLeft
+                          ? Icons.arrow_forward
+                          : Icons.arrow_back,
+                      size: 15,
+                      color: AppTheme.navyText.withValues(alpha: 0.4),
+                    ),
+                    onPressed: widget.onMove,
+                    padding: EdgeInsets.zero,
+                    constraints: const BoxConstraints(),
+                  ),
+                ),
+                const SizedBox(width: 4),
+                // Settings expand (only for configurable types)
+                if (_hasSettings)
+                  IconButton(
+                    icon: Icon(
+                      _expanded
+                          ? Icons.keyboard_arrow_up
+                          : Icons.tune_outlined,
+                      size: 15,
+                      color: _expanded
+                          ? AppTheme.royalPurple
+                          : AppTheme.navyText.withValues(alpha: 0.4),
+                    ),
+                    onPressed: () => setState(() => _expanded = !_expanded),
+                    padding: EdgeInsets.zero,
+                    constraints: const BoxConstraints(),
+                    tooltip: 'Settings',
+                  ),
+                if (!_hasSettings) const SizedBox(width: 19),
+                const SizedBox(width: 4),
+                SizedBox(
+                  height: 28,
+                  child: Switch(
+                    value: widget.widget.isEnabled,
+                    activeColor: AppTheme.royalPurple,
+                    activeTrackColor:
+                        AppTheme.royalPurple.withValues(alpha: 0.35),
+                    inactiveThumbColor: const Color(0xFFCBD5E1),
+                    inactiveTrackColor: const Color(0xFFE2E8F0),
+                    onChanged: widget.onToggle,
+                  ),
+                ),
+                if (widget.onRemove != null)
+                  IconButton(
+                    icon: Icon(Icons.close,
+                        size: 16,
+                        color: AppTheme.navyText.withValues(alpha: 0.3)),
+                    onPressed: widget.onRemove,
+                    padding: EdgeInsets.zero,
+                    constraints: const BoxConstraints(),
+                    tooltip: 'Remove',
+                  )
+                else
+                  Tooltip(
+                    message: 'This widget is always visible',
+                    child: Icon(Icons.lock_outline,
+                        size: 14,
+                        color: AppTheme.navyText.withValues(alpha: 0.2)),
+                  ),
+              ],
             ),
-            if (onRemove != null)
-              IconButton(
-                icon: Icon(Icons.close,
-                    size: 16,
-                    color: AppTheme.navyText.withValues(alpha: 0.3)),
-                onPressed: onRemove,
-                padding: EdgeInsets.zero,
-                constraints: const BoxConstraints(),
-                tooltip: 'Remove',
-              )
-            else
-              Tooltip(
-                message: 'This widget is always visible',
-                child: Icon(Icons.lock_outline,
-                    size: 14,
-                    color: AppTheme.navyText.withValues(alpha: 0.2)),
-              ),
-          ],
+          ),
         ),
+        // Expandable settings panel
+        if (_expanded && _hasSettings)
+          Container(
+            color: AppTheme.royalPurple.withValues(alpha: 0.03),
+            padding:
+                const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+            child: Row(
+              children: [
+                Text('Show items:',
+                    style: TextStyle(
+                        color: AppTheme.navyText.withValues(alpha: 0.6),
+                        fontSize: 12)),
+                const Spacer(),
+                _StepperButton(
+                  icon: Icons.remove,
+                  onPressed: _currentMaxItems > 1
+                      ? () => _setMaxItems(_currentMaxItems - 1)
+                      : null,
+                ),
+                const SizedBox(width: 8),
+                SizedBox(
+                  width: 28,
+                  child: Text(
+                    '$_currentMaxItems',
+                    textAlign: TextAlign.center,
+                    style: TextStyle(
+                        color: AppTheme.navyText,
+                        fontSize: 13,
+                        fontWeight: FontWeight.w700),
+                  ),
+                ),
+                const SizedBox(width: 8),
+                _StepperButton(
+                  icon: Icons.add,
+                  onPressed: _currentMaxItems < 20
+                      ? () => _setMaxItems(_currentMaxItems + 1)
+                      : null,
+                ),
+              ],
+            ),
+          ),
+      ],
+    );
+  }
+}
+
+class _StepperButton extends StatelessWidget {
+  final IconData icon;
+  final VoidCallback? onPressed;
+
+  const _StepperButton({required this.icon, this.onPressed});
+
+  @override
+  Widget build(BuildContext context) {
+    return InkWell(
+      onTap: onPressed,
+      borderRadius: BorderRadius.circular(6),
+      child: Container(
+        width: 26,
+        height: 26,
+        decoration: BoxDecoration(
+          color: onPressed != null
+              ? AppTheme.royalPurple.withValues(alpha: 0.1)
+              : AppTheme.royalPurple.withValues(alpha: 0.04),
+          borderRadius: BorderRadius.circular(6),
+        ),
+        child: Icon(icon,
+            size: 14,
+            color: onPressed != null
+                ? AppTheme.royalPurple
+                : AppTheme.royalPurple.withValues(alpha: 0.3)),
       ),
     );
   }

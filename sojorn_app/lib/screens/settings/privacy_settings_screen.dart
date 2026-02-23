@@ -9,6 +9,8 @@ import '../../theme/tokens.dart';
 import '../../widgets/app_scaffold.dart';
 import '../../providers/api_provider.dart';
 import '../../models/profile_privacy_settings.dart';
+import '../../services/api_service.dart';
+import '../../widgets/neighborhood/neighborhood_picker_sheet.dart';
 
 /// Comprehensive privacy settings screen for managing account privacy
 class PrivacySettingsScreen extends ConsumerStatefulWidget {
@@ -30,6 +32,7 @@ class _PrivacySettingsScreenState
   bool _isLoading = false;
   bool _isSaving = false;
   bool _hasChanges = false;
+  String? _neighborhoodName;
 
   @override
   void initState() {
@@ -55,6 +58,15 @@ class _PrivacySettingsScreenState
       _setStateIfMounted(() {
         _settings = ProfilePrivacySettings.fromJson(data);
       });
+
+      // Load neighborhood name for display
+      try {
+        final hood = await ApiService.instance.getMyNeighborhood();
+        final hoodData = hood?['neighborhood'] as Map<String, dynamic>?;
+        _setStateIfMounted(() {
+          _neighborhoodName = hoodData?['name'] as String?;
+        });
+      } catch (_) {}
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
@@ -191,6 +203,7 @@ class _PrivacySettingsScreenState
                       children: [
                         _buildShowInSearchTile(),
                         _buildShowSuggestedTile(),
+                        _buildHomeNeighborhoodTile(),
                       ],
                     ),
                     const SizedBox(height: 24),
@@ -339,6 +352,27 @@ class _PrivacySettingsScreenState
       onChanged: (value) =>
           _updateSetting(() => _settings.showInSuggestions = value),
       activeColor: AppTheme.brightNavy,
+    );
+  }
+
+  Widget _buildHomeNeighborhoodTile() {
+    return ListTile(
+      title: const Text('Home Neighborhood'),
+      subtitle: Text(_neighborhoodName ?? 'Not set'),
+      trailing: const Icon(Icons.chevron_right),
+      onTap: () async {
+        final result = await NeighborhoodPickerSheet.show(context, isChangeMode: true);
+        if (result != null && mounted) {
+          // Reload to get updated name
+          try {
+            final hood = await ApiService.instance.getMyNeighborhood();
+            final hoodData = hood?['neighborhood'] as Map<String, dynamic>?;
+            _setStateIfMounted(() {
+              _neighborhoodName = hoodData?['name'] as String?;
+            });
+          } catch (_) {}
+        }
+      },
     );
   }
 

@@ -249,7 +249,10 @@ func (h *PostHandler) GetNearbyBeacons(c *gin.Context) {
 	long := utils.GetQueryFloat(c, "long", 0)
 	radius := utils.GetQueryInt(c, "radius", 16000)
 
-	beacons, err := h.postRepo.GetNearbyBeacons(c.Request.Context(), lat, long, radius)
+	userIDStr, _ := c.Get("user_id")
+	userID, _ := userIDStr.(string)
+
+	beacons, err := h.postRepo.GetNearbyBeacons(c.Request.Context(), lat, long, radius, userID)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to fetch nearby beacons", "details": err.Error()})
 		return
@@ -259,10 +262,9 @@ func (h *PostHandler) GetNearbyBeacons(c *gin.Context) {
 	results := make([]gin.H, 0, len(beacons))
 	for _, b := range beacons {
 		item := gin.H{
-			"id":       b.ID,
-			"body":     b.Body,
-			// author_id is intentionally omitted — beacons are anonymous by policy.
-			// The internal author_id is stored only for abuse prevention and is never exposed.
+			"id":   b.ID,
+			"body": b.Body,
+			// author_id intentionally omitted — beacons are anonymous by policy.
 			"is_beacon":           true,
 			"beacon_type":         b.BeaconType,
 			"confidence_score":    b.Confidence,
@@ -276,9 +278,10 @@ func (h *PostHandler) GetNearbyBeacons(c *gin.Context) {
 			"incident_status":     b.IncidentStatus,
 			"radius":              b.Radius,
 			"distance_meters":     b.DistanceMeters,
-			"vouch_count":         b.LikeCount,    // mapped from vouch subquery
-			"report_count":        b.CommentCount, // mapped from report subquery
-			"verification_count":  b.LikeCount,    // vouches = verification
+			"vouch_count":         b.LikeCount,    // from beacon_vouches count
+			"report_count":        b.CommentCount, // from beacon_reports count
+			"verification_count":  b.LikeCount,    // vouches = verifications
+			"my_vote":             b.MyVote,        // "vouch", "report", or null
 			"status_color":        beaconStatusColor(b.Confidence),
 			"author_handle":       "Anonymous",
 			"author_display_name": "Anonymous",

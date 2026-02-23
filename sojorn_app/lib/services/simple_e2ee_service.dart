@@ -12,6 +12,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'auth_service.dart';
 import 'api_service.dart';
 import 'key_vault_service.dart';
+import 'ratchet_session.dart';
 import 'secure_chat_service.dart';
 
 class SimpleE2EEService {
@@ -46,8 +47,6 @@ class SimpleE2EEService {
   Future<void>? _initFuture;
   bool _needsVaultRestore = false;
 
-  // Cache for X3DH shared secrets
-  final Map<String, SecretKey> _sessionCache = {};
 
   SimpleE2EEService._internal() 
       : _storage = const FlutterSecureStorage(
@@ -72,9 +71,11 @@ class SimpleE2EEService {
   bool get needsVaultRestore => _needsVaultRestore;
 
   /// Clear the restore flag after a successful vault restore.
+  /// Persists a marker so the flag isn't re-set on next app resume.
   void clearNeedsVaultRestore() {
     _needsVaultRestore = false;
     _initFuture = null; // Allow re-initialization after restore
+    _storage.write(key: 'vault_restore_completed', value: 'true');
   }
 
   // DEPRECATED: Old backup PIN was user ID (insecure — server could derive it).
@@ -97,8 +98,8 @@ class SimpleE2EEService {
   // DO NOT add debug flags here - use resetAllKeys() method for intentional resets
 
   Future<void> resetAllKeys() async {
-    
-    // Clear all storage
+
+    // Clear all storage (including vault_restore_completed marker)
     await _storage.deleteAll();
     
     // Clear local key variables
@@ -122,7 +123,6 @@ class SimpleE2EEService {
     _oneTimePreKeys = null;
     _initializedForUserId = null;
     _initFuture = null;
-    _sessionCache.clear();
     await generateNewIdentity();
   }
 
@@ -238,7 +238,17 @@ class SimpleE2EEService {
     // 3. Check if a vault backup exists before generating new keys.
     //    If the user has a vault backup, they need to enter their passphrase
     //    to restore — we must NOT silently generate a new identity.
+    //    BUT: if they already restored on this device, skip the prompt.
     try {
+      final alreadyRestored = await _storage.read(key: 'vault_restore_completed');
+      if (alreadyRestored == 'true') {
+        if (kDebugMode) debugPrint('[E2EE] Vault was previously restored on this device — regenerating keys');
+        // Keys were lost (cleared storage?) but vault was restored before.
+        // Generate fresh keys instead of re-prompting.
+        await generateNewIdentity();
+        return;
+      }
+
       final statusData = await _api.callGoApi('/capsule/escrow/status', method: 'GET');
       if (statusData['has_backup'] == true) {
         if (kDebugMode) debugPrint('[E2EE] Vault backup found on server — waiting for user to restore');
@@ -417,7 +427,21 @@ class SimpleE2EEService {
     if (!_auth.isAuthenticated) throw Exception('Not authenticated');
     await initialize();
 
+    // Fast path: use existing Double Ratchet session (no X3DH round-trip needed)
+    final myId = _auth.currentUser!.id;
+    final stored = await RatchetSessionStore.load(myId, recipientId);
+    if (stored != null) {
+      final (session, _) = stored;
+      final payload = await session.encrypt(plaintext);
+      await RatchetSessionStore.save(myId, recipientId, session);
+      return {
+        'ciphertext': payload.ciphertext,
+        'iv': payload.iv,
+        'header': payload.toHeaderAdditions(),
+      };
+    }
 
+    // No session yet — perform X3DH handshake and initialise Double Ratchet.
     // 1. Fetch Bundle
     final bundle = await ApiService(AuthService.instance).getKeyBundle(recipientId);
     
@@ -544,100 +568,174 @@ class SimpleE2EEService {
       }
     }
 
-    final rootSecret = await _kdf(dhBytes);
-    final nonce = _cipher.newNonce();
-    final secretBox = await _cipher.encrypt(
-      utf8.encode(plaintext),
-      secretKey: SecretKey(rootSecret),
-      nonce: nonce,
+    // Initialise Double Ratchet with the X3DH shared secret.
+    // theirSpkBytes serves as the receiver's initial ratchet public key.
+    final ratchetKey = await _dhAlgo.newKeyPair();
+    final session = await RatchetSession.initAsSender(
+      sharedSecret: Uint8List.fromList(dhBytes),
+      ourRatchetKey: ratchetKey,
+      theirRatchetPub: theirSpkBytes,
     );
+    final payload = await session.encrypt(plaintext);
 
+    // Persist the session so subsequent messages skip X3DH entirely.
+    final myId = _auth.currentUser!.id;
+    await RatchetSessionStore.save(myId, recipientId, session);
+
+    // First-message header: X3DH fields + ratchet fields (v:2 from toHeaderAdditions).
     final header = {
-      'v': 1,
       'ik': base64Encode((await _identityDhKeyPair!.extractPublicKey()).bytes),
       'ek': base64Encode(ephemeralPublic.bytes),
       'opk_id': theirOtkId,
-      'm': base64Encode(secretBox.mac.bytes),
+      ...payload.toHeaderAdditions(), // adds v:2, rk, n, pn, m
     };
 
     return {
-      'ciphertext': base64Encode(secretBox.cipherText),
-      'iv': base64Encode(nonce),
-      'header': header, // Return as Map
+      'ciphertext': payload.ciphertext,
+      'iv': payload.iv,
+      'header': header,
     };
   }
 
-  Future<String> decrypt(String ciphertext, String iv, dynamic headerData) async {
-     await initialize();
-     
-     try {
-         // Handle both String and Map inputs for header
-         final Map<String, dynamic> header;
-         if (headerData is String) {
-            try {
-              header = jsonDecode(headerData);
-            } catch (e) {
-               throw Exception('Invalid Header JSON: $e');
-            }
-         } else if (headerData is Map) {
-            header = Map<String, dynamic>.from(headerData);
-         } else {
-            throw Exception('Invalid header type: ${headerData.runtimeType}');
-         }
+  Future<String> decrypt(
+    String ciphertext,
+    String iv,
+    dynamic headerData, {
+    String? senderId,
+  }) async {
+    await initialize();
 
-         final nonce = base64Decode(iv);
-         final ciphertextBytes = base64Decode(ciphertext);
-         final macBytes = base64Decode(header['m'] ?? '');
-         
-         if (header['ik'] == null || header['ek'] == null) {
-             throw Exception('Invalid Header: Missing IK or EK');
-         }
-
-         final senderIkBytes = base64Decode(header['ik']);
-         final senderEkBytes = base64Decode(header['ek']);
-         
-         final senderIk = SimplePublicKey(senderIkBytes, type: KeyPairType.x25519);
-         final senderEk = SimplePublicKey(senderEkBytes, type: KeyPairType.x25519);
-
-         final dh1 = await _dhAlgo.sharedSecretKey(keyPair: _signedPreKey!, remotePublicKey: senderIk);
-         final dh2 = await _dhAlgo.sharedSecretKey(keyPair: _identityDhKeyPair!, remotePublicKey: senderEk);
-         final dh3 = await _dhAlgo.sharedSecretKey(keyPair: _signedPreKey!, remotePublicKey: senderEk);
-
-         List<int> dhBytes = [];
-         dhBytes.addAll(await dh1.extractBytes());
-         dhBytes.addAll(await dh2.extractBytes());
-         dhBytes.addAll(await dh3.extractBytes());
-
-         if (header['opk_id'] != null && _oneTimePreKeys != null && _oneTimePreKeys!.isNotEmpty) {
-               final otkId = header['opk_id'] as int;
-               // The opk_id refers to the key_id that was published (0-19 position in our array)
-               // Since we generate OTKs in order and publish them with key_id = array_index,
-               // we can use the opk_id directly as the array index
-               if (otkId >= 0 && otkId < _oneTimePreKeys!.length) {
-                 final matchingOtk = _oneTimePreKeys![otkId];
-                 final dh4 = await _dhAlgo.sharedSecretKey(keyPair: matchingOtk, remotePublicKey: senderEk);
-                 dhBytes.addAll(await dh4.extractBytes());
-               } else {
-               }
-         }
-
-         final rootSecret = await _kdf(dhBytes);
-         final secretBox = SecretBox(ciphertextBytes, nonce: nonce, mac: Mac(macBytes));
-         final plaintextBytes = await _cipher.decrypt(secretBox, secretKey: SecretKey(rootSecret));
-         final plaintext = utf8.decode(plaintextBytes);
-         // Decryption successful - plaintext not logged for security
-         return plaintext;
-     } catch (e) {
-        if (e.toString().contains('MAC') || e.toString().contains('SecretBoxAuthenticationError')) {
-            // Automatic key recovery on MAC errors
-            _handleMacError();
-            return '[Message encrypted with old keys - cannot decrypt]';
+    try {
+      // Parse header
+      final Map<String, dynamic> header;
+      if (headerData is String) {
+        try {
+          header = jsonDecode(headerData);
+        } catch (e) {
+          throw Exception('Invalid Header JSON: $e');
         }
-        if (e.toString().contains('Invalid Header')) {
-            return '[Message encrypted with old keys - cannot decrypt]';
+      } else if (headerData is Map) {
+        header = Map<String, dynamic>.from(headerData);
+      } else {
+        throw Exception('Invalid header type: ${headerData.runtimeType}');
+      }
+
+      // v:2 = Double Ratchet path (requires senderId to look up session)
+      final version = header['v'] as int? ?? 1;
+      if (version == 2 && senderId != null) {
+        return await _decryptWithRatchet(ciphertext, iv, header, senderId);
+      }
+
+      // v:1 legacy X3DH path — re-derive root secret on every message
+      if (header['ik'] == null || header['ek'] == null) {
+        throw Exception('Invalid Header: Missing IK or EK');
+      }
+
+      final nonce = base64Decode(iv);
+      final ciphertextBytes = base64Decode(ciphertext);
+      final macBytes = base64Decode(header['m'] ?? '');
+
+      final senderIkBytes = base64Decode(header['ik'] as String);
+      final senderEkBytes = base64Decode(header['ek'] as String);
+
+      final senderIk = SimplePublicKey(senderIkBytes, type: KeyPairType.x25519);
+      final senderEk = SimplePublicKey(senderEkBytes, type: KeyPairType.x25519);
+
+      final dh1 = await _dhAlgo.sharedSecretKey(keyPair: _signedPreKey!, remotePublicKey: senderIk);
+      final dh2 = await _dhAlgo.sharedSecretKey(keyPair: _identityDhKeyPair!, remotePublicKey: senderEk);
+      final dh3 = await _dhAlgo.sharedSecretKey(keyPair: _signedPreKey!, remotePublicKey: senderEk);
+
+      final dhBytes = <int>[];
+      dhBytes.addAll(await dh1.extractBytes());
+      dhBytes.addAll(await dh2.extractBytes());
+      dhBytes.addAll(await dh3.extractBytes());
+
+      if (header['opk_id'] != null && _oneTimePreKeys != null && _oneTimePreKeys!.isNotEmpty) {
+        final otkId = header['opk_id'] as int;
+        if (otkId >= 0 && otkId < _oneTimePreKeys!.length) {
+          final matchingOtk = _oneTimePreKeys![otkId];
+          final dh4 = await _dhAlgo.sharedSecretKey(keyPair: matchingOtk, remotePublicKey: senderEk);
+          dhBytes.addAll(await dh4.extractBytes());
         }
-        rethrow;
-    } 
+      }
+
+      final rootSecret = await _kdf(dhBytes);
+      final secretBox = SecretBox(ciphertextBytes, nonce: nonce, mac: Mac(macBytes));
+      final plaintextBytes = await _cipher.decrypt(secretBox, secretKey: SecretKey(rootSecret));
+      return utf8.decode(plaintextBytes);
+    } catch (e) {
+      if (e.toString().contains('MAC') || e.toString().contains('SecretBoxAuthenticationError')) {
+        _handleMacError();
+        return '[Message encrypted with old keys - cannot decrypt]';
+      }
+      if (e.toString().contains('Invalid Header')) {
+        return '[Message encrypted with old keys - cannot decrypt]';
+      }
+      rethrow;
+    }
+  }
+
+  /// Decrypt a v:2 Double Ratchet message.
+  /// Uses an existing session if one is stored, otherwise establishes
+  /// receiver-side ratchet from the X3DH fields in the header.
+  Future<String> _decryptWithRatchet(
+    String ciphertext,
+    String iv,
+    Map<String, dynamic> header,
+    String senderId,
+  ) async {
+    final myId = _auth.currentUser!.id;
+    final stored = await RatchetSessionStore.load(myId, senderId);
+    RatchetSession session;
+
+    if (stored != null) {
+      session = stored.$1;
+    } else {
+      // First message: derive X3DH shared secret, then init receiver ratchet
+      if (header['ik'] == null || header['ek'] == null) {
+        throw Exception('Invalid Header: Missing IK or EK for session init');
+      }
+      final senderIkBytes = base64Decode(header['ik'] as String);
+      final senderEkBytes = base64Decode(header['ek'] as String);
+      final senderIk = SimplePublicKey(senderIkBytes, type: KeyPairType.x25519);
+      final senderEk = SimplePublicKey(senderEkBytes, type: KeyPairType.x25519);
+
+      final dh1 = await _dhAlgo.sharedSecretKey(keyPair: _signedPreKey!, remotePublicKey: senderIk);
+      final dh2 = await _dhAlgo.sharedSecretKey(keyPair: _identityDhKeyPair!, remotePublicKey: senderEk);
+      final dh3 = await _dhAlgo.sharedSecretKey(keyPair: _signedPreKey!, remotePublicKey: senderEk);
+
+      final dhBytes = <int>[];
+      dhBytes.addAll(await dh1.extractBytes());
+      dhBytes.addAll(await dh2.extractBytes());
+      dhBytes.addAll(await dh3.extractBytes());
+
+      if (header['opk_id'] != null && _oneTimePreKeys != null && _oneTimePreKeys!.isNotEmpty) {
+        final otkId = header['opk_id'] as int;
+        if (otkId >= 0 && otkId < _oneTimePreKeys!.length) {
+          final matchingOtk = _oneTimePreKeys![otkId];
+          final dh4 = await _dhAlgo.sharedSecretKey(keyPair: matchingOtk, remotePublicKey: senderEk);
+          dhBytes.addAll(await dh4.extractBytes());
+        }
+      }
+
+      session = await RatchetSession.initAsReceiver(
+        sharedSecret: Uint8List.fromList(dhBytes),
+        ourSignedPreKey: _signedPreKey!,
+      );
+    }
+
+    final senderRatchetPub = Uint8List.fromList(base64Decode(header['rk'] as String));
+    final plaintext = await session.decrypt(
+      ciphertext: ciphertext,
+      iv: iv,
+      mac: header['m'] as String,
+      senderRatchetPub: senderRatchetPub,
+      messageNumber: header['n'] as int,
+      previousChainLength: header['pn'] as int,
+    );
+
+    await RatchetSessionStore.save(myId, senderId, session);
+    return plaintext;
   }
 
   // Automatic MAC error handling

@@ -47,6 +47,9 @@ class _SecureChatScreenState extends State<SecureChatScreen>
   final GlobalKey _listViewportKey = GlobalKey();
   final Set<String> _deletedMessageIds = {};
 
+  // Reactions cache: messageId -> list of ReactionGroups
+  final Map<String, List<ReactionGroup>> _reactionsCache = {};
+
   late final Stream<List<LocalMessageRecord>> _messageStream;
   StreamSubscription<List<LocalMessageRecord>>? _reconcileSubscription;
   final List<_PendingMessage> _pendingMessages = [];
@@ -81,6 +84,7 @@ class _SecureChatScreenState extends State<SecureChatScreen>
     NotificationService.instance.activeConversationId = widget.conversation.id;
     _markAsRead();
     _hydrateAvatars();
+    _fetchReactions();
   }
 
   @override
@@ -527,6 +531,9 @@ class _SecureChatScreenState extends State<SecureChatScreen>
                                         forEveryone: false,
                                       ),
                               onReply: () => _startReply(current),
+                              reactions: _reactionsCache[current.id] ?? const [],
+                              onReact: current.isPending ? null : (emoji) => _handleReaction(current.id, emoji),
+                              currentUserId: _currentUserId,
                             ),
                           ),
                       ],
@@ -598,6 +605,7 @@ class _SecureChatScreenState extends State<SecureChatScreen>
           collapsedFailureCount: 0,
           isPending: false,
           sendFailed: false,
+          replyToId: msg.replyToId,
         ),
       );
     }
@@ -805,6 +813,77 @@ class _SecureChatScreenState extends State<SecureChatScreen>
     setState(() {
       _replyPreview = null;
     });
+  }
+
+  Future<void> _handleReaction(String messageId, String emoji) async {
+    // Check if already reacted with this emoji — toggle off
+    final existing = _reactionsCache[messageId] ?? [];
+    final already = existing.any((r) => r.emoji == emoji && r.iReacted);
+
+    try {
+      if (already) {
+        await ApiService.instance.removeMessageReaction(messageId, emoji);
+      } else {
+        await ApiService.instance.addMessageReaction(messageId, emoji);
+      }
+    } catch (_) {
+      return;
+    }
+
+    // Optimistic update
+    if (mounted) {
+      setState(() {
+        final groups = List<ReactionGroup>.from(_reactionsCache[messageId] ?? []);
+        final idx = groups.indexWhere((g) => g.emoji == emoji);
+        if (already) {
+          if (idx >= 0) {
+            if (groups[idx].count <= 1) {
+              groups.removeAt(idx);
+            } else {
+              groups[idx] = ReactionGroup(emoji: emoji, count: groups[idx].count - 1, iReacted: false);
+            }
+          }
+        } else {
+          if (idx >= 0) {
+            groups[idx] = ReactionGroup(emoji: emoji, count: groups[idx].count + 1, iReacted: true);
+          } else {
+            groups.add(ReactionGroup(emoji: emoji, count: 1, iReacted: true));
+          }
+        }
+        _reactionsCache[messageId] = groups;
+      });
+    }
+  }
+
+  Future<void> _fetchReactions() async {
+    try {
+      final rows = await ApiService.instance.getConversationMessages(
+        widget.conversation.id,
+        limit: 100,
+      );
+      final messages = rows
+          .whereType<Map>()
+          .map((m) => EncryptedMessage.fromJson(Map<String, dynamic>.from(m)))
+          .toList();
+      _loadReactionsFromServer(messages);
+      if (mounted) setState(() {});
+    } catch (_) {}
+  }
+
+  void _loadReactionsFromServer(List<EncryptedMessage> serverMessages) {
+    for (final msg in serverMessages) {
+      if (msg.reactions.isEmpty) continue;
+      final grouped = <String, ReactionGroup>{};
+      for (final r in msg.reactions) {
+        final existing = grouped[r.emoji];
+        grouped[r.emoji] = ReactionGroup(
+          emoji: r.emoji,
+          count: (existing?.count ?? 0) + 1,
+          iReacted: existing?.iReacted == true || r.userId == _currentUserId,
+        );
+      }
+      _reactionsCache[msg.id] = grouped.values.toList();
+    }
   }
 
   void _removePending(String id) {
@@ -1303,6 +1382,7 @@ class _ChatListItem {
     required this.collapsedFailureCount,
     required this.isPending,
     required this.sendFailed,
+    this.replyToId,
   });
 
   final String id;
@@ -1315,6 +1395,7 @@ class _ChatListItem {
   final int collapsedFailureCount;
   final bool isPending;
   final bool sendFailed;
+  final String? replyToId;
 }
 
 class _PendingMessage {

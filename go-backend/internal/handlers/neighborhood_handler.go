@@ -652,10 +652,39 @@ func (h *NeighborhoodHandler) GetMyNeighborhood(c *gin.Context) {
 	if groupID != nil {
 		var groupName string
 		var memberCount int
-		h.pool.QueryRow(ctx, `SELECT name, member_count FROM groups WHERE id = $1`, *groupID).Scan(&groupName, &memberCount)
+		var bannerUrl *string
+		h.pool.QueryRow(ctx, `SELECT name, member_count, banner_url FROM groups WHERE id = $1`, *groupID).Scan(&groupName, &memberCount, &bannerUrl)
 		result["group_id"] = groupID
 		result["group_name"] = groupName
 		result["member_count"] = memberCount
+
+		// Also nest group_id and banner_url inside neighborhood for Flutter convenience
+		if neigh, ok := result["neighborhood"].(gin.H); ok {
+			neigh["group_id"] = groupID
+			if bannerUrl != nil {
+				neigh["banner_url"] = *bannerUrl
+			}
+		}
+
+		// Active now count (users with recent activity, excluding private profiles)
+		var activeNow int
+		_ = h.pool.QueryRow(ctx, `
+			SELECT COUNT(*) FROM group_members gm
+			JOIN profiles p ON p.id = gm.user_id
+			LEFT JOIN profile_privacy_settings ps ON ps.user_id = gm.user_id
+			WHERE gm.group_id = $1
+			  AND p.last_active_at > NOW() - INTERVAL '15 minutes'
+			  AND (ps.show_activity_status IS NULL OR ps.show_activity_status = true)
+			  AND (ps.is_private_profile IS NULL OR ps.is_private_profile = false)
+		`, *groupID).Scan(&activeNow)
+		result["active_now"] = activeNow
+
+		// User's role in the neighborhood group
+		var role string
+		err := h.pool.QueryRow(ctx, `SELECT role FROM group_members WHERE group_id = $1 AND user_id = $2`, *groupID, userID).Scan(&role)
+		if err == nil {
+			result["role"] = role
+		}
 	}
 
 	if changedAt != nil {

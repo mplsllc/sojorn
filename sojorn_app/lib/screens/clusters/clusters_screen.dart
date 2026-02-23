@@ -2,6 +2,7 @@
 // Licensed under the GNU Affero General Public License v3.0 (AGPL-3.0)
 // See LICENSE file in the project root for full license text.
 
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -14,12 +15,12 @@ import '../../theme/tokens.dart';
 import '../../theme/app_theme.dart';
 import 'group_screen.dart';
 import '../../widgets/skeleton_loader.dart';
-import '../../widgets/group_card.dart';
 import '../../widgets/group_creation_modal.dart';
 import '../../widgets/desktop/desktop_dialog_helper.dart';
+import '../../widgets/media/sojorn_avatar.dart';
+import '../../widgets/media/signed_media_image.dart';
 
-/// ClustersScreen — Discovery-first groups page.
-/// Shows "Your Groups" at top, then "Discover Communities" with category filtering.
+/// ClustersScreen — HumHub-inspired groups directory.
 class ClustersScreen extends ConsumerStatefulWidget {
   const ClustersScreen({super.key});
 
@@ -32,17 +33,18 @@ class _ClustersScreenState extends ConsumerState<ClustersScreen>
   late TabController _tabController;
   bool _isLoading = true;
   bool _isDiscoverLoading = false;
-  List<Cluster> _myGroups = [];
   List<Cluster> _myCapsules = [];
   List<Map<String, dynamic>> _discoverGroups = [];
   Map<String, String> _encryptedKeys = {};
   String _selectedCategory = 'all';
-  
+  String _searchQuery = '';
+  Timer? _searchDebounce;
+
   // Groups system state
   List<group_models.Group> _myUserGroups = [];
   List<group_models.SuggestedGroup> _suggestedGroups = [];
-  bool _isGroupsLoading = false;
-  bool _isSuggestedLoading = false;
+
+  final _searchController = TextEditingController();
 
   static const _categories = [
     ('all', 'All', Icons.grid_view),
@@ -65,13 +67,15 @@ class _ClustersScreenState extends ConsumerState<ClustersScreen>
   @override
   void dispose() {
     _tabController.dispose();
+    _searchController.dispose();
+    _searchDebounce?.cancel();
     super.dispose();
   }
 
   Future<void> _loadAll() async {
     setState(() => _isLoading = true);
     await Future.wait([
-      _loadMyGroups(), 
+      _loadMyGroups(),
       _loadDiscover(),
       _loadUserGroups(),
       _loadSuggestedGroups(),
@@ -85,7 +89,6 @@ class _ClustersScreenState extends ConsumerState<ClustersScreen>
       final allClusters = groups.map((g) => Cluster.fromJson(g)).toList();
       if (mounted) {
         setState(() {
-          _myGroups = allClusters.where((c) => !c.isCapsule).toList();
           _myCapsules = allClusters.where((c) => c.isCapsule).toList();
           _encryptedKeys = {
             for (final g in groups)
@@ -104,6 +107,7 @@ class _ClustersScreenState extends ConsumerState<ClustersScreen>
     try {
       final groups = await ApiService.instance.discoverGroups(
         category: _selectedCategory == 'all' ? null : _selectedCategory,
+        search: _searchQuery.isEmpty ? null : _searchQuery,
       );
       if (mounted) setState(() => _discoverGroups = groups);
     } catch (e) {
@@ -112,22 +116,32 @@ class _ClustersScreenState extends ConsumerState<ClustersScreen>
     if (mounted) setState(() => _isDiscoverLoading = false);
   }
 
-  Future<void> _joinGroup(String groupId) async {
+  Future<void> _loadUserGroups() async {
     try {
-      await ApiService.instance.joinGroup(groupId);
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Joined group!'), backgroundColor: Color(0xFF4CAF50)),
-        );
-      }
-      await _loadAll();
+      final api = ref.read(apiServiceProvider);
+      final groups = await api.getMyGroups();
+      if (mounted) setState(() => _myUserGroups = groups);
     } catch (e) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('$e'), backgroundColor: Colors.red),
-        );
-      }
+      if (kDebugMode) print('[Groups] Load user groups error: $e');
     }
+  }
+
+  Future<void> _loadSuggestedGroups() async {
+    try {
+      final api = ref.read(apiServiceProvider);
+      final suggestions = await api.getSuggestedGroups();
+      if (mounted) setState(() => _suggestedGroups = suggestions);
+    } catch (e) {
+      if (kDebugMode) print('[Groups] Load suggestions error: $e');
+    }
+  }
+
+  void _onSearchChanged(String value) {
+    _searchDebounce?.cancel();
+    _searchDebounce = Timer(const Duration(milliseconds: 400), () {
+      setState(() => _searchQuery = value.trim());
+      _loadDiscover();
+    });
   }
 
   void _navigateToCluster(Cluster cluster) {
@@ -139,31 +153,6 @@ class _ClustersScreenState extends ConsumerState<ClustersScreen>
         encryptedGroupKey: _encryptedKeys[cluster.id],
       ),
     );
-  }
-
-  // Groups system methods
-  Future<void> _loadUserGroups() async {
-    setState(() => _isGroupsLoading = true);
-    try {
-      final api = ref.read(apiServiceProvider);
-      final groups = await api.getMyGroups();
-      if (mounted) setState(() => _myUserGroups = groups);
-    } catch (e) {
-      if (kDebugMode) print('[Groups] Load user groups error: $e');
-    }
-    if (mounted) setState(() => _isGroupsLoading = false);
-  }
-
-  Future<void> _loadSuggestedGroups() async {
-    setState(() => _isSuggestedLoading = true);
-    try {
-      final api = ref.read(apiServiceProvider);
-      final suggestions = await api.getSuggestedGroups();
-      if (mounted) setState(() => _suggestedGroups = suggestions);
-    } catch (e) {
-      if (kDebugMode) print('[Groups] Load suggestions error: $e');
-    }
-    if (mounted) setState(() => _isSuggestedLoading = false);
   }
 
   void _navigateToGroup(group_models.Group group) {
@@ -192,9 +181,10 @@ class _ClustersScreenState extends ConsumerState<ClustersScreen>
 
     final tabBar = TabBar(
       controller: _tabController,
-      indicatorColor: AppTheme.navyBlue,
-      labelColor: AppTheme.navyBlue,
-      unselectedLabelColor: SojornColors.textDisabled,
+      indicatorColor: AppTheme.brightNavy,
+      labelColor: AppTheme.navyText,
+      unselectedLabelColor: AppTheme.navyText.withValues(alpha: 0.4),
+      labelStyle: const TextStyle(fontWeight: FontWeight.w700, fontSize: 13),
       tabs: const [
         Tab(text: 'Groups'),
         Tab(text: 'Encrypted'),
@@ -212,18 +202,27 @@ class _ClustersScreenState extends ConsumerState<ClustersScreen>
     if (isDesktop) {
       return Column(
         children: [
-          // Compact header row
           Container(
             color: AppTheme.scaffoldBg,
             padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
             child: Row(
               children: [
-                const Text('Communities', style: TextStyle(fontWeight: FontWeight.w800, fontSize: 20)),
+                const Text('Communities',
+                    style: TextStyle(fontWeight: FontWeight.w800, fontSize: 20)),
                 const Spacer(),
-                IconButton(
-                  icon: const Icon(Icons.add),
-                  onPressed: () => _showCreateSheet(context),
-                  tooltip: 'Create Group',
+                SizedBox(
+                  height: 36,
+                  child: ElevatedButton.icon(
+                    onPressed: () => _showCreateSheet(context),
+                    icon: const Icon(Icons.add, size: 16),
+                    label: const Text('Create', style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600)),
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: AppTheme.brightNavy,
+                      foregroundColor: Colors.white,
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(SojornRadii.md)),
+                      elevation: 0,
+                    ),
+                  ),
                 ),
               ],
             ),
@@ -237,9 +236,10 @@ class _ClustersScreenState extends ConsumerState<ClustersScreen>
     return Scaffold(
       backgroundColor: AppTheme.scaffoldBg,
       appBar: AppBar(
-        title: const Text('Communities', style: TextStyle(fontWeight: FontWeight.w800)),
+        title: const Text('Communities',
+            style: TextStyle(fontWeight: FontWeight.w800)),
         backgroundColor: AppTheme.scaffoldBg,
-        surfaceTintColor: SojornColors.transparent,
+        surfaceTintColor: Colors.transparent,
         bottom: tabBar,
         actions: [
           IconButton(
@@ -253,147 +253,196 @@ class _ClustersScreenState extends ConsumerState<ClustersScreen>
     );
   }
 
-  // ── Groups Tab (Your Groups + Discover) ──────────────────────────────
+  // ── Groups Tab ────────────────────────────────────────────────────────
   Widget _buildGroupsTab() {
-    if (_isLoading) return const SingleChildScrollView(child: SkeletonGroupList(count: 6));
+    if (_isLoading) {
+      return const SingleChildScrollView(child: SkeletonGroupList(count: 6));
+    }
     return RefreshIndicator(
       onRefresh: _loadAll,
       child: ListView(
-        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
         children: [
+          // ── Search Bar ──
+          _buildSearchBar(),
+          const SizedBox(height: 16),
+
           // ── Your Groups ──
-          if (_myUserGroups.isNotEmpty) ...[
+          if (_myUserGroups.isNotEmpty && _searchQuery.isEmpty) ...[
             _SectionHeader(title: 'Your Groups', count: _myUserGroups.length),
-            const SizedBox(height: 8),
+            const SizedBox(height: 10),
             SizedBox(
-              height: 180,
+              height: 190,
               child: ListView.separated(
                 scrollDirection: Axis.horizontal,
                 itemCount: _myUserGroups.length,
                 separatorBuilder: (_, __) => const SizedBox(width: 12),
                 itemBuilder: (_, i) {
                   final group = _myUserGroups[i];
-                  return CompactGroupCard(
+                  return _MyGroupCard(
                     group: group,
                     onTap: () => _navigateToGroup(group),
                   );
                 },
               ),
             ),
-            const SizedBox(height: 20),
+            const SizedBox(height: 24),
           ],
 
-          // ── Discover Communities ──
-          _SectionHeader(title: 'Discover Communities'),
+          // ── Suggested for You ──
+          if (_suggestedGroups.isNotEmpty && _searchQuery.isEmpty) ...[
+            const _SectionHeader(title: 'Suggested for You'),
+            const SizedBox(height: 10),
+            SizedBox(
+              height: 220,
+              child: ListView.separated(
+                scrollDirection: Axis.horizontal,
+                itemCount: _suggestedGroups.length,
+                separatorBuilder: (_, __) => const SizedBox(width: 12),
+                itemBuilder: (_, i) {
+                  final sg = _suggestedGroups[i];
+                  return _SuggestedGroupCard(
+                    group: sg.group,
+                    reason: sg.reason,
+                    onTap: () => _navigateToGroup(sg.group),
+                  );
+                },
+              ),
+            ),
+            const SizedBox(height: 24),
+          ],
+
+          // ── Browse / Search Results ──
+          _SectionHeader(
+            title: _searchQuery.isNotEmpty ? 'Search Results' : 'Browse Communities',
+            count: _discoverGroups.isNotEmpty ? _discoverGroups.length : null,
+          ),
           const SizedBox(height: 10),
 
-          // ── Suggested for You (personalized, category-agnostic) ──
-          if (_suggestedGroups.isNotEmpty) ...[
-            const _SectionHeader(title: 'Suggested for You'),
-            const SizedBox(height: 8),
-            ..._suggestedGroups.take(3).map((sg) => GroupCard(
-              group: sg.group,
-              onTap: () => _navigateToGroup(sg.group),
-              showReason: true,
-              reason: sg.reason,
-            )),
-            const SizedBox(height: 20),
-            _SectionHeader(title: 'Browse Communities',
-                count: _discoverGroups.length > 0 ? _discoverGroups.length : null),
-            const SizedBox(height: 10),
+          // Category chips
+          if (_searchQuery.isEmpty) ...[
+            SizedBox(
+              height: 36,
+              child: ListView.separated(
+                scrollDirection: Axis.horizontal,
+                itemCount: _categories.length,
+                separatorBuilder: (_, __) => const SizedBox(width: 8),
+                itemBuilder: (_, i) {
+                  final (value, label, icon) = _categories[i];
+                  final selected = _selectedCategory == value;
+                  return FilterChip(
+                    label: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Icon(icon, size: 14,
+                            color: selected ? Colors.white : AppTheme.brightNavy),
+                        const SizedBox(width: 5),
+                        Text(label,
+                            style: TextStyle(
+                              fontSize: 12,
+                              fontWeight: FontWeight.w600,
+                              color: selected ? Colors.white : AppTheme.brightNavy,
+                            )),
+                      ],
+                    ),
+                    selected: selected,
+                    onSelected: (_) {
+                      setState(() => _selectedCategory = value);
+                      _loadDiscover();
+                    },
+                    selectedColor: AppTheme.brightNavy,
+                    backgroundColor: AppTheme.brightNavy.withValues(alpha: 0.06),
+                    side: BorderSide(
+                        color: selected
+                            ? AppTheme.brightNavy
+                            : AppTheme.brightNavy.withValues(alpha: 0.15)),
+                    shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(20)),
+                    showCheckmark: false,
+                    padding: const EdgeInsets.symmetric(horizontal: 6),
+                    materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                    visualDensity: VisualDensity.compact,
+                  );
+                },
+              ),
+            ),
+            const SizedBox(height: 14),
           ],
 
-          // Category chips (horizontal scroll)
-          SizedBox(
-            height: 36,
-            child: ListView.separated(
-              scrollDirection: Axis.horizontal,
-              itemCount: _categories.length,
-              separatorBuilder: (_, __) => const SizedBox(width: 8),
-              itemBuilder: (_, i) {
-                final (value, label, icon) = _categories[i];
-                final selected = _selectedCategory == value;
-                return FilterChip(
-                  label: Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      Icon(icon, size: 14, color: selected ? Colors.white : AppTheme.navyBlue),
-                      const SizedBox(width: 5),
-                      Text(label, style: TextStyle(
-                        fontSize: 12, fontWeight: FontWeight.w600,
-                        color: selected ? Colors.white : AppTheme.navyBlue,
-                      )),
-                    ],
-                  ),
-                  selected: selected,
-                  onSelected: (_) {
-                    setState(() => _selectedCategory = value);
-                    _loadDiscover(); // category-filtered browse
-                  },
-                  selectedColor: AppTheme.navyBlue,
-                  backgroundColor: AppTheme.navyBlue.withValues(alpha: 0.06),
-                  side: BorderSide(color: selected ? AppTheme.navyBlue : AppTheme.navyBlue.withValues(alpha: 0.15)),
-                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-                  showCheckmark: false,
-                  padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 0),
-                  materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                  visualDensity: VisualDensity.compact,
-                );
-              },
-            ),
-          ),
-          const SizedBox(height: 12),
-
-          // Discover results — category-filtered public groups
+          // Results
           if (_isDiscoverLoading)
             const SkeletonGroupList(count: 4)
           else if (_discoverGroups.isEmpty)
             _EmptyDiscoverState(
+              isSearch: _searchQuery.isNotEmpty,
               onCreateGroup: () => _showCreateSheet(context),
             )
           else
-            Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                const SizedBox(height: 4),
-                ..._discoverGroups.map((g) {
-                  final group = group_models.Group.fromJson(g);
-                  return GroupCard(
-                    group: group,
-                    onTap: () => _navigateToGroup(group),
-                  );
-                }),
-                const SizedBox(height: 20),
-              ],
-            ),
+            ..._discoverGroups.map((g) {
+              final group = group_models.Group.fromJson(g);
+              return _BrowseGroupCard(
+                group: group,
+                onTap: () => _navigateToGroup(group),
+              );
+            }),
 
-          // Create group CTA at bottom
-          const SizedBox(height: 16),
-          Center(
-            child: TextButton.icon(
-              onPressed: () => _showCreateSheet(context),
-              icon: Icon(Icons.add_circle_outline, size: 18, color: AppTheme.navyBlue),
-              label: Text('Create a Group', style: TextStyle(
-                color: AppTheme.navyBlue, fontWeight: FontWeight.w600,
-              )),
-            ),
-          ),
           const SizedBox(height: 32),
         ],
       ),
     );
   }
 
-  // ── Capsules Tab ─────────────────────────────────────────────────────
-  Widget _buildCapsuleTab() {
-    if (_isLoading) return const SingleChildScrollView(child: SkeletonGroupList(count: 4));
-    if (_myCapsules.isEmpty) return _EmptyState(
-      icon: Icons.lock,
-      title: 'No Capsules Yet',
-      subtitle: 'Create an encrypted capsule or join one via invite code.',
-      actionLabel: 'Create Capsule',
-      onAction: () => _showCreateSheet(context, capsule: true),
+  Widget _buildSearchBar() {
+    return Container(
+      height: 44,
+      decoration: BoxDecoration(
+        color: AppTheme.cardSurface,
+        borderRadius: BorderRadius.circular(SojornRadii.lg),
+        border: Border.all(color: AppTheme.navyText.withValues(alpha: 0.08)),
+      ),
+      child: TextField(
+        controller: _searchController,
+        onChanged: _onSearchChanged,
+        style: TextStyle(fontSize: 14, color: AppTheme.navyText),
+        decoration: InputDecoration(
+          hintText: 'Search communities...',
+          hintStyle: TextStyle(
+              color: AppTheme.navyText.withValues(alpha: 0.35), fontSize: 14),
+          prefixIcon:
+              Icon(Icons.search, color: AppTheme.navyText.withValues(alpha: 0.3), size: 20),
+          suffixIcon: _searchQuery.isNotEmpty
+              ? IconButton(
+                  icon: Icon(Icons.close,
+                      size: 18, color: AppTheme.navyText.withValues(alpha: 0.4)),
+                  onPressed: () {
+                    _searchController.clear();
+                    setState(() => _searchQuery = '');
+                    _loadDiscover();
+                  },
+                )
+              : null,
+          border: InputBorder.none,
+          contentPadding: const EdgeInsets.symmetric(vertical: 12),
+        ),
+      ),
     );
+  }
+
+  // ── Capsules Tab ──────────────────────────────────────────────────────
+  Widget _buildCapsuleTab() {
+    if (_isLoading) {
+      return const SingleChildScrollView(child: SkeletonGroupList(count: 4));
+    }
+    if (_myCapsules.isEmpty) {
+      return _EmptyState(
+        icon: Icons.lock,
+        title: 'No Capsules Yet',
+        subtitle:
+            'Create an encrypted capsule or join one via invite code.',
+        actionLabel: 'Create Capsule',
+        onAction: () => _showCreateSheet(context, capsule: true),
+      );
+    }
     return RefreshIndicator(
       onRefresh: _loadAll,
       child: ListView.builder(
@@ -409,27 +458,525 @@ class _ClustersScreenState extends ConsumerState<ClustersScreen>
 
   void _showCreateSheet(BuildContext context, {bool capsule = false}) {
     if (capsule) {
-      // Keep existing capsule creation
       showModalBottomSheet(
         context: context,
         backgroundColor: AppTheme.cardSurface,
         isScrollControlled: true,
-        builder: (ctx) => _CreateCapsuleForm(onCreated: () { Navigator.pop(ctx); _loadAll(); }),
+        builder: (ctx) => _CreateCapsuleForm(
+            onCreated: () {
+              Navigator.pop(ctx);
+              _loadAll();
+            }),
       );
     } else {
-      // Use new GroupCreationModal
       showDialog(
         context: context,
         builder: (ctx) => GroupCreationModal(),
-      ).then((_) {
-        // Refresh data after modal is closed
-        _loadAll();
-      });
+      ).then((_) => _loadAll());
     }
   }
 }
 
-// ── Section Header ────────────────────────────────────────────────────────
+// ─── My Group Card (horizontal scroll) ──────────────────────────────────────
+
+class _MyGroupCard extends StatelessWidget {
+  final group_models.Group group;
+  final VoidCallback onTap;
+  const _MyGroupCard({required this.group, required this.onTap});
+
+  @override
+  Widget build(BuildContext context) {
+    return GestureDetector(
+      onTap: onTap,
+      child: Container(
+        width: 150,
+        padding: const EdgeInsets.all(12),
+        decoration: BoxDecoration(
+          color: AppTheme.cardSurface,
+          borderRadius: BorderRadius.circular(SojornRadii.card),
+          border: Border.all(color: AppTheme.navyText.withValues(alpha: 0.06)),
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.center,
+          children: [
+            // Banner or gradient strip
+            Container(
+              height: 48,
+              width: double.infinity,
+              decoration: BoxDecoration(
+                borderRadius: BorderRadius.circular(SojornRadii.md),
+                gradient: LinearGradient(
+                  colors: [
+                    group.category.color.withValues(alpha: 0.3),
+                    group.category.color.withValues(alpha: 0.1),
+                  ],
+                ),
+              ),
+              child: group.bannerUrl != null
+                  ? ClipRRect(
+                      borderRadius: BorderRadius.circular(SojornRadii.md),
+                      child: SignedMediaImage(
+                          url: group.bannerUrl!, fit: BoxFit.cover),
+                    )
+                  : Center(
+                      child: Icon(group.category.icon,
+                          size: 20, color: group.category.color)),
+            ),
+            const SizedBox(height: 10),
+            SojornAvatar(
+              displayName: group.name,
+              avatarUrl: group.avatarUrl,
+              size: 40,
+            ),
+            const SizedBox(height: 8),
+            Text(
+              group.name,
+              style: TextStyle(
+                  fontSize: 13,
+                  fontWeight: FontWeight.w700,
+                  color: AppTheme.navyText),
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              textAlign: TextAlign.center,
+            ),
+            const SizedBox(height: 3),
+            Text(
+              group.memberCountText,
+              style: TextStyle(
+                  fontSize: 11,
+                  color: AppTheme.navyText.withValues(alpha: 0.4)),
+            ),
+            if (group.userRole != null) ...[
+              const SizedBox(height: 4),
+              Container(
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 6, vertical: 1),
+                decoration: BoxDecoration(
+                  color: AppTheme.brightNavy.withValues(alpha: 0.08),
+                  borderRadius: BorderRadius.circular(6),
+                ),
+                child: Text(
+                  group.userRole!.displayName,
+                  style: TextStyle(
+                      fontSize: 9,
+                      fontWeight: FontWeight.w600,
+                      color: AppTheme.brightNavy),
+                ),
+              ),
+            ],
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+// ─── Suggested Group Card (horizontal scroll) ───────────────────────────────
+
+class _SuggestedGroupCard extends ConsumerStatefulWidget {
+  final group_models.Group group;
+  final String reason;
+  final VoidCallback onTap;
+  const _SuggestedGroupCard(
+      {required this.group, required this.reason, required this.onTap});
+
+  @override
+  ConsumerState<_SuggestedGroupCard> createState() =>
+      _SuggestedGroupCardState();
+}
+
+class _SuggestedGroupCardState extends ConsumerState<_SuggestedGroupCard> {
+  bool _joining = false;
+
+  Future<void> _join() async {
+    if (_joining) return;
+    setState(() => _joining = true);
+    try {
+      final api = ref.read(apiServiceProvider);
+      await api.joinGroup(widget.group.id);
+    } catch (_) {}
+    if (mounted) setState(() => _joining = false);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return GestureDetector(
+      onTap: widget.onTap,
+      child: Container(
+        width: 220,
+        padding: const EdgeInsets.all(14),
+        decoration: BoxDecoration(
+          color: AppTheme.cardSurface,
+          borderRadius: BorderRadius.circular(SojornRadii.card),
+          border:
+              Border.all(color: AppTheme.navyText.withValues(alpha: 0.06)),
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                SojornAvatar(
+                  displayName: widget.group.name,
+                  avatarUrl: widget.group.avatarUrl,
+                  size: 44,
+                ),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(widget.group.name,
+                          style: TextStyle(
+                              fontSize: 14,
+                              fontWeight: FontWeight.w700,
+                              color: AppTheme.navyText),
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis),
+                      const SizedBox(height: 2),
+                      Container(
+                        padding: const EdgeInsets.symmetric(
+                            horizontal: 6, vertical: 1),
+                        decoration: BoxDecoration(
+                          color: widget.group.category.color
+                              .withValues(alpha: 0.1),
+                          borderRadius: BorderRadius.circular(6),
+                        ),
+                        child: Text(
+                          widget.group.category.displayName,
+                          style: TextStyle(
+                              fontSize: 10,
+                              fontWeight: FontWeight.w600,
+                              color: widget.group.category.color),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 10),
+            if (widget.group.description.isNotEmpty)
+              Text(
+                widget.group.description,
+                style: TextStyle(
+                    fontSize: 12,
+                    color: AppTheme.navyText.withValues(alpha: 0.6),
+                    height: 1.3),
+                maxLines: 2,
+                overflow: TextOverflow.ellipsis,
+              ),
+            const Spacer(),
+            // Reason chip
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+              decoration: BoxDecoration(
+                color: AppTheme.royalPurple.withValues(alpha: 0.06),
+                borderRadius: BorderRadius.circular(8),
+              ),
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Icon(Icons.auto_awesome,
+                      size: 12, color: AppTheme.royalPurple),
+                  const SizedBox(width: 4),
+                  Flexible(
+                    child: Text(
+                      widget.reason,
+                      style: TextStyle(
+                          fontSize: 10,
+                          color: AppTheme.royalPurple,
+                          fontStyle: FontStyle.italic),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(height: 8),
+            // Stats + Join
+            Row(
+              children: [
+                Text(
+                  widget.group.memberCountText,
+                  style: TextStyle(
+                      fontSize: 11,
+                      color: AppTheme.navyText.withValues(alpha: 0.4)),
+                ),
+                const Spacer(),
+                if (widget.group.isMember)
+                  Container(
+                    padding:
+                        const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+                    decoration: BoxDecoration(
+                      color: Colors.green.withValues(alpha: 0.1),
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                    child: const Text('Joined',
+                        style: TextStyle(
+                            fontSize: 11,
+                            fontWeight: FontWeight.w600,
+                            color: Colors.green)),
+                  )
+                else
+                  SizedBox(
+                    height: 30,
+                    child: ElevatedButton(
+                      onPressed: _joining ? null : _join,
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: AppTheme.brightNavy,
+                        foregroundColor: Colors.white,
+                        shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(12)),
+                        padding:
+                            const EdgeInsets.symmetric(horizontal: 14),
+                        elevation: 0,
+                      ),
+                      child: _joining
+                          ? const SizedBox(
+                              width: 14,
+                              height: 14,
+                              child: CircularProgressIndicator(
+                                  strokeWidth: 2, color: Colors.white))
+                          : const Text('Join',
+                              style: TextStyle(
+                                  fontSize: 12,
+                                  fontWeight: FontWeight.w700)),
+                    ),
+                  ),
+              ],
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+// ─── Browse Group Card (vertical list, rich) ────────────────────────────────
+
+class _BrowseGroupCard extends ConsumerStatefulWidget {
+  final group_models.Group group;
+  final VoidCallback onTap;
+  const _BrowseGroupCard({required this.group, required this.onTap});
+
+  @override
+  ConsumerState<_BrowseGroupCard> createState() => _BrowseGroupCardState();
+}
+
+class _BrowseGroupCardState extends ConsumerState<_BrowseGroupCard> {
+  bool _joining = false;
+
+  Future<void> _join() async {
+    if (_joining) return;
+    setState(() => _joining = true);
+    try {
+      final api = ref.read(apiServiceProvider);
+      await api.joinGroup(widget.group.id);
+    } catch (_) {}
+    if (mounted) setState(() => _joining = false);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final g = widget.group;
+    return GestureDetector(
+      onTap: widget.onTap,
+      child: Container(
+        margin: const EdgeInsets.only(bottom: 10),
+        decoration: BoxDecoration(
+          color: AppTheme.cardSurface,
+          borderRadius: BorderRadius.circular(SojornRadii.card),
+          border: Border.all(color: AppTheme.navyText.withValues(alpha: 0.06)),
+        ),
+        clipBehavior: Clip.antiAlias,
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            // Banner / gradient header
+            Container(
+              height: 64,
+              decoration: BoxDecoration(
+                gradient: LinearGradient(
+                  colors: [
+                    g.category.color.withValues(alpha: 0.25),
+                    g.category.color.withValues(alpha: 0.08),
+                  ],
+                ),
+              ),
+              child: g.bannerUrl != null
+                  ? SignedMediaImage(
+                      url: g.bannerUrl!, fit: BoxFit.cover, width: double.infinity)
+                  : null,
+            ),
+            // Content
+            Padding(
+              padding: const EdgeInsets.all(14),
+              child: Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  // Avatar overlapping banner
+                  Transform.translate(
+                    offset: const Offset(0, -28),
+                    child: Container(
+                      decoration: BoxDecoration(
+                        borderRadius: BorderRadius.circular(14),
+                        border: Border.all(color: AppTheme.cardSurface, width: 3),
+                      ),
+                      child: SojornAvatar(
+                        displayName: g.name,
+                        avatarUrl: g.avatarUrl,
+                        size: 48,
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: 12),
+                  // Info
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Row(
+                          children: [
+                            Expanded(
+                              child: Text(g.name,
+                                  style: TextStyle(
+                                      fontSize: 15,
+                                      fontWeight: FontWeight.w700,
+                                      color: AppTheme.navyText),
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis),
+                            ),
+                            if (g.isPrivate)
+                              Padding(
+                                padding: const EdgeInsets.only(left: 6),
+                                child: Icon(Icons.lock,
+                                    size: 14,
+                                    color:
+                                        AppTheme.navyText.withValues(alpha: 0.3)),
+                              ),
+                          ],
+                        ),
+                        const SizedBox(height: 3),
+                        if (g.description.isNotEmpty) ...[
+                          Text(g.description,
+                              style: TextStyle(
+                                  fontSize: 12,
+                                  color:
+                                      AppTheme.navyText.withValues(alpha: 0.55),
+                                  height: 1.3),
+                              maxLines: 2,
+                              overflow: TextOverflow.ellipsis),
+                          const SizedBox(height: 6),
+                        ],
+                        // Stats row
+                        Row(
+                          children: [
+                            Icon(Icons.people_outline,
+                                size: 13,
+                                color:
+                                    AppTheme.navyText.withValues(alpha: 0.35)),
+                            const SizedBox(width: 3),
+                            Text(g.memberCountText,
+                                style: TextStyle(
+                                    fontSize: 11,
+                                    color: AppTheme.navyText
+                                        .withValues(alpha: 0.4))),
+                            const SizedBox(width: 10),
+                            Text('${g.postCount} posts',
+                                style: TextStyle(
+                                    fontSize: 11,
+                                    color: AppTheme.navyText
+                                        .withValues(alpha: 0.4))),
+                            const SizedBox(width: 10),
+                            Container(
+                              padding: const EdgeInsets.symmetric(
+                                  horizontal: 6, vertical: 1),
+                              decoration: BoxDecoration(
+                                color: g.category.color
+                                    .withValues(alpha: 0.1),
+                                borderRadius: BorderRadius.circular(6),
+                              ),
+                              child: Text(g.category.displayName,
+                                  style: TextStyle(
+                                      fontSize: 10,
+                                      fontWeight: FontWeight.w600,
+                                      color: g.category.color)),
+                            ),
+                          ],
+                        ),
+                      ],
+                    ),
+                  ),
+                  const SizedBox(width: 10),
+                  // Join button
+                  if (g.isMember)
+                    Container(
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 12, vertical: 6),
+                      decoration: BoxDecoration(
+                        color: Colors.green.withValues(alpha: 0.1),
+                        borderRadius: BorderRadius.circular(14),
+                      ),
+                      child: const Text('Joined',
+                          style: TextStyle(
+                              fontSize: 12,
+                              fontWeight: FontWeight.w600,
+                              color: Colors.green)),
+                    )
+                  else if (g.hasPendingRequest)
+                    Container(
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 12, vertical: 6),
+                      decoration: BoxDecoration(
+                        color: Colors.orange.withValues(alpha: 0.1),
+                        borderRadius: BorderRadius.circular(14),
+                      ),
+                      child: const Text('Pending',
+                          style: TextStyle(
+                              fontSize: 12,
+                              fontWeight: FontWeight.w600,
+                              color: Colors.deepOrange)),
+                    )
+                  else
+                    SizedBox(
+                      height: 32,
+                      child: ElevatedButton(
+                        onPressed: _joining ? null : _join,
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: AppTheme.brightNavy,
+                          foregroundColor: Colors.white,
+                          shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(14)),
+                          padding:
+                              const EdgeInsets.symmetric(horizontal: 16),
+                          elevation: 0,
+                        ),
+                        child: _joining
+                            ? const SizedBox(
+                                width: 14,
+                                height: 14,
+                                child: CircularProgressIndicator(
+                                    strokeWidth: 2, color: Colors.white))
+                            : Text(g.isPrivate ? 'Request' : 'Join',
+                                style: const TextStyle(
+                                    fontSize: 12,
+                                    fontWeight: FontWeight.w700)),
+                      ),
+                    ),
+                ],
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+// ─── Section Header ─────────────────────────────────────────────────────────
+
 class _SectionHeader extends StatelessWidget {
   final String title;
   final int? count;
@@ -439,20 +986,26 @@ class _SectionHeader extends StatelessWidget {
   Widget build(BuildContext context) {
     return Row(
       children: [
-        Text(title, style: TextStyle(
-          fontSize: 16, fontWeight: FontWeight.w700, color: AppTheme.navyBlue,
-        )),
+        Text(title,
+            style: TextStyle(
+              fontSize: 16,
+              fontWeight: FontWeight.w700,
+              color: AppTheme.navyText,
+            )),
         if (count != null) ...[
           const SizedBox(width: 6),
           Container(
             padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 1),
             decoration: BoxDecoration(
-              color: AppTheme.navyBlue.withValues(alpha: 0.1),
+              color: AppTheme.brightNavy.withValues(alpha: 0.1),
               borderRadius: BorderRadius.circular(10),
             ),
-            child: Text('$count', style: TextStyle(
-              fontSize: 11, fontWeight: FontWeight.w700, color: AppTheme.navyBlue,
-            )),
+            child: Text('$count',
+                style: TextStyle(
+                  fontSize: 11,
+                  fontWeight: FontWeight.w700,
+                  color: AppTheme.brightNavy,
+                )),
           ),
         ],
       ],
@@ -460,10 +1013,13 @@ class _SectionHeader extends StatelessWidget {
   }
 }
 
-// ── Empty Discover State ──────────────────────────────────────────────────
+// ─── Empty States ───────────────────────────────────────────────────────────
+
 class _EmptyDiscoverState extends StatelessWidget {
+  final bool isSearch;
   final VoidCallback onCreateGroup;
-  const _EmptyDiscoverState({required this.onCreateGroup});
+  const _EmptyDiscoverState(
+      {this.isSearch = false, required this.onCreateGroup});
 
   @override
   Widget build(BuildContext context) {
@@ -471,32 +1027,43 @@ class _EmptyDiscoverState extends StatelessWidget {
       padding: const EdgeInsets.symmetric(vertical: 32),
       child: Column(
         children: [
-          Icon(Icons.explore_outlined, size: 48, color: AppTheme.navyBlue.withValues(alpha: 0.2)),
+          Icon(
+              isSearch ? Icons.search_off : Icons.explore_outlined,
+              size: 48,
+              color: AppTheme.navyText.withValues(alpha: 0.2)),
           const SizedBox(height: 12),
-          Text('No groups found in this category', style: TextStyle(
-            fontSize: 14, fontWeight: FontWeight.w600,
-            color: AppTheme.navyBlue.withValues(alpha: 0.5),
-          )),
-          const SizedBox(height: 4),
-          Text('Be the first to create one!', style: TextStyle(
-            fontSize: 12, color: AppTheme.navyBlue.withValues(alpha: 0.35),
-          )),
-          const SizedBox(height: 16),
-          OutlinedButton.icon(
-            onPressed: onCreateGroup,
-            icon: const Icon(Icons.add, size: 16),
-            label: const Text('Create Group'),
-            style: OutlinedButton.styleFrom(
-              side: BorderSide(color: AppTheme.navyBlue.withValues(alpha: 0.3)),
-            ),
+          Text(
+            isSearch
+                ? 'No groups match your search'
+                : 'No groups found in this category',
+            style: TextStyle(
+                fontSize: 14,
+                fontWeight: FontWeight.w600,
+                color: AppTheme.navyText.withValues(alpha: 0.5)),
           ),
+          if (!isSearch) ...[
+            const SizedBox(height: 4),
+            Text('Be the first to create one!',
+                style: TextStyle(
+                    fontSize: 12,
+                    color: AppTheme.navyText.withValues(alpha: 0.35))),
+            const SizedBox(height: 16),
+            OutlinedButton.icon(
+              onPressed: onCreateGroup,
+              icon: const Icon(Icons.add, size: 16),
+              label: const Text('Create Group'),
+              style: OutlinedButton.styleFrom(
+                side: BorderSide(
+                    color: AppTheme.brightNavy.withValues(alpha: 0.3)),
+              ),
+            ),
+          ],
         ],
       ),
     );
   }
 }
 
-// ── Empty State (for capsules) ────────────────────────────────────────────
 class _EmptyState extends StatelessWidget {
   final IconData icon;
   final String title;
@@ -520,21 +1087,26 @@ class _EmptyState extends StatelessWidget {
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            Icon(icon, size: 56, color: AppTheme.navyBlue.withValues(alpha: 0.2)),
+            Icon(icon,
+                size: 56, color: AppTheme.navyText.withValues(alpha: 0.2)),
             const SizedBox(height: 16),
-            Text(title, style: TextStyle(
-              fontSize: 18, fontWeight: FontWeight.w700,
-              color: AppTheme.navyBlue.withValues(alpha: 0.6),
-            )),
+            Text(title,
+                style: TextStyle(
+                    fontSize: 18,
+                    fontWeight: FontWeight.w700,
+                    color: AppTheme.navyText.withValues(alpha: 0.6))),
             const SizedBox(height: 8),
-            Text(subtitle, style: TextStyle(
-              fontSize: 13, color: AppTheme.navyBlue.withValues(alpha: 0.4),
-            ), textAlign: TextAlign.center),
+            Text(subtitle,
+                style: TextStyle(
+                    fontSize: 13,
+                    color: AppTheme.navyText.withValues(alpha: 0.4)),
+                textAlign: TextAlign.center),
             const SizedBox(height: 24),
             OutlinedButton(
               onPressed: onAction,
               style: OutlinedButton.styleFrom(
-                side: BorderSide(color: AppTheme.navyBlue.withValues(alpha: 0.3)),
+                side: BorderSide(
+                    color: AppTheme.navyText.withValues(alpha: 0.3)),
               ),
               child: Text(actionLabel),
             ),
@@ -545,189 +1117,8 @@ class _EmptyState extends StatelessWidget {
   }
 }
 
-// ── Group Card (user's own groups) ────────────────────────────────────────
-class _GroupCard extends StatelessWidget {
-  final Cluster cluster;
-  final VoidCallback onTap;
-  const _GroupCard({required this.cluster, required this.onTap});
+// ─── Capsule Card ───────────────────────────────────────────────────────────
 
-  @override
-  Widget build(BuildContext context) {
-    final cat = cluster.category;
-    return GestureDetector(
-      onTap: onTap,
-      child: Container(
-        margin: const EdgeInsets.only(bottom: 10),
-        padding: const EdgeInsets.all(16),
-        decoration: BoxDecoration(
-          color: AppTheme.cardSurface,
-          borderRadius: BorderRadius.circular(16),
-          border: Border.all(color: AppTheme.navyBlue.withValues(alpha: 0.1)),
-          boxShadow: [
-            BoxShadow(
-              color: AppTheme.brightNavy.withValues(alpha: 0.06),
-              blurRadius: 12,
-              offset: const Offset(0, 4),
-            ),
-          ],
-        ),
-        child: Row(
-          children: [
-            Container(
-              width: 48, height: 48,
-              decoration: BoxDecoration(
-                color: cat.color.withValues(alpha: 0.1),
-                borderRadius: BorderRadius.circular(14),
-              ),
-              child: Icon(cat.icon, color: cat.color, size: 24),
-            ),
-            const SizedBox(width: 14),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(cluster.name, style: const TextStyle(
-                    fontSize: 15, fontWeight: FontWeight.w600,
-                  )),
-                  const SizedBox(height: 3),
-                  Row(
-                    children: [
-                      Icon(Icons.people, size: 12, color: SojornColors.textDisabled),
-                      const SizedBox(width: 4),
-                      Text('${cluster.memberCount} members', style: TextStyle(fontSize: 11, color: SojornColors.textDisabled)),
-                    ],
-                  ),
-                ],
-              ),
-            ),
-            Icon(Icons.chevron_right, color: SojornColors.textDisabled, size: 20),
-          ],
-        ),
-      ),
-    );
-  }
-}
-
-// ── Discover Group Card (with Join button) ────────────────────────────────
-class _DiscoverGroupCard extends StatelessWidget {
-  final String name;
-  final String description;
-  final int memberCount;
-  final GroupCategory category;
-  final bool isMember;
-  final VoidCallback? onJoin;
-  final VoidCallback? onTap;
-
-  const _DiscoverGroupCard({
-    required this.name,
-    required this.description,
-    required this.memberCount,
-    required this.category,
-    required this.isMember,
-    this.onJoin,
-    this.onTap,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    return GestureDetector(
-      onTap: onTap,
-      child: Container(
-        margin: const EdgeInsets.only(bottom: 10),
-        padding: const EdgeInsets.all(14),
-        decoration: BoxDecoration(
-          color: AppTheme.cardSurface,
-          borderRadius: BorderRadius.circular(16),
-          border: Border.all(color: AppTheme.navyBlue.withValues(alpha: 0.08)),
-          boxShadow: [
-            BoxShadow(
-              color: AppTheme.brightNavy.withValues(alpha: 0.04),
-              blurRadius: 8,
-              offset: const Offset(0, 2),
-            ),
-          ],
-        ),
-        child: Row(
-          children: [
-            Container(
-              width: 44, height: 44,
-              decoration: BoxDecoration(
-                color: category.color.withValues(alpha: 0.1),
-                borderRadius: BorderRadius.circular(12),
-              ),
-              child: Icon(category.icon, color: category.color, size: 22),
-            ),
-            const SizedBox(width: 12),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(name, style: const TextStyle(
-                    fontSize: 14, fontWeight: FontWeight.w600,
-                  ), maxLines: 1, overflow: TextOverflow.ellipsis),
-                  if (description.isNotEmpty) ...[
-                    const SizedBox(height: 2),
-                    Text(description, style: TextStyle(
-                      fontSize: 12, color: SojornColors.textDisabled,
-                    ), maxLines: 1, overflow: TextOverflow.ellipsis),
-                  ],
-                  const SizedBox(height: 3),
-                  Row(
-                    children: [
-                      Icon(Icons.people_outline, size: 12, color: SojornColors.textDisabled),
-                      const SizedBox(width: 3),
-                      Text('$memberCount', style: TextStyle(fontSize: 11, color: SojornColors.textDisabled)),
-                      const SizedBox(width: 8),
-                      Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 1),
-                        decoration: BoxDecoration(
-                          color: category.color.withValues(alpha: 0.1),
-                          borderRadius: BorderRadius.circular(6),
-                        ),
-                        child: Text(category.displayName, style: TextStyle(
-                          fontSize: 10, fontWeight: FontWeight.w600, color: category.color,
-                        )),
-                      ),
-                    ],
-                  ),
-                ],
-              ),
-            ),
-            const SizedBox(width: 8),
-            if (isMember)
-              Container(
-                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-                decoration: BoxDecoration(
-                  color: const Color(0xFF4CAF50).withValues(alpha: 0.1),
-                  borderRadius: BorderRadius.circular(20),
-                ),
-                child: const Text('Joined', style: TextStyle(
-                  fontSize: 12, fontWeight: FontWeight.w600, color: Color(0xFF4CAF50),
-                )),
-              )
-            else
-              SizedBox(
-                height: 32,
-                child: ElevatedButton(
-                  onPressed: onJoin,
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: AppTheme.navyBlue,
-                    foregroundColor: Colors.white,
-                    padding: const EdgeInsets.symmetric(horizontal: 16),
-                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-                    elevation: 0,
-                  ),
-                  child: const Text('Join', style: TextStyle(fontSize: 12, fontWeight: FontWeight.w700)),
-                ),
-              ),
-          ],
-        ),
-      ),
-    );
-  }
-}
-
-// ── Private Capsule Card ──────────────────────────────────────────────────
 class _CapsuleCard extends StatelessWidget {
   final Cluster capsule;
   final VoidCallback onTap;
@@ -742,54 +1133,62 @@ class _CapsuleCard extends StatelessWidget {
         padding: const EdgeInsets.all(16),
         decoration: BoxDecoration(
           color: const Color(0xFFF0F8F0),
-          borderRadius: BorderRadius.circular(16),
-          border: Border.all(color: const Color(0xFF4CAF50).withValues(alpha: 0.18)),
-          boxShadow: [
-            BoxShadow(
-              color: const Color(0xFF4CAF50).withValues(alpha: 0.06),
-              blurRadius: 12,
-              offset: const Offset(0, 4),
-            ),
-          ],
+          borderRadius: BorderRadius.circular(SojornRadii.card),
+          border: Border.all(
+              color: const Color(0xFF4CAF50).withValues(alpha: 0.18)),
         ),
         child: Row(
           children: [
             Container(
-              width: 48, height: 48,
+              width: 48,
+              height: 48,
               decoration: BoxDecoration(
                 color: const Color(0xFF4CAF50).withValues(alpha: 0.1),
                 borderRadius: BorderRadius.circular(14),
               ),
-              child: const Icon(Icons.lock, color: Color(0xFF4CAF50), size: 22),
+              child: const Icon(Icons.lock,
+                  color: Color(0xFF4CAF50), size: 22),
             ),
             const SizedBox(width: 14),
             Expanded(
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text(capsule.name, style: TextStyle(
-                    fontSize: 15, fontWeight: FontWeight.w600, color: AppTheme.navyBlue,
-                  )),
+                  Text(capsule.name,
+                      style: TextStyle(
+                          fontSize: 15,
+                          fontWeight: FontWeight.w600,
+                          color: AppTheme.navyText)),
                   const SizedBox(height: 3),
                   Row(
                     children: [
-                      const Icon(Icons.shield, size: 12, color: Color(0xFF4CAF50)),
+                      Icon(Icons.shield,
+                          size: 12,
+                          color: const Color(0xFF4CAF50)
+                              .withValues(alpha: 0.7)),
                       const SizedBox(width: 4),
-                      Text('E2E Encrypted', style: TextStyle(fontSize: 11, color: const Color(0xFF4CAF50).withValues(alpha: 0.7))),
+                      Text('E2E Encrypted',
+                          style: TextStyle(
+                              fontSize: 11,
+                              color: const Color(0xFF4CAF50)
+                                  .withValues(alpha: 0.7))),
                       const SizedBox(width: 10),
-                      Icon(Icons.people, size: 12, color: SojornColors.textDisabled),
+                      Icon(Icons.people,
+                          size: 12,
+                          color: AppTheme.navyText.withValues(alpha: 0.35)),
                       const SizedBox(width: 4),
-                      Text('${capsule.memberCount}', style: TextStyle(fontSize: 11, color: SojornColors.postContentLight)),
-                      const SizedBox(width: 10),
-                      Icon(Icons.vpn_key, size: 11, color: SojornColors.textDisabled),
-                      const SizedBox(width: 3),
-                      Text('v${capsule.keyVersion}', style: TextStyle(fontSize: 10, color: SojornColors.textDisabled)),
+                      Text('${capsule.memberCount}',
+                          style: TextStyle(
+                              fontSize: 11,
+                              color: AppTheme.navyText
+                                  .withValues(alpha: 0.4))),
                     ],
                   ),
                 ],
               ),
             ),
-            Icon(Icons.chevron_right, color: SojornColors.textDisabled, size: 20),
+            Icon(Icons.chevron_right,
+                color: AppTheme.navyText.withValues(alpha: 0.3), size: 20),
           ],
         ),
       ),
@@ -797,125 +1196,8 @@ class _CapsuleCard extends StatelessWidget {
   }
 }
 
-// ── Create Group Form (non-encrypted, public/private) ─────────────────
-class _CreateGroupForm extends ConsumerStatefulWidget {
-  final VoidCallback onCreated;
-  const _CreateGroupForm({required this.onCreated});
+// ─── Create Capsule Form ────────────────────────────────────────────────────
 
-  @override
-  ConsumerState<_CreateGroupForm> createState() => _CreateGroupFormState();
-}
-
-class _CreateGroupFormState extends ConsumerState<_CreateGroupForm> {
-  final _nameCtrl = TextEditingController();
-  final _descCtrl = TextEditingController();
-  bool _privacy = false;
-  bool _submitting = false;
-
-  @override
-  void dispose() { _nameCtrl.dispose(); _descCtrl.dispose(); super.dispose(); }
-
-  Future<void> _submit() async {
-    if (_nameCtrl.text.trim().isEmpty) return;
-    setState(() => _submitting = true);
-    try {
-      final api = ref.read(apiServiceProvider);
-      await api.createGroup(
-        name: _nameCtrl.text.trim(),
-        description: _descCtrl.text.trim(),
-        category: GroupCategory.general,
-        isPrivate: _privacy,
-      );
-      widget.onCreated();
-    } catch (e) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Failed to create group: $e')),
-        );
-      }
-    }
-    if (mounted) setState(() => _submitting = false);
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return Padding(
-      padding: EdgeInsets.fromLTRB(20, 16, 20, MediaQuery.of(context).viewInsets.bottom + 20),
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Center(child: Container(width: 40, height: 4, decoration: BoxDecoration(color: SojornColors.basicBlack.withValues(alpha: 0.15), borderRadius: BorderRadius.circular(2)))),
-          const SizedBox(height: 20),
-          const Text('Create Group', style: TextStyle(fontSize: 18, fontWeight: FontWeight.w700)),
-          const SizedBox(height: 4),
-          Text('Anyone can create a group. Automatic geo-groups are official.',
-            style: TextStyle(fontSize: 12, color: SojornColors.basicBlack.withValues(alpha: 0.45))),
-          const SizedBox(height: 20),
-          TextField(
-            controller: _nameCtrl,
-            decoration: InputDecoration(
-              labelText: 'Group name',
-              filled: true,
-              fillColor: SojornColors.basicBlack.withValues(alpha: 0.04),
-              border: OutlineInputBorder(borderRadius: BorderRadius.circular(10), borderSide: BorderSide(color: SojornColors.basicBlack.withValues(alpha: 0.1))),
-              enabledBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(10), borderSide: BorderSide(color: SojornColors.basicBlack.withValues(alpha: 0.1))),
-            ),
-          ),
-          const SizedBox(height: 12),
-          TextField(
-            controller: _descCtrl,
-            maxLines: 2,
-            decoration: InputDecoration(
-              labelText: 'Description (optional)',
-              filled: true,
-              fillColor: SojornColors.basicBlack.withValues(alpha: 0.04),
-              border: OutlineInputBorder(borderRadius: BorderRadius.circular(10), borderSide: BorderSide(color: SojornColors.basicBlack.withValues(alpha: 0.1))),
-              enabledBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(10), borderSide: BorderSide(color: SojornColors.basicBlack.withValues(alpha: 0.1))),
-            ),
-          ),
-          const SizedBox(height: 14),
-          Row(
-            children: [
-              Text('Visibility:', style: TextStyle(fontSize: 13, color: SojornColors.basicBlack.withValues(alpha: 0.6))),
-              const SizedBox(width: 12),
-              ChoiceChip(
-                label: const Text('Public'),
-                selected: !_privacy,
-                onSelected: (_) => setState(() => _privacy = false),
-                selectedColor: AppTheme.brightNavy.withValues(alpha: 0.15),
-              ),
-              const SizedBox(width: 8),
-              ChoiceChip(
-                label: const Text('Private'),
-                selected: _privacy,
-                onSelected: (_) => setState(() => _privacy = true),
-                selectedColor: AppTheme.brightNavy.withValues(alpha: 0.15),
-              ),
-            ],
-          ),
-          const SizedBox(height: 20),
-          SizedBox(
-            width: double.infinity, height: 48,
-            child: ElevatedButton(
-              onPressed: _submitting ? null : _submit,
-              style: ElevatedButton.styleFrom(
-                backgroundColor: AppTheme.navyBlue,
-                foregroundColor: SojornColors.basicWhite,
-                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-              ),
-              child: _submitting
-                  ? const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2, color: SojornColors.basicWhite))
-                  : const Text('Create Group', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 15)),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-// ── Create Capsule Form (E2EE, generates keys automatically) ──────────
 class _CreateCapsuleForm extends StatefulWidget {
   final VoidCallback onCreated;
   const _CreateCapsuleForm({required this.onCreated});
@@ -931,29 +1213,34 @@ class _CreateCapsuleFormState extends State<_CreateCapsuleForm> {
   String? _statusMsg;
 
   @override
-  void dispose() { _nameCtrl.dispose(); _descCtrl.dispose(); super.dispose(); }
+  void dispose() {
+    _nameCtrl.dispose();
+    _descCtrl.dispose();
+    super.dispose();
+  }
 
   Future<void> _submit() async {
     if (_nameCtrl.text.trim().isEmpty) return;
-    setState(() { _submitting = true; _statusMsg = 'Generating encryption keys…'; });
+    setState(() {
+      _submitting = true;
+      _statusMsg = 'Generating encryption keys...';
+    });
     try {
-      // 1. Generate capsule AES key
-      final capsuleKey = await CapsuleSecurityService.generateCapsuleKey();
+      final capsuleKey =
+          await CapsuleSecurityService.generateCapsuleKey();
+      final publicKeyB64 =
+          await CapsuleSecurityService.getUserPublicKeyB64();
 
-      // 2. Get (or create) user's X25519 key pair
-      final publicKeyB64 = await CapsuleSecurityService.getUserPublicKeyB64();
+      setState(() => _statusMsg = 'Encrypting group key...');
 
-      setState(() => _statusMsg = 'Encrypting group key…');
-
-      // 3. Encrypt capsule key for the creator (box it to themselves)
-      final encryptedGroupKey = await CapsuleSecurityService.encryptCapsuleKeyForUser(
+      final encryptedGroupKey =
+          await CapsuleSecurityService.encryptCapsuleKeyForUser(
         capsuleKey: capsuleKey,
         recipientPublicKeyB64: publicKeyB64,
       );
 
-      setState(() => _statusMsg = 'Creating capsule…');
+      setState(() => _statusMsg = 'Creating capsule...');
 
-      // 4. POST to backend
       final result = await ApiService.instance.createCapsule(
         name: _nameCtrl.text.trim(),
         description: _descCtrl.text.trim(),
@@ -961,10 +1248,11 @@ class _CreateCapsuleFormState extends State<_CreateCapsuleForm> {
         encryptedGroupKey: encryptedGroupKey,
       );
 
-      // 5. Cache the capsule key locally for instant access
-      final capsuleId = (result['capsule'] as Map<String, dynamic>?)?['id']?.toString();
+      final capsuleId =
+          (result['capsule'] as Map<String, dynamic>?)?['id']?.toString();
       if (capsuleId != null) {
-        await CapsuleSecurityService.cacheCapsuleKey(capsuleId, capsuleKey);
+        await CapsuleSecurityService.cacheCapsuleKey(
+            capsuleId, capsuleKey);
       }
 
       widget.onCreated();
@@ -975,52 +1263,77 @@ class _CreateCapsuleFormState extends State<_CreateCapsuleForm> {
         );
       }
     }
-    if (mounted) setState(() { _submitting = false; _statusMsg = null; });
+    if (mounted) {
+      setState(() {
+        _submitting = false;
+        _statusMsg = null;
+      });
+    }
   }
 
   @override
   Widget build(BuildContext context) {
     return Padding(
-      padding: EdgeInsets.fromLTRB(20, 16, 20, MediaQuery.of(context).viewInsets.bottom + 20),
+      padding: EdgeInsets.fromLTRB(
+          20, 16, 20, MediaQuery.of(context).viewInsets.bottom + 20),
       child: Column(
         mainAxisSize: MainAxisSize.min,
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Center(child: Container(width: 40, height: 4, decoration: BoxDecoration(color: AppTheme.navyBlue.withValues(alpha: 0.15), borderRadius: BorderRadius.circular(2)))),
+          Center(
+              child: Container(
+                  width: 40,
+                  height: 4,
+                  decoration: BoxDecoration(
+                      color: AppTheme.navyText.withValues(alpha: 0.15),
+                      borderRadius: BorderRadius.circular(2)))),
           const SizedBox(height: 20),
           Row(
             children: [
               const Icon(Icons.lock, color: Color(0xFF4CAF50), size: 20),
               const SizedBox(width: 8),
-              Text('Create Private Capsule', style: TextStyle(color: AppTheme.navyBlue, fontSize: 18, fontWeight: FontWeight.w700)),
+              Text('Create Private Capsule',
+                  style: TextStyle(
+                      color: AppTheme.navyText,
+                      fontSize: 18,
+                      fontWeight: FontWeight.w700)),
             ],
           ),
           const SizedBox(height: 4),
-          Text('End-to-end encrypted. The server never sees your content.',
-            style: TextStyle(fontSize: 12, color: SojornColors.textDisabled)),
+          Text(
+              'End-to-end encrypted. The server never sees your content.',
+              style: TextStyle(
+                  fontSize: 12,
+                  color: AppTheme.navyText.withValues(alpha: 0.4))),
           const SizedBox(height: 20),
           TextField(
             controller: _nameCtrl,
-            style: TextStyle(color: SojornColors.postContent),
+            style: TextStyle(color: AppTheme.navyText),
             decoration: InputDecoration(
               labelText: 'Capsule name',
-              labelStyle: TextStyle(color: SojornColors.textDisabled),
+              labelStyle: TextStyle(
+                  color: AppTheme.navyText.withValues(alpha: 0.4)),
               filled: true,
               fillColor: AppTheme.scaffoldBg,
-              border: OutlineInputBorder(borderRadius: BorderRadius.circular(10), borderSide: BorderSide.none),
+              border: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(10),
+                  borderSide: BorderSide.none),
             ),
           ),
           const SizedBox(height: 12),
           TextField(
             controller: _descCtrl,
-            style: TextStyle(color: SojornColors.postContent),
+            style: TextStyle(color: AppTheme.navyText),
             maxLines: 2,
             decoration: InputDecoration(
               labelText: 'Description (optional)',
-              labelStyle: TextStyle(color: SojornColors.textDisabled),
+              labelStyle: TextStyle(
+                  color: AppTheme.navyText.withValues(alpha: 0.4)),
               filled: true,
               fillColor: AppTheme.scaffoldBg,
-              border: OutlineInputBorder(borderRadius: BorderRadius.circular(10), borderSide: BorderSide.none),
+              border: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(10),
+                  borderSide: BorderSide.none),
             ),
           ),
           const SizedBox(height: 8),
@@ -1029,41 +1342,63 @@ class _CreateCapsuleFormState extends State<_CreateCapsuleForm> {
             decoration: BoxDecoration(
               color: const Color(0xFF4CAF50).withValues(alpha: 0.08),
               borderRadius: BorderRadius.circular(8),
-              border: Border.all(color: const Color(0xFF4CAF50).withValues(alpha: 0.15)),
+              border: Border.all(
+                  color: const Color(0xFF4CAF50).withValues(alpha: 0.15)),
             ),
             child: Row(
               children: [
-                Icon(Icons.shield, size: 14, color: const Color(0xFF4CAF50).withValues(alpha: 0.7)),
+                Icon(Icons.shield,
+                    size: 14,
+                    color:
+                        const Color(0xFF4CAF50).withValues(alpha: 0.7)),
                 const SizedBox(width: 8),
-                Expanded(child: Text(
+                Expanded(
+                    child: Text(
                   'Keys are generated on your device. Only invited members can decrypt content.',
-                  style: TextStyle(fontSize: 11, color: SojornColors.postContentLight),
+                  style: TextStyle(
+                      fontSize: 11,
+                      color: AppTheme.navyText.withValues(alpha: 0.5)),
                 )),
               ],
             ),
           ),
           const SizedBox(height: 20),
           SizedBox(
-            width: double.infinity, height: 48,
+            width: double.infinity,
+            height: 48,
             child: ElevatedButton(
               onPressed: _submitting ? null : _submit,
               style: ElevatedButton.styleFrom(
                 backgroundColor: const Color(0xFF4CAF50),
-                foregroundColor: SojornColors.basicWhite,
-                disabledBackgroundColor: const Color(0xFF4CAF50).withValues(alpha: 0.3),
-                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                foregroundColor: Colors.white,
+                disabledBackgroundColor:
+                    const Color(0xFF4CAF50).withValues(alpha: 0.3),
+                shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(12)),
               ),
               child: _submitting
-                  ? Row(mainAxisAlignment: MainAxisAlignment.center, children: [
-                      const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2, color: SojornColors.basicWhite)),
-                      const SizedBox(width: 10),
-                      Text(_statusMsg ?? 'Creating…', style: const TextStyle(fontSize: 13)),
-                    ])
-                  : const Row(mainAxisAlignment: MainAxisAlignment.center, children: [
-                      Icon(Icons.lock, size: 16),
-                      SizedBox(width: 8),
-                      Text('Generate Keys & Create', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 15)),
-                    ]),
+                  ? Row(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                          const SizedBox(
+                              width: 16,
+                              height: 16,
+                              child: CircularProgressIndicator(
+                                  strokeWidth: 2, color: Colors.white)),
+                          const SizedBox(width: 10),
+                          Text(_statusMsg ?? 'Creating...',
+                              style: const TextStyle(fontSize: 13)),
+                        ])
+                  : const Row(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                          Icon(Icons.lock, size: 16),
+                          SizedBox(width: 8),
+                          Text('Generate Keys & Create',
+                              style: TextStyle(
+                                  fontWeight: FontWeight.bold,
+                                  fontSize: 15)),
+                        ]),
             ),
           ),
         ],

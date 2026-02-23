@@ -62,13 +62,16 @@ type Post struct {
 	DeletedAt              *time.Time `json:"deleted_at,omitempty" db:"deleted_at"`
 
 	// Joined fields (Scan targets)
-	AuthorHandle      string `json:"-" db:"author_handle"`
-	AuthorDisplayName string `json:"-" db:"author_display_name"`
-	AuthorAvatarURL   string `json:"-" db:"author_avatar_url"`
-	AuthorTrustTier   string `json:"-" db:"author_trust_tier"`
-	LikeCount         int    `json:"like_count" db:"like_count"`
-	CommentCount      int    `json:"comment_count" db:"comment_count"`
-	IsLiked           bool   `json:"is_liked" db:"is_liked"`
+	AuthorHandle      string  `json:"-" db:"author_handle"`
+	AuthorDisplayName string  `json:"-" db:"author_display_name"`
+	AuthorAvatarURL   string  `json:"-" db:"author_avatar_url"`
+	AuthorTrustTier   string  `json:"-" db:"author_trust_tier"`
+	LikeCount         int     `json:"like_count" db:"like_count"`
+	CommentCount      int     `json:"comment_count" db:"comment_count"`
+	IsLiked           bool    `json:"is_liked" db:"is_liked"`
+	// MyVote is beacon-specific: "vouch", "report", or nil. Populated only by
+	// GetNearbyBeacons; never exposed via the generic Post JSON struct tag.
+	MyVote *string `json:"-"`
 
 	// Nested objects for JSON API
 	Author      *AuthorProfile `json:"author,omitempty"`

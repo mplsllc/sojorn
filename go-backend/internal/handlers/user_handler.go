@@ -6,6 +6,7 @@ package handlers
 
 import (
 	"context"
+	"encoding/json"
 	"net/http"
 	"strings"
 
@@ -181,8 +182,9 @@ func (h *UserHandler) UpdateProfile(c *gin.Context) {
 		RegistrationID      *int     `json:"registration_id"`
 		EncryptedPrivateKey *string  `json:"encrypted_private_key"`
 		IsPrivate           *bool    `json:"is_private"`
-		IsOfficial          *bool    `json:"is_official"`
-		StatusText          *string  `json:"status_text"`
+		IsOfficial          *bool            `json:"is_official"`
+		StatusText          *string          `json:"status_text"`
+		MetadataFields      json.RawMessage  `json:"metadata_fields"`
 	}
 
 	if err := c.ShouldBindJSON(&req); err != nil {
@@ -228,6 +230,7 @@ func (h *UserHandler) UpdateProfile(c *gin.Context) {
 		IsPrivate:           req.IsPrivate,
 		IsOfficial:          req.IsOfficial,
 		StatusText:          req.StatusText,
+		MetadataFields:      req.MetadataFields,
 	}
 
 	err := h.repo.UpdateProfile(c.Request.Context(), profile)

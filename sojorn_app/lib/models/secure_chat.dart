@@ -67,13 +67,15 @@ class EncryptedMessage {
   final String conversationId;
   final String senderId;
   final String ciphertext;
-  final String iv; 
+  final String iv;
   final Object messageHeader;
   final int messageType;
+  final String? replyToId;
   final DateTime createdAt;
   final DateTime? deliveredAt;
   final DateTime? readAt;
   final DateTime? expiresAt;
+  final List<MessageReaction> reactions;
 
   // Decrypted content (populated client-side)
   String? decryptedContent;
@@ -86,11 +88,13 @@ class EncryptedMessage {
     required this.iv,
     required this.messageHeader,
     required this.messageType,
+    this.replyToId,
     required this.createdAt,
     this.deliveredAt,
     this.readAt,
     this.expiresAt,
     this.decryptedContent,
+    this.reactions = const [],
   });
 
   factory EncryptedMessage.fromJson(Map<String, dynamic> json) {
@@ -114,6 +118,11 @@ class EncryptedMessage {
             ? header
             : '';
 
+    final reactionsJson = json['reactions'] as List?;
+    final reactions = reactionsJson
+        ?.map((r) => MessageReaction.fromJson(r as Map<String, dynamic>))
+        .toList() ?? [];
+
     return EncryptedMessage(
       id: json['id'] as String,
       conversationId: json['conversation_id'] as String,
@@ -122,6 +131,7 @@ class EncryptedMessage {
       iv: iv,
       messageHeader: messageHeader,
       messageType: parsedType ?? MessageType.standardMessage,
+      replyToId: json['reply_to_id'] as String?,
       createdAt: DateTime.parse(json['created_at'] as String),
       deliveredAt: json['delivered_at'] != null
           ? DateTime.parse(json['delivered_at'] as String)
@@ -132,6 +142,7 @@ class EncryptedMessage {
       expiresAt: json['expires_at'] != null
           ? DateTime.parse(json['expires_at'] as String)
           : null,
+      reactions: reactions,
     );
   }
 
@@ -139,6 +150,35 @@ class EncryptedMessage {
   bool get isDelivered => deliveredAt != null;
   bool get isExpired =>
       expiresAt != null && DateTime.now().isAfter(expiresAt!);
+}
+
+/// Reaction on a message (plaintext metadata — not encrypted)
+class MessageReaction {
+  final String id;
+  final String messageId;
+  final String userId;
+  final String emoji;
+  final DateTime createdAt;
+
+  const MessageReaction({
+    required this.id,
+    required this.messageId,
+    required this.userId,
+    required this.emoji,
+    required this.createdAt,
+  });
+
+  factory MessageReaction.fromJson(Map<String, dynamic> json) {
+    return MessageReaction(
+      id: json['id'] as String? ?? '',
+      messageId: json['message_id'] as String? ?? '',
+      userId: json['user_id'] as String? ?? '',
+      emoji: json['emoji'] as String? ?? '',
+      createdAt: json['created_at'] != null
+          ? DateTime.parse(json['created_at'] as String)
+          : DateTime.now(),
+    );
+  }
 }
 
 /// Message type constants

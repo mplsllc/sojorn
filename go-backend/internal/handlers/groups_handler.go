@@ -69,6 +69,7 @@ type JoinRequest struct {
 func (h *GroupsHandler) ListGroups(c *gin.Context) {
 	userID := c.GetString("user_id")
 	category := c.Query("category")
+	search := c.Query("search")
 	page := c.DefaultQuery("page", "0")
 	limit := c.DefaultQuery("limit", "20")
 
@@ -82,11 +83,14 @@ func (h *GroupsHandler) ListGroups(c *gin.Context) {
 		FROM groups g
 		LEFT JOIN group_members gm ON g.id = gm.group_id AND gm.user_id = $1
 		WHERE ($2 = '' OR g.category = $2)
+		  AND g.is_active = true
+		  AND g.type NOT IN ('neighborhood', 'private_capsule')
+		  AND ($5 = '' OR g.name ILIKE '%' || $5 || '%' OR g.description ILIKE '%' || $5 || '%')
 		ORDER BY g.member_count DESC, g.created_at DESC
 		LIMIT $3 OFFSET $4
 	`
 
-	rows, err := h.db.Query(c.Request.Context(), query, userID, category, limit, page)
+	rows, err := h.db.Query(c.Request.Context(), query, userID, category, limit, page, search)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to fetch groups"})
 		return

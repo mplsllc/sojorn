@@ -634,20 +634,28 @@ func (r *PostRepository) CreateComment(ctx context.Context, comment *models.Comm
 	return nil
 }
 
-func (r *PostRepository) GetNearbyBeacons(ctx context.Context, lat float64, long float64, radius int) ([]models.Post, error) {
+func (r *PostRepository) GetNearbyBeacons(ctx context.Context, lat float64, long float64, radius int, userID string) ([]models.Post, error) {
 	// Beacons are anonymous: we never expose author info to the API.
 	// author_id is stored internally for abuse tracking only.
+	//
+	// Counts use beacon_vouches / beacon_reports (the authoritative write tables).
+	// my_vote returns "vouch", "report", or NULL for the requesting user.
 	query := `
-		SELECT 
+		SELECT
 			p.id, p.category_id, p.body, COALESCE(p.image_url, ''), p.tags, p.created_at,
 			p.beacon_type, p.confidence_score, p.is_active_beacon, COALESCE(p.is_priority, FALSE) as is_priority,
 			ST_Y(p.location::geometry) as lat, ST_X(p.location::geometry) as long,
 			COALESCE(p.severity, 'medium') as severity,
 			COALESCE(p.incident_status, 'active') as incident_status,
 			COALESCE(p.radius, 500) as radius,
-			COALESCE((SELECT COUNT(*) FROM beacon_votes bv WHERE bv.beacon_id = p.id AND bv.vote_type = 'vouch'), 0) as vouch_count,
-			COALESCE((SELECT COUNT(*) FROM beacon_votes bv WHERE bv.beacon_id = p.id AND bv.vote_type = 'report'), 0) as report_count,
-			ST_Distance(p.location::geography, ST_SetSRID(ST_Point($2, $1), 4326)::geography) AS distance_meters
+			COALESCE((SELECT COUNT(*) FROM public.beacon_vouches bv WHERE bv.beacon_id = p.id), 0) as vouch_count,
+			COALESCE((SELECT COUNT(*) FROM public.beacon_reports br WHERE br.beacon_id = p.id), 0) as report_count,
+			ST_Distance(p.location::geography, ST_SetSRID(ST_Point($2, $1), 4326)::geography) AS distance_meters,
+			CASE
+				WHEN EXISTS (SELECT 1 FROM public.beacon_vouches WHERE beacon_id = p.id AND user_id = $4::uuid) THEN 'vouch'
+				WHEN EXISTS (SELECT 1 FROM public.beacon_reports WHERE beacon_id = p.id AND user_id = $4::uuid) THEN 'report'
+				ELSE NULL
+			END as my_vote
 		FROM public.posts p
 		WHERE p.is_beacon = true
 		  AND ST_DWithin(p.location, ST_SetSRID(ST_Point($2, $1), 4326)::geography, $3)
@@ -655,7 +663,7 @@ func (r *PostRepository) GetNearbyBeacons(ctx context.Context, lat float64, long
 		  AND COALESCE(p.incident_status, 'active') = 'active'
 		ORDER BY p.is_priority DESC, p.created_at DESC
 	`
-	rows, err := r.pool.Query(ctx, query, lat, long, radius)
+	rows, err := r.pool.Query(ctx, query, lat, long, radius, userID)
 	if err != nil {
 		return nil, err
 	}
@@ -665,19 +673,17 @@ func (r *PostRepository) GetNearbyBeacons(ctx context.Context, lat float64, long
 	for rows.Next() {
 		var p models.Post
 		var vouchCount, reportCount int
+		var myVote *string
 		err := rows.Scan(
 			&p.ID, &p.CategoryID, &p.Body, &p.ImageURL, &p.Tags, &p.CreatedAt,
 			&p.BeaconType, &p.Confidence, &p.IsActiveBeacon, &p.IsPriority, &p.Lat, &p.Long,
 			&p.Severity, &p.IncidentStatus, &p.Radius,
-			&vouchCount, &reportCount, &p.DistanceMeters,
+			&vouchCount, &reportCount, &p.DistanceMeters, &myVote,
 		)
 		if err != nil {
 			return nil, err
 		}
 		// Return anonymous author placeholder — no real user info
-		p.AuthorHandle = "Anonymous"
-		p.AuthorDisplayName = "Anonymous"
-		p.AuthorAvatarURL = ""
 		p.Author = &models.AuthorProfile{
 			Handle:      "Anonymous",
 			DisplayName: "Anonymous",
@@ -685,6 +691,7 @@ func (r *PostRepository) GetNearbyBeacons(ctx context.Context, lat float64, long
 		}
 		p.LikeCount = vouchCount     // repurpose like_count as vouch_count for beacon API
 		p.CommentCount = reportCount // repurpose comment_count as report_count for beacon API
+		p.MyVote = myVote
 		beacons = append(beacons, p)
 	}
 	return beacons, nil

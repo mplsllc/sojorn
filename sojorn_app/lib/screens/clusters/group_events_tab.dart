@@ -9,6 +9,7 @@ import '../../models/group.dart';
 import '../../services/api_service.dart';
 import '../../theme/tokens.dart';
 import '../../utils/snackbar_ext.dart';
+import '../events/event_detail_screen.dart';
 
 class GroupEventsTab extends StatefulWidget {
   final String groupId;
@@ -123,7 +124,10 @@ class _GroupEventsTabState extends State<GroupEventsTab> {
                 final event = _events[_canCreate ? index - 1 : index];
                 return _EventCard(
                   event: event,
+                  groupId: widget.groupId,
+                  isAdmin: _canCreate,
                   onRsvp: (status) => _rsvp(event, status),
+                  onDeleted: _loadEvents,
                 );
               },
             ),
@@ -133,9 +137,66 @@ class _GroupEventsTabState extends State<GroupEventsTab> {
 
 class _EventCard extends StatelessWidget {
   final GroupEvent event;
+  final String groupId;
+  final bool isAdmin;
   final ValueChanged<RSVPStatus> onRsvp;
+  final VoidCallback onDeleted;
 
-  const _EventCard({required this.event, required this.onRsvp});
+  const _EventCard({
+    required this.event,
+    required this.groupId,
+    required this.isAdmin,
+    required this.onRsvp,
+    required this.onDeleted,
+  });
+
+  Future<void> _delete(BuildContext context) async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (_) => AlertDialog(
+        title: const Text('Delete Event'),
+        content: const Text('Permanently delete this event and all RSVPs?'),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(context, false), child: const Text('Cancel')),
+          FilledButton(
+            onPressed: () => Navigator.pop(context, true),
+            style: FilledButton.styleFrom(backgroundColor: Colors.red),
+            child: const Text('Delete'),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true) return;
+    try {
+      await ApiService.instance.deleteGroupEvent(groupId, event.id);
+      onDeleted();
+    } catch (_) {
+      if (context.mounted) context.showError('Failed to delete event');
+    }
+  }
+
+  void _openDetail(BuildContext context) {
+    final userRole = isAdmin ? GroupRole.admin : null;
+    Navigator.of(context).push(MaterialPageRoute(
+      builder: (_) => EventDetailScreen(
+        groupId: groupId,
+        eventId: event.id,
+        initialEvent: event,
+        userRole: userRole,
+      ),
+    ));
+  }
+
+  void _showEdit(BuildContext context) {
+    Navigator.of(context).push(MaterialPageRoute(
+      builder: (_) => EventDetailScreen(
+        groupId: groupId,
+        eventId: event.id,
+        initialEvent: event,
+        userRole: GroupRole.admin,
+      ),
+    ));
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -149,101 +210,136 @@ class _EventCard extends StatelessWidget {
       shape: RoundedRectangleBorder(
         borderRadius: BorderRadius.circular(SojornRadii.card),
       ),
-      child: Padding(
-        padding: const EdgeInsets.all(SojornSpacing.md),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            // Date + public badge
-            Row(
-              children: [
-                Icon(Icons.calendar_today, size: 14, color: SojornColors.basicRoyalPurple),
-                const SizedBox(width: 6),
-                Text(
-                  '${dateFormat.format(event.startsAt.toLocal())} at ${timeFormat.format(event.startsAt.toLocal())}',
-                  style: theme.textTheme.bodySmall?.copyWith(
-                    color: SojornColors.basicRoyalPurple,
-                    fontWeight: FontWeight.w600,
-                  ),
-                ),
-                const Spacer(),
-                if (event.isPublic)
-                  Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
-                    decoration: BoxDecoration(
-                      color: SojornColors.basicRoyalPurple.withValues(alpha: 0.1),
-                      borderRadius: BorderRadius.circular(SojornRadii.sm),
-                    ),
-                    child: Text('Public',
-                        style: theme.textTheme.labelSmall?.copyWith(
-                          color: SojornColors.basicRoyalPurple,
-                        )),
-                  ),
-              ],
-            ),
-            const SizedBox(height: 8),
-
-            // Title
-            Text(
-              event.title,
-              style: theme.textTheme.titleMedium?.copyWith(
-                fontWeight: FontWeight.bold,
-                color: isPast ? SojornColors.textDisabled : null,
-              ),
-            ),
-
-            if (event.description.isNotEmpty) ...[
-              const SizedBox(height: 4),
-              Text(event.description,
-                  maxLines: 2,
-                  overflow: TextOverflow.ellipsis,
-                  style: theme.textTheme.bodySmall),
-            ],
-
-            if (event.locationName != null) ...[
-              const SizedBox(height: 6),
+      clipBehavior: Clip.antiAlias,
+      child: InkWell(
+        onTap: () => _openDetail(context),
+        child: Padding(
+          padding: const EdgeInsets.all(SojornSpacing.md),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              // Date row + public badge + admin menu
               Row(
                 children: [
-                  Icon(Icons.location_on_outlined, size: 14, color: SojornColors.textDisabled),
-                  const SizedBox(width: 4),
+                  Icon(Icons.calendar_today, size: 14, color: SojornColors.basicRoyalPurple),
+                  const SizedBox(width: 6),
                   Expanded(
-                    child: Text(event.locationName!,
-                        style: theme.textTheme.bodySmall?.copyWith(
-                          color: SojornColors.textDisabled,
-                        )),
+                    child: Text(
+                      '${dateFormat.format(event.startsAt.toLocal())} at ${timeFormat.format(event.startsAt.toLocal())}',
+                      style: theme.textTheme.bodySmall?.copyWith(
+                        color: SojornColors.basicRoyalPurple,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
                   ),
+                  if (event.isPublic)
+                    Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                      decoration: BoxDecoration(
+                        color: SojornColors.basicRoyalPurple.withValues(alpha: 0.1),
+                        borderRadius: BorderRadius.circular(SojornRadii.sm),
+                      ),
+                      child: Text('Public',
+                          style: theme.textTheme.labelSmall?.copyWith(
+                            color: SojornColors.basicRoyalPurple,
+                          )),
+                    ),
+                  if (isAdmin) ...[
+                    const SizedBox(width: 4),
+                    PopupMenuButton<String>(
+                      icon: Icon(Icons.more_vert, size: 16, color: SojornColors.textDisabled),
+                      iconSize: 16,
+                      padding: EdgeInsets.zero,
+                      onSelected: (v) {
+                        if (v == 'edit') _showEdit(context);
+                        if (v == 'delete') _delete(context);
+                      },
+                      itemBuilder: (_) => const [
+                        PopupMenuItem(
+                          value: 'edit',
+                          child: Row(children: [
+                            Icon(Icons.edit_outlined, size: 16),
+                            SizedBox(width: 8),
+                            Text('Edit'),
+                          ]),
+                        ),
+                        PopupMenuItem(
+                          value: 'delete',
+                          child: Row(children: [
+                            Icon(Icons.delete_outline, size: 16, color: Colors.red),
+                            SizedBox(width: 8),
+                            Text('Delete', style: TextStyle(color: Colors.red)),
+                          ]),
+                        ),
+                      ],
+                    ),
+                  ],
+                ],
+              ),
+              const SizedBox(height: 8),
+
+              // Title
+              Text(
+                event.title,
+                style: theme.textTheme.titleMedium?.copyWith(
+                  fontWeight: FontWeight.bold,
+                  color: isPast ? SojornColors.textDisabled : null,
+                ),
+              ),
+
+              if (event.description.isNotEmpty) ...[
+                const SizedBox(height: 4),
+                Text(event.description,
+                    maxLines: 2,
+                    overflow: TextOverflow.ellipsis,
+                    style: theme.textTheme.bodySmall),
+              ],
+
+              if (event.locationName != null) ...[
+                const SizedBox(height: 6),
+                Row(
+                  children: [
+                    Icon(Icons.location_on_outlined, size: 14, color: SojornColors.textDisabled),
+                    const SizedBox(width: 4),
+                    Expanded(
+                      child: Text(event.locationName!,
+                          style: theme.textTheme.bodySmall?.copyWith(
+                            color: SojornColors.textDisabled,
+                          )),
+                    ),
+                  ],
+                ),
+              ],
+
+              const SizedBox(height: 12),
+
+              // Bottom row: attendee count + RSVP chips
+              Row(
+                children: [
+                  Icon(Icons.people_outline, size: 16, color: SojornColors.textDisabled),
+                  const SizedBox(width: 4),
+                  Text('${event.attendeeCount} going',
+                      style: theme.textTheme.bodySmall?.copyWith(
+                        color: SojornColors.textDisabled,
+                      )),
+                  const Spacer(),
+                  if (!isPast) ...[
+                    _RsvpChip(
+                      label: 'Going',
+                      isSelected: event.myRsvp == RSVPStatus.going,
+                      onTap: () => onRsvp(RSVPStatus.going),
+                    ),
+                    const SizedBox(width: 6),
+                    _RsvpChip(
+                      label: 'Interested',
+                      isSelected: event.myRsvp == RSVPStatus.interested,
+                      onTap: () => onRsvp(RSVPStatus.interested),
+                    ),
+                  ],
                 ],
               ),
             ],
-
-            const SizedBox(height: 12),
-
-            // Bottom row: attendee count + RSVP chips
-            Row(
-              children: [
-                Icon(Icons.people_outline, size: 16, color: SojornColors.textDisabled),
-                const SizedBox(width: 4),
-                Text('${event.attendeeCount} going',
-                    style: theme.textTheme.bodySmall?.copyWith(
-                      color: SojornColors.textDisabled,
-                    )),
-                const Spacer(),
-                if (!isPast) ...[
-                  _RsvpChip(
-                    label: 'Going',
-                    isSelected: event.myRsvp == RSVPStatus.going,
-                    onTap: () => onRsvp(RSVPStatus.going),
-                  ),
-                  const SizedBox(width: 6),
-                  _RsvpChip(
-                    label: 'Interested',
-                    isSelected: event.myRsvp == RSVPStatus.interested,
-                    onTap: () => onRsvp(RSVPStatus.interested),
-                  ),
-                ],
-              ],
-            ),
-          ],
+          ),
         ),
       ),
     );

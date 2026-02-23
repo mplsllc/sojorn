@@ -63,6 +63,86 @@ class UploadResult {
 /// Progress callback for upload operations
 typedef UploadProgressCallback = void Function(double progress);
 
+/// Top-level function for compute() — runs image resize in a background isolate.
+/// Must be top-level (not a closure or instance method) to work with compute().
+_ProcessedImage _resizeInIsolate(Map<String, dynamic> params) {
+  final bytes = params['bytes'] as Uint8List;
+  final maxWidth = params['maxWidth'] as int;
+  final maxHeight = params['maxHeight'] as int;
+  final quality = params['quality'] as int;
+
+  final image = img.decodeImage(bytes);
+  if (image == null) {
+    throw Exception('Failed to decode image');
+  }
+
+  // Resize if needed
+  img.Image resized;
+  if (image.width <= maxWidth && image.height <= maxHeight) {
+    resized = image;
+  } else {
+    final widthRatio = maxWidth / image.width;
+    final heightRatio = maxHeight / image.height;
+    final ratio = widthRatio < heightRatio ? widthRatio : heightRatio;
+    final newWidth = (image.width * ratio).round();
+    final newHeight = (image.height * ratio).round();
+    resized = img.copyResize(image, width: newWidth, height: newHeight);
+  }
+
+  final outputBytes = img.encodeJpg(resized, quality: quality);
+  return _ProcessedImage(
+    bytes: outputBytes,
+    width: resized.width,
+    height: resized.height,
+  );
+}
+
+/// Top-level function for compute() — runs image processing with filter in a background isolate.
+_ProcessedImage _processInIsolate(Map<String, dynamic> params) {
+  final bytes = params['bytes'] as Uint8List;
+  final maxWidth = params['maxWidth'] as int;
+  final maxHeight = params['maxHeight'] as int;
+  final quality = params['quality'] as int;
+  final brightness = params['brightness'] as double?;
+  final contrast = params['contrast'] as double?;
+  final saturation = params['saturation'] as double?;
+
+  final image = img.decodeImage(bytes);
+  if (image == null) {
+    throw Exception('Failed to decode image');
+  }
+
+  if (brightness != null && brightness != 1.0) {
+    img.adjustColor(image, brightness: brightness - 1.0);
+  }
+  if (contrast != null && contrast != 1.0) {
+    img.adjustColor(image, contrast: contrast - 1.0);
+  }
+  if (saturation != null && saturation != 1.0) {
+    img.adjustColor(image, saturation: saturation - 1.0);
+  }
+
+  // Resize
+  img.Image resized;
+  if (image.width <= maxWidth && image.height <= maxHeight) {
+    resized = image;
+  } else {
+    final widthRatio = maxWidth / image.width;
+    final heightRatio = maxHeight / image.height;
+    final ratio = widthRatio < heightRatio ? widthRatio : heightRatio;
+    final newWidth = (image.width * ratio).round();
+    final newHeight = (image.height * ratio).round();
+    resized = img.copyResize(image, width: newWidth, height: newHeight);
+  }
+
+  final outputBytes = img.encodeJpg(resized, quality: quality);
+  return _ProcessedImage(
+    bytes: outputBytes,
+    width: resized.width,
+    height: resized.height,
+  );
+}
+
 /// Service for uploading images AND videos to Cloudflare R2 via Go Backend
 class ImageUploadService {
   final AuthService _auth = AuthService.instance;
@@ -127,8 +207,10 @@ class ImageUploadService {
       final responseData = jsonDecode(response.body) as Map<String, dynamic>;
       // Return publicUrl or signedUrl depending on your function response
       final url = (responseData['publicUrl'] ?? responseData['signedUrl']) as String;
-      debugPrint('[UPLOAD] Video upload complete: ${_fixR2Url(url)}');
-      return _fixR2Url(url);
+      final fixedVideoUrl = _fixR2Url(url);
+      final shortVideoName = Uri.parse(fixedVideoUrl).pathSegments.lastOrNull ?? fixedVideoUrl;
+      debugPrint('[UPLOAD] Video upload complete: $shortVideoName');
+      return fixedVideoUrl;
     } catch (e) {
       debugPrint('[UPLOAD] Video upload failed: $e');
       throw UploadException('Video upload failed: $e');
@@ -321,34 +403,16 @@ class ImageUploadService {
     int quality,
   ) async {
     final bytes = await imageFile.readAsBytes();
-    final image = img.decodeImage(bytes);
-    
-    if (image == null) {
-      throw UploadException('Failed to decode image');
-    }
-
-    if (filter.brightness != 1.0) {
-      img.adjustColor(image, brightness: filter.brightness - 1.0);
-    }
-    if (filter.contrast != 1.0) {
-      img.adjustColor(image, contrast: filter.contrast - 1.0);
-    }
-    if (filter.saturation != 1.0) {
-      img.adjustColor(image, saturation: filter.saturation - 1.0);
-    }
-
-    if (filter.vignette > 0) {
-      _applyVignette(image, filter.vignette);
-    }
-
-    final resized = _resizeMaintainAspectRatio(image, maxWidth, maxHeight);
-    final outputBytes = img.encodeJpg(resized, quality: quality);
-
-    return _ProcessedImage(
-      bytes: outputBytes,
-      width: resized.width,
-      height: resized.height,
-    );
+    return compute(_processInIsolate, {
+      'bytes': bytes,
+      'maxWidth': maxWidth,
+      'maxHeight': maxHeight,
+      'quality': quality,
+      'brightness': filter.brightness,
+      'contrast': filter.contrast,
+      'saturation': filter.saturation,
+      'vignette': filter.vignette,
+    });
   }
 
   Future<_ProcessedImage> _processImageBytes(
@@ -358,34 +422,16 @@ class ImageUploadService {
     int maxHeight,
     int quality,
   ) async {
-    final image = img.decodeImage(bytes);
-
-    if (image == null) {
-      throw UploadException('Failed to decode image');
-    }
-
-    if (filter.brightness != 1.0) {
-      img.adjustColor(image, brightness: filter.brightness - 1.0);
-    }
-    if (filter.contrast != 1.0) {
-      img.adjustColor(image, contrast: filter.contrast - 1.0);
-    }
-    if (filter.saturation != 1.0) {
-      img.adjustColor(image, saturation: filter.saturation - 1.0);
-    }
-
-    if (filter.vignette > 0) {
-      _applyVignette(image, filter.vignette);
-    }
-
-    final resized = _resizeMaintainAspectRatio(image, maxWidth, maxHeight);
-    final outputBytes = img.encodeJpg(resized, quality: quality);
-
-    return _ProcessedImage(
-      bytes: outputBytes,
-      width: resized.width,
-      height: resized.height,
-    );
+    return compute(_processInIsolate, {
+      'bytes': bytes,
+      'maxWidth': maxWidth,
+      'maxHeight': maxHeight,
+      'quality': quality,
+      'brightness': filter.brightness,
+      'contrast': filter.contrast,
+      'saturation': filter.saturation,
+      'vignette': filter.vignette,
+    });
   }
 
   Future<_ProcessedImage> _resizeImage(
@@ -395,40 +441,14 @@ class ImageUploadService {
     int quality,
   ) async {
     final bytes = await imageFile.readAsBytes();
-    final image = img.decodeImage(bytes);
-    
-    if (image == null) {
-      throw UploadException('Failed to decode image');
-    }
-
-    final resized = _resizeMaintainAspectRatio(image, maxWidth, maxHeight);
-    final outputBytes = img.encodeJpg(resized, quality: quality);
-
-    return _ProcessedImage(
-      bytes: outputBytes,
-      width: resized.width,
-      height: resized.height,
-    );
+    return compute(_resizeInIsolate, {
+      'bytes': bytes,
+      'maxWidth': maxWidth,
+      'maxHeight': maxHeight,
+      'quality': quality,
+    });
   }
 
-  img.Image _resizeMaintainAspectRatio(img.Image image, int maxWidth, int maxHeight) {
-    if (image.width <= maxWidth && image.height <= maxHeight) {
-      return image;
-    }
-
-    final widthRatio = maxWidth / image.width;
-    final heightRatio = maxHeight / image.height;
-    final ratio = widthRatio < heightRatio ? widthRatio : heightRatio;
-
-    final newWidth = (image.width * ratio).round();
-    final newHeight = (image.height * ratio).round();
-
-    return img.copyResize(image, width: newWidth, height: newHeight);
-  }
-
-  void _applyVignette(img.Image image, double intensity) {
-    // Vignette logic placeholder
-  }
 
   Future<_ProcessedImage> _resizeImageBytes(
     Uint8List bytes,
@@ -436,20 +456,12 @@ class ImageUploadService {
     int maxHeight,
     int quality,
   ) async {
-    final image = img.decodeImage(bytes);
-
-    if (image == null) {
-      throw UploadException('Failed to decode image');
-    }
-
-    final resized = _resizeMaintainAspectRatio(image, maxWidth, maxHeight);
-    final outputBytes = img.encodeJpg(resized, quality: quality);
-
-    return _ProcessedImage(
-      bytes: outputBytes,
-      width: resized.width,
-      height: resized.height,
-    );
+    return compute(_resizeInIsolate, {
+      'bytes': bytes,
+      'maxWidth': maxWidth,
+      'maxHeight': maxHeight,
+      'quality': quality,
+    });
   }
 
   Future<ImageValidationResult> validateImage(File imageFile) async {
@@ -542,9 +554,10 @@ class ImageUploadService {
 
       onProgress?.call(1.0);
 
-      debugPrint('[UPLOAD] Image upload complete: ${_fixR2Url(publicUrl)}');
-      // FORCE FIX: Ensure custom domain is used even if backend returns raw R2 URL
-      return _fixR2Url(publicUrl);
+      final fixedUrl = _fixR2Url(publicUrl);
+      final shortName = Uri.parse(fixedUrl).pathSegments.lastOrNull ?? fixedUrl;
+      debugPrint('[UPLOAD] Image upload complete: $shortName');
+      return fixedUrl;
     } catch (e, stack) {
       debugPrint('[UPLOAD] Upload error: $e');
       throw UploadException(e.toString());

@@ -68,12 +68,13 @@ func (h *ChatHandler) SendMessage(c *gin.Context) {
 	}
 
 	var req struct {
-		ConversationID string `json:"conversation_id" binding:"required"`
-		ReceiverID     string `json:"receiver_id"`
-		Ciphertext     string `json:"ciphertext" binding:"required"`
-		IV             string `json:"iv"`
-		KeyVersion     string `json:"key_version"`
-		MessageHeader  string `json:"message_header"`
+		ConversationID string  `json:"conversation_id" binding:"required"`
+		ReceiverID     string  `json:"receiver_id"`
+		Ciphertext     string  `json:"ciphertext" binding:"required"`
+		IV             string  `json:"iv"`
+		KeyVersion     string  `json:"key_version"`
+		MessageHeader  string  `json:"message_header"`
+		ReplyToID      *string `json:"reply_to_id"`
 	}
 
 	if err := c.ShouldBindJSON(&req); err != nil {
@@ -119,8 +120,17 @@ func (h *ChatHandler) SendMessage(c *gin.Context) {
 		receiverID, _ = uuid.Parse(otherParticipant)
 	}
 
+	// Parse optional reply_to_id
+	var replyToID *uuid.UUID
+	if req.ReplyToID != nil && *req.ReplyToID != "" {
+		parsed, parseErr := uuid.Parse(*req.ReplyToID)
+		if parseErr == nil {
+			replyToID = &parsed
+		}
+	}
+
 	// Persist blind ciphertext to DB
-	msg, err := h.chatRepo.CreateMessage(c.Request.Context(), senderID, receiverID, convID, req.Ciphertext, req.IV, req.KeyVersion, req.MessageHeader)
+	msg, err := h.chatRepo.CreateMessage(c.Request.Context(), senderID, receiverID, convID, req.Ciphertext, req.IV, req.KeyVersion, req.MessageHeader, replyToID)
 	if err != nil {
 		log.Error().Err(err).Msg("Failed to persist secure message")
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to send message"})
@@ -137,8 +147,9 @@ func (h *ChatHandler) SendMessage(c *gin.Context) {
 			"receiver_id":     msg.ReceiverID,
 			"ciphertext":      msg.Ciphertext,
 			"iv":              msg.IV,
-			"key_version":     msg.KeyVersion, // e.g. "x3dh"
+			"key_version":     msg.KeyVersion,
 			"message_header":  msg.MessageHeader,
+			"reply_to_id":     msg.ReplyToID,
 			"created_at":      msg.CreatedAt,
 		},
 	}
@@ -259,4 +270,115 @@ func (h *ChatHandler) DeleteMessage(c *gin.Context) {
 	_ = h.hub.SendToUser(receiverID.String(), deleteEvent)
 
 	c.JSON(http.StatusOK, gin.H{"success": true, "message": "Message permanently deleted"})
+}
+
+// ── Reactions ──────────────────────────────────────────────────────────────
+
+func (h *ChatHandler) AddReaction(c *gin.Context) {
+	userIDStr, _ := c.Get("user_id")
+	userID, err := uuid.Parse(userIDStr.(string))
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid user"})
+		return
+	}
+
+	msgID, err := uuid.Parse(c.Param("id"))
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid message id"})
+		return
+	}
+
+	var req struct {
+		Emoji string `json:"emoji" binding:"required"`
+	}
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+
+	// Verify user is a participant in this conversation
+	convID, err := h.chatRepo.GetMessageConversationID(c.Request.Context(), msgID)
+	if err != nil {
+		c.JSON(http.StatusNotFound, gin.H{"error": "message not found"})
+		return
+	}
+	pA, pB, err := h.chatRepo.GetParticipants(c.Request.Context(), convID.String())
+	if err != nil || (userIDStr.(string) != pA && userIDStr.(string) != pB) {
+		c.JSON(http.StatusForbidden, gin.H{"error": "not a participant"})
+		return
+	}
+
+	reaction, err := h.chatRepo.AddReaction(c.Request.Context(), msgID, userID, req.Emoji)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to add reaction"})
+		return
+	}
+
+	// Broadcast to both participants
+	rtPayload := map[string]interface{}{
+		"type": "reaction_added",
+		"payload": map[string]interface{}{
+			"message_id":      msgID.String(),
+			"conversation_id": convID.String(),
+			"user_id":         userID.String(),
+			"emoji":           req.Emoji,
+		},
+	}
+	_ = h.hub.SendToUser(pA, rtPayload)
+	_ = h.hub.SendToUser(pB, rtPayload)
+
+	c.JSON(http.StatusCreated, reaction)
+}
+
+func (h *ChatHandler) RemoveReaction(c *gin.Context) {
+	userIDStr, _ := c.Get("user_id")
+	userID, err := uuid.Parse(userIDStr.(string))
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid user"})
+		return
+	}
+
+	msgID, err := uuid.Parse(c.Param("id"))
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid message id"})
+		return
+	}
+
+	emoji := c.Query("emoji")
+	if emoji == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "emoji required"})
+		return
+	}
+
+	// Verify participant
+	convID, err := h.chatRepo.GetMessageConversationID(c.Request.Context(), msgID)
+	if err != nil {
+		c.JSON(http.StatusNotFound, gin.H{"error": "message not found"})
+		return
+	}
+	pA, pB, err := h.chatRepo.GetParticipants(c.Request.Context(), convID.String())
+	if err != nil || (userIDStr.(string) != pA && userIDStr.(string) != pB) {
+		c.JSON(http.StatusForbidden, gin.H{"error": "not a participant"})
+		return
+	}
+
+	if err := h.chatRepo.RemoveReaction(c.Request.Context(), msgID, userID, emoji); err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to remove reaction"})
+		return
+	}
+
+	// Broadcast removal
+	rtPayload := map[string]interface{}{
+		"type": "reaction_removed",
+		"payload": map[string]interface{}{
+			"message_id":      msgID.String(),
+			"conversation_id": convID.String(),
+			"user_id":         userID.String(),
+			"emoji":           emoji,
+		},
+	}
+	_ = h.hub.SendToUser(pA, rtPayload)
+	_ = h.hub.SendToUser(pB, rtPayload)
+
+	c.JSON(http.StatusOK, gin.H{"success": true})
 }

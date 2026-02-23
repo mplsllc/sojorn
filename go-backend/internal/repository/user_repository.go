@@ -55,18 +55,22 @@ func (r *UserRepository) CreateProfile(ctx context.Context, profile *models.Prof
 }
 
 func (r *UserRepository) GetProfileByID(ctx context.Context, id string) (*models.Profile, error) {
-	query := `SELECT id, handle, display_name, bio, avatar_url, origin_country,
+	query := `SELECT id, handle, display_name, bio, avatar_url, cover_url,
+		origin_country, location, website, interests,
 		has_completed_onboarding, is_official, is_private, role, created_at,
 		COALESCE(birth_month, 0), COALESCE(birth_year, 0),
-		status_text, status_updated_at
+		status_text, status_updated_at,
+		COALESCE(metadata_fields, '[]'::jsonb)
 		FROM public.profiles WHERE id = $1::uuid`
 
 	var p models.Profile
 	err := r.pool.QueryRow(ctx, query, id).Scan(
-		&p.ID, &p.Handle, &p.DisplayName, &p.Bio, &p.AvatarURL, &p.OriginCountry,
+		&p.ID, &p.Handle, &p.DisplayName, &p.Bio, &p.AvatarURL, &p.CoverURL,
+		&p.OriginCountry, &p.Location, &p.Website, &p.Interests,
 		&p.HasCompletedOnboarding, &p.IsOfficial, &p.IsPrivate, &p.Role, &p.CreatedAt,
 		&p.BirthMonth, &p.BirthYear,
 		&p.StatusText, &p.StatusUpdatedAt,
+		&p.MetadataFields,
 	)
 	if err != nil {
 		return nil, err
@@ -76,19 +80,23 @@ func (r *UserRepository) GetProfileByID(ctx context.Context, id string) (*models
 
 func (r *UserRepository) GetProfileByHandle(ctx context.Context, handle string) (*models.Profile, error) {
 	query := `
-		SELECT id, handle, display_name, bio, avatar_url, origin_country,
+		SELECT id, handle, display_name, bio, avatar_url, cover_url,
+		       origin_country, location, website, interests,
 		       has_completed_onboarding, is_official, is_private, role, created_at,
 		       COALESCE(birth_month, 0), COALESCE(birth_year, 0),
-		       status_text, status_updated_at
+		       status_text, status_updated_at,
+		       COALESCE(metadata_fields, '[]'::jsonb)
 		FROM public.profiles
 		WHERE handle = $1
 	`
 	var p models.Profile
 	err := r.pool.QueryRow(ctx, query, handle).Scan(
-		&p.ID, &p.Handle, &p.DisplayName, &p.Bio, &p.AvatarURL, &p.OriginCountry,
+		&p.ID, &p.Handle, &p.DisplayName, &p.Bio, &p.AvatarURL, &p.CoverURL,
+		&p.OriginCountry, &p.Location, &p.Website, &p.Interests,
 		&p.HasCompletedOnboarding, &p.IsOfficial, &p.IsPrivate, &p.Role, &p.CreatedAt,
 		&p.BirthMonth, &p.BirthYear,
 		&p.StatusText, &p.StatusUpdatedAt,
+		&p.MetadataFields,
 	)
 	if err != nil {
 		return nil, err
@@ -114,6 +122,7 @@ func (r *UserRepository) UpdateProfile(ctx context.Context, profile *models.Prof
 			is_official = COALESCE($13, is_official),
 			status_text = CASE WHEN $15::boolean THEN $14 ELSE status_text END,
 			status_updated_at = CASE WHEN $15::boolean THEN NOW() ELSE status_updated_at END,
+			metadata_fields = COALESCE($17, metadata_fields),
 			updated_at = NOW()
 		WHERE id = $16::uuid
 	`
@@ -126,6 +135,7 @@ func (r *UserRepository) UpdateProfile(ctx context.Context, profile *models.Prof
 		profile.IsPrivate, profile.IsOfficial,
 		profile.StatusText, statusProvided,
 		profile.ID,
+		profile.MetadataFields,
 	)
 	return err
 }

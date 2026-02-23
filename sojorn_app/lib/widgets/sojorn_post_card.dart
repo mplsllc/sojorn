@@ -23,6 +23,7 @@ import 'post/post_view_mode.dart';
 import 'chain_quote_widget.dart';
 import '../routes/app_routes.dart';
 import 'modals/sanctuary_sheet.dart';
+import 'user_hover_card.dart';
 
 
 
@@ -200,23 +201,25 @@ class _sojornPostCardState extends ConsumerState<sojornPostCard> {
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
                           Expanded(
-                            child: InkWell(
-                              onTap: () {
-                                final handle = post.author?.handle ?? 'unknown';
-                                if (handle != 'unknown' && handle.trim().isNotEmpty) {
-                                  AppRoutes.navigateToProfile(context, handle);
-                                }
-                              },
-                              borderRadius: BorderRadius.circular(AppTheme.radiusMd),
-                              child: Padding(
-                                padding: const EdgeInsets.symmetric(
-                                  horizontal: 4,
-                                  vertical: 4,
-                                ),
-                                child: PostHeader(
-                                  post: post,
-                                  avatarSize: _avatarSize,
-                                  mode: mode,
+                            child: UserHoverCard(
+                              handle: post.author?.handle ?? 'unknown',
+                              child: GestureDetector(
+                                onTap: () {
+                                  final handle = post.author?.handle ?? 'unknown';
+                                  if (handle != 'unknown' && handle.trim().isNotEmpty) {
+                                    AppRoutes.navigateToProfile(context, handle);
+                                  }
+                                },
+                                child: Padding(
+                                  padding: const EdgeInsets.symmetric(
+                                    horizontal: 4,
+                                    vertical: 4,
+                                  ),
+                                  child: PostHeader(
+                                    post: post,
+                                    avatarSize: _avatarSize,
+                                    mode: mode,
+                                  ),
                                 ),
                               ),
                             ),

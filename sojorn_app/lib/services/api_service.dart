@@ -58,6 +58,7 @@ class ApiService {
           .replace(queryParameters: queryParams);
       var headers = await _authHeaders();
       headers['Content-Type'] = 'application/json';
+      headers['Cache-Control'] = 'no-cache';
 
       // Add request signature for critical operations
       if (requireSignature && body != null) {
@@ -303,8 +304,9 @@ class ApiService {
       queryParams: handle != null ? {'handle': handle} : null,
     );
 
+    final profileJson = data['profile'] as Map<String, dynamic>;
     return {
-      'profile': Profile.fromJson(data['profile'] as Map<String, dynamic>),
+      'profile': Profile.fromJson(profileJson),
       'stats': ProfileStats.fromJson(data['stats'] as Map<String, dynamic>?),
       'is_following': data['is_following'] as bool? ?? false,
       'is_followed_by': data['is_followed_by'] as bool? ?? false,
@@ -347,6 +349,7 @@ class ApiService {
     String? identityKey,
     int? registrationId,
     String? encryptedPrivateKey,
+    List<ProfileMetadataField>? metadataFields,
   }) async {
     // Validate and sanitize inputs
     if (handle != null && !SecurityUtils.isValidHandle(handle)) {
@@ -932,16 +935,25 @@ class ApiService {
     int radius = 5000,
     String? topic,
     String sort = 'new',
+    String? search,
+    String? tag,
   }) async {
     var path = '/board/nearby?lat=$lat&long=$long&radius=$radius&sort=$sort';
     if (topic != null && topic.isNotEmpty) path += '&topic=$topic';
+    if (search != null && search.isNotEmpty) path += '&search=${Uri.encodeComponent(search)}';
+    if (tag != null && tag.isNotEmpty) path += '&tag=$tag';
     return await _callGoApi(path, method: 'GET');
+  }
+
+  Future<Map<String, dynamic>> updateBoardEntryTag(String entryId, String tag) async {
+    return await _callGoApi('/board/$entryId/tag', method: 'PATCH', body: {'tag': tag});
   }
 
   Future<Map<String, dynamic>> createBoardEntry({
     required String body,
     String? imageUrl,
     required String topic,
+    String? tag,
     required double lat,
     required double long,
   }) async {
@@ -949,6 +961,7 @@ class ApiService {
       'body': body,
       if (imageUrl != null) 'image_url': imageUrl,
       'topic': topic,
+      if (tag != null && tag.isNotEmpty) 'tag': tag,
       'lat': lat,
       'long': long,
     });
@@ -1034,10 +1047,11 @@ class ApiService {
     return (data['groups'] as List?)?.cast<Map<String, dynamic>>() ?? [];
   }
 
-  Future<List<Map<String, dynamic>>> discoverGroups({String? category, int limit = 50}) async {
+  Future<List<Map<String, dynamic>>> discoverGroups({String? category, String? search, int limit = 50}) async {
     final params = <String, String>{'limit': '$limit'};
     if (category != null && category != 'all') params['category'] = category;
-    final data = await _callGoApi('/capsules/discover', method: 'GET', queryParams: params);
+    if (search != null && search.isNotEmpty) params['search'] = search;
+    final data = await _callGoApi('/groups', method: 'GET', queryParams: params);
     return (data['groups'] as List?)?.cast<Map<String, dynamic>>() ?? [];
   }
 
@@ -1231,6 +1245,7 @@ class ApiService {
     String? keyVersion,
     String? messageHeader,
     int messageType = 1,
+    String? replyToId,
   }) async {
     final data = await _callGoApi('/messages', method: 'POST', body: {
       'conversation_id': conversationId,
@@ -1239,9 +1254,18 @@ class ApiService {
       if (iv != null) 'iv': iv,
       if (keyVersion != null) 'key_version': keyVersion,
       if (messageHeader != null) 'message_header': messageHeader,
-      'message_type': messageType
+      'message_type': messageType,
+      if (replyToId != null) 'reply_to_id': replyToId,
     });
     return data;
+  }
+
+  Future<Map<String, dynamic>> addMessageReaction(String messageId, String emoji) async {
+    return await _callGoApi('/messages/$messageId/reactions', method: 'POST', body: {'emoji': emoji});
+  }
+
+  Future<void> removeMessageReaction(String messageId, String emoji) async {
+    await _callGoApi('/messages/$messageId/reactions?emoji=${Uri.encodeComponent(emoji)}', method: 'DELETE');
   }
 
   Future<List<dynamic>> getConversationMessages(String conversationId,
@@ -1772,6 +1796,10 @@ class ApiService {
     return await _callGoApi('/groups/$groupId/events', body: body);
   }
 
+  Future<Map<String, dynamic>> getGroupEvent(String groupId, String eventId) async {
+    return await _callGoApi('/groups/$groupId/events/$eventId', method: 'GET');
+  }
+
   Future<Map<String, dynamic>> updateGroupEvent(String groupId, String eventId, Map<String, dynamic> body) async {
     return await _callGoApi('/groups/$groupId/events/$eventId', method: 'PATCH', body: body);
   }
@@ -1810,6 +1838,18 @@ class ApiService {
 
   Future<Map<String, dynamic>> saveDashboardLayout(Map<String, dynamic> layout) async {
     return await _callGoApi('/dashboard/layout', method: 'PUT', body: layout);
+  }
+
+  // =========================================================================
+  // Profile Layout (own profile)
+  // =========================================================================
+
+  Future<Map<String, dynamic>> getProfileLayout() async {
+    return await _callGoApi('/profile/layout', method: 'GET');
+  }
+
+  Future<Map<String, dynamic>> saveProfileLayout(Map<String, dynamic> layout) async {
+    return await _callGoApi('/profile/layout', method: 'PUT', body: layout);
   }
 
   // =========================================================================

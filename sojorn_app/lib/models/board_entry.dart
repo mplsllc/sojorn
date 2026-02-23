@@ -10,6 +10,7 @@ class BoardEntry {
   final String body;
   final String? imageUrl;
   final BoardTopic topic;
+  final BoardTag? tag;
   final double lat;
   final double long;
   final int upvotes;
@@ -26,6 +27,7 @@ class BoardEntry {
     required this.body,
     this.imageUrl,
     required this.topic,
+    this.tag,
     required this.lat,
     required this.long,
     this.upvotes = 0,
@@ -38,12 +40,33 @@ class BoardEntry {
     this.hasVoted = false,
   });
 
+  BoardEntry copyWith({BoardTag? tag, bool clearTag = false}) {
+    return BoardEntry(
+      id: id,
+      body: body,
+      imageUrl: imageUrl,
+      topic: topic,
+      tag: clearTag ? null : (tag ?? this.tag),
+      lat: lat,
+      long: long,
+      upvotes: upvotes,
+      replyCount: replyCount,
+      isPinned: isPinned,
+      createdAt: createdAt,
+      authorHandle: authorHandle,
+      authorDisplayName: authorDisplayName,
+      authorAvatarUrl: authorAvatarUrl,
+      hasVoted: hasVoted,
+    );
+  }
+
   factory BoardEntry.fromJson(Map<String, dynamic> json) {
     return BoardEntry(
       id: json['id'] ?? '',
       body: json['body'] ?? '',
       imageUrl: (json['image_url'] != null && json['image_url'] != '') ? json['image_url'] : null,
       topic: BoardTopic.fromString(json['topic'] ?? 'community'),
+      tag: (json['tag'] != null && json['tag'] != '') ? BoardTag.fromString(json['tag']) : null,
       lat: (json['lat'] as num?)?.toDouble() ?? 0,
       long: (json['long'] as num?)?.toDouble() ?? 0,
       upvotes: json['upvotes'] ?? 0,
@@ -127,5 +150,27 @@ enum BoardTopic {
 
   static BoardTopic fromString(String s) {
     return BoardTopic.values.firstWhere((t) => t.value == s, orElse: () => BoardTopic.community);
+  }
+}
+
+enum BoardTag {
+  discussion('discussion', 'Discussion', Icons.chat_bubble_outline, Color(0xFF607D8B)),
+  question('question', 'Question', Icons.help_outline, Color(0xFF2196F3)),
+  resolved('resolved', 'Resolved', Icons.check_circle_outline, Color(0xFF4CAF50)),
+  announcement('announcement', 'Announcement', Icons.campaign, Color(0xFFFF9800)),
+  poll('poll', 'Poll', Icons.poll, Color(0xFF9C27B0));
+
+  final String value;
+  final String displayName;
+  final IconData icon;
+  final Color color;
+  const BoardTag(this.value, this.displayName, this.icon, this.color);
+
+  static BoardTag? fromString(String s) {
+    try {
+      return BoardTag.values.firstWhere((t) => t.value == s);
+    } catch (_) {
+      return null;
+    }
   }
 }

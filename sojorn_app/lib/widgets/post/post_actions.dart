@@ -359,7 +359,7 @@ class _PostActionsState extends ConsumerState<PostActions>
                   onAddReaction: _showReactionPicker,
                   mode: ReactionsDisplayMode.compact,
                 ),
-                const SizedBox(width: 8),
+                const SizedBox(width: 6),
                 if (allowChain)
                   ElevatedButton.icon(
                     onPressed: widget.onChain,
@@ -371,7 +371,7 @@ class _PostActionsState extends ConsumerState<PostActions>
                       elevation: 0,
                       shadowColor: SojornColors.transparent,
                       minimumSize: const Size(0, 38),
-                      padding: const EdgeInsets.symmetric(horizontal: 14),
+                      padding: const EdgeInsets.symmetric(horizontal: 10),
                       shape: RoundedRectangleBorder(
                         borderRadius: BorderRadius.circular(12),
                       ),

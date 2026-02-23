@@ -256,6 +256,7 @@ class _DraggableWidgetGridState extends State<DraggableWidgetGrid> {
       case ProfileWidgetType.stats:
       case ProfileWidgetType.beaconActivity:
       case ProfileWidgetType.featuredFriends:
+      case ProfileWidgetType.featuredGroups:
         break;
     }
   }

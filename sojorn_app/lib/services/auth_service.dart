@@ -70,6 +70,8 @@ class AuthService {
   String? _temporaryToken;
   model.AuthUser? _localUser;
   bool _initialized = false;
+  /// Single-flight guard: only one refresh at a time.
+  Completer<bool>? _refreshCompleter;
   final _authEventController = StreamController<AuthState>.broadcast();
   Timer? _refreshTimer;
 
@@ -156,6 +158,28 @@ class AuthService {
   }
 
   Future<bool> refreshSession() async {
+    // Single-flight: if a refresh is already in progress, piggyback on it.
+    if (_refreshCompleter != null && !_refreshCompleter!.isCompleted) {
+      if (kDebugMode) debugPrint('[AUTH] Refresh already in flight — waiting');
+      return _refreshCompleter!.future;
+    }
+
+    _refreshCompleter = Completer<bool>();
+
+    try {
+      final result = await _doRefresh();
+      _refreshCompleter!.complete(result);
+      return result;
+    } catch (e) {
+      _refreshCompleter!.complete(false);
+      return false;
+    } finally {
+      // Reset so future refresh attempts aren't stuck on a stale completer.
+      _refreshCompleter = null;
+    }
+  }
+
+  Future<bool> _doRefresh() async {
     if (kDebugMode) debugPrint('[AUTH] Attempting token refresh...');
     final refreshToken = await _storage.read(key: 'refresh_token');
     if (refreshToken == null) {
@@ -177,11 +201,12 @@ class AuthService {
         return true;
       } else {
         if (kDebugMode) debugPrint('[AUTH] Token refresh failed (${response.statusCode}) — signing out');
-        await signOut(); // Refresh failed (revoked/expired), force logout
+        await signOut();
         return false;
       }
     } catch (e) {
-      if (kDebugMode) debugPrint('[AUTH] Token refresh error: $e');
+      if (kDebugMode) debugPrint('[AUTH] Token refresh error: $e — signing out');
+      await signOut();
       return false;
     }
   }

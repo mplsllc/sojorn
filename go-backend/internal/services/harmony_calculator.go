@@ -16,9 +16,11 @@
 //   4. Negative signals are time-limited: a report 6 months ago matters less.
 //
 // Tier thresholds (stable — not changed by recalculation):
-//   new_user:    0–29    → "Seedling"  🌱
-//   trusted:     30–69   → "Trusted"   🌿
-//   established: 70–100  → "Established" 🌳
+//   new_user:    0–19    → "Seedling"     🌱
+//   sprout:      20–39   → "Sprout"       🪴
+//   trusted:     40–64   → "Trusted"      🌿
+//   elder:       65–84   → "Elder"        🌾
+//   established: 85–100  → "Established" 🌳
 
 package services
 
@@ -171,8 +173,10 @@ func (hc *HarmonyCalculator) ScoreUser(ctx context.Context, userID string) error
 		SET
 			harmony_score        = (SELECT raw_score FROM total),
 			tier = CASE
-				WHEN (SELECT raw_score FROM total) >= 70 THEN 'established'
-				WHEN (SELECT raw_score FROM total) >= 30 THEN 'trusted'
+				WHEN (SELECT raw_score FROM total) >= 85 THEN 'established'
+				WHEN (SELECT raw_score FROM total) >= 65 THEN 'elder'
+				WHEN (SELECT raw_score FROM total) >= 40 THEN 'trusted'
+				WHEN (SELECT raw_score FROM total) >= 20 THEN 'sprout'
 				ELSE 'new_user'
 			END,
 			last_harmony_calc_at = NOW(),

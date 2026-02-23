@@ -5,6 +5,7 @@
 package models
 
 import (
+	"encoding/json"
 	"time"
 
 	"github.com/google/uuid"
@@ -60,8 +61,11 @@ type Profile struct {
 	BirthYear              int        `json:"birth_year" db:"birth_year"`
 	// AIM-style ephemeral presence line — max 80 chars.
 	StatusText             *string    `json:"status_text,omitempty" db:"status_text"`
-	StatusUpdatedAt        *time.Time `json:"status_updated_at,omitempty" db:"status_updated_at"`
-	CreatedAt              time.Time  `json:"created_at" db:"created_at"`
+	StatusUpdatedAt        *time.Time      `json:"status_updated_at,omitempty" db:"status_updated_at"`
+	// Mastodon-style key-value metadata fields (max 8).
+	// JSON array: [{"key":"Pronouns","value":"they/them","verified":false}, ...]
+	MetadataFields         json.RawMessage `json:"metadata_fields" db:"metadata_fields"`
+	CreatedAt              time.Time       `json:"created_at" db:"created_at"`
 	UpdatedAt              time.Time  `json:"updated_at" db:"updated_at"`
 
 	// Computed fields (not stored in DB)

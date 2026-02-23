@@ -23,13 +23,13 @@ func NewChatRepository(pool *pgxpool.Pool) *ChatRepository {
 	return &ChatRepository{pool: pool}
 }
 
-func (r *ChatRepository) CreateMessage(ctx context.Context, senderID, receiverID, conversationID uuid.UUID, ciphertext, iv, keyVersion, messageHeader string) (*models.EncryptedMessage, error) {
+func (r *ChatRepository) CreateMessage(ctx context.Context, senderID, receiverID, conversationID uuid.UUID, ciphertext, iv, keyVersion, messageHeader string, replyToID *uuid.UUID) (*models.EncryptedMessage, error) {
 	var msg models.EncryptedMessage
 	err := r.pool.QueryRow(ctx, `
-		INSERT INTO public.secure_messages (conversation_id, sender_id, receiver_id, ciphertext, iv, key_version, message_header, message_type, created_at)
-		VALUES ($1, $2, $3, $4, $5, $6, $7, 1, NOW())
+		INSERT INTO public.secure_messages (conversation_id, sender_id, receiver_id, ciphertext, iv, key_version, message_header, message_type, reply_to_id, created_at)
+		VALUES ($1, $2, $3, $4, $5, $6, $7, 1, $8, NOW())
 		RETURNING id, created_at
-	`, conversationID, senderID, receiverID, ciphertext, iv, keyVersion, messageHeader).Scan(&msg.ID, &msg.CreatedAt)
+	`, conversationID, senderID, receiverID, ciphertext, iv, keyVersion, messageHeader, replyToID).Scan(&msg.ID, &msg.CreatedAt)
 
 	if err != nil {
 		return nil, err
@@ -42,13 +42,14 @@ func (r *ChatRepository) CreateMessage(ctx context.Context, senderID, receiverID
 	msg.IV = iv
 	msg.KeyVersion = keyVersion
 	msg.MessageHeader = messageHeader
+	msg.ReplyToID = replyToID
 
 	return &msg, nil
 }
 
 func (r *ChatRepository) GetMessages(ctx context.Context, conversationID uuid.UUID, limit, offset int) ([]models.EncryptedMessage, error) {
 	rows, err := r.pool.Query(ctx, `
-		SELECT id, conversation_id, sender_id, receiver_id, ciphertext, iv, key_version, message_header, created_at
+		SELECT id, conversation_id, sender_id, receiver_id, ciphertext, iv, key_version, message_header, reply_to_id, created_at
 		FROM public.secure_messages
 		WHERE conversation_id = $1
 		ORDER BY created_at DESC
@@ -64,7 +65,7 @@ func (r *ChatRepository) GetMessages(ctx context.Context, conversationID uuid.UU
 		var m models.EncryptedMessage
 		var ciphertextStr string
 		err := rows.Scan(
-			&m.ID, &m.ConversationID, &m.SenderID, &m.ReceiverID, &ciphertextStr, &m.IV, &m.KeyVersion, &m.MessageHeader, &m.CreatedAt,
+			&m.ID, &m.ConversationID, &m.SenderID, &m.ReceiverID, &ciphertextStr, &m.IV, &m.KeyVersion, &m.MessageHeader, &m.ReplyToID, &m.CreatedAt,
 		)
 		if err != nil {
 			return nil, err
@@ -73,7 +74,77 @@ func (r *ChatRepository) GetMessages(ctx context.Context, conversationID uuid.UU
 		messages = append(messages, m)
 	}
 
+	// Bulk-load reactions for all messages
+	if len(messages) > 0 {
+		msgIDs := make([]uuid.UUID, len(messages))
+		for i, m := range messages {
+			msgIDs[i] = m.ID
+		}
+		reactions, err := r.GetReactionsForMessages(ctx, msgIDs)
+		if err == nil {
+			for i := range messages {
+				if rs, ok := reactions[messages[i].ID]; ok {
+					messages[i].Reactions = rs
+				}
+			}
+		}
+	}
+
 	return messages, nil
+}
+
+// ── Reactions ──────────────────────────────────────────────────────────────
+
+func (r *ChatRepository) AddReaction(ctx context.Context, messageID, userID uuid.UUID, emoji string) (*models.Reaction, error) {
+	var reaction models.Reaction
+	err := r.pool.QueryRow(ctx, `
+		INSERT INTO public.message_reactions (message_id, user_id, emoji)
+		VALUES ($1, $2, $3)
+		ON CONFLICT (message_id, user_id, emoji) DO NOTHING
+		RETURNING id, message_id, user_id, emoji, created_at
+	`, messageID, userID, emoji).Scan(&reaction.ID, &reaction.MessageID, &reaction.UserID, &reaction.Emoji, &reaction.CreatedAt)
+	if err != nil {
+		return nil, err
+	}
+	return &reaction, nil
+}
+
+func (r *ChatRepository) RemoveReaction(ctx context.Context, messageID, userID uuid.UUID, emoji string) error {
+	_, err := r.pool.Exec(ctx, `
+		DELETE FROM public.message_reactions WHERE message_id = $1 AND user_id = $2 AND emoji = $3
+	`, messageID, userID, emoji)
+	return err
+}
+
+func (r *ChatRepository) GetReactionsForMessages(ctx context.Context, messageIDs []uuid.UUID) (map[uuid.UUID][]models.Reaction, error) {
+	rows, err := r.pool.Query(ctx, `
+		SELECT id, message_id, user_id, emoji, created_at
+		FROM public.message_reactions
+		WHERE message_id = ANY($1)
+		ORDER BY created_at ASC
+	`, messageIDs)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	result := make(map[uuid.UUID][]models.Reaction)
+	for rows.Next() {
+		var r models.Reaction
+		if err := rows.Scan(&r.ID, &r.MessageID, &r.UserID, &r.Emoji, &r.CreatedAt); err != nil {
+			continue
+		}
+		result[r.MessageID] = append(result[r.MessageID], r)
+	}
+	return result, nil
+}
+
+func (r *ChatRepository) GetMessageConversationID(ctx context.Context, messageID uuid.UUID) (uuid.UUID, error) {
+	var convID uuid.UUID
+	err := r.pool.QueryRow(ctx, `
+		SELECT conversation_id FROM public.secure_messages WHERE id = $1
+	`, messageID).Scan(&convID)
+	return convID, err
 }
 
 func (r *ChatRepository) GetConversations(ctx context.Context, userID string) ([]models.Conversation, error) {

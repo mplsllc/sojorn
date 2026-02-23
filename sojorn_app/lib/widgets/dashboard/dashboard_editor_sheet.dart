@@ -48,7 +48,12 @@ class _DashboardEditorSheetState extends State<DashboardEditorSheet> {
   bool _saving = false;
 
   /// Widget types available in the catalog (ones not already placed).
-  static const _allTypes = DashboardWidgetType.values;
+  /// musicPlayer / nowPlaying hidden until audio library is configured.
+  static final _allTypes = DashboardWidgetType.values
+      .where((t) =>
+          t != DashboardWidgetType.musicPlayer &&
+          t != DashboardWidgetType.nowPlaying)
+      .toList();
 
   @override
   void initState() {

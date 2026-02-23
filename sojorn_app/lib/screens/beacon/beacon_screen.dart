@@ -33,6 +33,8 @@ import '../clusters/group_screen.dart';
 import '../clusters/group_chat_tab.dart';
 import '../clusters/group_forum_tab.dart';
 import '../clusters/group_members_tab.dart';
+import '../events/event_detail_screen.dart';
+import '../../models/event.dart';
 import '../../theme/tokens.dart';
 import '../../theme/app_theme.dart';
 import '../../widgets/media/sojorn_avatar.dart';
@@ -70,6 +72,7 @@ class BeaconScreenState extends ConsumerState<BeaconScreen> with TickerProviderS
 
   List<Post> _beacons = [];
   List<Post> _officialPosts = []; // MN511 government alerts
+  List<GroupEvent> _mapEvents = []; // public events with coordinates
   List<Beacon> _cameraPosts = []; // MN511 traffic cameras
   List<Beacon> _signPosts = []; // MN511 DMS road signs
   List<Beacon> _weatherPosts = []; // MN511 RWIS weather stations
@@ -156,6 +159,7 @@ class BeaconScreenState extends ConsumerState<BeaconScreen> with TickerProviderS
     _checkHomeNeighborhood();
     _checkLocationPermission();
     _loadClusters();
+    _loadMapEvents();
     WidgetsBinding.instance.addPostFrameCallback((_) {
       _sheetController.addListener(_onSheetSizeChanged);
     });
@@ -464,6 +468,55 @@ class BeaconScreenState extends ConsumerState<BeaconScreen> with TickerProviderS
       debugPrint('[Beacon] ✗ loadBeacons failed: $e');
       if (mounted) setState(() => _isLoading = false);
     }
+  }
+
+  Future<void> _loadMapEvents() async {
+    try {
+      final raw = await ApiService.instance.fetchUpcomingEvents(limit: 50);
+      final events = raw
+          .map((e) => GroupEvent.fromJson(e))
+          .where((e) => e.lat != null && e.long != null)
+          .toList();
+      if (mounted) setState(() => _mapEvents = events);
+    } catch (e) {
+      debugPrint('[Beacon] _loadMapEvents failed: $e');
+    }
+  }
+
+  void _onEventMarkerTap(GroupEvent event) {
+    Navigator.of(context).push(MaterialPageRoute(
+      builder: (_) => EventDetailScreen(
+        groupId: event.groupId,
+        eventId: event.id,
+        initialEvent: event,
+      ),
+    ));
+  }
+
+  List<Marker> _buildEventMarkers() {
+    return _mapEvents.map((event) {
+      return Marker(
+        key: ValueKey('event:${event.id}'),
+        point: LatLng(event.lat!, event.long!),
+        width: 36,
+        height: 36,
+        child: GestureDetector(
+          onTap: () => _onEventMarkerTap(event),
+          child: Tooltip(
+            message: event.title,
+            child: Container(
+              decoration: BoxDecoration(
+                color: SojornColors.basicRoyalPurple,
+                shape: BoxShape.circle,
+                border: Border.all(color: Colors.white, width: 2),
+                boxShadow: const [BoxShadow(color: Colors.black26, blurRadius: 4, offset: Offset(0, 2))],
+              ),
+              child: const Icon(Icons.event, color: Colors.white, size: 18),
+            ),
+          ),
+        ),
+      );
+    }).toList();
   }
 
   Future<void> _loadClusters() async {
@@ -869,41 +922,47 @@ class BeaconScreenState extends ConsumerState<BeaconScreen> with TickerProviderS
       return _buildLocationPermissionOverlay(context);
     }
 
-    return Column(
-      children: [
-        // Top tab bar
-        Material(
-          color: AppTheme.scaffoldBg,
-          child: TabBar(
-            controller: _tabController,
-            labelColor: AppTheme.brightNavy,
-            unselectedLabelColor: SojornColors.textDisabled,
-            indicatorColor: AppTheme.brightNavy,
-            indicatorWeight: 2.5,
-            labelStyle: const TextStyle(fontSize: 13, fontWeight: FontWeight.w700),
-            unselectedLabelStyle: const TextStyle(fontSize: 13, fontWeight: FontWeight.w500),
-            tabs: const [
-              Tab(text: 'Map', icon: Icon(Icons.map_outlined, size: SojornNav.beaconTabIconSize), iconMargin: EdgeInsets.only(bottom: 2)),
-              Tab(text: 'Board', icon: Icon(Icons.forum_outlined, size: SojornNav.beaconTabIconSize), iconMargin: EdgeInsets.only(bottom: 2)),
-              Tab(text: 'Groups', icon: Icon(Icons.groups_outlined, size: SojornNav.beaconTabIconSize), iconMargin: EdgeInsets.only(bottom: 2)),
-              Tab(text: 'Search', icon: Icon(Icons.search, size: SojornNav.beaconTabIconSize), iconMargin: EdgeInsets.only(bottom: 2)),
-            ],
+    return LayoutBuilder(builder: (context, constraints) {
+      // Desktop: map-only — Board and Groups live in their own nav sections.
+      if (SojornBreakpoints.isDesktop(constraints.maxWidth)) {
+        return _buildMapTab();
+      }
+
+      // Mobile: full 4-tab layout.
+      return Column(
+        children: [
+          Material(
+            color: AppTheme.scaffoldBg,
+            child: TabBar(
+              controller: _tabController,
+              labelColor: AppTheme.brightNavy,
+              unselectedLabelColor: SojornColors.textDisabled,
+              indicatorColor: AppTheme.brightNavy,
+              indicatorWeight: 2.5,
+              labelStyle: const TextStyle(fontSize: 13, fontWeight: FontWeight.w700),
+              unselectedLabelStyle: const TextStyle(fontSize: 13, fontWeight: FontWeight.w500),
+              tabs: const [
+                Tab(text: 'Map', icon: Icon(Icons.map_outlined, size: SojornNav.beaconTabIconSize), iconMargin: EdgeInsets.only(bottom: 2)),
+                Tab(text: 'Board', icon: Icon(Icons.forum_outlined, size: SojornNav.beaconTabIconSize), iconMargin: EdgeInsets.only(bottom: 2)),
+                Tab(text: 'Groups', icon: Icon(Icons.groups_outlined, size: SojornNav.beaconTabIconSize), iconMargin: EdgeInsets.only(bottom: 2)),
+                Tab(text: 'Search', icon: Icon(Icons.search, size: SojornNav.beaconTabIconSize), iconMargin: EdgeInsets.only(bottom: 2)),
+              ],
+            ),
           ),
-        ),
-        // Content
-        Expanded(
-          child: IndexedStack(
-            index: _tabController.index,
-            children: [
-              _buildMapTab(),
-              _buildBoardView(),
-              _buildGroupsView(),
-              _buildSearchView(),
-            ],
+          Expanded(
+            child: IndexedStack(
+              index: _tabController.index,
+              children: [
+                _buildMapTab(),
+                _buildBoardView(),
+                _buildGroupsView(),
+                _buildSearchView(),
+              ],
+            ),
           ),
-        ),
-      ],
-    );
+        ],
+      );
+    });
   }
 
   /// Active geo-alerts only: no discussion types, no expired unverified reports,
@@ -3137,6 +3196,9 @@ class BeaconScreenState extends ConsumerState<BeaconScreen> with TickerProviderS
             builder: _buildClusterWidget,
           ),
         ),
+        // Public event markers — calendar pins for events with coordinates
+        if (_mapEvents.isNotEmpty)
+          MarkerLayer(markers: _buildEventMarkers()),
         // Camera markers — shown only when zoomed in enough (≥ 12)
         if (_currentZoom >= 12.0 && _cameraPosts.isNotEmpty)
           MarkerLayer(markers: _buildCameraMarkers()),

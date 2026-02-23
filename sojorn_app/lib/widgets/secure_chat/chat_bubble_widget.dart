@@ -33,6 +33,10 @@ class ChatBubbleWidget extends StatefulWidget {
     this.onLongPress,
     this.onReply,
     this.onDelete,
+    this.reactions = const [],
+    this.onReact,
+    this.currentUserId,
+    this.replyToPreview,
   });
 
   final String message;
@@ -51,6 +55,10 @@ class ChatBubbleWidget extends StatefulWidget {
   final VoidCallback? onLongPress;
   final VoidCallback? onReply;
   final VoidCallback? onDelete;
+  final List<ReactionGroup> reactions;
+  final void Function(String emoji)? onReact;
+  final String? currentUserId;
+  final String? replyToPreview;
 
   @override
   State<ChatBubbleWidget> createState() => _ChatBubbleWidgetState();
@@ -467,8 +475,109 @@ class _ChatBubbleWidgetState extends State<ChatBubbleWidget>
                 ),
             ],
           ),
+          // Reactions row
+          if (widget.reactions.isNotEmpty) ...[
+            const SizedBox(height: 6),
+            Wrap(
+              spacing: 4,
+              runSpacing: 4,
+              children: [
+                for (final rg in widget.reactions)
+                  GestureDetector(
+                    onTap: () => widget.onReact?.call(rg.emoji),
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                      decoration: BoxDecoration(
+                        color: rg.iReacted
+                            ? AppTheme.brightNavy.withValues(alpha: widget.isMe ? 0.3 : 0.12)
+                            : (widget.isMe
+                                ? SojornColors.basicWhite.withValues(alpha: 0.08)
+                                : AppTheme.navyBlue.withValues(alpha: 0.05)),
+                        borderRadius: BorderRadius.circular(12),
+                        border: rg.iReacted
+                            ? Border.all(color: AppTheme.brightNavy.withValues(alpha: 0.4))
+                            : null,
+                      ),
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Text(rg.emoji, style: const TextStyle(fontSize: 14)),
+                          if (rg.count > 1) ...[
+                            const SizedBox(width: 3),
+                            Text(
+                              '${rg.count}',
+                              style: GoogleFonts.inter(
+                                fontSize: 11,
+                                fontWeight: FontWeight.w600,
+                                color: widget.isMe ? SojornColors.basicWhite.withValues(alpha: 0.8) : AppTheme.navyText.withValues(alpha: 0.6),
+                              ),
+                            ),
+                          ],
+                        ],
+                      ),
+                    ),
+                  ),
+                // "+" button to add reaction
+                if (widget.onReact != null)
+                  GestureDetector(
+                    onTap: () => _showQuickReactPicker(context),
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                      decoration: BoxDecoration(
+                        color: widget.isMe
+                            ? SojornColors.basicWhite.withValues(alpha: 0.08)
+                            : AppTheme.navyBlue.withValues(alpha: 0.05),
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                      child: Icon(
+                        Icons.add,
+                        size: 14,
+                        color: widget.isMe ? SojornColors.basicWhite.withValues(alpha: 0.5) : AppTheme.navyText.withValues(alpha: 0.4),
+                      ),
+                    ),
+                  ),
+              ],
+            ),
+          ],
         ],
       ),
+    );
+  }
+
+  void _showQuickReactPicker(BuildContext context) {
+    const quickEmojis = ['❤️', '👍', '😂', '😮', '😢', '🔥'];
+    final RenderBox box = context.findRenderObject() as RenderBox;
+    final pos = box.localToGlobal(Offset.zero);
+    showMenu<String>(
+      context: context,
+      position: RelativeRect.fromLTRB(
+        pos.dx,
+        pos.dy - 48,
+        pos.dx + box.size.width,
+        pos.dy,
+      ),
+      items: [
+        PopupMenuItem<String>(
+          enabled: false,
+          padding: EdgeInsets.zero,
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: quickEmojis.map((emoji) =>
+              InkWell(
+                onTap: () {
+                  Navigator.of(context).pop();
+                  widget.onReact?.call(emoji);
+                },
+                borderRadius: BorderRadius.circular(20),
+                child: Padding(
+                  padding: const EdgeInsets.all(8),
+                  child: Text(emoji, style: const TextStyle(fontSize: 22)),
+                ),
+              ),
+            ).toList(),
+          ),
+        ),
+      ],
     );
   }
 
@@ -495,6 +604,17 @@ class _ChatBubbleWidgetState extends State<ChatBubbleWidget>
 
   Widget _buildHoverActions() {
     final actions = <Widget>[];
+    if (widget.onReact != null) {
+      actions.add(
+        IconButton(
+          splashRadius: 18,
+          tooltip: 'React',
+          icon: const Icon(Icons.emoji_emotions_outlined, size: 18),
+          color: AppTheme.navyBlue,
+          onPressed: () => _showQuickReactPicker(context),
+        ),
+      );
+    }
     if (widget.onReply != null) {
       actions.add(
         IconButton(
@@ -664,4 +784,17 @@ class _VideoAttachment extends StatelessWidget {
       ),
     );
   }
+}
+
+/// Grouped reaction data for display (emoji -> count + users)
+class ReactionGroup {
+  final String emoji;
+  final int count;
+  final bool iReacted;
+
+  const ReactionGroup({
+    required this.emoji,
+    required this.count,
+    this.iReacted = false,
+  });
 }

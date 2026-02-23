@@ -702,7 +702,9 @@ func (h *GroupHandler) ListGroupMembers(c *gin.Context) {
 		       p.handle, COALESCE(p.display_name, '') AS display_name, COALESCE(p.avatar_url, '') AS avatar_url
 		FROM group_members gm
 		JOIN profiles p ON p.id = gm.user_id
+		LEFT JOIN profile_privacy_settings ps ON ps.user_id = gm.user_id
 		WHERE gm.group_id = $1
+		  AND (ps.is_private_profile IS NULL OR ps.is_private_profile = false)
 		ORDER BY
 			CASE gm.role WHEN 'owner' THEN 0 WHEN 'admin' THEN 1 WHEN 'moderator' THEN 2 ELSE 3 END,
 			gm.joined_at ASC
@@ -973,8 +975,10 @@ func (h *GroupHandler) SearchUsersForInvite(c *gin.Context) {
 	rows, err := h.pool.Query(c.Request.Context(), `
 		SELECT p.id, p.handle, COALESCE(p.display_name, '') AS display_name, COALESCE(p.avatar_url, '') AS avatar_url
 		FROM profiles p
+		LEFT JOIN profile_privacy_settings ps ON ps.user_id = p.id
 		WHERE (p.handle ILIKE $1 OR p.display_name ILIKE $1)
 		  AND p.id NOT IN (SELECT user_id FROM group_members WHERE group_id = $2)
+		  AND (ps.is_private_profile IS NULL OR ps.is_private_profile = false)
 		LIMIT 20
 	`, fmt.Sprintf("%%%s%%", query), groupID)
 	if err != nil {

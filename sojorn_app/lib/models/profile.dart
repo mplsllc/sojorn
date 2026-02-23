@@ -32,6 +32,9 @@ class Profile {
   /// Null = no status. Max 80 chars enforced server-side.
   final String? statusText;
   final DateTime? statusUpdatedAt;
+  /// Mastodon-style key-value metadata fields (max 8).
+  /// Each entry: {"key": "Pronouns", "value": "they/them", "verified": false}
+  final List<ProfileMetadataField> metadataFields;
 
   Profile({
     required this.id,
@@ -57,6 +60,7 @@ class Profile {
     this.birthYear = 0,
     this.statusText,
     this.statusUpdatedAt,
+    this.metadataFields = const [],
   });
 
   factory Profile.fromJson(Map<String, dynamic> json) {
@@ -112,6 +116,9 @@ class Profile {
       statusUpdatedAt: json['status_updated_at'] != null
           ? DateTime.tryParse(json['status_updated_at'] as String)
           : null,
+      metadataFields: (json['metadata_fields'] as List?)
+          ?.map((e) => ProfileMetadataField.fromJson(e as Map<String, dynamic>))
+          .toList() ?? const [],
     );
   }
 
@@ -167,6 +174,7 @@ class Profile {
     int? birthYear,
     String? statusText,
     DateTime? statusUpdatedAt,
+    List<ProfileMetadataField>? metadataFields,
   }) {
     return Profile(
       id: id ?? this.id,
@@ -192,8 +200,36 @@ class Profile {
       birthYear: birthYear ?? this.birthYear,
       statusText: statusText ?? this.statusText,
       statusUpdatedAt: statusUpdatedAt ?? this.statusUpdatedAt,
+      metadataFields: metadataFields ?? this.metadataFields,
     );
   }
+}
+
+/// Mastodon-style key-value metadata field.
+class ProfileMetadataField {
+  final String key;
+  final String value;
+  final bool verified;
+
+  const ProfileMetadataField({
+    required this.key,
+    required this.value,
+    this.verified = false,
+  });
+
+  factory ProfileMetadataField.fromJson(Map<String, dynamic> json) {
+    return ProfileMetadataField(
+      key: json['key'] as String? ?? '',
+      value: json['value'] as String? ?? '',
+      verified: json['verified'] as bool? ?? false,
+    );
+  }
+
+  Map<String, dynamic> toJson() => {
+    'key': key,
+    'value': value,
+    'verified': verified,
+  };
 }
 
 /// Profile stats (returned separately from profile API)

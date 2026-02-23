@@ -70,6 +70,8 @@ class ProfileWidgetRenderer extends StatelessWidget {
         return _buildCustomText();
       case ProfileWidgetType.featuredFriends:
         return _buildFeaturedFriends();
+      case ProfileWidgetType.featuredGroups:
+        return _buildFeaturedGroups();
     }
   }
 
@@ -672,6 +674,63 @@ class ProfileWidgetRenderer extends StatelessWidget {
                   backgroundColor: theme.primaryColor.withOpacity(0.1),
                   child: Icon(
                     Icons.person,
+                    color: theme.primaryColor,
+                    size: 16,
+                  ),
+                );
+              }).toList(),
+            ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildFeaturedGroups() {
+    final groupIds = widget.config['groupIds'] as List<dynamic>? ?? [];
+    final maxGroups = widget.config['maxGroups'] as int? ?? 6;
+
+    return Padding(
+      padding: const EdgeInsets.all(12),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Icon(
+                Icons.groups,
+                color: theme.primaryColor,
+                size: 16,
+              ),
+              const SizedBox(width: 8),
+              Text(
+                'Featured Groups',
+                style: TextStyle(
+                  color: theme.textColor,
+                  fontSize: 14,
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 12),
+          if (groupIds.isEmpty)
+            Text(
+              'No featured groups yet',
+              style: TextStyle(
+                color: theme.textColor.withOpacity(0.6),
+                fontSize: 12,
+              ),
+            )
+          else
+            Wrap(
+              spacing: 8,
+              runSpacing: 8,
+              children: groupIds.take(maxGroups).map((groupId) {
+                return CircleAvatar(
+                  radius: 16,
+                  backgroundColor: theme.primaryColor.withOpacity(0.1),
+                  child: Icon(
+                    Icons.group,
                     color: theme.primaryColor,
                     size: 16,
                   ),

@@ -406,6 +406,8 @@ func main() {
 			authorized.GET("/conversations/:id/messages", chatHandler.GetMessages)
 			authorized.DELETE("/conversations/:id", chatHandler.DeleteConversation)
 			authorized.DELETE("/messages/:id", chatHandler.DeleteMessage)
+			authorized.POST("/messages/:id/reactions", chatHandler.AddReaction)
+			authorized.DELETE("/messages/:id/reactions", chatHandler.RemoveReaction)
 			authorized.GET("/mutual-follows", chatHandler.GetMutualFollows)
 
 			// Key routes
@@ -511,6 +513,7 @@ func main() {
 				board.POST("/:id/replies", boardHandler.CreateReply)
 				board.POST("/vote", boardHandler.ToggleVote)
 				board.POST("/:id/remove", boardHandler.RemoveEntry)
+				board.PATCH("/:id/tag", boardHandler.UpdateTag)
 				board.POST("/:id/flag", boardHandler.FlagEntry)
 			}
 

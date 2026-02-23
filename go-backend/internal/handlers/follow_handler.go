@@ -96,18 +96,20 @@ func (h *FollowHandler) GetSuggestedUsers(c *gin.Context) {
 		return
 	}
 
-	// Suggest users followed by people the current user follows, excluding already-followed
+	// Suggest users followed by people the current user follows, excluding already-followed and private profiles
 	rows, err := h.db.Query(context.Background(), `
 		SELECT DISTINCT p.id, p.handle, p.display_name, p.avatar_url,
 		       COUNT(f2.follower_id) AS mutual_count
 		FROM follows f1
 		JOIN follows f2 ON f2.follower_id = f1.following_id
 		JOIN profiles p ON p.id = f2.following_id
+		LEFT JOIN profile_privacy_settings ps ON ps.user_id = p.id
 		WHERE f1.follower_id = $1
 		  AND f2.following_id != $1
 		  AND f2.following_id NOT IN (
 		      SELECT following_id FROM follows WHERE follower_id = $1
 		  )
+		  AND (ps.is_private_profile IS NULL OR ps.is_private_profile = false)
 		GROUP BY p.id, p.handle, p.display_name, p.avatar_url
 		ORDER BY mutual_count DESC
 		LIMIT 10

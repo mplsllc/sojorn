@@ -289,6 +289,7 @@ class SecureChatService {
     String recipientId,
     String plaintext, {
     Duration? expiresIn,
+    String? replyToId,
   }) async {
     final userId = currentUserId;
     if (userId == null) return null;
@@ -321,9 +322,10 @@ class SecureChatService {
         receiverId: recipientId,
         ciphertext: encrypted['ciphertext']!,
         iv: encrypted['iv']!,
-        messageHeader: headerString, 
+        messageHeader: headerString,
         keyVersion: 'x3dh_v1',
         messageType: MessageType.standardMessage,
+        replyToId: replyToId,
       );
 
       final messageJson = response['message'] ?? response;
@@ -343,6 +345,7 @@ class SecureChatService {
         deliveredAt: msg.deliveredAt,
         readAt: msg.readAt,
         expiresAt: msg.expiresAt,
+        replyToId: replyToId,
       );
 
       _processedMessageIds
@@ -532,9 +535,10 @@ class SecureChatService {
             final headerData = msg.messageHeader;
 
             final plaintext = await _e2ee.decrypt(
-                msg.ciphertext, 
-                msg.iv, 
-                headerData
+                msg.ciphertext,
+                msg.iv,
+                headerData,
+                senderId: msg.senderId,
             );
             
             await _localStore.saveMessage(

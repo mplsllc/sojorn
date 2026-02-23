@@ -55,6 +55,8 @@ func (h *BoardHandler) ListNearby(c *gin.Context) {
 	radiusStr := c.DefaultQuery("radius", "5000")
 	topic := c.Query("topic")
 	sort := c.DefaultQuery("sort", "new")
+	search := c.Query("search")
+	tag := c.Query("tag")
 
 	lat, err := strconv.ParseFloat(latStr, 64)
 	if err != nil {
@@ -72,7 +74,7 @@ func (h *BoardHandler) ListNearby(c *gin.Context) {
 	}
 
 	query := `
-		SELECT e.id, e.body, COALESCE(e.image_url, ''), e.topic,
+		SELECT e.id, e.body, COALESCE(e.image_url, ''), e.topic, COALESCE(e.tag, ''),
 		       e.lat, e.long, e.upvotes, e.reply_count, e.is_pinned, e.created_at,
 		       pr.handle, pr.display_name, COALESCE(pr.avatar_url, ''),
 		       EXISTS(SELECT 1 FROM board_votes bv WHERE bv.user_id = $4 AND bv.entry_id = e.id) AS has_voted
@@ -87,6 +89,18 @@ func (h *BoardHandler) ListNearby(c *gin.Context) {
 	if topic != "" {
 		query += ` AND e.topic = $` + strconv.Itoa(argIdx)
 		args = append(args, topic)
+		argIdx++
+	}
+
+	if search != "" {
+		query += ` AND e.body ILIKE '%' || $` + strconv.Itoa(argIdx) + ` || '%'`
+		args = append(args, search)
+		argIdx++
+	}
+
+	if tag != "" {
+		query += ` AND e.tag = $` + strconv.Itoa(argIdx)
+		args = append(args, tag)
 		argIdx++
 	}
 
@@ -110,18 +124,18 @@ func (h *BoardHandler) ListNearby(c *gin.Context) {
 	var entries []gin.H
 	for rows.Next() {
 		var id uuid.UUID
-		var body, imageURL, tp, handle, displayName, avatarURL string
+		var body, imageURL, tp, entryTag, handle, displayName, avatarURL string
 		var eLat, eLong float64
 		var upvotes, replyCount int
 		var isPinned, hasVoted bool
 		var createdAt time.Time
-		if err := rows.Scan(&id, &body, &imageURL, &tp,
+		if err := rows.Scan(&id, &body, &imageURL, &tp, &entryTag,
 			&eLat, &eLong, &upvotes, &replyCount, &isPinned, &createdAt,
 			&handle, &displayName, &avatarURL, &hasVoted); err != nil {
 			continue
 		}
 		entries = append(entries, gin.H{
-			"id": id, "body": body, "image_url": imageURL, "topic": tp,
+			"id": id, "body": body, "image_url": imageURL, "topic": tp, "tag": entryTag,
 			"lat": eLat, "long": eLong, "upvotes": upvotes, "reply_count": replyCount,
 			"is_pinned": isPinned, "created_at": createdAt,
 			"author_handle": handle, "author_display_name": displayName, "author_avatar_url": avatarURL,
@@ -152,6 +166,7 @@ func (h *BoardHandler) CreateEntry(c *gin.Context) {
 		Body     string  `json:"body" binding:"required,max=1000"`
 		ImageURL *string `json:"image_url"`
 		Topic    string  `json:"topic"`
+		Tag      string  `json:"tag"`
 		Lat      float64 `json:"lat" binding:"required"`
 		Long     float64 `json:"long" binding:"required"`
 	}
@@ -161,6 +176,12 @@ func (h *BoardHandler) CreateEntry(c *gin.Context) {
 	}
 	if req.Topic == "" {
 		req.Topic = "community"
+	}
+
+	// Validate tag if provided (allowed: discussion, question, resolved, announcement, poll)
+	validTags := map[string]bool{"": true, "discussion": true, "question": true, "resolved": true, "announcement": true, "poll": true}
+	if !validTags[req.Tag] {
+		req.Tag = ""
 	}
 
 	// Layer 0: Hard blocklist check (instant rejection)
@@ -182,11 +203,15 @@ func (h *BoardHandler) CreateEntry(c *gin.Context) {
 
 	var id uuid.UUID
 	var createdAt time.Time
+	var tagPtr *string
+	if req.Tag != "" {
+		tagPtr = &req.Tag
+	}
 	err = h.pool.QueryRow(c.Request.Context(), `
-		INSERT INTO board_entries (author_id, body, image_url, topic, lat, long)
-		VALUES ($1, $2, $3, $4, $5, $6)
+		INSERT INTO board_entries (author_id, body, image_url, topic, tag, lat, long)
+		VALUES ($1, $2, $3, $4, $5, $6, $7)
 		RETURNING id, created_at
-	`, userID, req.Body, req.ImageURL, req.Topic, fLat, fLong).Scan(&id, &createdAt)
+	`, userID, req.Body, req.ImageURL, req.Topic, tagPtr, fLat, fLong).Scan(&id, &createdAt)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to create entry"})
 		return
@@ -222,20 +247,20 @@ func (h *BoardHandler) GetEntry(c *gin.Context) {
 	}
 
 	// Fetch entry
-	var body, imageURL, topic, handle, displayName, avatarURL string
+	var body, imageURL, topic, entryTag, handle, displayName, avatarURL string
 	var eLat, eLong float64
 	var upvotes, replyCount int
 	var isPinned, hasVoted bool
 	var createdAt time.Time
 	err = h.pool.QueryRow(c.Request.Context(), `
-		SELECT e.body, COALESCE(e.image_url, ''), e.topic,
+		SELECT e.body, COALESCE(e.image_url, ''), e.topic, COALESCE(e.tag, ''),
 		       e.lat, e.long, e.upvotes, e.reply_count, e.is_pinned, e.created_at,
 		       pr.handle, pr.display_name, COALESCE(pr.avatar_url, ''),
 		       EXISTS(SELECT 1 FROM board_votes bv WHERE bv.user_id = $2 AND bv.entry_id = e.id) AS has_voted
 		FROM board_entries e
 		JOIN profiles pr ON e.author_id = pr.id
 		WHERE e.id = $1 AND e.is_active = TRUE
-	`, entryID, userID).Scan(&body, &imageURL, &topic,
+	`, entryID, userID).Scan(&body, &imageURL, &topic, &entryTag,
 		&eLat, &eLong, &upvotes, &replyCount, &isPinned, &createdAt,
 		&handle, &displayName, &avatarURL, &hasVoted)
 	if err != nil {
@@ -285,7 +310,7 @@ func (h *BoardHandler) GetEntry(c *gin.Context) {
 
 	c.JSON(http.StatusOK, gin.H{
 		"entry": gin.H{
-			"id": entryID, "body": body, "image_url": imageURL, "topic": topic,
+			"id": entryID, "body": body, "image_url": imageURL, "topic": topic, "tag": entryTag,
 			"lat": eLat, "long": eLong, "upvotes": upvotes, "reply_count": replyCount,
 			"is_pinned": isPinned, "created_at": createdAt,
 			"author_handle": handle, "author_display_name": displayName, "author_avatar_url": avatarURL,
@@ -446,6 +471,68 @@ func (h *BoardHandler) ToggleVote(c *gin.Context) {
 	}
 
 	c.JSON(http.StatusBadRequest, gin.H{"error": "entry_id or reply_id required"})
+}
+
+// ── Update tag on board entry ─────────────────────────────────────────────
+// Author or neighborhood admin can set/change the tag on an entry.
+// PATCH /board/:id/tag
+
+func (h *BoardHandler) UpdateTag(c *gin.Context) {
+	userIDStr, _ := c.Get("user_id")
+	userID, err := uuid.Parse(userIDStr.(string))
+	if err != nil {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "unauthorized"})
+		return
+	}
+
+	entryID, err := uuid.Parse(c.Param("id"))
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid entry id"})
+		return
+	}
+
+	var req struct {
+		Tag string `json:"tag"`
+	}
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+
+	validTags := map[string]bool{"": true, "discussion": true, "question": true, "resolved": true, "announcement": true, "poll": true}
+	if !validTags[req.Tag] {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid tag"})
+		return
+	}
+
+	// Check ownership: author or neighborhood admin
+	var authorID uuid.UUID
+	var lat, lng float64
+	err = h.pool.QueryRow(c.Request.Context(),
+		`SELECT author_id, lat, long FROM board_entries WHERE id = $1 AND is_active = TRUE`, entryID,
+	).Scan(&authorID, &lat, &lng)
+	if err != nil {
+		c.JSON(http.StatusNotFound, gin.H{"error": "entry not found"})
+		return
+	}
+
+	if authorID != userID && !h.isNeighborhoodAdmin(c, userID, lat, lng) {
+		c.JSON(http.StatusForbidden, gin.H{"error": "not authorized to update this entry's tag"})
+		return
+	}
+
+	var tagPtr *string
+	if req.Tag != "" {
+		tagPtr = &req.Tag
+	}
+	_, err = h.pool.Exec(c.Request.Context(),
+		`UPDATE board_entries SET tag = $1 WHERE id = $2`, tagPtr, entryID)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to update tag"})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{"tag": req.Tag})
 }
 
 // ── Admin: Remove board entry ─────────────────────────────────────────────

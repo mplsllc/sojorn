@@ -129,6 +129,7 @@ class LocalMessageStore {
     DateTime? deliveredAt,
     DateTime? readAt,
     DateTime? expiresAt,
+    String? replyToId,
   }) async {
     // Add to write-ahead log immediately (memory-safe copy)
     final pending = _PendingSave(
@@ -142,6 +143,7 @@ class LocalMessageStore {
       deliveredAt: deliveredAt,
       readAt: readAt,
       expiresAt: expiresAt,
+      replyToId: replyToId,
     );
     
     _writeAheadLog[messageId] = pending;
@@ -181,6 +183,7 @@ class LocalMessageStore {
             'delivered_at': deliveredAt.toIso8601String(),
           if (readAt != null) 'read_at': readAt.toIso8601String(),
           if (expiresAt != null) 'expires_at': expiresAt.toIso8601String(),
+          if (replyToId != null) 'reply_to_id': replyToId,
         });
 
         await _messageBox!.put(messageId, payload);
@@ -386,6 +389,7 @@ class LocalMessageStore {
         deliveredAt: pending.deliveredAt,
         readAt: pending.readAt,
         expiresAt: pending.expiresAt,
+        replyToId: pending.replyToId,
       ));
     }
 
@@ -427,6 +431,7 @@ class LocalMessageStore {
       deliveredAt: record.deliveredAt,
       readAt: record.readAt,
       expiresAt: record.expiresAt,
+      replyToId: record.replyToId,
     );
   }
 
@@ -651,6 +656,7 @@ class LocalMessageStore {
       final deliveredAt = _parseTimestamp(data['delivered_at']);
       final readAt = _parseTimestamp(data['read_at']);
       final expiresAt = _parseTimestamp(data['expires_at']);
+      final replyToId = data['reply_to_id'] as String?;
 
       final record = LocalMessageRecord(
         conversationId: conversationId,
@@ -662,6 +668,7 @@ class LocalMessageStore {
         deliveredAt: deliveredAt,
         readAt: readAt,
         expiresAt: expiresAt,
+        replyToId: replyToId,
       );
       _recordCache[messageId] = record;
       return record;
@@ -708,6 +715,7 @@ class _PendingSave {
   final DateTime? deliveredAt;
   final DateTime? readAt;
   final DateTime? expiresAt;
+  final String? replyToId;
 
   _PendingSave({
     required this.conversationId,
@@ -720,6 +728,7 @@ class _PendingSave {
     this.deliveredAt,
     this.readAt,
     this.expiresAt,
+    this.replyToId,
   });
 
   Map<String, dynamic> toJson() => {
@@ -733,6 +742,7 @@ class _PendingSave {
     'deliveredAt': deliveredAt?.toIso8601String(),
     'readAt': readAt?.toIso8601String(),
     'expiresAt': expiresAt?.toIso8601String(),
+    if (replyToId != null) 'replyToId': replyToId,
   };
 
   factory _PendingSave.fromJson(Map<String, dynamic> json) => _PendingSave(
@@ -746,6 +756,7 @@ class _PendingSave {
     deliveredAt: json['deliveredAt'] != null ? DateTime.parse(json['deliveredAt']) : null,
     readAt: json['readAt'] != null ? DateTime.parse(json['readAt']) : null,
     expiresAt: json['expiresAt'] != null ? DateTime.parse(json['expiresAt']) : null,
+    replyToId: json['replyToId'],
   );
 }
 
@@ -760,6 +771,7 @@ class LocalMessageRecord {
   final DateTime? deliveredAt;
   final DateTime? readAt;
   final DateTime? expiresAt;
+  final String? replyToId;
 
   LocalMessageRecord({
     required this.conversationId,
@@ -771,5 +783,6 @@ class LocalMessageRecord {
     this.deliveredAt,
     this.readAt,
     this.expiresAt,
+    this.replyToId,
   });
 }

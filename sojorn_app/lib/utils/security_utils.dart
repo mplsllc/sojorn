@@ -29,32 +29,32 @@ class SecurityUtils {
   /// Validate and sanitize URLs
   static String? sanitizeUrl(String url) {
     if (url.isEmpty) return null;
-    
+
     try {
       final uri = Uri.parse(url.startsWith('http') ? url : 'https://$url');
-      
+
       // Only allow safe protocols
       if (!['http', 'https'].contains(uri.scheme)) {
         return null;
       }
-      
-      // Remove potentially dangerous query parameters
+
+      // For internal media URLs (our own CDN), pass through as-is
+      if (uri.host.endsWith('sojorn.net')) {
+        return uri.toString();
+      }
+
+      // Remove potentially dangerous query parameters for external URLs
       final sanitizedParams = <String, String>{};
       uri.queryParameters.forEach((key, value) {
-        // Remove dangerous query parameters
         if (!_isDangerousQueryParam(key) && !_isDangerousQueryParam(value)) {
           sanitizedParams[key] = value;
         }
       });
-      
-      final sanitizedUri = Uri(
-        scheme: uri.scheme,
-        host: uri.host,
-        port: uri.port,
-        path: uri.path,
-        queryParameters: sanitizedParams,
+
+      final sanitizedUri = uri.replace(
+        queryParameters: sanitizedParams.isEmpty ? null : sanitizedParams,
       );
-      
+
       return sanitizedUri.toString();
     } catch (e) {
       return null;

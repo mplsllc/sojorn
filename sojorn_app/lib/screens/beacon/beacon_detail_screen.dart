@@ -9,6 +9,7 @@ import '../../models/beacon.dart';
 import '../../providers/api_provider.dart';
 import '../../theme/tokens.dart';
 import '../../theme/app_theme.dart';
+import '../../utils/snackbar_ext.dart';
 
 class BeaconDetailScreen extends ConsumerStatefulWidget {
   final Post beaconPost;
@@ -26,10 +27,15 @@ class _BeaconDetailScreenState extends ConsumerState<BeaconDetailScreen>
   bool _isVouching = false;
   bool _isReporting = false;
   bool _isResolving = false;
+  // Tracks the current user's vote locally so the UI updates immediately.
+  // Initialised from the server-returned my_vote field; updated optimistically.
+  String? _userVote; // "vouch", "report", or null
 
   @override
   void initState() {
     super.initState();
+    _userVote = widget.beaconPost.toBeacon().userVote;
+
     _pulseController = AnimationController(
       duration: const Duration(milliseconds: 1200),
       vsync: this,
@@ -464,19 +470,30 @@ class _BeaconDetailScreenState extends ConsumerState<BeaconDetailScreen>
                 // Urgency CTA — show expiry time right above the verify button
                 _buildVouchUrgencyBanner(),
                 const SizedBox(height: 8),
-                // "I see this too" button — primary action
+                // "I see this too" button — primary confirm action
                 SizedBox(
                   width: double.infinity,
                   height: 50,
                   child: ElevatedButton.icon(
-                    onPressed: _isVouching ? null : _vouchBeacon,
+                    onPressed: _isVouching || _isReporting
+                        ? null
+                        : (_userVote == 'vouch' ? _unvoteBeacon : _vouchBeacon),
                     icon: _isVouching
                         ? const SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2, color: SojornColors.basicWhite))
-                        : const Icon(Icons.visibility, size: 20),
-                    label: Text(_isVouching ? 'Confirming...' : 'I see this too',
-                      style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 15)),
+                        : Icon(
+                            _userVote == 'vouch' ? Icons.check_circle : Icons.visibility,
+                            size: 20,
+                          ),
+                    label: Text(
+                      _isVouching
+                          ? 'Confirming...'
+                          : (_userVote == 'vouch' ? 'You confirmed this — Undo' : 'I see this too'),
+                      style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 15),
+                    ),
                     style: ElevatedButton.styleFrom(
-                      backgroundColor: const Color(0xFF388E3C),
+                      backgroundColor: _userVote == 'vouch'
+                          ? const Color(0xFF2E7D32)  // darker green when voted
+                          : const Color(0xFF388E3C),
                       foregroundColor: SojornColors.basicWhite,
                       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
                       disabledBackgroundColor: const Color(0xFF4CAF50).withValues(alpha: 0.3),
@@ -489,14 +506,35 @@ class _BeaconDetailScreenState extends ConsumerState<BeaconDetailScreen>
                   width: double.infinity,
                   height: 44,
                   child: OutlinedButton.icon(
-                    onPressed: _isReporting ? null : _reportBeacon,
+                    onPressed: _isReporting || _isVouching
+                        ? null
+                        : (_userVote == 'report' ? _unvoteBeacon : _reportBeacon),
                     icon: _isReporting
                         ? SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2, color: SojornColors.destructive))
-                        : Icon(Icons.flag, size: 18, color: SojornColors.destructive.withValues(alpha: 0.7)),
-                    label: Text(_isReporting ? 'Reporting...' : 'False alarm / Report',
-                      style: TextStyle(color: SojornColors.destructive.withValues(alpha: 0.7), fontSize: 13)),
+                        : Icon(
+                            _userVote == 'report' ? Icons.flag : Icons.flag_outlined,
+                            size: 18,
+                            color: _userVote == 'report'
+                                ? SojornColors.destructive
+                                : SojornColors.destructive.withValues(alpha: 0.7),
+                          ),
+                    label: Text(
+                      _isReporting
+                          ? 'Reporting...'
+                          : (_userVote == 'report' ? 'You reported this — Undo' : 'False alarm / Report'),
+                      style: TextStyle(
+                        color: _userVote == 'report'
+                            ? SojornColors.destructive
+                            : SojornColors.destructive.withValues(alpha: 0.7),
+                        fontSize: 13,
+                      ),
+                    ),
                     style: OutlinedButton.styleFrom(
-                      side: BorderSide(color: SojornColors.destructive.withValues(alpha: 0.3)),
+                      side: BorderSide(
+                        color: _userVote == 'report'
+                            ? SojornColors.destructive
+                            : SojornColors.destructive.withValues(alpha: 0.3),
+                      ),
                       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
                     ),
                   ),
@@ -523,21 +561,14 @@ class _BeaconDetailScreenState extends ConsumerState<BeaconDetailScreen>
   Future<void> _vouchBeacon() async {
     final apiService = ref.read(apiServiceProvider);
     setState(() => _isVouching = true);
-
     try {
       await apiService.vouchBeacon(_post.id);
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Thanks for confirming this report!'), backgroundColor: Color(0xFF4CAF50)),
-        );
-        Navigator.of(context).pop();
+        setState(() => _userVote = 'vouch');
+        context.showSuccess('Thanks for confirming this report!');
       }
     } catch (e) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Something went wrong: $e'), backgroundColor: SojornColors.destructive),
-        );
-      }
+      if (mounted) context.showError('Something went wrong: $e');
     } finally {
       if (mounted) setState(() => _isVouching = false);
     }
@@ -546,47 +577,50 @@ class _BeaconDetailScreenState extends ConsumerState<BeaconDetailScreen>
   Future<void> _reportBeacon() async {
     final apiService = ref.read(apiServiceProvider);
     setState(() => _isReporting = true);
-
     try {
       await apiService.reportBeacon(_post.id);
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Report received. Thanks for keeping the community safe.'), backgroundColor: SojornColors.nsfwWarningIcon),
-        );
-        Navigator.of(context).pop();
+        setState(() => _userVote = 'report');
+        context.showInfo('Report received. Thanks for keeping the community safe.');
       }
     } catch (e) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Something went wrong: $e'), backgroundColor: SojornColors.destructive),
-        );
-      }
+      if (mounted) context.showError('Something went wrong: $e');
     } finally {
       if (mounted) setState(() => _isReporting = false);
+    }
+  }
+
+  Future<void> _unvoteBeacon() async {
+    final apiService = ref.read(apiServiceProvider);
+    final previous = _userVote;
+    setState(() {
+      _isVouching = previous == 'vouch';
+      _isReporting = previous == 'report';
+    });
+    try {
+      await apiService.removeBeaconVote(_post.id);
+      if (mounted) {
+        setState(() => _userVote = null);
+        context.showInfo('Vote removed.');
+      }
+    } catch (e) {
+      if (mounted) context.showError('Something went wrong: $e');
+    } finally {
+      if (mounted) setState(() { _isVouching = false; _isReporting = false; });
     }
   }
 
   Future<void> _resolveBeacon() async {
     final apiService = ref.read(apiServiceProvider);
     setState(() => _isResolving = true);
-
     try {
       await apiService.resolveBeacon(_post.id, 'resolved');
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('Beacon marked as resolved. Thanks for the update!'),
-            backgroundColor: Color(0xFF388E3C),
-          ),
-        );
+        context.showSuccess('Beacon marked as resolved. Thanks for the update!');
         Navigator.of(context).pop();
       }
     } catch (e) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Something went wrong: $e'), backgroundColor: SojornColors.destructive),
-        );
-      }
+      if (mounted) context.showError('Something went wrong: $e');
     } finally {
       if (mounted) setState(() => _isResolving = false);
     }

@@ -245,7 +245,27 @@ func (h *EventHandler) UpdateEvent(c *gin.Context) {
 		}
 	}
 
-	c.JSON(http.StatusOK, gin.H{"message": "event updated"})
+	// Return the updated event
+	var updated GroupEvent
+	err = h.db.QueryRow(c.Request.Context(), `
+		SELECT e.id, e.group_id, e.created_by, e.title, e.description, e.location_name,
+		       e.lat, e.long, e.starts_at, e.ends_at, e.is_public, e.cover_image_url,
+		       e.max_attendees, e.created_at, e.updated_at,
+		       g.name AS group_name,
+		       (SELECT COUNT(*) FROM group_event_rsvps WHERE event_id = e.id AND status = 'going') AS attendee_count,
+		       (SELECT status FROM group_event_rsvps WHERE event_id = e.id AND user_id = $2::uuid) AS my_rsvp
+		FROM group_events e
+		JOIN groups g ON g.id = e.group_id
+		WHERE e.id = $1
+	`, eventID, userIDStr).Scan(&updated.ID, &updated.GroupID, &updated.CreatedBy, &updated.Title, &updated.Description,
+		&updated.LocationName, &updated.Lat, &updated.Long, &updated.StartsAt, &updated.EndsAt, &updated.IsPublic,
+		&updated.CoverImageURL, &updated.MaxAttendees, &updated.CreatedAt, &updated.UpdatedAt,
+		&updated.GroupName, &updated.AttendeeCount, &updated.MyRSVP)
+	if err != nil {
+		c.JSON(http.StatusOK, gin.H{"message": "event updated"})
+		return
+	}
+	c.JSON(http.StatusOK, updated)
 }
 
 // DeleteEvent — DELETE /groups/:id/events/:eventId

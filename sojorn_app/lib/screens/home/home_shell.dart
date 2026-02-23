@@ -32,6 +32,7 @@ import '../../models/profile.dart';
 import '../../models/dashboard_widgets.dart';
 import '../../widgets/dashboard/dashboard_editor_panel.dart';
 import '../../widgets/desktop/desktop_sidebar_widgets.dart';
+import '../settings/privacy_settings_screen.dart';
 import '../../widgets/desktop/hover_scale.dart';
 import '../../widgets/desktop/command_palette.dart';
 import '../../widgets/media/sojorn_avatar.dart';
@@ -118,8 +119,8 @@ class _HomeShellState extends ConsumerState<HomeShell> with WidgetsBindingObserv
             'followers': stats.followers,
             'following': stats.following,
           };
-          // Use following as "friends" for Top 8 (mutual follows could be added later)
-          _desktopFriends = following.take(8).toList();
+          // Full following list — used for Top 8 picker and friend activity filter
+          _desktopFriends = following;
           // Online users — placeholder until presence API exists
           _desktopOnlineUsers = following.take(5).map((u) {
             return {...u, 'status': 'online'};
@@ -501,8 +502,9 @@ class _HomeShellState extends ConsumerState<HomeShell> with WidgetsBindingObserv
                   _buildDesktopNavItem(Icons.home_outlined, Icons.home, 'Home', 0, currentIndex),
                   _buildDesktopNavItem(Icons.video_collection_outlined, Icons.video_collection, 'Quips', 1, currentIndex),
                   _buildDesktopNavItem(Icons.sensors_outlined, Icons.sensors, 'Beacons', 2, currentIndex),
+                  _buildDesktopNavItem(Icons.location_city_outlined, Icons.location_city, 'Neighborhood', 6, currentIndex),
+                  _buildDesktopNavItem(Icons.groups_outlined, Icons.groups, 'Groups', 7, currentIndex),
                   _buildDesktopNavItem(Icons.explore_outlined, Icons.explore, 'Discover', 4, currentIndex),
-                  _buildDesktopNavItem(Icons.person_outline, Icons.person, 'Profile', 3, currentIndex),
                   _buildDesktopNavItem(Icons.mail_outline, Icons.mail, 'Messages', 5, currentIndex),
                 ],
               ),
@@ -562,9 +564,15 @@ class _HomeShellState extends ConsumerState<HomeShell> with WidgetsBindingObserv
             ),
             const SizedBox(width: 8),
             IconButton(
-              icon: Icon(Icons.dashboard_customize_outlined, color: AppTheme.navyBlue, size: 20),
+              icon: Icon(
+                currentIndex == 3
+                    ? Icons.person_pin_outlined
+                    : Icons.dashboard_customize_outlined,
+                color: AppTheme.navyBlue,
+                size: 20,
+              ),
               tooltip: 'Customize Dashboard',
-              onPressed: () => _openDashboardEditor(),
+              onPressed: currentIndex == 3 ? null : _openDashboardEditor,
             ),
             const SizedBox(width: 4),
             IconButton(
@@ -629,7 +637,9 @@ class _HomeShellState extends ConsumerState<HomeShell> with WidgetsBindingObserv
                     case 'settings':
                       context.push('/settings');
                     case 'privacy':
-                      context.push('/settings/privacy');
+                      Navigator.of(context).push(MaterialPageRoute(
+                        builder: (_) => const PrivacySettingsScreen(),
+                      ));
                     case 'signout':
                       context.push('/logout');
                   }
@@ -681,11 +691,17 @@ class _HomeShellState extends ConsumerState<HomeShell> with WidgetsBindingObserv
     widget.navigationShell.goBranch(0);
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted) return;
-      setState(() => _isDashboardEditing = true);
+      setState(() {
+        _isDashboardEditing = true;
+      });
     });
   }
 
+
+
   Widget _buildDesktop3Column(int currentIndex) {
+    final isProfileBranch = currentIndex == 3;
+
     return Container(
       decoration: BoxDecoration(
         color: _ambientColor().withValues(alpha: 0.5),
@@ -693,93 +709,112 @@ class _HomeShellState extends ConsumerState<HomeShell> with WidgetsBindingObserv
       alignment: Alignment.topCenter,
       child: ConstrainedBox(
         constraints: const BoxConstraints(maxWidth: 1340),
-        child: Row(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            // ── Left sidebar ── 260px fixed ──
-            SizedBox(
-              width: 260,
-              child: _isDashboardEditing
-                  ? _buildEditableSidebar(_dashboardLayout.leftSidebar, true)
-                  : SingleChildScrollView(
-                      padding: const EdgeInsets.all(16),
-                      child: Column(
-                        children: [
-                          if (currentIndex == 4) ...[
-                            Container(
-                              width: double.infinity,
-                              padding: const EdgeInsets.all(14),
-                              decoration: BoxDecoration(
-                                gradient: LinearGradient(
-                                  colors: [
-                                    AppTheme.royalPurple.withValues(alpha: 0.12),
-                                    AppTheme.brightNavy.withValues(alpha: 0.08),
-                                  ],
-                                ),
-                                borderRadius: BorderRadius.circular(SojornRadii.card),
-                              ),
-                              child: Column(
-                                crossAxisAlignment: CrossAxisAlignment.start,
+        child: isProfileBranch
+            ? _buildProfileColumns()
+            : _buildDashboardColumns(currentIndex),
+      ),
+    );
+  }
+
+  /// Profile branch — full-width, no sidebars. Profile screen handles its own layout.
+  Widget _buildProfileColumns() {
+    return NavigationShellScope(
+      currentIndex: 3,
+      child: widget.navigationShell,
+    );
+  }
+
+  /// Standard 3-column layout for home / discover / other branches.
+  Widget _buildDashboardColumns(int currentIndex) {
+    final isEditing = _isDashboardEditing;
+    final leftWidgets = _dashboardLayout.leftSidebar;
+    final rightWidgets = _dashboardLayout.rightSidebar;
+
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        // ── Left sidebar ── 260px fixed ──
+        SizedBox(
+          width: 260,
+          child: isEditing
+              ? _buildEditableSidebar(leftWidgets, true)
+              : SingleChildScrollView(
+                  padding: const EdgeInsets.all(16),
+                  child: Column(
+                    children: [
+                      if (currentIndex == 4) ...[
+                        Container(
+                          width: double.infinity,
+                          padding: const EdgeInsets.all(14),
+                          decoration: BoxDecoration(
+                            gradient: LinearGradient(
+                              colors: [
+                                AppTheme.royalPurple.withValues(alpha: 0.12),
+                                AppTheme.brightNavy.withValues(alpha: 0.08),
+                              ],
+                            ),
+                            borderRadius: BorderRadius.circular(SojornRadii.card),
+                          ),
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Row(
                                 children: [
-                                  Row(
-                                    children: [
-                                      Icon(Icons.explore, size: 18, color: AppTheme.royalPurple),
-                                      const SizedBox(width: 8),
-                                      Text('Discover', style: TextStyle(fontSize: 14, fontWeight: FontWeight.w700, color: AppTheme.navyText)),
-                                    ],
-                                  ),
-                                  const SizedBox(height: 4),
-                                  Text(
-                                    'Find new people, trending topics, and popular content.',
-                                    style: TextStyle(fontSize: 11, color: AppTheme.navyText.withValues(alpha: 0.6)),
-                                  ),
+                                  Icon(Icons.explore, size: 18, color: AppTheme.royalPurple),
+                                  const SizedBox(width: 8),
+                                  Text('Discover', style: TextStyle(fontSize: 14, fontWeight: FontWeight.w700, color: AppTheme.navyText)),
                                 ],
                               ),
-                            ),
-                            const SizedBox(height: 12),
-                          ],
-                          ..._buildSidebarWidgets(_dashboardLayout.leftSidebar),
-                        ],
-                      ),
-                    ),
-            ),
-            // ── Center: feed / page content ── flex with 660px cap ──
-            Expanded(
-              child: Center(
-                child: ConstrainedBox(
-                  constraints: const BoxConstraints(maxWidth: 660),
-                  child: _isDashboardEditing
-                      ? DashboardEditorPanel(
-                          layout: _dashboardLayout,
-                          onLayoutChanged: (layout) {
-                            setState(() => _dashboardLayout = layout);
-                          },
-                          onClose: () {
-                            setState(() => _isDashboardEditing = false);
-                          },
-                        )
-                      : NavigationShellScope(
-                          currentIndex: currentIndex,
-                          child: widget.navigationShell,
+                              const SizedBox(height: 4),
+                              Text(
+                                'Find new people, trending topics, and popular content.',
+                                style: TextStyle(fontSize: 11, color: AppTheme.navyText.withValues(alpha: 0.6)),
+                              ),
+                            ],
+                          ),
                         ),
+                        const SizedBox(height: 12),
+                      ],
+                      ..._buildSidebarWidgets(leftWidgets),
+                    ],
+                  ),
                 ),
-              ),
-            ),
-            // ── Right sidebar ── 280px fixed ──
-            SizedBox(
-              width: 280,
-              child: _isDashboardEditing
-                  ? _buildEditableSidebar(_dashboardLayout.rightSidebar, false)
-                  : SingleChildScrollView(
-                      padding: const EdgeInsets.all(16),
-                      child: Column(
-                        children: _buildSidebarWidgets(_dashboardLayout.rightSidebar),
-                      ),
+        ),
+        // ── Center: feed / page content ── flex with 660px cap ──
+        Expanded(
+          child: Center(
+            child: ConstrainedBox(
+              constraints: const BoxConstraints(maxWidth: 660),
+              child: isEditing
+                  ? DashboardEditorPanel(
+                      layout: _dashboardLayout,
+                      onLayoutChanged: (layout) {
+                        setState(() => _dashboardLayout = layout);
+                      },
+                      onClose: () {
+                        setState(() => _isDashboardEditing = false);
+                      },
+                    )
+                  : NavigationShellScope(
+                      currentIndex: currentIndex,
+                      child: widget.navigationShell,
                     ),
             ),
-          ],
+          ),
         ),
-      ),
+        // ── Right sidebar ── 280px fixed ──
+        SizedBox(
+          width: 280,
+          child: isEditing
+              ? _buildEditableSidebar(rightWidgets, false)
+              : SingleChildScrollView(
+                  padding: const EdgeInsets.all(16),
+                  child: Column(
+                    children: _buildSidebarWidgets(rightWidgets),
+                  ),
+                ),
+        ),
+      ],
     );
   }
 
@@ -851,9 +886,29 @@ class _HomeShellState extends ConsumerState<HomeShell> with WidgetsBindingObserv
     );
   }
 
+  /// Persists a widget config update into the layout state and auto-saves.
+  void _updateWidgetConfig(DashboardWidget dw, Map<String, dynamic> newConfig) {
+    List<DashboardWidget> patchList(List<DashboardWidget> list) => list.map((w) {
+      if (w.type == dw.type && w.order == dw.order) return w.copyWith(config: newConfig);
+      return w;
+    }).toList();
+
+    final updated = DashboardLayout(
+      leftSidebar: patchList(_dashboardLayout.leftSidebar),
+      rightSidebar: patchList(_dashboardLayout.rightSidebar),
+      feedTopbar: patchList(_dashboardLayout.feedTopbar),
+      updatedAt: _dashboardLayout.updatedAt,
+    );
+    setState(() => _dashboardLayout = updated);
+    // Fire-and-forget save — non-blocking
+    ApiService.instance.saveDashboardLayout(updated.toJson()).catchError((_) => <String, dynamic>{});
+  }
+
+  // Profile widget editing removed — profile uses fixed Facebook-style layout.
+
   /// Wraps a dashboard widget with a dashed border and label during edit mode.
   Widget _buildEditableWidgetWrapper(DashboardWidget dw) {
-    final rendered = _renderDashboardWidget(dw.type);
+    final rendered = _renderDashboardWidget(dw);
     if (rendered == null) {
       return Container(
         height: 60,
@@ -886,22 +941,38 @@ class _HomeShellState extends ConsumerState<HomeShell> with WidgetsBindingObserv
   }
 
   /// Renders a list of dashboard widgets dynamically based on saved layout.
-  List<Widget> _buildSidebarWidgets(List<DashboardWidget> widgets) {
+  List<Widget> _buildSidebarWidgets(
+    List<DashboardWidget> widgets, {
+    void Function(DashboardWidget, Map<String, dynamic>)? configSaver,
+  }) {
     final rendered = <Widget>[];
+    int staggerIdx = 0;
     for (final w in widgets) {
       if (!w.isEnabled) continue;
-      final widget = _renderDashboardWidget(w.type);
-      if (widget != null) {
+      final built = _renderDashboardWidget(w, configSaver: configSaver);
+      if (built != null) {
         if (rendered.isNotEmpty) rendered.add(const SizedBox(height: 12));
-        rendered.add(HoverScale(scale: 1.01, borderRadius: BorderRadius.circular(SojornRadii.card), child: widget));
+        rendered.add(
+          _StaggeredFadeIn(
+            index: staggerIdx++,
+            child: HoverScale(scale: 1.01, borderRadius: BorderRadius.circular(SojornRadii.card), child: built),
+          ),
+        );
       }
     }
     return rendered;
   }
 
-  /// Maps a DashboardWidgetType to the actual widget instance.
-  Widget? _renderDashboardWidget(DashboardWidgetType type) {
-    switch (type) {
+  /// Maps a DashboardWidget to the actual widget instance.
+  /// [configSaver] overrides the default save path (used for profile sidebar widgets).
+  Widget? _renderDashboardWidget(
+    DashboardWidget dw, {
+    void Function(DashboardWidget, Map<String, dynamic>)? configSaver,
+  }) {
+    void save(Map<String, dynamic> cfg) =>
+        configSaver != null ? configSaver(dw, cfg) : _updateWidgetConfig(dw, cfg);
+
+    switch (dw.type) {
       case DashboardWidgetType.profileCard:
         if (_desktopProfile == null) return null;
         return DesktopProfileCard(
@@ -914,24 +985,54 @@ class _HomeShellState extends ConsumerState<HomeShell> with WidgetsBindingObserv
         if (_desktopFriends.isEmpty) return null;
         return Top8FriendsGrid(
           friends: _desktopFriends,
+          config: dw.config,
           onViewAll: () => widget.navigationShell.goBranch(3),
           onFriendTap: (handle) => context.push('/u/$handle'),
+          onConfigChange: (cfg) => save(cfg),
         );
       case DashboardWidgetType.upcomingEvents:
-        return const UpcomingEventsWidget();
+        return UpcomingEventsWidget(
+          config: dw.config,
+          onConfigChange: (cfg) => save(cfg),
+        );
       case DashboardWidgetType.whosOnline:
         return WhosOnlineList(
           onlineUsers: _desktopOnlineUsers,
           onUserTap: (handle) => context.push('/u/$handle'),
+          config: dw.config,
+          onConfigChange: (cfg) => save(cfg),
         );
       case DashboardWidgetType.nowPlaying:
-        return const NowPlayingCard(
-          trackTitle: 'No track playing',
-          artistName: 'Browse sounds',
+      case DashboardWidgetType.musicPlayer:
+        return const SizedBox.shrink(); // hidden until audio library is configured
+      case DashboardWidgetType.quote:
+        return QuoteWidget(
+          config: dw.config,
+          onConfigChange: (cfg) => save(cfg),
         );
-      default:
-        // Other widget types (quote, customText, photoFrame, etc.) — placeholder
-        return null;
+      case DashboardWidgetType.customText:
+        return CustomTextWidget(
+          config: dw.config,
+          onConfigChange: (cfg) => save(cfg),
+        );
+      case DashboardWidgetType.photoFrame:
+        return PhotoFrameWidget(
+          config: dw.config,
+          onConfigChange: (cfg) => save(cfg),
+        );
+      case DashboardWidgetType.groupEvents:
+        return GroupEventsWidget(
+          config: dw.config,
+          onConfigChange: (cfg) => save(cfg),
+        );
+      case DashboardWidgetType.friendActivity:
+        return FriendActivityWidget(
+          config: dw.config,
+          onConfigChange: (cfg) => save(cfg),
+          allFriends: _desktopFriends,
+        );
+      case DashboardWidgetType.pinnedPost:
+        return null; // requires API support — skip for now
     }
   }
 
@@ -1214,36 +1315,6 @@ class _HomeShellState extends ConsumerState<HomeShell> with WidgetsBindingObserv
         ),
         const SizedBox(width: 8),
       ],
-    );
-  }
-
-  Widget _buildBeaconCreateButton() {
-    final beaconState = BeaconScreen.globalKey.currentState;
-    final label = beaconState?.createLabel ?? 'Create';
-    return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 2),
-      child: FilledButton.icon(
-        onPressed: () {
-          final state = BeaconScreen.globalKey.currentState;
-          if (state != null) {
-            state.onCreateAction();
-          } else {
-            WidgetsBinding.instance.addPostFrameCallback((_) {
-              BeaconScreen.globalKey.currentState?.onCreateAction();
-            });
-          }
-        },
-        icon: const Icon(Icons.add, size: 16),
-        label: Text(label, style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w700)),
-        style: FilledButton.styleFrom(
-          backgroundColor: AppTheme.navyBlue,
-          foregroundColor: SojornColors.basicWhite,
-          padding: const EdgeInsets.symmetric(horizontal: 14),
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-          minimumSize: const Size(0, 38),
-          elevation: 1.5,
-        ),
-      ),
     );
   }
 
@@ -1583,4 +1654,58 @@ class _FocusSearchIntent extends Intent {
 
 class _DismissTopIntent extends Intent {
   const _DismissTopIntent();
+}
+
+/// Staggered fade-in + slide-up animation for sidebar widgets.
+class _StaggeredFadeIn extends StatefulWidget {
+  final int index;
+  final Widget child;
+
+  const _StaggeredFadeIn({required this.index, required this.child});
+
+  @override
+  State<_StaggeredFadeIn> createState() => _StaggeredFadeInState();
+}
+
+class _StaggeredFadeInState extends State<_StaggeredFadeIn>
+    with SingleTickerProviderStateMixin {
+  late final AnimationController _controller;
+  late final Animation<double> _opacity;
+  late final Animation<Offset> _slide;
+
+  @override
+  void initState() {
+    super.initState();
+    _controller = AnimationController(
+      duration: const Duration(milliseconds: 350),
+      vsync: this,
+    );
+    _opacity = CurvedAnimation(parent: _controller, curve: Curves.easeOut);
+    _slide = Tween<Offset>(
+      begin: const Offset(0, 0.08),
+      end: Offset.zero,
+    ).animate(CurvedAnimation(parent: _controller, curve: Curves.easeOut));
+
+    // Stagger: each widget delays 60ms more than the previous
+    Future.delayed(Duration(milliseconds: 60 * widget.index), () {
+      if (mounted) _controller.forward();
+    });
+  }
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return FadeTransition(
+      opacity: _opacity,
+      child: SlideTransition(
+        position: _slide,
+        child: widget.child,
+      ),
+    );
+  }
 }

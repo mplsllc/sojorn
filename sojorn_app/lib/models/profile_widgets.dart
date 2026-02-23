@@ -3,7 +3,7 @@
 // See LICENSE file in the project root for full license text.
 
 import 'package:flutter/material.dart';
-import 'dart:convert';
+import 'dashboard_widgets.dart';
 
 enum ProfileWidgetType {
   pinnedPosts('Pinned Posts', Icons.push_pin),
@@ -15,10 +15,11 @@ enum ProfileWidgetType {
   quote('Quote', Icons.format_quote),
   beaconActivity('Beacon Activity', Icons.location_on),
   customText('Custom Text', Icons.text_fields),
-  featuredFriends('Featured Friends', Icons.people);
+  featuredFriends('Featured Friends', Icons.people),
+  featuredGroups('Featured Groups', Icons.groups);
 
   const ProfileWidgetType(this.displayName, this.icon);
-  
+
   final String displayName;
   final IconData icon;
 
@@ -44,6 +45,8 @@ enum ProfileWidgetType {
         return ProfileWidgetType.customText;
       case 'featuredFriends':
         return ProfileWidgetType.featuredFriends;
+      case 'featuredGroups':
+        return ProfileWidgetType.featuredGroups;
       default:
         return ProfileWidgetType.bio;
     }
@@ -108,6 +111,8 @@ class ProfileLayout {
   final Color? accentColor;
   final String? bannerImageUrl;
   final DateTime updatedAt;
+  final List<DashboardWidget> desktopLeftSidebar;
+  final List<DashboardWidget> desktopRightSidebar;
 
   ProfileLayout({
     required this.widgets,
@@ -115,19 +120,45 @@ class ProfileLayout {
     this.accentColor,
     this.bannerImageUrl,
     required this.updatedAt,
-  });
+    List<DashboardWidget>? desktopLeftSidebar,
+    List<DashboardWidget>? desktopRightSidebar,
+  })  : desktopLeftSidebar = desktopLeftSidebar ?? _defaultLeftSidebar,
+        desktopRightSidebar = desktopRightSidebar ?? _defaultRightSidebar;
+
+  static final List<DashboardWidget> _defaultLeftSidebar = [
+    DashboardWidget(type: DashboardWidgetType.top8Friends, order: 0),
+    DashboardWidget(type: DashboardWidgetType.quote, order: 1),
+  ];
+
+  static final List<DashboardWidget> _defaultRightSidebar = [
+    DashboardWidget(type: DashboardWidgetType.friendActivity, order: 0),
+    DashboardWidget(type: DashboardWidgetType.upcomingEvents, order: 1),
+  ];
 
   factory ProfileLayout.fromJson(Map<String, dynamic> json) {
+    List<DashboardWidget> parseSidebar(dynamic raw) {
+      if (raw is! List || raw.isEmpty) return [];
+      return raw
+          .whereType<Map<String, dynamic>>()
+          .map((w) => DashboardWidget.fromJson(w))
+          .toList();
+    }
+
+    final left = parseSidebar(json['desktop_left_sidebar']);
+    final right = parseSidebar(json['desktop_right_sidebar']);
+
     return ProfileLayout(
       widgets: (json['widgets'] as List<dynamic>?)
           ?.map((w) => ProfileWidget.fromJson(w as Map<String, dynamic>))
           .toList() ?? [],
       theme: json['theme'] ?? 'default',
-      accentColor: json['accent_color'] != null 
-          ? Color(int.parse(json['accent_color'].replace('#', '0xFF')))
+      accentColor: json['accent_color'] != null
+          ? Color(int.parse(json['accent_color'].replaceFirst('#', '0xFF')))
           : null,
       bannerImageUrl: json['banner_image_url'],
       updatedAt: DateTime.parse(json['updated_at']),
+      desktopLeftSidebar: left.isEmpty ? null : left,
+      desktopRightSidebar: right.isEmpty ? null : right,
     );
   }
 
@@ -135,9 +166,11 @@ class ProfileLayout {
     return {
       'widgets': widgets.map((w) => w.toJson()).toList(),
       'theme': theme,
-      'accent_color': accentColor?.value.toRadixString(16).padLeft(8, '0xFF'),
+      'accent_color': accentColor != null ? '#${accentColor!.toARGB32().toRadixString(16).padLeft(8, '0')}' : null,
       'banner_image_url': bannerImageUrl,
       'updated_at': updatedAt.toIso8601String(),
+      'desktop_left_sidebar': desktopLeftSidebar.map((w) => w.toJson()).toList(),
+      'desktop_right_sidebar': desktopRightSidebar.map((w) => w.toJson()).toList(),
     };
   }
 
@@ -147,6 +180,8 @@ class ProfileLayout {
     Color? accentColor,
     String? bannerImageUrl,
     DateTime? updatedAt,
+    List<DashboardWidget>? desktopLeftSidebar,
+    List<DashboardWidget>? desktopRightSidebar,
   }) {
     return ProfileLayout(
       widgets: widgets ?? this.widgets,
@@ -154,6 +189,8 @@ class ProfileLayout {
       accentColor: accentColor ?? this.accentColor,
       bannerImageUrl: bannerImageUrl ?? this.bannerImageUrl,
       updatedAt: updatedAt ?? this.updatedAt,
+      desktopLeftSidebar: desktopLeftSidebar ?? this.desktopLeftSidebar,
+      desktopRightSidebar: desktopRightSidebar ?? this.desktopRightSidebar,
     );
   }
 }
@@ -185,6 +222,8 @@ class ProfileWidgetConstraints {
       case ProfileWidgetType.customText:
         return const Size(maxWidth, 150.0);
       case ProfileWidgetType.featuredFriends:
+        return const Size(maxWidth, 120.0);
+      case ProfileWidgetType.featuredGroups:
         return const Size(maxWidth, 120.0);
     }
   }
