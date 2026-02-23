@@ -23,6 +23,7 @@ import '../../widgets/media/signed_media_image.dart';
 import '../../widgets/media/sojorn_avatar.dart';
 import '../../widgets/sojorn_input.dart';
 import '../../services/api_service.dart';
+import '../../utils/snackbar_ext.dart';
 import '../../widgets/sojorn_text_area.dart';
 import 'follow_requests_screen.dart';
 import 'blocked_users_screen.dart';
@@ -31,6 +32,8 @@ import '../compose/image_editor_screen.dart';
 import '../../models/sojorn_media_result.dart';
 import '../security/encryption_hub_screen.dart';
 import '../../widgets/neighborhood/neighborhood_picker_sheet.dart';
+import '../../widgets/desktop/desktop_dialog_helper.dart';
+import '../../widgets/desktop/desktop_slide_panel.dart';
 
 class ProfileSettingsScreen extends ConsumerStatefulWidget {
   final Profile? profile;
@@ -80,7 +83,15 @@ class _ProfileSettingsScreenState extends ConsumerState<ProfileSettingsScreen> {
     final state = ref.watch(settingsProvider);
     final profile = state.profile;
     
+    final isDesktop = MediaQuery.of(context).size.width >= 900;
+
     if (state.isLoading && profile == null) {
+      if (isDesktop) {
+        return Scaffold(
+          appBar: AppBar(title: const Text('Settings'), leading: IconButton(icon: const Icon(Icons.close), onPressed: () => Navigator.of(context).pop())),
+          body: const Center(child: CircularProgressIndicator()),
+        );
+      }
       return const FullScreenShell(
         titleText: 'Settings',
         body: Center(child: CircularProgressIndicator()),
@@ -88,15 +99,19 @@ class _ProfileSettingsScreenState extends ConsumerState<ProfileSettingsScreen> {
     }
 
     if (profile == null) {
+      if (isDesktop) {
+        return Scaffold(
+          appBar: AppBar(title: const Text('Settings'), leading: IconButton(icon: const Icon(Icons.close), onPressed: () => Navigator.of(context).pop())),
+          body: const Center(child: Text('Failed to load profile')),
+        );
+      }
       return const FullScreenShell(
         titleText: 'Settings',
         body: Center(child: Text('Failed to load profile')),
       );
     }
 
-    return FullScreenShell(
-      titleText: 'Settings',
-      body: SingleChildScrollView(
+    final body = SingleChildScrollView(
         physics: const BouncingScrollPhysics(),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
@@ -124,38 +139,32 @@ class _ProfileSettingsScreenState extends ConsumerState<ProfileSettingsScreen> {
                          icon: Icons.lock,
                          title: 'Encryption & Backup',
                          subtitle: 'Manage your encryption keys',
-                         onTap: () => Navigator.of(context).push(
-                           MaterialPageRoute(builder: (_) => const EncryptionHubScreen()),
-                         ),
+                         onTap: () {
+                           if (isDesktop) {
+                             openDesktopSlidePanel(context, width: 480, child: const EncryptionHubScreen());
+                           } else {
+                             Navigator.of(context).push(MaterialPageRoute(builder: (_) => const EncryptionHubScreen()));
+                           }
+                         },
                        ),
                        _buildEditTile(
                          icon: Icons.interests_outlined,
                          title: 'Content Interests',
                          subtitle: 'Topics used to personalize your feed',
-                         onTap: () => Navigator.of(context).push(
-                           MaterialPageRoute(builder: (_) => const CategoryDiscoveryScreen()),
-                         ),
+                         onTap: () {
+                           if (isDesktop) {
+                             openDesktopSlidePanel(context, width: 480, child: const CategoryDiscoveryScreen());
+                           } else {
+                             Navigator.of(context).push(MaterialPageRoute(builder: (_) => const CategoryDiscoveryScreen()));
+                           }
+                         },
                        ),
                        _buildEditTile(
-                         icon: Icons.pause_circle_outline,
-                         title: 'Deactivate Account',
-                         subtitle: 'Temporarily hide your profile',
-                         color: SojornColors.nsfwWarningIcon,
-                         onTap: () => _showDeactivateDialog(),
-                       ),
-                       _buildEditTile(
-                         icon: Icons.delete_outline,
-                         title: 'Delete Account',
-                         subtitle: 'Permanently remove your account',
+                         icon: Icons.remove_circle_outline,
+                         title: 'Account Removal',
+                         subtitle: 'Deactivate, delete, or erase your account',
                          color: SojornColors.destructive,
-                         onTap: () => _showDeleteDialog(),
-                       ),
-                       _buildEditTile(
-                         icon: Icons.warning_amber_rounded,
-                         title: 'Permanently Delete Now',
-                         subtitle: 'Immediately erase all data — cannot be undone',
-                         color: const Color(0xFFC62828),
-                         onTap: () => _showSuperDeleteDialog(),
+                         onTap: () => _showAccountRemovalSheet(),
                        ),
                      ],
                    ),
@@ -168,16 +177,24 @@ class _ProfileSettingsScreenState extends ConsumerState<ProfileSettingsScreen> {
                        _buildEditTile(
                          icon: Icons.person_add_alt_1_outlined,
                          title: 'Follow Requests',
-                         onTap: () => Navigator.of(context).push(
-                           MaterialPageRoute(builder: (_) => const FollowRequestsScreen()),
-                         ),
+                         onTap: () {
+                           if (isDesktop) {
+                             openDesktopDialog(context, width: 500, child: const FollowRequestsScreen());
+                           } else {
+                             Navigator.of(context).push(MaterialPageRoute(builder: (_) => const FollowRequestsScreen()));
+                           }
+                         },
                        ),
                        _buildEditTile(
                          icon: Icons.block_flipped,
                          title: 'Blocked',
-                         onTap: () => Navigator.of(context).push(
-                           MaterialPageRoute(builder: (_) => const BlockedUsersScreen()),
-                         ),
+                         onTap: () {
+                           if (isDesktop) {
+                             openDesktopDialog(context, width: 500, child: const BlockedUsersScreen());
+                           } else {
+                             Navigator.of(context).push(MaterialPageRoute(builder: (_) => const BlockedUsersScreen()));
+                           }
+                         },
                        ),
                        _buildEditTile(
                          icon: Icons.visibility_outlined,
@@ -187,9 +204,13 @@ class _ProfileSettingsScreenState extends ConsumerState<ProfileSettingsScreen> {
                        _buildEditTile(
                          icon: Icons.dashboard_outlined,
                          title: 'Privacy Dashboard',
-                         onTap: () => Navigator.of(context).push(
-                           MaterialPageRoute(builder: (_) => const PrivacyDashboardScreen()),
-                         ),
+                         onTap: () {
+                           if (isDesktop) {
+                             openDesktopSlidePanel(context, width: 520, child: const PrivacyDashboardScreen());
+                           } else {
+                             Navigator.of(context).push(MaterialPageRoute(builder: (_) => const PrivacyDashboardScreen()));
+                           }
+                         },
                        ),
                      ],
                    ),
@@ -225,6 +246,32 @@ class _ProfileSettingsScreenState extends ConsumerState<ProfileSettingsScreen> {
                      ],
                    ),
 
+                   const SizedBox(height: AppTheme.spacingLg),
+                   _buildSection(
+                     title: 'Preferences',
+                     subtitle: 'App behavior & accessibility',
+                     children: [
+                       _buildEditTile(
+                         icon: Icons.language,
+                         title: 'Language',
+                         subtitle: 'English (US)',
+                         onTap: () => context.showInfo('Language settings coming soon'),
+                       ),
+                       _buildEditTile(
+                         icon: Icons.accessibility_new_outlined,
+                         title: 'Accessibility',
+                         subtitle: 'Text size, motion, screen reader',
+                         onTap: () => context.showInfo('Accessibility settings coming soon'),
+                       ),
+                       _buildEditTile(
+                         icon: Icons.link,
+                         title: 'Connected Accounts',
+                         subtitle: 'Linked services and sign-in methods',
+                         onTap: () => context.showInfo('Connected accounts coming soon'),
+                       ),
+                     ],
+                   ),
+
                    const SizedBox(height: AppTheme.spacingLg * 2),
                    _buildLogoutButton(),
                    
@@ -238,7 +285,28 @@ class _ProfileSettingsScreenState extends ConsumerState<ProfileSettingsScreen> {
             ),
           ],
         ),
-      ),
+      );
+
+    if (isDesktop) {
+      return Scaffold(
+        backgroundColor: AppTheme.scaffoldBg,
+        appBar: AppBar(
+          backgroundColor: AppTheme.scaffoldBg,
+          elevation: 0,
+          surfaceTintColor: SojornColors.transparent,
+          leading: IconButton(
+            icon: const Icon(Icons.close),
+            onPressed: () => Navigator.of(context).pop(),
+          ),
+          title: Text('Settings', style: TextStyle(color: AppTheme.textPrimary, fontSize: 18, fontWeight: FontWeight.w600)),
+        ),
+        body: body,
+      );
+    }
+
+    return FullScreenShell(
+      titleText: 'Settings',
+      body: body,
     );
   }
 
@@ -338,41 +406,134 @@ class _ProfileSettingsScreenState extends ConsumerState<ProfileSettingsScreen> {
     );
   }
 
+  bool _isHarmonyExpanded = false;
+
   Widget _buildHarmonyInsight(SettingsState state) {
     final trust = state.trust;
     if (trust == null) return const SizedBox.shrink();
 
-    return Container(
-      padding: const EdgeInsets.all(AppTheme.spacingMd),
-      decoration: BoxDecoration(
-        color: AppTheme.royalPurple.withValues(alpha: 0.05),
-        borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: AppTheme.royalPurple.withValues(alpha: 0.2)),
-      ),
-      child: Row(
-        children: [
-          Container(
-            padding: const EdgeInsets.all(10),
-            decoration: BoxDecoration(
-              color: AppTheme.royalPurple.withValues(alpha: 0.1),
-              shape: BoxShape.circle,
-            ),
-            child: Icon(Icons.spa_outlined, color: AppTheme.royalPurple),
-          ),
-          const SizedBox(width: 16),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
+    return GestureDetector(
+      onTap: () => setState(() => _isHarmonyExpanded = !_isHarmonyExpanded),
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 200),
+        padding: const EdgeInsets.all(AppTheme.spacingMd),
+        decoration: BoxDecoration(
+          color: AppTheme.royalPurple.withValues(alpha: 0.05),
+          borderRadius: BorderRadius.circular(16),
+          border: Border.all(color: AppTheme.royalPurple.withValues(alpha: 0.2)),
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
               children: [
-                Text('Trust Level: ${trust.tier.displayName}', style: AppTheme.textTheme.labelMedium),
-                const SizedBox(height: 2),
-                Text(
-                  'Your posts reach more people as you contribute positively to the community. Tap to learn more.',
-                  style: AppTheme.textTheme.bodySmall?.copyWith(color: AppTheme.navyText.withValues(alpha: 0.6)),
+                Container(
+                  padding: const EdgeInsets.all(10),
+                  decoration: BoxDecoration(
+                    color: AppTheme.royalPurple.withValues(alpha: 0.1),
+                    shape: BoxShape.circle,
+                  ),
+                  child: Icon(Icons.spa_outlined, color: AppTheme.royalPurple),
+                ),
+                const SizedBox(width: 16),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text('Trust Level: ${trust.tier.displayName}', style: AppTheme.textTheme.labelMedium),
+                      const SizedBox(height: 4),
+                      ClipRRect(
+                        borderRadius: BorderRadius.circular(4),
+                        child: LinearProgressIndicator(
+                          value: (trust.harmonyScore / 100).clamp(0.0, 1.0).toDouble(),
+                          backgroundColor: AppTheme.royalPurple.withValues(alpha: 0.1),
+                          valueColor: AlwaysStoppedAnimation(AppTheme.royalPurple),
+                          minHeight: 4,
+                        ),
+                      ),
+                      const SizedBox(height: 4),
+                      Text(
+                        'Harmony Score: ${trust.harmonyScore}%',
+                        style: AppTheme.textTheme.bodySmall?.copyWith(color: AppTheme.navyText.withValues(alpha: 0.6)),
+                      ),
+                    ],
+                  ),
+                ),
+                Icon(
+                  _isHarmonyExpanded ? Icons.expand_less : Icons.expand_more,
+                  color: AppTheme.royalPurple.withValues(alpha: 0.5),
                 ),
               ],
             ),
+            AnimatedCrossFade(
+              firstChild: const SizedBox.shrink(),
+              secondChild: Padding(
+                padding: const EdgeInsets.only(top: 12),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Divider(color: AppTheme.royalPurple.withValues(alpha: 0.1)),
+                    const SizedBox(height: 8),
+                    Text('Trust Tiers', style: AppTheme.textTheme.labelMedium?.copyWith(fontWeight: FontWeight.w700)),
+                    const SizedBox(height: 8),
+                    _buildTierRow('New', '0-30%', trust.tier == TrustTier.new_user, '${trust.tier.postLimit} posts/day'),
+                    const SizedBox(height: 4),
+                    _buildTierRow('Trusted', '30-70%', trust.tier == TrustTier.trusted, '10 posts/day, higher reach'),
+                    const SizedBox(height: 4),
+                    _buildTierRow('Established', '70-100%', trust.tier == TrustTier.established, '25 posts/day, top reach'),
+                    const SizedBox(height: 12),
+                    Text('How to improve', style: AppTheme.textTheme.labelMedium?.copyWith(fontWeight: FontWeight.w700)),
+                    const SizedBox(height: 6),
+                    _buildHarmonyTip(Icons.post_add, 'Post regularly and engage with others'),
+                    _buildHarmonyTip(Icons.favorite_border, 'Get positive reactions on your content'),
+                    _buildHarmonyTip(Icons.shield_outlined, 'Follow community guidelines'),
+                  ],
+                ),
+              ),
+              crossFadeState: _isHarmonyExpanded ? CrossFadeState.showSecond : CrossFadeState.showFirst,
+              duration: const Duration(milliseconds: 200),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildTierRow(String name, String range, bool isCurrent, String benefit) {
+    return Row(
+      children: [
+        Container(
+          width: 8, height: 8,
+          decoration: BoxDecoration(
+            color: isCurrent ? AppTheme.royalPurple : AppTheme.navyText.withValues(alpha: 0.2),
+            shape: BoxShape.circle,
           ),
+        ),
+        const SizedBox(width: 8),
+        Text(
+          '$name ($range)',
+          style: TextStyle(
+            fontSize: 12,
+            fontWeight: isCurrent ? FontWeight.w700 : FontWeight.w500,
+            color: isCurrent ? AppTheme.royalPurple : AppTheme.navyText.withValues(alpha: 0.6),
+          ),
+        ),
+        const SizedBox(width: 8),
+        Expanded(
+          child: Text(benefit, style: TextStyle(fontSize: 11, color: AppTheme.navyText.withValues(alpha: 0.4)), overflow: TextOverflow.ellipsis),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildHarmonyTip(IconData icon, String text) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 4),
+      child: Row(
+        children: [
+          Icon(icon, size: 14, color: AppTheme.royalPurple.withValues(alpha: 0.6)),
+          const SizedBox(width: 8),
+          Expanded(child: Text(text, style: TextStyle(fontSize: 12, color: AppTheme.navyText.withValues(alpha: 0.6)))),
         ],
       ),
     );
@@ -1129,6 +1290,101 @@ class _ProfileSettingsScreenState extends ConsumerState<ProfileSettingsScreen> {
   }
 
   // --- Account Lifecycle Dialogs ---
+
+  void _showAccountRemovalSheet() {
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: Row(
+          children: [
+            Icon(Icons.remove_circle_outline, color: SojornColors.destructive, size: 24),
+            const SizedBox(width: 8),
+            const Text('Account Removal'),
+          ],
+        ),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            _buildRemovalOption(
+              icon: Icons.pause_circle_outline,
+              title: 'Deactivate',
+              subtitle: 'Temporarily hide your profile. You can reactivate anytime.',
+              color: SojornColors.nsfwWarningIcon,
+              onTap: () {
+                Navigator.of(ctx).pop();
+                _showDeactivateDialog();
+              },
+            ),
+            const SizedBox(height: 8),
+            _buildRemovalOption(
+              icon: Icons.delete_outline,
+              title: 'Delete Account',
+              subtitle: 'Permanently remove your account after a 30-day grace period.',
+              color: SojornColors.destructive,
+              onTap: () {
+                Navigator.of(ctx).pop();
+                _showDeleteDialog();
+              },
+            ),
+            const SizedBox(height: 8),
+            _buildRemovalOption(
+              icon: Icons.warning_amber_rounded,
+              title: 'Permanently Delete Now',
+              subtitle: 'Immediately erase all data. This cannot be undone.',
+              color: const Color(0xFFC62828),
+              onTap: () {
+                Navigator.of(ctx).pop();
+                _showSuperDeleteDialog();
+              },
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(ctx).pop(),
+            child: const Text('Cancel'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildRemovalOption({
+    required IconData icon,
+    required String title,
+    required String subtitle,
+    required Color color,
+    required VoidCallback onTap,
+  }) {
+    return InkWell(
+      onTap: onTap,
+      borderRadius: BorderRadius.circular(12),
+      child: Container(
+        padding: const EdgeInsets.all(12),
+        decoration: BoxDecoration(
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(color: color.withValues(alpha: 0.2)),
+        ),
+        child: Row(
+          children: [
+            Icon(icon, color: color, size: 22),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(title, style: TextStyle(fontWeight: FontWeight.w700, color: color, fontSize: 14)),
+                  const SizedBox(height: 2),
+                  Text(subtitle, style: TextStyle(fontSize: 12, color: AppTheme.navyText.withValues(alpha: 0.6))),
+                ],
+              ),
+            ),
+            Icon(Icons.chevron_right, color: color.withValues(alpha: 0.5), size: 20),
+          ],
+        ),
+      ),
+    );
+  }
 
   void _showDeactivateDialog() {
     showDialog(

@@ -95,8 +95,67 @@ class _GroupScreenState extends ConsumerState<GroupScreen>
 
   @override
   Widget build(BuildContext context) {
+    final isDesktop = MediaQuery.of(context).size.width >= 900;
+
     if (isEncrypted && _isUnlocking) return _buildUnlockingScreen();
     if (isEncrypted && _unlockError != null) return _buildErrorScreen();
+
+    final tabBarWidget = TabBar(
+      controller: _tabController,
+      indicatorColor: isEncrypted ? const Color(0xFF4CAF50) : AppTheme.brightNavy,
+      labelColor: AppTheme.navyBlue,
+      unselectedLabelColor: SojornColors.textDisabled,
+      labelStyle: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600),
+      tabs: const [
+        Tab(icon: Icon(Icons.dynamic_feed, size: 18), text: 'Feed'),
+        Tab(icon: Icon(Icons.chat_bubble, size: 18), text: 'Chat'),
+        Tab(icon: Icon(Icons.forum, size: 18), text: 'Forum'),
+        Tab(icon: Icon(Icons.event, size: 18), text: 'Events'),
+        Tab(icon: Icon(Icons.people, size: 18), text: 'Members'),
+      ],
+    );
+
+    final tabBody = TabBarView(
+      controller: _tabController,
+      children: [
+        GroupFeedTab(
+          groupId: widget.group.id,
+          isEncrypted: isEncrypted,
+          capsuleKey: _capsuleKey,
+          currentUserId: _currentUserId,
+        ),
+        GroupChatTab(
+          groupId: widget.group.id,
+          isEncrypted: isEncrypted,
+          capsuleKey: _capsuleKey,
+          currentUserId: _currentUserId,
+        ),
+        GroupForumTab(
+          groupId: widget.group.id,
+          isEncrypted: isEncrypted,
+          capsuleKey: _capsuleKey,
+        ),
+        GroupEventsTab(
+          groupId: widget.group.id,
+        ),
+        GroupMembersTab(
+          groupId: widget.group.id,
+          group: widget.group,
+          isEncrypted: isEncrypted,
+        ),
+      ],
+    );
+
+    if (isDesktop) {
+      return Column(
+        children: [
+          // Compact header
+          _buildCompactHeader(context),
+          if (_isMember) tabBarWidget,
+          Expanded(child: _isMember ? tabBody : _buildJoinPrompt()),
+        ],
+      );
+    }
 
     return Scaffold(
       backgroundColor: AppTheme.scaffoldBg,
@@ -105,38 +164,76 @@ class _GroupScreenState extends ConsumerState<GroupScreen>
           _buildHeader(context),
           if (_isMember) _buildTabBar(),
         ],
-        body: _isMember
-            ? TabBarView(
-                controller: _tabController,
-                children: [
-                  GroupFeedTab(
-                    groupId: widget.group.id,
-                    isEncrypted: isEncrypted,
-                    capsuleKey: _capsuleKey,
-                    currentUserId: _currentUserId,
-                  ),
-                  GroupChatTab(
-                    groupId: widget.group.id,
-                    isEncrypted: isEncrypted,
-                    capsuleKey: _capsuleKey,
-                    currentUserId: _currentUserId,
-                  ),
-                  GroupForumTab(
-                    groupId: widget.group.id,
-                    isEncrypted: isEncrypted,
-                    capsuleKey: _capsuleKey,
-                  ),
-                  GroupEventsTab(
-                    groupId: widget.group.id,
-                  ),
-                  GroupMembersTab(
-                    groupId: widget.group.id,
-                    group: widget.group,
-                    isEncrypted: isEncrypted,
-                  ),
-                ],
-              )
-            : _buildJoinPrompt(),
+        body: _isMember ? tabBody : _buildJoinPrompt(),
+      ),
+    );
+  }
+
+  /// Compact header for desktop dialog layout (replaces SliverAppBar).
+  Widget _buildCompactHeader(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.fromLTRB(16, 12, 8, 12),
+      decoration: BoxDecoration(
+        color: AppTheme.cardSurface,
+        border: Border(bottom: BorderSide(color: AppTheme.navyBlue.withValues(alpha: 0.08))),
+      ),
+      child: Row(
+        children: [
+          if (isEncrypted) ...[
+            const Icon(Icons.lock, size: 16, color: Color(0xFF4CAF50)),
+            const SizedBox(width: 8),
+          ],
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  widget.group.name,
+                  style: TextStyle(fontWeight: FontWeight.w700, fontSize: 16, color: AppTheme.navyBlue),
+                  overflow: TextOverflow.ellipsis,
+                ),
+                const SizedBox(height: 2),
+                Row(
+                  children: [
+                    _GroupBadge(isEncrypted: isEncrypted),
+                    const SizedBox(width: 10),
+                    Icon(Icons.people, size: 13, color: SojornColors.textDisabled),
+                    const SizedBox(width: 4),
+                    Text('${widget.group.memberCount}',
+                        style: TextStyle(color: SojornColors.postContentLight, fontSize: 12)),
+                    if (widget.group.description.isNotEmpty) ...[
+                      const SizedBox(width: 12),
+                      Flexible(
+                        child: Text(
+                          widget.group.description,
+                          style: TextStyle(color: SojornColors.textDisabled, fontSize: 12),
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      ),
+                    ],
+                  ],
+                ),
+              ],
+            ),
+          ),
+          PopupMenuButton<String>(
+            icon: Icon(Icons.more_vert, color: AppTheme.navyBlue),
+            onSelected: (val) {
+              if (val == 'settings') _showSettings();
+              if (val == 'leave') _confirmLeave();
+            },
+            itemBuilder: (_) => [
+              const PopupMenuItem(value: 'settings', child: Text('Group Settings')),
+              const PopupMenuItem(value: 'leave', child: Text('Leave Group')),
+            ],
+          ),
+          IconButton(
+            icon: const Icon(Icons.close),
+            onPressed: () => Navigator.of(context).pop(),
+            tooltip: 'Close',
+          ),
+        ],
       ),
     );
   }

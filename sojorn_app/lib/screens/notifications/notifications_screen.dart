@@ -19,6 +19,7 @@ import '../post/post_detail_screen.dart';
 import 'package:go_router/go_router.dart';
 import '../../services/notification_service.dart';
 import '../home/full_screen_shell.dart';
+import '../../widgets/desktop/desktop_slide_panel.dart';
 import 'activity_log_screen.dart';
 
 /// Notifications screen showing user activity
@@ -452,9 +453,8 @@ class _NotificationsScreenState extends ConsumerState<NotificationsScreen> {
     final canArchiveAll = _filter != 'archived' && _notifications.isNotEmpty;
     final displayed = _filteredNotifications;
 
-    return FullScreenShell(
-      titleText: 'Notifications',
-      body: Column(
+    final isDesktop = MediaQuery.of(context).size.width >= 900;
+    final notifBody = Column(
         children: [
           _buildFilterRow(canArchiveAll),
           Expanded(
@@ -540,7 +540,28 @@ class _NotificationsScreenState extends ConsumerState<NotificationsScreen> {
                       ),
           ),
         ],
-      ),
+      );
+
+    if (isDesktop) {
+      return Scaffold(
+        backgroundColor: AppTheme.scaffoldBg,
+        appBar: AppBar(
+          backgroundColor: AppTheme.scaffoldBg,
+          elevation: 0,
+          surfaceTintColor: Colors.transparent,
+          leading: IconButton(
+            icon: const Icon(Icons.close),
+            onPressed: () => Navigator.of(context).pop(),
+          ),
+          title: Text('Notifications', style: TextStyle(color: AppTheme.navyText, fontSize: 18, fontWeight: FontWeight.w600)),
+        ),
+        body: notifBody,
+      );
+    }
+
+    return FullScreenShell(
+      titleText: 'Notifications',
+      body: notifBody,
     );
   }
 
@@ -597,9 +618,16 @@ class _NotificationsScreenState extends ConsumerState<NotificationsScreen> {
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
                 TextButton.icon(
-                  onPressed: () => Navigator.of(context).push(MaterialPageRoute(
-                    builder: (_) => const ActivityLogScreen(),
-                  )),
+                  onPressed: () {
+                    final isDesktop = MediaQuery.of(context).size.width >= 900;
+                    if (isDesktop) {
+                      openDesktopSlidePanel(context, width: 480, child: const ActivityLogScreen());
+                    } else {
+                      Navigator.of(context).push(MaterialPageRoute(
+                        builder: (_) => const ActivityLogScreen(),
+                      ));
+                    }
+                  },
                   icon: Icon(Icons.history, size: 15,
                       color: AppTheme.egyptianBlue.withValues(alpha: 0.7)),
                   label: Text('My Activity',
@@ -1070,6 +1098,13 @@ class _EmptyState extends StatelessWidget {
               "You'll see likes, comments, follows, group activity, and more here.",
               style: AppTheme.textTheme.bodyMedium
                   ?.copyWith(color: AppTheme.navyText.withValues(alpha: 0.7)),
+              textAlign: TextAlign.center,
+            ),
+            const SizedBox(height: AppTheme.spacingLg),
+            Text(
+              'Try following people, joining groups, or making a post to get started.',
+              style: AppTheme.textTheme.bodySmall
+                  ?.copyWith(color: AppTheme.navyText.withValues(alpha: 0.5)),
               textAlign: TextAlign.center,
             ),
           ],

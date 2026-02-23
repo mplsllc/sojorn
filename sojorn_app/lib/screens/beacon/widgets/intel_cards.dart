@@ -131,7 +131,7 @@ class ConditionsCard extends StatelessWidget {
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Text(
-              '${weather.temperature.round()}°',
+              '${weather.temperature.round()}°F',
               style: Theme.of(context).textTheme.headlineMedium?.copyWith(
                     fontWeight: FontWeight.bold,
                     color: AppTheme.navyBlue,

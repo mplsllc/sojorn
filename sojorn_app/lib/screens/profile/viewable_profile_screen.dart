@@ -29,6 +29,8 @@ import '../post/post_detail_screen.dart';
 import 'profile_settings_screen.dart';
 import 'profile_layout_editor.dart';
 import 'followers_following_screen.dart';
+import '../../widgets/desktop/desktop_dialog_helper.dart';
+import '../../widgets/desktop/desktop_slide_panel.dart';
 import '../../models/profile_widgets.dart';
 import '../../widgets/harmony_explainer_modal.dart';
 import '../../widgets/follow_button.dart';
@@ -231,9 +233,18 @@ class _UnifiedProfileScreenState extends ConsumerState<UnifiedProfileScreen>
   }
 
   Future<void> _openLayoutEditor() async {
-    await Navigator.of(context, rootNavigator: true).push(
-      MaterialPageRoute(builder: (_) => const ProfileLayoutEditor()),
-    );
+    final isDesktop = MediaQuery.of(context).size.width >= 900;
+    if (isDesktop) {
+      openDesktopSlidePanel(
+        context,
+        width: 520,
+        child: const ProfileLayoutEditor(),
+      );
+    } else {
+      await Navigator.of(context, rootNavigator: true).push(
+        MaterialPageRoute(builder: (_) => const ProfileLayoutEditor()),
+      );
+    }
     // Refresh layout after editing
     _loadProfileLayout();
   }
@@ -631,21 +642,31 @@ class _UnifiedProfileScreenState extends ConsumerState<UnifiedProfileScreen>
     final settings =
         _privacySettings ?? ProfilePrivacySettings.defaults(profile.id);
 
-    final result = await Navigator.of(context, rootNavigator: true)
-        .push<ProfileSettingsResult>(
-      MaterialPageRoute(
-        builder: (_) => ProfileSettingsScreen(
-          profile: profile,
-          settings: settings,
-        ),
-      ),
+    final settingsScreen = ProfileSettingsScreen(
+      profile: profile,
+      settings: settings,
     );
 
-    if (result != null && mounted) {
-      setState(() {
-        _profile = result.profile;
-        _privacySettings = result.settings;
-      });
+    final isDesktop = MediaQuery.of(context).size.width >= 900;
+    if (isDesktop) {
+      openDesktopSlidePanel(
+        context,
+        width: 520,
+        child: settingsScreen,
+      );
+      // Desktop panel is fire-and-forget; reload profile when user returns.
+    } else {
+      final result = await Navigator.of(context, rootNavigator: true)
+          .push<ProfileSettingsResult>(
+        MaterialPageRoute(builder: (_) => settingsScreen),
+      );
+
+      if (result != null && mounted) {
+        setState(() {
+          _profile = result.profile;
+          _privacySettings = result.settings;
+        });
+      }
     }
   }
 
@@ -779,12 +800,12 @@ class _UnifiedProfileScreenState extends ConsumerState<UnifiedProfileScreen>
 
   void _navigateToConnections(int tabIndex) {
     if (_profile == null) return;
-    Navigator.of(context).push(
-      MaterialPageRoute(
-        builder: (context) => FollowersFollowingScreen(
-          userId: _profile!.id,
-          initialTabIndex: tabIndex,
-        ),
+    openDesktopDialog(
+      context,
+      width: 600,
+      child: FollowersFollowingScreen(
+        userId: _profile!.id,
+        initialTabIndex: tabIndex,
       ),
     );
   }
@@ -895,25 +916,20 @@ class _UnifiedProfileScreenState extends ConsumerState<UnifiedProfileScreen>
       );
     }
 
-    return LayoutBuilder(
-      builder: (context, constraints) {
-        if (SojornBreakpoints.isDesktop(constraints.maxWidth)) {
-          return _buildDesktopProfile();
-        }
-        return _buildMobileProfile();
-      },
-    );
+    final isDesktop = MediaQuery.of(context).size.width >= 900;
+    if (isDesktop) {
+      return _buildDesktopProfile();
+    }
+    return _buildMobileProfile();
   }
 
   Widget _buildDesktopProfile() {
-    return Scaffold(
-      backgroundColor: AppTheme.scaffoldBg,
-      body: Column(
-        children: [
-          // ── Profile header banner (full width, fixed height) ────────────
-          SizedBox(
-            height: 260,
-            child: Stack(
+    return Column(
+      children: [
+        // ── Profile header banner (fits center column) ────────────
+        SizedBox(
+          height: 180,
+          child: Stack(
               fit: StackFit.passthrough,
               children: [
                 _ProfileHeader(
@@ -981,7 +997,7 @@ class _UnifiedProfileScreenState extends ConsumerState<UnifiedProfileScreen>
                     tabs: [
                       const Tab(text: 'Posts'),
                       const Tab(text: 'Saved'),
-                      const Tab(text: 'Chains'),
+                      const Tooltip(message: 'Posts you\'ve replied to or continued', child: Tab(text: 'Chains')),
                       if (!_isOwnProfileMode) const Tab(text: 'About'),
                     ],
                   ),
@@ -991,7 +1007,6 @@ class _UnifiedProfileScreenState extends ConsumerState<UnifiedProfileScreen>
             ),
           ),
         ],
-      ),
     );
   }
 
@@ -1127,7 +1142,7 @@ class _UnifiedProfileScreenState extends ConsumerState<UnifiedProfileScreen>
           tabs: [
             const Tab(text: 'Posts'),
             const Tab(text: 'Saved'),
-            const Tab(text: 'Chains'),
+            const Tooltip(message: 'Posts you\'ve replied to or continued', child: Tab(text: 'Chains')),
             if (!_isOwnProfileMode) const Tab(text: 'About'),
           ],
         ),
@@ -1161,6 +1176,33 @@ class _UnifiedProfileScreenState extends ConsumerState<UnifiedProfileScreen>
         _chainedError,
         () => _loadChained(refresh: true),
         () => _loadChained(refresh: false),
+        emptyStateWidget: Center(
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 32),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Icon(Icons.link, size: 48, color: AppTheme.royalPurple.withValues(alpha: 0.4)),
+                const SizedBox(height: 16),
+                Text(
+                  'Chains',
+                  style: AppTheme.textTheme.titleMedium?.copyWith(
+                    fontWeight: FontWeight.w700,
+                    color: AppTheme.navyText,
+                  ),
+                ),
+                const SizedBox(height: 8),
+                Text(
+                  'Chains are threaded conversations that build on each other. When you reply to a post and others reply to your reply, it creates a Chain. Your longest and most engaging Chains appear here.',
+                  style: AppTheme.bodyMedium.copyWith(
+                    color: AppTheme.navyText.withValues(alpha: 0.6),
+                  ),
+                  textAlign: TextAlign.center,
+                ),
+              ],
+            ),
+          ),
+        ),
       );
     }
 
@@ -1185,6 +1227,7 @@ class _UnifiedProfileScreenState extends ConsumerState<UnifiedProfileScreen>
     VoidCallback onRefresh,
     VoidCallback onLoadMore, {
     bool showToggle = false,
+    Widget? emptyStateWidget,
   }) {
     return RefreshIndicator(
       onRefresh: () async => onRefresh(),
@@ -1244,7 +1287,7 @@ class _UnifiedProfileScreenState extends ConsumerState<UnifiedProfileScreen>
             ),
           if (posts.isEmpty && !isLoading)
             SliverFillRemaining(
-              child: Center(
+              child: emptyStateWidget ?? Center(
                 child: Text(
                   'No posts yet',
                   style: AppTheme.bodyMedium.copyWith(
@@ -1812,6 +1855,36 @@ class _ProfileHeader extends StatelessWidget {
                 )
               else
                 _buildRelationshipActions(),
+              // ── Bio section ────────────────────────────────────────────
+              if (profile.bio != null && profile.bio!.isNotEmpty) ...[
+                const SizedBox(height: 10),
+                Text(
+                  profile.bio!,
+                  style: TextStyle(
+                    color: Colors.white.withValues(alpha: 0.9),
+                    fontSize: 13,
+                    height: 1.4,
+                    shadows: [
+                      Shadow(color: Colors.black.withValues(alpha: 0.4), blurRadius: 4, offset: const Offset(0, 1)),
+                    ],
+                  ),
+                  maxLines: 3,
+                  overflow: TextOverflow.ellipsis,
+                ),
+              ] else if (isOwnProfile) ...[
+                const SizedBox(height: 8),
+                GestureDetector(
+                  onTap: onSettingsTap,
+                  child: Text(
+                    'Add a bio to tell people about yourself',
+                    style: TextStyle(
+                      color: Colors.white.withValues(alpha: 0.5),
+                      fontSize: 12,
+                      fontStyle: FontStyle.italic,
+                    ),
+                  ),
+                ),
+              ],
             ],
           ),
         ),

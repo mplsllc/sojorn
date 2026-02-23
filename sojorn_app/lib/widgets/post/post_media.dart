@@ -9,8 +9,45 @@ import '../../routes/app_routes.dart';
 
 import '../../theme/app_theme.dart';
 import '../../theme/tokens.dart';
+import '../desktop/image_lightbox.dart';
 import '../media/signed_media_image.dart';
 import 'post_view_mode.dart';
+
+void _showLightbox(BuildContext context, Post? post, String imageUrl) {
+  final imageUrls = <String>[];
+  if (post?.imageUrl?.isNotEmpty == true) imageUrls.add(post!.imageUrl!);
+  if (post?.thumbnailUrl?.isNotEmpty == true &&
+      !imageUrls.contains(post!.thumbnailUrl)) {
+    imageUrls.add(post!.thumbnailUrl!);
+  }
+  if (imageUrls.isEmpty) imageUrls.add(imageUrl);
+
+  showGeneralDialog(
+    context: context,
+    barrierDismissible: true,
+    barrierLabel: 'Close lightbox',
+    barrierColor: Colors.black54,
+    transitionDuration: const Duration(milliseconds: 200),
+    pageBuilder: (ctx, __, ___) => ImageLightbox(
+      imageUrls: imageUrls,
+      initialIndex: 0,
+      authorName: post?.author?.displayName,
+      caption: post?.body,
+      date: post?.createdAt,
+      onClose: () => Navigator.of(ctx).pop(),
+    ),
+    transitionBuilder: (context, animation, _, child) {
+      return FadeTransition(
+        opacity: animation,
+        child: ScaleTransition(
+          scale: Tween<double>(begin: 0.9, end: 1.0)
+              .animate(CurvedAnimation(parent: animation, curve: Curves.easeOut)),
+          child: child,
+        ),
+      );
+    },
+  );
+}
 
 /// Post media widget with view-mode-aware sizing.
 ///
@@ -104,7 +141,9 @@ class PostMedia extends StatelessWidget {
                           final url = '${AppRoutes.quips}?postId=${post!.id}';
                           context.go(url);
                         })
-                      : onTap,
+                      : (isDesktop && !isVideo
+                          ? () => _showLightbox(context, post, displayUrl)
+                          : onTap),
                   child: imageContent,
                 ),
               ),

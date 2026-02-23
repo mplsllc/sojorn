@@ -202,7 +202,7 @@ class _ProfileLayoutEditorState extends State<ProfileLayoutEditor> {
         children: [
           // Editor panel
           SizedBox(
-            width: 320,
+            width: MediaQuery.of(context).size.width >= 900 ? 320 : 240,
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [

@@ -8,6 +8,7 @@ import '../../services/api_service.dart';
 import '../../services/capsule_security_service.dart';
 import '../../theme/tokens.dart';
 import '../../theme/app_theme.dart';
+import '../../widgets/desktop/desktop_dialog_helper.dart';
 import 'group_thread_detail_screen.dart';
 
 class GroupForumTab extends StatefulWidget {
@@ -165,15 +166,19 @@ class _GroupForumTabState extends State<GroupForumTab> {
   }
 
   void _openThread(Map<String, dynamic> thread) {
-    Navigator.push(context, MaterialPageRoute(
-      builder: (_) => GroupThreadDetailScreen(
-        groupId: widget.groupId,
-        threadId: thread['id'].toString(),
-        isEncrypted: widget.isEncrypted,
-        capsuleKey: widget.capsuleKey,
-        threadTitle: thread['title'] as String? ?? 'Thread',
-      ),
-    )).then((_) => _loadThreads());
+    final child = GroupThreadDetailScreen(
+      groupId: widget.groupId,
+      threadId: thread['id'].toString(),
+      isEncrypted: widget.isEncrypted,
+      capsuleKey: widget.capsuleKey,
+      threadTitle: thread['title'] as String? ?? 'Thread',
+    );
+    final isDesktop = MediaQuery.of(context).size.width >= 900;
+    if (isDesktop) {
+      openDesktopDialog(context, width: 700, child: child);
+    } else {
+      Navigator.push(context, MaterialPageRoute(builder: (_) => child)).then((_) => _loadThreads());
+    }
   }
 
   String _timeAgo(String? dateStr) {

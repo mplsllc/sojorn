@@ -9,6 +9,7 @@ import '../../widgets/app_scaffold.dart';
 import '../../widgets/media/signed_media_image.dart';
 import '../../widgets/media/sojorn_avatar.dart';
 import '../../providers/api_provider.dart';
+import '../../widgets/desktop/desktop_dialog_helper.dart';
 import 'viewable_profile_screen.dart';
 
 /// Screen to manage followers and following with tabbed interface
@@ -161,9 +162,8 @@ class _FollowersFollowingScreenState
 
   @override
   Widget build(BuildContext context) {
-    return AppScaffold(
-      title: 'Connections',
-      body: Column(
+    final isDesktop = MediaQuery.of(context).size.width >= 900;
+    final content = Column(
         children: [
           // Tab Bar
           Container(
@@ -203,7 +203,28 @@ class _FollowersFollowingScreenState
             ),
           ),
         ],
-      ),
+      );
+
+    if (isDesktop) {
+      return Scaffold(
+        backgroundColor: AppTheme.scaffoldBg,
+        appBar: AppBar(
+          backgroundColor: AppTheme.scaffoldBg,
+          elevation: 0,
+          surfaceTintColor: Colors.transparent,
+          leading: IconButton(
+            icon: const Icon(Icons.close),
+            onPressed: () => Navigator.of(context).pop(),
+          ),
+          title: Text('Connections', style: TextStyle(color: AppTheme.navyText, fontSize: 18, fontWeight: FontWeight.w600)),
+        ),
+        body: content,
+      );
+    }
+
+    return AppScaffold(
+      title: 'Connections',
+      body: content,
     );
   }
 
@@ -277,11 +298,16 @@ class _FollowersFollowingScreenState
   }
 
   void _navigateToProfile(UserListItem user) {
-    Navigator.of(context).push(
-      MaterialPageRoute(
-        builder: (context) => UnifiedProfileScreen(handle: user.handle),
-      ),
-    );
+    final isDesktop = MediaQuery.of(context).size.width >= 900;
+    if (isDesktop) {
+      openDesktopDialog(context, width: 700, child: UnifiedProfileScreen(handle: user.handle));
+    } else {
+      Navigator.of(context).push(
+        MaterialPageRoute(
+          builder: (context) => UnifiedProfileScreen(handle: user.handle),
+        ),
+      );
+    }
   }
 }
 

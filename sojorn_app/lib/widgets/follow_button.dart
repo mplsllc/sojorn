@@ -105,9 +105,13 @@ class _FollowButtonState extends ConsumerState<FollowButton> {
                   ),
                 ),
               )
-            : Text(
-                _isFollowing ? 'Following' : 'Follow',
-                style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w600),
+            : AnimatedSwitcher(
+                duration: const Duration(milliseconds: 200),
+                child: Text(
+                  _isFollowing ? 'Following' : 'Follow',
+                  key: ValueKey(_isFollowing),
+                  style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w600),
+                ),
               ),
       ),
     );
@@ -140,9 +144,13 @@ class _FollowButtonState extends ConsumerState<FollowButton> {
                   ),
                 ),
               )
-            : Text(
-                _isFollowing ? 'Following' : 'Follow',
-                style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600),
+            : AnimatedSwitcher(
+                duration: const Duration(milliseconds: 200),
+                child: Text(
+                  _isFollowing ? 'Following' : 'Follow',
+                  key: ValueKey(_isFollowing),
+                  style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600),
+                ),
               ),
       ),
     );

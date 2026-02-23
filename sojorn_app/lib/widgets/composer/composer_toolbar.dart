@@ -52,7 +52,6 @@ class ComposerToolbar extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final isOverLimit = remainingChars < 0;
-    final showNumber = remainingChars <= 20;
 
     Color ringColor;
     if (isOverLimit) {
@@ -143,33 +142,29 @@ class ComposerToolbar extends StatelessWidget {
           ],
         ),
         const Spacer(),
-        SizedBox(
-          width: 24,
-          height: 24,
-          child: Stack(
-            alignment: Alignment.center,
-            children: [
-              SizedBox(
-                width: 20,
-                height: 20,
-                child: CircularProgressIndicator(
-                  value: (characterCount / maxCharacters).clamp(0, 1),
-                  strokeWidth: 2.5,
-                  backgroundColor: AppTheme.queenPink.withValues(alpha: 0.2),
-                  valueColor: AlwaysStoppedAnimation<Color>(ringColor),
-                ),
+        Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Text(
+              '$characterCount / $maxCharacters',
+              style: TextStyle(
+                fontSize: 12,
+                fontWeight: FontWeight.w500,
+                color: ringColor,
               ),
-              if (showNumber)
-                Text(
-                  remainingChars.clamp(-99, 99).toString(),
-                  style: TextStyle(
-                    fontSize: 10,
-                    fontWeight: FontWeight.w700,
-                    color: ringColor,
-                  ),
-                ),
-            ],
-          ),
+            ),
+            const SizedBox(width: 6),
+            SizedBox(
+              width: 20,
+              height: 20,
+              child: CircularProgressIndicator(
+                value: (characterCount / maxCharacters).clamp(0, 1),
+                strokeWidth: 2.5,
+                backgroundColor: AppTheme.queenPink.withValues(alpha: 0.2),
+                valueColor: AlwaysStoppedAnimation<Color>(ringColor),
+              ),
+            ),
+          ],
         ),
       ],
     );

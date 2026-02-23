@@ -34,6 +34,7 @@ class _SecureChatFullScreenState extends State<SecureChatFullScreen>
   bool _isLoading = true;
   bool _isInitializing = false;
   String? _error;
+  SecureConversation? _selectedConversation;
 
   Timer? _pollTimer;
   StreamSubscription? _changesSub;
@@ -137,26 +138,161 @@ class _SecureChatFullScreenState extends State<SecureChatFullScreen>
   }
 
   void _showNewConversationSheet() {
-    showModalBottomSheet(
-      context: context,
-      isScrollControlled: true,
-      backgroundColor: SojornColors.transparent,
-      builder: (context) => NewConversationSheet(
-        onConversationStarted: (conversation) {
-          Navigator.pop(context); // Close new conversation sheet
-          Navigator.push(
-            context,
-            MaterialPageRoute(
-              builder: (context) => SecureChatScreen(conversation: conversation),
+    final isDesktop = MediaQuery.of(context).size.width >= 900;
+    if (isDesktop) {
+      showDialog(
+        context: context,
+        builder: (ctx) => Dialog(
+          insetPadding: const EdgeInsets.symmetric(horizontal: 80, vertical: 40),
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(SojornRadii.modal),
+          ),
+          clipBehavior: Clip.antiAlias,
+          child: ConstrainedBox(
+            constraints: BoxConstraints(
+              maxWidth: 480,
+              maxHeight: MediaQuery.of(context).size.height - 80,
             ),
-          );
-        },
-      ),
-    );
+            child: NewConversationSheet(
+              onConversationStarted: (conversation) {
+                Navigator.pop(ctx); // Close dialog
+                setState(() => _selectedConversation = conversation);
+                _loadConversations(); // Refresh list
+              },
+            ),
+          ),
+        ),
+      );
+    } else {
+      showModalBottomSheet(
+        context: context,
+        isScrollControlled: true,
+        backgroundColor: SojornColors.transparent,
+        builder: (context) => NewConversationSheet(
+          onConversationStarted: (conversation) {
+            Navigator.pop(context);
+            Navigator.push(
+              context,
+              MaterialPageRoute(
+                builder: (context) => SecureChatScreen(conversation: conversation),
+              ),
+            );
+          },
+        ),
+      );
+    }
   }
 
   @override
   Widget build(BuildContext context) {
+    final isDesktop = MediaQuery.of(context).size.width >= 900;
+    if (isDesktop) {
+      return Column(
+        children: [
+          // Compact header for desktop
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+            decoration: BoxDecoration(
+              color: AppTheme.cardSurface,
+              border: Border(
+                bottom: BorderSide(color: AppTheme.royalPurple.withValues(alpha: 0.08)),
+              ),
+            ),
+            child: Row(
+              children: [
+                Text(
+                  'Messages',
+                  style: GoogleFonts.literata(
+                    fontWeight: FontWeight.w600,
+                    color: AppTheme.navyBlue,
+                    fontSize: 18,
+                  ),
+                ),
+                const SizedBox(width: 8),
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                  decoration: BoxDecoration(
+                    color: AppTheme.brightNavy.withValues(alpha: 0.1),
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  child: Text(
+                    'E2E encrypted',
+                    style: GoogleFonts.inter(
+                      color: AppTheme.brightNavy,
+                      fontSize: 10,
+                      fontWeight: FontWeight.w500,
+                    ),
+                  ),
+                ),
+                const Spacer(),
+                IconButton(
+                  icon: Icon(Icons.edit_outlined, color: AppTheme.brightNavy, size: 20),
+                  onPressed: _showNewConversationSheet,
+                  tooltip: 'New conversation',
+                ),
+              ],
+            ),
+          ),
+          // Master-detail: conversation list + selected chat
+          Expanded(
+            child: Row(
+              children: [
+                // Conversation list (left)
+                SizedBox(
+                  width: 340,
+                  child: Container(
+                    decoration: BoxDecoration(
+                      border: Border(
+                        right: BorderSide(color: AppTheme.royalPurple.withValues(alpha: 0.08)),
+                      ),
+                    ),
+                    child: _buildBody(desktopOnTap: (conversation) {
+                      setState(() => _selectedConversation = conversation);
+                    }),
+                  ),
+                ),
+                // Selected conversation (right)
+                Expanded(
+                  child: _selectedConversation != null
+                      ? SecureChatScreen(
+                          key: ValueKey(_selectedConversation!.id),
+                          conversation: _selectedConversation!,
+                          embeddedMode: true,
+                        )
+                      : Center(
+                          child: Column(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              Icon(Icons.chat_bubble_outline,
+                                  size: 48, color: AppTheme.navyText.withValues(alpha: 0.15)),
+                              const SizedBox(height: 12),
+                              Text(
+                                'Select a conversation',
+                                style: TextStyle(
+                                  color: AppTheme.navyText.withValues(alpha: 0.4),
+                                  fontSize: 14,
+                                ),
+                              ),
+                              const SizedBox(height: 16),
+                              TextButton.icon(
+                                onPressed: _showNewConversationSheet,
+                                icon: const Icon(Icons.add, size: 18),
+                                label: const Text('Start a new conversation'),
+                                style: TextButton.styleFrom(
+                                  foregroundColor: AppTheme.brightNavy,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                ),
+              ],
+            ),
+          ),
+        ],
+      );
+    }
+
     return FullScreenShell(
       title: Row(
         children: [
@@ -279,7 +415,7 @@ class _SecureChatFullScreenState extends State<SecureChatFullScreen>
     );
   }
 
-  Widget _buildBody() {
+  Widget _buildBody({void Function(SecureConversation)? desktopOnTap}) {
     if (_isLoading && _conversations.isEmpty) {
       return Center(
         child: CircularProgressIndicator(
@@ -390,13 +526,18 @@ class _SecureChatFullScreenState extends State<SecureChatFullScreen>
           final conversation = _conversations[index];
           return _ConversationTile(
             conversation: conversation,
+            isSelected: desktopOnTap != null && _selectedConversation?.id == conversation.id,
             onTap: () {
-              Navigator.push(
-                context,
-                MaterialPageRoute(
-                  builder: (context) => SecureChatScreen(conversation: conversation),
-                ),
-              );
+              if (desktopOnTap != null) {
+                desktopOnTap(conversation);
+              } else {
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                    builder: (context) => SecureChatScreen(conversation: conversation),
+                  ),
+                );
+              }
             },
             onDelete: () => _confirmDeleteConversation(conversation),
           );
@@ -473,11 +614,13 @@ class _ConversationTile extends StatefulWidget {
   final SecureConversation conversation;
   final VoidCallback onTap;
   final VoidCallback onDelete;
+  final bool isSelected;
 
   const _ConversationTile({
     required this.conversation,
     required this.onTap,
     required this.onDelete,
+    this.isSelected = false,
   });
 
   @override
@@ -516,11 +659,15 @@ class _ConversationTileState extends State<_ConversationTile> {
         child: Container(
           margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
           decoration: BoxDecoration(
-            color: AppTheme.cardSurface,
+            color: widget.isSelected
+                ? AppTheme.royalPurple.withValues(alpha: 0.08)
+                : AppTheme.cardSurface,
             borderRadius: BorderRadius.circular(12),
             border: Border.all(
-              color: AppTheme.navyBlue.withValues(alpha: 0.1),
-              width: 1,
+              color: widget.isSelected
+                  ? AppTheme.royalPurple.withValues(alpha: 0.3)
+                  : AppTheme.navyBlue.withValues(alpha: 0.1),
+              width: widget.isSelected ? 1.5 : 1,
             ),
           ),
           child: Material(

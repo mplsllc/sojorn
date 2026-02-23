@@ -25,6 +25,8 @@ import '../../widgets/post/post_link_preview.dart';
 import '../../widgets/post/post_view_mode.dart';
 import '../../widgets/post/post_media.dart';
 import '../home/full_screen_shell.dart';
+import '../../widgets/desktop/desktop_dialog_helper.dart';
+import '../../widgets/desktop/desktop_slide_panel.dart';
 import 'package:share_plus/share_plus.dart';
 
 
@@ -157,17 +159,53 @@ class _ThreadedConversationScreenState extends ConsumerState<ThreadedConversatio
 
   Future<void> _navigateToPost(String postId) async {
     if (_isTransitioning || _focusContext?.targetPost.id == postId) return;
-    
-    // Instead of just flipping state, we push a new route to maintain history
-    Navigator.of(context).push(
-      MaterialPageRoute(
-        builder: (_) => ThreadedConversationScreen(rootPostId: postId),
-      ),
-    );
+
+    final isDesktop = MediaQuery.of(context).size.width >= 900;
+    if (isDesktop) {
+      // On desktop, close current dialog and open a new one
+      Navigator.of(context).pop();
+      if (mounted) {
+        openDesktopDialog(context, width: 700, child: ThreadedConversationScreen(rootPostId: postId));
+      }
+    } else {
+      Navigator.of(context).push(
+        MaterialPageRoute(
+          builder: (_) => ThreadedConversationScreen(rootPostId: postId),
+        ),
+      );
+    }
   }
 
   @override
   Widget build(BuildContext context) {
+    final isDesktop = MediaQuery.of(context).size.width >= 900;
+
+    // On desktop, render without FullScreenShell (shown inside a Dialog)
+    if (isDesktop) {
+      return Scaffold(
+        backgroundColor: AppTheme.scaffoldBg,
+        appBar: AppBar(
+          backgroundColor: AppTheme.scaffoldBg,
+          elevation: 0,
+          surfaceTintColor: SojornColors.transparent,
+          leading: IconButton(
+            icon: const Icon(Icons.close),
+            onPressed: () => Navigator.of(context).pop(),
+          ),
+          title: Text(
+            _focusContext != null ? 'Thread' : 'Loading...',
+            style: GoogleFonts.inter(
+              color: AppTheme.textPrimary,
+              fontSize: 18,
+              fontWeight: FontWeight.w700,
+            ),
+          ),
+          centerTitle: false,
+        ),
+        body: _buildBody(),
+      );
+    }
+
     return FullScreenShell(
       title: AnimatedSwitcher(
         duration: const Duration(milliseconds: 250),
@@ -707,15 +745,22 @@ class _ThreadedConversationScreenState extends ConsumerState<ThreadedConversatio
   }
 
   Future<void> _openReplyComposer(Post post) async {
-    final result = await Navigator.of(context).push<bool>(
-      MaterialPageRoute(
-        builder: (context) => ComposeScreen(chainParentPost: post),
-      ),
-    );
-    // Reset focus so the underlying screen is interactive on web
-    FocusManager.instance.primaryFocus?.unfocus();
-    if (result == true) {
+    final isDesktop = MediaQuery.of(context).size.width >= 900;
+    if (isDesktop) {
+      openDesktopSlidePanel(context, width: 520, child: ComposeScreen(chainParentPost: post));
+      // Refresh thread after panel closes
+      await Future.delayed(const Duration(milliseconds: 300));
       _loadFocusContext();
+    } else {
+      final result = await Navigator.of(context).push<bool>(
+        MaterialPageRoute(
+          builder: (context) => ComposeScreen(chainParentPost: post),
+        ),
+      );
+      FocusManager.instance.primaryFocus?.unfocus();
+      if (result == true) {
+        _loadFocusContext();
+      }
     }
   }
 

@@ -98,6 +98,7 @@ class _DashboardEditorSheetState extends State<DashboardEditorSheet> {
   }
 
   void _removeWidget(DashboardWidgetType type) {
+    if (!type.isRemovable) return;
     setState(() {
       _left.removeWhere((w) => w.type == type);
       _right.removeWhere((w) => w.type == type);
@@ -231,13 +232,14 @@ class _DashboardEditorSheetState extends State<DashboardEditorSheet> {
                   });
                 },
               ),
-              // Remove
-              IconButton(
-                icon: const Icon(Icons.close, size: 16),
-                onPressed: () => _removeWidget(w.type),
-                padding: EdgeInsets.zero,
-                constraints: const BoxConstraints(),
-              ),
+              // Remove (hidden for non-removable widgets like profileCard)
+              if (w.type.isRemovable)
+                IconButton(
+                  icon: const Icon(Icons.close, size: 16),
+                  onPressed: () => _removeWidget(w.type),
+                  padding: EdgeInsets.zero,
+                  constraints: const BoxConstraints(),
+                ),
             ],
           ),
         );

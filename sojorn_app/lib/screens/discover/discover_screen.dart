@@ -286,17 +286,22 @@ class _DiscoverScreenState extends ConsumerState<DiscoverScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final isDesktop = MediaQuery.of(context).size.width >= 900;
+    final content = Column(
+      children: [
+        _buildHeader(),
+        Expanded(
+          child: hasSearched ? _buildSearchResults() : _buildDiscoverContent(),
+        ),
+      ],
+    );
+
+    if (isDesktop) return content;
+
     return FullScreenShell(
       titleText: 'Search',
       showSearch: false,
-      body: Column(
-        children: [
-          _buildHeader(),
-          Expanded(
-            child: hasSearched ? _buildSearchResults() : _buildDiscoverContent(),
-          ),
-        ],
-      ),
+      body: content,
     );
   }
 
@@ -378,12 +383,25 @@ class _DiscoverScreenState extends ConsumerState<DiscoverScreen> {
           SliverToBoxAdapter(
             child: Padding(
               padding: const EdgeInsets.fromLTRB(16, 20, 16, 12),
-              child: Text(
-                'Top Trending',
-                style: AppTheme.labelLarge.copyWith(
-                  color: AppTheme.navyBlue,
-                  fontWeight: FontWeight.w800,
-                ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    'Trending Hashtags',
+                    style: AppTheme.labelLarge.copyWith(
+                      color: AppTheme.navyBlue,
+                      fontWeight: FontWeight.w800,
+                    ),
+                  ),
+                  const SizedBox(height: 2),
+                  Text(
+                    'Popular topics across the community right now',
+                    style: TextStyle(
+                      fontSize: 12,
+                      color: AppTheme.navyText.withValues(alpha: 0.5),
+                    ),
+                  ),
+                ],
               ),
             ),
           ),
@@ -420,12 +438,25 @@ class _DiscoverScreenState extends ConsumerState<DiscoverScreen> {
           SliverToBoxAdapter(
             child: Padding(
               padding: const EdgeInsets.fromLTRB(16, 24, 16, 12),
-              child: Text(
-                'Popular Now',
-                style: AppTheme.labelLarge.copyWith(
-                  color: AppTheme.navyBlue,
-                  fontWeight: FontWeight.w800,
-                ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    'Popular Now',
+                    style: AppTheme.labelLarge.copyWith(
+                      color: AppTheme.navyBlue,
+                      fontWeight: FontWeight.w800,
+                    ),
+                  ),
+                  const SizedBox(height: 2),
+                  Text(
+                    'Most engaging posts from the last 48 hours',
+                    style: TextStyle(
+                      fontSize: 12,
+                      color: AppTheme.navyText.withValues(alpha: 0.5),
+                    ),
+                  ),
+                ],
               ),
             ),
           ),

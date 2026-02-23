@@ -40,9 +40,12 @@ class PostActions extends ConsumerStatefulWidget {
   ConsumerState<PostActions> createState() => _PostActionsState();
 }
 
-class _PostActionsState extends ConsumerState<PostActions> {
+class _PostActionsState extends ConsumerState<PostActions>
+    with SingleTickerProviderStateMixin {
   late bool _isSaved;
   bool _isSaving = false;
+  late final AnimationController _saveAnimCtrl;
+  late final Animation<double> _saveScale;
   
   // Reaction state
   final Map<String, int> _reactionCounts = {};
@@ -53,6 +56,15 @@ class _PostActionsState extends ConsumerState<PostActions> {
     super.initState();
     _isSaved = widget.post.isSaved ?? false;
     _seedReactionState();
+    _saveAnimCtrl = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 300),
+    );
+    _saveScale = TweenSequence<double>([
+      TweenSequenceItem(tween: Tween(begin: 1.0, end: 1.3), weight: 40),
+      TweenSequenceItem(tween: Tween(begin: 1.3, end: 0.9), weight: 30),
+      TweenSequenceItem(tween: Tween(begin: 0.9, end: 1.0), weight: 30),
+    ]).animate(CurvedAnimation(parent: _saveAnimCtrl, curve: Curves.easeOut));
   }
 
   @override
@@ -63,6 +75,20 @@ class _PostActionsState extends ConsumerState<PostActions> {
       _seedReactionState();
     }
   }
+
+  @override
+  void dispose() {
+    _saveAnimCtrl.dispose();
+    super.dispose();
+  }
+
+  static const _primaryEmoji = '🔥';
+
+  int get _totalReactionCount => _reactionCounts.values.fold(0, (sum, c) => sum + c);
+
+  bool get _hasPrimaryReaction => _myReactions.contains(_primaryEmoji);
+
+  int get _primaryReactionCount => _reactionCounts[_primaryEmoji] ?? 0;
 
   void _seedReactionState() {
     _reactionCounts.clear();
@@ -88,6 +114,7 @@ class _PostActionsState extends ConsumerState<PostActions> {
       _isSaving = true;
       _isSaved = !_isSaved;
     });
+    _saveAnimCtrl.forward(from: 0);
 
     final apiService = ref.read(apiServiceProvider);
 
@@ -196,6 +223,47 @@ class _PostActionsState extends ConsumerState<PostActions> {
     }
   }
 
+  Widget _buildPrimaryReactionButton() {
+    final isActive = _hasPrimaryReaction;
+    final count = _primaryReactionCount;
+    return Tooltip(
+      message: 'Like',
+      child: GestureDetector(
+        onTap: () => _toggleReaction(_primaryEmoji),
+        child: AnimatedContainer(
+          duration: const Duration(milliseconds: 150),
+          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+          decoration: BoxDecoration(
+            color: isActive
+                ? const Color(0xFFFFF0E6)
+                : AppTheme.navyBlue.withValues(alpha: 0.08),
+            borderRadius: BorderRadius.circular(10),
+            border: isActive
+                ? Border.all(color: const Color(0xFFFF6B35).withValues(alpha: 0.3))
+                : null,
+          ),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Text(_primaryEmoji, style: const TextStyle(fontSize: 16)),
+              if (count > 0) ...[
+                const SizedBox(width: 4),
+                Text(
+                  '$count',
+                  style: GoogleFonts.inter(
+                    fontSize: 13,
+                    fontWeight: FontWeight.w600,
+                    color: isActive ? const Color(0xFFFF6B35) : AppTheme.textSecondary,
+                  ),
+                ),
+              ],
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final allowChain = widget.post.allowChain && widget.post.visibility != 'private' && widget.onChain != null;
@@ -212,30 +280,61 @@ class _PostActionsState extends ConsumerState<PostActions> {
             mode: ReactionsDisplayMode.full,
           ),
         
-        // Actions row - reply moved to right
+        // Engagement summary (reply count + reaction count) — only show if non-zero
+        if (!widget.showReactions && _totalReactionCount > 0 || (widget.post.commentCount ?? 0) > 0)
+          Padding(
+            padding: const EdgeInsets.only(bottom: 6),
+            child: Row(
+              children: [
+                if (_totalReactionCount > 0) ...[
+                  Text(
+                    '$_totalReactionCount ${_totalReactionCount == 1 ? 'reaction' : 'reactions'}',
+                    style: GoogleFonts.inter(fontSize: 12, color: AppTheme.navyText.withValues(alpha: 0.5), fontWeight: FontWeight.w500),
+                  ),
+                  if ((widget.post.commentCount ?? 0) > 0)
+                    Text(' · ', style: TextStyle(color: AppTheme.navyText.withValues(alpha: 0.35))),
+                ],
+                if ((widget.post.commentCount ?? 0) > 0)
+                  Text(
+                    '${widget.post.commentCount} ${widget.post.commentCount == 1 ? 'comment' : 'comments'}',
+                    style: GoogleFonts.inter(fontSize: 12, color: AppTheme.navyText.withValues(alpha: 0.5), fontWeight: FontWeight.w500),
+                  ),
+              ],
+            ),
+          ),
+
+        // Actions row
         Row(
           mainAxisAlignment: MainAxisAlignment.spaceBetween,
           children: [
-            // Left side: Save and Share
+            // Left side: Primary reaction + Save + Share
             Row(
               children: [
-                IconButton(
-                  onPressed: _isSaving ? null : _toggleSave,
-                  icon: Icon(
-                    _isSaved ? Icons.bookmark : Icons.bookmark_border,
-                    color: _isSaved ? AppTheme.brightNavy : AppTheme.textSecondary,
-                  ),
-                  style: IconButton.styleFrom(
-                    backgroundColor: AppTheme.navyBlue.withValues(alpha: 0.08),
-                    minimumSize: const Size(34, 34),
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(10),
+                // Primary reaction button (fire emoji)
+                _buildPrimaryReactionButton(),
+                const SizedBox(width: 8),
+                ScaleTransition(
+                  scale: _saveScale,
+                  child: IconButton(
+                    onPressed: _isSaving ? null : _toggleSave,
+                    tooltip: 'Save post',
+                    icon: Icon(
+                      _isSaved ? Icons.bookmark : Icons.bookmark_border,
+                      color: _isSaved ? AppTheme.brightNavy : AppTheme.textSecondary,
+                    ),
+                    style: IconButton.styleFrom(
+                      backgroundColor: AppTheme.navyBlue.withValues(alpha: 0.08),
+                      minimumSize: const Size(34, 34),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(10),
+                      ),
                     ),
                   ),
                 ),
                 const SizedBox(width: 8),
                 IconButton(
                   onPressed: _sharePost,
+                  tooltip: 'Share',
                   icon: Icon(
                     Icons.share_outlined,
                     color: AppTheme.textSecondary,
@@ -250,7 +349,7 @@ class _PostActionsState extends ConsumerState<PostActions> {
                 ),
               ],
             ),
-            
+
             Row(
               children: [
                 ReactionsDisplay(

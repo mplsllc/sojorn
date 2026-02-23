@@ -248,12 +248,21 @@ class SecureChatService {
     await _e2ee.generateNewIdentity();
   }
 
+  DateTime? _lastSyncTime;
+
   void startBackgroundSync({Duration interval = const Duration(minutes: 5)}) {
     _backgroundSyncTimer?.cancel();
     _backgroundSyncTimer = Timer.periodic(interval, (_) {
       unawaited(syncAllConversations());
     });
-    unawaited(syncAllConversations());
+    // Only do an immediate sync if we haven't synced in the last 30 seconds
+    // (prevents rapid-fire syncs from lifecycle events)
+    final now = DateTime.now();
+    if (_lastSyncTime == null ||
+        now.difference(_lastSyncTime!).inSeconds > 30) {
+      _lastSyncTime = now;
+      unawaited(syncAllConversations());
+    }
   }
 
   void stopBackgroundSync() {

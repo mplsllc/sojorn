@@ -23,12 +23,14 @@ import '../../widgets/secure_chat/composer_widget.dart';
 class SecureChatScreen extends StatefulWidget {
   final SecureConversation conversation;
   final bool isModal;
+  final bool embeddedMode;
   final ScrollController? scrollController;
 
   const SecureChatScreen({
     super.key,
     required this.conversation,
     this.isModal = false,
+    this.embeddedMode = false,
     this.scrollController,
   });
 
@@ -218,6 +220,16 @@ class _SecureChatScreenState extends State<SecureChatScreen>
       );
     }
 
+    if (widget.embeddedMode) {
+      return Column(
+        children: [
+          _buildEmbeddedHeader(),
+          Expanded(child: _buildMessageStream(controller)),
+          _buildInputArea(),
+        ],
+      );
+    }
+
     return Scaffold(
       backgroundColor: AppTheme.scaffoldBg,
       appBar: _buildAppBar(),
@@ -305,6 +317,77 @@ class _SecureChatScreenState extends State<SecureChatScreen>
       actions: [
         // Key upload removed - available in main chat list
       ],
+    );
+  }
+
+  Widget _buildEmbeddedHeader() {
+    final handle = widget.conversation.otherUserHandle ?? 'Unknown';
+    final displayName = widget.conversation.otherUserDisplayName ?? '@$handle';
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+      decoration: BoxDecoration(
+        color: AppTheme.cardSurface,
+        border: Border(
+          bottom: BorderSide(color: AppTheme.royalPurple.withValues(alpha: 0.08)),
+        ),
+      ),
+      child: Row(
+        children: [
+          Container(
+            width: 32,
+            height: 32,
+            decoration: BoxDecoration(
+              color: AppTheme.queenPink.withValues(alpha: 0.3),
+              borderRadius: BorderRadius.circular(8),
+            ),
+            child: widget.conversation.otherUserAvatarUrl != null
+                ? ClipRRect(
+                    borderRadius: BorderRadius.circular(7),
+                    child: SignedMediaImage(
+                      url: widget.conversation.otherUserAvatarUrl!,
+                      width: 32,
+                      height: 32,
+                      fit: BoxFit.cover,
+                    ),
+                  )
+                : Center(
+                    child: Text(
+                      handle.isNotEmpty ? handle[0].toUpperCase() : '?',
+                      style: GoogleFonts.inter(
+                        color: AppTheme.navyBlue,
+                        fontWeight: FontWeight.bold,
+                        fontSize: 13,
+                      ),
+                    ),
+                  ),
+          ),
+          const SizedBox(width: 10),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  displayName,
+                  style: GoogleFonts.literata(
+                    fontWeight: FontWeight.w600,
+                    color: AppTheme.navyBlue,
+                    fontSize: 15,
+                  ),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                ),
+                Text(
+                  'Encrypted',
+                  style: GoogleFonts.inter(
+                    color: AppTheme.textDisabled,
+                    fontSize: 10,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
     );
   }
 

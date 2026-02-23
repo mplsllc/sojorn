@@ -20,6 +20,8 @@ import '../../services/ad_integration_service.dart';
 import '../compose/compose_screen.dart';
 import '../post/post_detail_screen.dart';
 import '../profile/viewable_profile_screen.dart';
+import '../../widgets/desktop/desktop_dialog_helper.dart';
+import '../../widgets/desktop/desktop_slide_panel.dart';
 
 /// sojorn feed - TikTok/Reels style immersive swipeable feed
 class FeedsojornScreen extends ConsumerStatefulWidget {
@@ -127,24 +129,7 @@ class _FeedsojornScreenState extends ConsumerState<FeedsojornScreen> {
   }
 
   void _openPostDetail(Post post) {
-    final isDesktop = MediaQuery.of(context).size.width >= 900;
-    if (isDesktop) {
-      showDialog(
-        context: context,
-        barrierDismissible: true,
-        barrierColor: Colors.black38,
-        builder: (ctx) => Dialog(
-          insetPadding: const EdgeInsets.symmetric(horizontal: 220, vertical: 32),
-          shape: const RoundedRectangleBorder(borderRadius: BorderRadius.all(Radius.circular(16))),
-          clipBehavior: Clip.antiAlias,
-          child: PostDetailScreen(post: post),
-        ),
-      );
-    } else {
-      Navigator.of(context, rootNavigator: true).push(
-        MaterialPageRoute(builder: (_) => PostDetailScreen(post: post)),
-      );
-    }
+    openDesktopDialog(context, width: 700, child: PostDetailScreen(post: post));
   }
 
   void _openChainComposer(Post post) async {
@@ -159,11 +144,16 @@ class _FeedsojornScreenState extends ConsumerState<FeedsojornScreen> {
 
   void _openAuthorProfile(Post post) {
     if (post.author != null && post.author!.handle.isNotEmpty) {
-      Navigator.of(context).push(
-        MaterialPageRoute(
-          builder: (_) => UnifiedProfileScreen(handle: post.author!.handle),
-        ),
-      );
+      final isDesktop = MediaQuery.of(context).size.width >= 900;
+      if (isDesktop) {
+        openDesktopDialog(context, width: 700, child: UnifiedProfileScreen(handle: post.author!.handle));
+      } else {
+        Navigator.of(context).push(
+          MaterialPageRoute(
+            builder: (_) => UnifiedProfileScreen(handle: post.author!.handle),
+          ),
+        );
+      }
     }
   }
 
@@ -201,12 +191,17 @@ class _FeedsojornScreenState extends ConsumerState<FeedsojornScreen> {
             ? FloatingActionButton(
                 heroTag: 'sojorn_compose',
                 onPressed: () {
-                  Navigator.of(context).push(
-                    MaterialPageRoute(
-                      builder: (_) => const ComposeScreen(),
-                      fullscreenDialog: true,
-                    ),
-                  );
+                  final isDesktop = MediaQuery.of(context).size.width >= 900;
+                  if (isDesktop) {
+                    openDesktopSlidePanel(context, width: 520, child: const ComposeScreen());
+                  } else {
+                    Navigator.of(context).push(
+                      MaterialPageRoute(
+                        builder: (_) => const ComposeScreen(),
+                        fullscreenDialog: true,
+                      ),
+                    );
+                  }
                 },
                 backgroundColor: AppTheme.brightNavy,
                 foregroundColor: SojornColors.basicWhite,

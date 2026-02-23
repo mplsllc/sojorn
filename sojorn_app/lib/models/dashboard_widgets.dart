@@ -24,6 +24,10 @@ enum DashboardWidgetType {
   final String displayName;
   final IconData icon;
 
+  /// Whether this widget can be removed from the dashboard.
+  /// profileCard is always present for consistency across profiles.
+  bool get isRemovable => this != DashboardWidgetType.profileCard;
+
   static DashboardWidgetType fromString(String value) {
     return DashboardWidgetType.values.firstWhere(
       (t) => t.value == value,
@@ -125,12 +129,13 @@ class DashboardLayout {
   /// Default layout matching the server default.
   static const DashboardLayout defaultLayout = DashboardLayout(
     leftSidebar: [
-      DashboardWidget(type: DashboardWidgetType.profileCard, order: 0),
-      DashboardWidget(type: DashboardWidgetType.top8Friends, order: 1),
+      DashboardWidget(type: DashboardWidgetType.top8Friends, order: 0),
+      DashboardWidget(type: DashboardWidgetType.nowPlaying, order: 1),
     ],
     rightSidebar: [
-      DashboardWidget(type: DashboardWidgetType.upcomingEvents, order: 0),
-      DashboardWidget(type: DashboardWidgetType.whosOnline, order: 1),
+      DashboardWidget(type: DashboardWidgetType.profileCard, order: 0),
+      DashboardWidget(type: DashboardWidgetType.upcomingEvents, order: 1),
+      DashboardWidget(type: DashboardWidgetType.whosOnline, order: 2),
     ],
   );
 }

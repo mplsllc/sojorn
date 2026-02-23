@@ -14,6 +14,7 @@ import '../../widgets/app_scaffold.dart';
 import '../../widgets/feed_filter_button.dart';
 import '../compose/compose_screen.dart';
 import '../post/post_detail_screen.dart';
+import '../../widgets/desktop/desktop_dialog_helper.dart';
 import '../../widgets/first_use_hint.dart';
 import '../../widgets/skeleton_loader.dart';
 
@@ -86,25 +87,7 @@ class _FeedPersonalScreenState extends ConsumerState<FeedPersonalScreen> {
   }
 
   void _openPostDetail(Post post) {
-    final isDesktop = MediaQuery.of(context).size.width >= 900;
-    if (isDesktop) {
-      // On desktop: open as centered modal so sidebars stay visible
-      showDialog(
-        context: context,
-        barrierDismissible: true,
-        barrierColor: Colors.black38,
-        builder: (ctx) => Dialog(
-          insetPadding: const EdgeInsets.symmetric(horizontal: 220, vertical: 32),
-          shape: const RoundedRectangleBorder(borderRadius: BorderRadius.all(Radius.circular(16))),
-          clipBehavior: Clip.antiAlias,
-          child: PostDetailScreen(post: post),
-        ),
-      );
-    } else {
-      Navigator.of(context, rootNavigator: true).push(
-        MaterialPageRoute(builder: (_) => PostDetailScreen(post: post)),
-      );
-    }
+    openDesktopDialog(context, width: 700, child: PostDetailScreen(post: post));
   }
 
   void _openChainComposer(Post post) async {

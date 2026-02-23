@@ -38,6 +38,7 @@ import '../../theme/app_theme.dart';
 import '../../widgets/media/sojorn_avatar.dart';
 import '../../widgets/neighborhood/neighborhood_picker_sheet.dart';
 import 'package:url_launcher/url_launcher.dart';
+import '../../widgets/desktop/desktop_dialog_helper.dart';
 
 enum BeaconTab { map, board, search, groups }
 enum NeighborhoodHubTab { feed, chat, forum, members }
@@ -511,9 +512,11 @@ class BeaconScreenState extends ConsumerState<BeaconScreen> with TickerProviderS
   }
 
   void _onMarkerTap(Post post) {
-    Navigator.of(context).push(MaterialPageRoute(
-      builder: (context) => BeaconDetailScreen(beaconPost: post),
-    ));
+    openDesktopDialog(
+      context,
+      width: 700,
+      child: BeaconDetailScreen(beaconPost: post),
+    );
   }
 
   void _onBeaconModelTap(Beacon beacon) {
@@ -1245,7 +1248,7 @@ class BeaconScreenState extends ConsumerState<BeaconScreen> with TickerProviderS
                       Icon(_weatherIcon(_weather!.weatherCode), size: 17,
                         color: AppTheme.navyBlue.withValues(alpha: 0.85)),
                       const SizedBox(width: 6),
-                      Text('${_weather!.temperature.round()}°',
+                      Text('${_weather!.temperature.round()}°F',
                         style: TextStyle(
                           color: AppTheme.navyBlue,
                           fontSize: 15,
@@ -1597,37 +1600,49 @@ class BeaconScreenState extends ConsumerState<BeaconScreen> with TickerProviderS
                   child: Row(
                     children: [
                       Expanded(
-                        child: _buildHubSegment(
-                          label: 'Feed',
-                          icon: Icons.rss_feed,
-                          selected: _activeNeighborhoodHubTab == NeighborhoodHubTab.feed,
-                          onTap: () => setState(() => _activeNeighborhoodHubTab = NeighborhoodHubTab.feed),
+                        child: Tooltip(
+                          message: 'Recent posts from members',
+                          child: _buildHubSegment(
+                            label: 'Feed',
+                            icon: Icons.rss_feed,
+                            selected: _activeNeighborhoodHubTab == NeighborhoodHubTab.feed,
+                            onTap: () => setState(() => _activeNeighborhoodHubTab = NeighborhoodHubTab.feed),
+                          ),
                         ),
                       ),
                       Expanded(
-                        child: _buildHubSegment(
-                          label: 'Chat',
-                          icon: Icons.chat_bubble_outline,
-                          badgeCount: _chatActivityCount,
-                          selected: _activeNeighborhoodHubTab == NeighborhoodHubTab.chat,
-                          onTap: () => setState(() => _activeNeighborhoodHubTab = NeighborhoodHubTab.chat),
+                        child: Tooltip(
+                          message: 'Live group chat',
+                          child: _buildHubSegment(
+                            label: 'Chat',
+                            icon: Icons.chat_bubble_outline,
+                            badgeCount: _chatActivityCount,
+                            selected: _activeNeighborhoodHubTab == NeighborhoodHubTab.chat,
+                            onTap: () => setState(() => _activeNeighborhoodHubTab = NeighborhoodHubTab.chat),
+                          ),
                         ),
                       ),
                       Expanded(
-                        child: _buildHubSegment(
-                          label: 'Forum',
-                          icon: Icons.forum_outlined,
-                          badgeCount: _forumActivityCount,
-                          selected: _activeNeighborhoodHubTab == NeighborhoodHubTab.forum,
-                          onTap: () => setState(() => _activeNeighborhoodHubTab = NeighborhoodHubTab.forum),
+                        child: Tooltip(
+                          message: 'Threaded discussions',
+                          child: _buildHubSegment(
+                            label: 'Forum',
+                            icon: Icons.forum_outlined,
+                            badgeCount: _forumActivityCount,
+                            selected: _activeNeighborhoodHubTab == NeighborhoodHubTab.forum,
+                            onTap: () => setState(() => _activeNeighborhoodHubTab = NeighborhoodHubTab.forum),
+                          ),
                         ),
                       ),
                       Expanded(
-                        child: _buildHubSegment(
-                          label: 'Members',
-                          icon: Icons.groups_2_outlined,
-                          selected: _activeNeighborhoodHubTab == NeighborhoodHubTab.members,
-                          onTap: () => setState(() => _activeNeighborhoodHubTab = NeighborhoodHubTab.members),
+                        child: Tooltip(
+                          message: 'Group members',
+                          child: _buildHubSegment(
+                            label: 'Members',
+                            icon: Icons.groups_2_outlined,
+                            selected: _activeNeighborhoodHubTab == NeighborhoodHubTab.members,
+                            onTap: () => setState(() => _activeNeighborhoodHubTab = NeighborhoodHubTab.members),
+                          ),
                         ),
                       ),
                     ],
@@ -1854,13 +1869,24 @@ class BeaconScreenState extends ConsumerState<BeaconScreen> with TickerProviderS
     final avatarInitial = authorName.isNotEmpty ? authorName[0].toUpperCase() : 'N';
     return GestureDetector(
       onTap: () async {
-        final updated = await Navigator.of(context).push<BoardEntry>(
-          MaterialPageRoute(builder: (_) => BoardEntryDetailScreen(entry: entry)),
-        );
+        final isDesktop = MediaQuery.of(context).size.width >= 900;
+        BoardEntry? updated;
+        if (isDesktop) {
+          openDesktopDialog(
+            context,
+            width: 600,
+            child: BoardEntryDetailScreen(entry: entry),
+          );
+        } else {
+          updated = await Navigator.of(context).push<BoardEntry>(
+            MaterialPageRoute(builder: (_) => BoardEntryDetailScreen(entry: entry)),
+          );
+        }
         if (updated != null && mounted) {
+          final u = updated;
           setState(() {
-            final idx = _boardEntries.indexWhere((e) => e.id == updated.id);
-            if (idx >= 0) _boardEntries[idx] = updated;
+            final idx = _boardEntries.indexWhere((e) => e.id == u.id);
+            if (idx >= 0) _boardEntries[idx] = u;
           });
         }
       },
@@ -2190,9 +2216,11 @@ class BeaconScreenState extends ConsumerState<BeaconScreen> with TickerProviderS
         ),
         onTap: () {
           final entry = BoardEntry.fromJson(b);
-          Navigator.of(context).push(MaterialPageRoute(
-            builder: (_) => BoardEntryDetailScreen(entry: entry),
-          ));
+          openDesktopDialog(
+            context,
+            width: 600,
+            child: BoardEntryDetailScreen(entry: entry),
+          );
         },
       ),
     );
@@ -2700,7 +2728,7 @@ class BeaconScreenState extends ConsumerState<BeaconScreen> with TickerProviderS
                     ],
                   ),
                   const SizedBox(height: 3),
-                  Text(beacon.body, maxLines: 1, overflow: TextOverflow.ellipsis,
+                  Text(beacon.body, maxLines: 2, overflow: TextOverflow.ellipsis,
                     style: TextStyle(color: SojornColors.postContentLight, fontSize: 12)),
                   const SizedBox(height: 4),
                   Row(

@@ -4,8 +4,12 @@
 
 import 'package:flutter/material.dart';
 import '../theme/app_theme.dart';
+import '../widgets/desktop/desktop_toast.dart';
 
 /// BuildContext extension for quick, design-system-consistent snackbars.
+///
+/// On desktop (>= 900px), routes to [DesktopToast] slide-in cards.
+/// On mobile, uses standard [ScaffoldMessenger] snackbars.
 ///
 /// Usage:
 /// ```dart
@@ -14,7 +18,13 @@ import '../theme/app_theme.dart';
 /// context.showInfo('Loading…');
 /// ```
 extension SnackbarExt on BuildContext {
+  bool get _isDesktop => MediaQuery.of(this).size.width >= 900;
+
   void showSuccess(String message, {Duration duration = const Duration(seconds: 3)}) {
+    if (_isDesktop) {
+      DesktopToast.success(this, message);
+      return;
+    }
     ScaffoldMessenger.of(this).showSnackBar(
       _buildSnackBar(
         message: message,
@@ -26,6 +36,10 @@ extension SnackbarExt on BuildContext {
   }
 
   void showError(String message, {Duration duration = const Duration(seconds: 4)}) {
+    if (_isDesktop) {
+      DesktopToast.error(this, message);
+      return;
+    }
     ScaffoldMessenger.of(this).showSnackBar(
       _buildSnackBar(
         message: message,
@@ -37,6 +51,10 @@ extension SnackbarExt on BuildContext {
   }
 
   void showInfo(String message, {Duration duration = const Duration(seconds: 3)}) {
+    if (_isDesktop) {
+      DesktopToast.info(this, message);
+      return;
+    }
     ScaffoldMessenger.of(this).showSnackBar(
       _buildSnackBar(
         message: message,
@@ -48,6 +66,10 @@ extension SnackbarExt on BuildContext {
   }
 
   void showWarning(String message, {Duration duration = const Duration(seconds: 3)}) {
+    if (_isDesktop) {
+      DesktopToast.show(this, message: message, icon: Icons.warning, color: AppTheme.warning, duration: duration);
+      return;
+    }
     ScaffoldMessenger.of(this).showSnackBar(
       _buildSnackBar(
         message: message,

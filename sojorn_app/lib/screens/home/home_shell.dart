@@ -4,6 +4,7 @@
 
 import 'package:flutter/material.dart';
 import 'package:flutter/foundation.dart';
+import 'package:flutter/services.dart';
 import 'dart:async';
 import 'package:firebase_messaging/firebase_messaging.dart';
 import 'package:google_fonts/google_fonts.dart';
@@ -29,8 +30,10 @@ import '../../providers/quip_upload_provider.dart';
 import '../../providers/notification_provider.dart';
 import '../../models/profile.dart';
 import '../../models/dashboard_widgets.dart';
-import '../../widgets/dashboard/dashboard_editor_sheet.dart';
+import '../../widgets/dashboard/dashboard_editor_panel.dart';
 import '../../widgets/desktop/desktop_sidebar_widgets.dart';
+import '../../widgets/desktop/hover_scale.dart';
+import '../../widgets/desktop/command_palette.dart';
 import '../../widgets/media/sojorn_avatar.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
@@ -57,6 +60,11 @@ class _HomeShellState extends ConsumerState<HomeShell> with WidgetsBindingObserv
   List<Map<String, dynamic>> _desktopFriends = [];
   List<Map<String, dynamic>> _desktopOnlineUsers = [];
   DashboardLayout _dashboardLayout = DashboardLayout.defaultLayout;
+  bool _isDashboardEditing = false;
+  bool _isCommandPaletteOpen = false;
+  int _logoTapCount = 0;
+  Timer? _logoTapTimer;
+  bool _logoInverted = false;
 
   // Nav helper badges — show descriptive subtitle for first N taps
   static const _maxHelperShows = 3;
@@ -283,7 +291,9 @@ class _HomeShellState extends ConsumerState<HomeShell> with WidgetsBindingObserv
     if (kDebugMode) debugPrint('[SHELL] Lifecycle: $state');
     if (state == AppLifecycleState.resumed) {
       _chatService.startBackgroundSync();
-    } else if (state == AppLifecycleState.paused) {
+    } else if (state == AppLifecycleState.paused ||
+               state == AppLifecycleState.inactive ||
+               state == AppLifecycleState.hidden) {
       _chatService.stopBackgroundSync();
     }
   }
@@ -308,27 +318,98 @@ class _HomeShellState extends ConsumerState<HomeShell> with WidgetsBindingObserv
     );
   }
 
+  void _showCommandPalette() {
+    if (_isCommandPaletteOpen) return;
+    _isCommandPaletteOpen = true;
+    showGeneralDialog(
+      context: context,
+      barrierDismissible: true,
+      barrierColor: Colors.black26,
+      barrierLabel: 'Close',
+      transitionDuration: const Duration(milliseconds: 150),
+      pageBuilder: (ctx, anim, _) => const SizedBox.shrink(),
+      transitionBuilder: (ctx, anim, _, __) {
+        return FadeTransition(
+          opacity: anim,
+          child: ScaleTransition(
+            scale: Tween<double>(begin: 0.95, end: 1.0)
+                .animate(CurvedAnimation(parent: anim, curve: Curves.easeOut)),
+            child: CommandPaletteOverlay(
+              onDismiss: () => Navigator.of(ctx).pop(),
+              onNavigateBranch: (index) {
+                Navigator.of(ctx).pop();
+                widget.navigationShell.goBranch(index, initialLocation: true);
+              },
+              onNavigateRoute: (route) {
+                Navigator.of(ctx).pop();
+                context.push(route);
+              },
+            ),
+          ),
+        );
+      },
+    ).then((_) => _isCommandPaletteOpen = false);
+  }
+
+  void _onLogoTap() {
+    widget.navigationShell.goBranch(0, initialLocation: true);
+    _logoTapCount++;
+    _logoTapTimer?.cancel();
+    _logoTapTimer = Timer(const Duration(milliseconds: 500), () => _logoTapCount = 0);
+    if (_logoTapCount >= 5) {
+      _logoTapCount = 0;
+      setState(() => _logoInverted = true);
+      Future.delayed(const Duration(milliseconds: 400), () {
+        if (mounted) setState(() => _logoInverted = false);
+      });
+    }
+  }
+
+  Color _ambientColor() {
+    final hour = DateTime.now().hour;
+    if (hour >= 6 && hour < 10) return const Color(0xFFFFF8F0);
+    if (hour >= 10 && hour < 16) return SojornColors.basicQueenPinkLight;
+    if (hour >= 16 && hour < 20) return const Color(0xFFF5F0F8);
+    return const Color(0xFFF0F0F8);
+  }
+
   Widget _buildDesktopLayout(double width) {
     final currentIndex = widget.navigationShell.currentIndex;
     final isHome = currentIndex == 0;
 
-    return Scaffold(
-      backgroundColor: AppTheme.scaffoldBg,
-      body: Column(
-        children: [
-          const OfflineIndicator(),
-          // ── Top Navigation Bar ──────────────────────────────────
-          _buildDesktopTopNav(currentIndex),
-          // ── Content area ────────────────────────────────────────
-          Expanded(
-            child: isHome
-                ? _buildDesktop3Column(currentIndex)
-                : NavigationShellScope(
-                    currentIndex: currentIndex,
-                    child: widget.navigationShell,
-                  ),
+    return Shortcuts(
+      shortcuts: <ShortcutActivator, Intent>{
+        LogicalKeySet(LogicalKeyboardKey.meta, LogicalKeyboardKey.keyK):
+            const _OpenCommandPaletteIntent(),
+        LogicalKeySet(LogicalKeyboardKey.control, LogicalKeyboardKey.keyK):
+            const _OpenCommandPaletteIntent(),
+      },
+      child: Actions(
+        actions: <Type, Action<Intent>>{
+          _OpenCommandPaletteIntent: CallbackAction<_OpenCommandPaletteIntent>(
+            onInvoke: (_) { _showCommandPalette(); return null; },
           ),
-        ],
+        },
+        child: Focus(
+          autofocus: true,
+          child: Scaffold(
+            backgroundColor: AppTheme.scaffoldBg,
+            body: Column(
+              children: [
+                const OfflineIndicator(),
+                _buildDesktopTopNav(currentIndex),
+                Expanded(
+                  child: (isHome || currentIndex == 3 || currentIndex == 4 || currentIndex == 5)
+                      ? _buildDesktop3Column(currentIndex)
+                      : NavigationShellScope(
+                          currentIndex: currentIndex,
+                          child: widget.navigationShell,
+                        ),
+                ),
+              ],
+            ),
+          ),
+        ),
       ),
     );
   }
@@ -358,8 +439,21 @@ class _HomeShellState extends ConsumerState<HomeShell> with WidgetsBindingObserv
           children: [
             // ── Left: Logo ────────────────────────────────────
             GestureDetector(
-              onTap: () => widget.navigationShell.goBranch(0, initialLocation: true),
-              child: Image.asset('assets/images/toplogo.png', height: 32),
+              onTap: _onLogoTap,
+              child: AnimatedContainer(
+                duration: const Duration(milliseconds: 200),
+                child: ColorFiltered(
+                  colorFilter: _logoInverted
+                      ? const ColorFilter.matrix(<double>[
+                          -1, 0, 0, 0, 255,
+                          0, -1, 0, 0, 255,
+                          0, 0, -1, 0, 255,
+                          0, 0, 0, 1, 0,
+                        ])
+                      : const ColorFilter.mode(Colors.transparent, BlendMode.dst),
+                  child: Image.asset('assets/images/toplogo.png', height: 32),
+                ),
+              ),
             ),
             const SizedBox(width: 28),
             // ── Center: Nav items ─────────────────────────────
@@ -535,118 +629,221 @@ class _HomeShellState extends ConsumerState<HomeShell> with WidgetsBindingObserv
   }
 
   Widget _buildDesktopNavItem(IconData icon, IconData activeIcon, String label, int index, int currentIndex) {
-    final isActive = index == currentIndex;
-    final isMessages = index == 5;
-
-    return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 2),
-      child: InkWell(
-        onTap: () => widget.navigationShell.goBranch(index, initialLocation: index == currentIndex),
-        borderRadius: BorderRadius.circular(8),
-        hoverColor: AppTheme.royalPurple.withValues(alpha: 0.06),
-        child: Container(
-          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 6),
-          decoration: BoxDecoration(
-            border: Border(
-              bottom: BorderSide(
-                color: isActive ? AppTheme.royalPurple : SojornColors.transparent,
-                width: 2.5,
-              ),
-            ),
-          ),
-          child: Column(
-            mainAxisAlignment: MainAxisAlignment.center,
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              isMessages
-                  ? Consumer(
-                      builder: (context, ref, child) {
-                        final badge = ref.watch(currentBadgeProvider);
-                        return Badge(
-                          label: Text(badge.messageCount.toString(), style: const TextStyle(fontSize: 9)),
-                          isLabelVisible: badge.messageCount > 0,
-                          backgroundColor: AppTheme.brightNavy,
-                          child: Icon(
-                            icon,
-                            color: isActive ? AppTheme.royalPurple : SojornColors.bottomNavUnselected,
-                            size: 20,
-                          ),
-                        );
-                      },
-                    )
-                  : Icon(
-                      isActive ? activeIcon : icon,
-                      color: isActive ? AppTheme.royalPurple : SojornColors.bottomNavUnselected,
-                      size: 20,
-                    ),
-              const SizedBox(height: 2),
-              Text(
-                label,
-                style: TextStyle(
-                  color: isActive ? AppTheme.royalPurple : SojornColors.bottomNavUnselected,
-                  fontSize: 11,
-                  fontWeight: isActive ? FontWeight.w700 : FontWeight.w500,
-                ),
-              ),
-            ],
-          ),
-        ),
-      ),
+    return _DesktopNavItem(
+      icon: icon,
+      activeIcon: activeIcon,
+      label: label,
+      index: index,
+      currentIndex: currentIndex,
+      onTap: () => widget.navigationShell.goBranch(index, initialLocation: index == currentIndex),
     );
   }
 
   void _openDashboardEditor() {
-    // Navigate to home first so the user can see the dashboard being edited
+    // Navigate to home first so the user can see the sidebars being edited
     widget.navigationShell.goBranch(0);
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted) return;
-      DashboardEditorSheet.show(
-        context,
-        layout: _dashboardLayout,
-        onSaved: (newLayout) {
-          setState(() => _dashboardLayout = newLayout);
-        },
-      );
+      setState(() => _isDashboardEditing = true);
     });
   }
 
   Widget _buildDesktop3Column(int currentIndex) {
     return Container(
       decoration: BoxDecoration(
-        // Subtle lavender tint matching the mockup's background
-        color: SojornColors.basicQueenPinkLight.withValues(alpha: 0.5),
+        color: _ambientColor().withValues(alpha: 0.5),
       ),
-      child: Row(
+      alignment: Alignment.topCenter,
+      child: ConstrainedBox(
+        constraints: const BoxConstraints(maxWidth: 1340),
+        child: Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            // ── Left sidebar ── 260px fixed ──
+            SizedBox(
+              width: 260,
+              child: _isDashboardEditing
+                  ? _buildEditableSidebar(_dashboardLayout.leftSidebar, true)
+                  : SingleChildScrollView(
+                      padding: const EdgeInsets.all(16),
+                      child: Column(
+                        children: [
+                          if (currentIndex == 4) ...[
+                            Container(
+                              width: double.infinity,
+                              padding: const EdgeInsets.all(14),
+                              decoration: BoxDecoration(
+                                gradient: LinearGradient(
+                                  colors: [
+                                    AppTheme.royalPurple.withValues(alpha: 0.12),
+                                    AppTheme.brightNavy.withValues(alpha: 0.08),
+                                  ],
+                                ),
+                                borderRadius: BorderRadius.circular(SojornRadii.card),
+                              ),
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Row(
+                                    children: [
+                                      Icon(Icons.explore, size: 18, color: AppTheme.royalPurple),
+                                      const SizedBox(width: 8),
+                                      Text('Discover', style: TextStyle(fontSize: 14, fontWeight: FontWeight.w700, color: AppTheme.navyText)),
+                                    ],
+                                  ),
+                                  const SizedBox(height: 4),
+                                  Text(
+                                    'Find new people, trending topics, and popular content.',
+                                    style: TextStyle(fontSize: 11, color: AppTheme.navyText.withValues(alpha: 0.6)),
+                                  ),
+                                ],
+                              ),
+                            ),
+                            const SizedBox(height: 12),
+                          ],
+                          ..._buildSidebarWidgets(_dashboardLayout.leftSidebar),
+                        ],
+                      ),
+                    ),
+            ),
+            // ── Center: feed / page content ── flex with 660px cap ──
+            Expanded(
+              child: Center(
+                child: ConstrainedBox(
+                  constraints: const BoxConstraints(maxWidth: 660),
+                  child: _isDashboardEditing
+                      ? DashboardEditorPanel(
+                          layout: _dashboardLayout,
+                          onLayoutChanged: (layout) {
+                            setState(() => _dashboardLayout = layout);
+                          },
+                          onClose: () {
+                            setState(() => _isDashboardEditing = false);
+                          },
+                        )
+                      : NavigationShellScope(
+                          currentIndex: currentIndex,
+                          child: widget.navigationShell,
+                        ),
+                ),
+              ),
+            ),
+            // ── Right sidebar ── 280px fixed ──
+            SizedBox(
+              width: 280,
+              child: _isDashboardEditing
+                  ? _buildEditableSidebar(_dashboardLayout.rightSidebar, false)
+                  : SingleChildScrollView(
+                      padding: const EdgeInsets.all(16),
+                      child: Column(
+                        children: _buildSidebarWidgets(_dashboardLayout.rightSidebar),
+                      ),
+                    ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  /// Sidebar in edit mode: draggable widgets with visual chrome.
+  Widget _buildEditableSidebar(List<DashboardWidget> widgets, bool isLeft) {
+    return SingleChildScrollView(
+      padding: const EdgeInsets.all(16),
+      child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          // ── Left sidebar (dynamic) ──────────────────
-          SizedBox(
-            width: 280,
-            child: SingleChildScrollView(
-              padding: const EdgeInsets.all(16),
-              child: Column(
-                children: _buildSidebarWidgets(_dashboardLayout.leftSidebar),
+          // Sidebar label
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+            margin: const EdgeInsets.only(bottom: 12),
+            decoration: BoxDecoration(
+              color: AppTheme.royalPurple.withValues(alpha: 0.08),
+              borderRadius: BorderRadius.circular(8),
+            ),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Icon(Icons.view_sidebar_outlined,
+                    size: 14, color: AppTheme.royalPurple),
+                const SizedBox(width: 6),
+                Text(
+                  isLeft ? 'Left Sidebar' : 'Right Sidebar',
+                  style: TextStyle(
+                    color: AppTheme.royalPurple,
+                    fontSize: 11,
+                    fontWeight: FontWeight.w700,
+                  ),
+                ),
+              ],
+            ),
+          ),
+          // Render each widget with edit chrome
+          for (int i = 0; i < widgets.length; i++)
+            if (widgets[i].isEnabled) ...[
+              _buildEditableWidgetWrapper(widgets[i]),
+              if (i < widgets.length - 1) const SizedBox(height: 12),
+            ] else ...[
+              // Disabled widgets show as ghosted
+              Opacity(
+                opacity: 0.35,
+                child: _buildEditableWidgetWrapper(widgets[i]),
+              ),
+              if (i < widgets.length - 1) const SizedBox(height: 12),
+            ],
+          if (widgets.isEmpty)
+            Container(
+              height: 80,
+              decoration: BoxDecoration(
+                border: Border.all(
+                  color: AppTheme.royalPurple.withValues(alpha: 0.2),
+                  style: BorderStyle.solid,
+                ),
+                borderRadius: BorderRadius.circular(SojornRadii.card),
+                color: AppTheme.royalPurple.withValues(alpha: 0.03),
+              ),
+              child: Center(
+                child: Text('Empty',
+                    style: TextStyle(
+                        color: AppTheme.navyText.withValues(alpha: 0.3),
+                        fontSize: 12)),
               ),
             ),
-          ),
-          // ── Center: Feed (GoRouter shell content) ──────────
-          Expanded(
-            child: NavigationShellScope(
-              currentIndex: currentIndex,
-              child: widget.navigationShell,
-            ),
-          ),
-          // ── Right sidebar (dynamic) ─────────
-          SizedBox(
-            width: 260,
-            child: SingleChildScrollView(
-              padding: const EdgeInsets.all(16),
-              child: Column(
-                children: _buildSidebarWidgets(_dashboardLayout.rightSidebar),
-              ),
-            ),
-          ),
         ],
+      ),
+    );
+  }
+
+  /// Wraps a dashboard widget with a dashed border and label during edit mode.
+  Widget _buildEditableWidgetWrapper(DashboardWidget dw) {
+    final rendered = _renderDashboardWidget(dw.type);
+    if (rendered == null) {
+      return Container(
+        height: 60,
+        decoration: BoxDecoration(
+          border: Border.all(
+              color: AppTheme.royalPurple.withValues(alpha: 0.15)),
+          borderRadius: BorderRadius.circular(SojornRadii.card),
+        ),
+        child: Center(
+          child: Text(dw.type.displayName,
+              style: TextStyle(
+                  color: AppTheme.navyText.withValues(alpha: 0.4),
+                  fontSize: 11)),
+        ),
+      );
+    }
+    return Container(
+      decoration: BoxDecoration(
+        borderRadius: BorderRadius.circular(SojornRadii.card + 2),
+        border: Border.all(
+          color: AppTheme.royalPurple.withValues(alpha: 0.25),
+          width: 1.5,
+        ),
+      ),
+      child: ClipRRect(
+        borderRadius: BorderRadius.circular(SojornRadii.card),
+        child: rendered,
       ),
     );
   }
@@ -659,7 +856,7 @@ class _HomeShellState extends ConsumerState<HomeShell> with WidgetsBindingObserv
       final widget = _renderDashboardWidget(w.type);
       if (widget != null) {
         if (rendered.isNotEmpty) rendered.add(const SizedBox(height: 12));
-        rendered.add(widget);
+        rendered.add(HoverScale(scale: 1.01, borderRadius: BorderRadius.circular(SojornRadii.card), child: widget));
       }
     }
     return rendered;
@@ -1232,4 +1429,108 @@ class NavigationShellScope extends InheritedWidget {
   bool updateShouldNotify(covariant NavigationShellScope oldWidget) {
     return currentIndex != oldWidget.currentIndex;
   }
+}
+
+/// Desktop nav item with hover animation (scale + color shift).
+class _DesktopNavItem extends StatefulWidget {
+  final IconData icon;
+  final IconData activeIcon;
+  final String label;
+  final int index;
+  final int currentIndex;
+  final VoidCallback onTap;
+
+  const _DesktopNavItem({
+    required this.icon,
+    required this.activeIcon,
+    required this.label,
+    required this.index,
+    required this.currentIndex,
+    required this.onTap,
+  });
+
+  @override
+  State<_DesktopNavItem> createState() => _DesktopNavItemState();
+}
+
+class _DesktopNavItemState extends State<_DesktopNavItem> {
+  bool _hovering = false;
+
+  @override
+  Widget build(BuildContext context) {
+    final isActive = widget.index == widget.currentIndex;
+    final isMessages = widget.index == 5;
+
+    final baseColor = isActive
+        ? AppTheme.royalPurple
+        : _hovering
+            ? AppTheme.royalPurple.withValues(alpha: 0.6)
+            : SojornColors.bottomNavUnselected;
+
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 2),
+      child: MouseRegion(
+        onEnter: (_) => setState(() => _hovering = true),
+        onExit: (_) => setState(() => _hovering = false),
+        child: InkWell(
+          onTap: widget.onTap,
+          borderRadius: BorderRadius.circular(8),
+          hoverColor: AppTheme.royalPurple.withValues(alpha: 0.06),
+          child: AnimatedScale(
+            scale: _hovering && !isActive ? 1.05 : 1.0,
+            duration: const Duration(milliseconds: 150),
+            curve: Curves.easeOut,
+            child: Container(
+              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 6),
+              decoration: BoxDecoration(
+                border: Border(
+                  bottom: BorderSide(
+                    color: isActive ? AppTheme.royalPurple : SojornColors.transparent,
+                    width: 2.5,
+                  ),
+                ),
+              ),
+              child: Column(
+                mainAxisAlignment: MainAxisAlignment.center,
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  isMessages
+                      ? Consumer(
+                          builder: (context, ref, child) {
+                            final badge = ref.watch(currentBadgeProvider);
+                            return Badge(
+                              label: Text(badge.messageCount.toString(),
+                                  style: const TextStyle(fontSize: 9)),
+                              isLabelVisible: badge.messageCount > 0,
+                              backgroundColor: AppTheme.brightNavy,
+                              child: Icon(widget.icon, color: baseColor, size: 20),
+                            );
+                          },
+                        )
+                      : Icon(
+                          isActive ? widget.activeIcon : widget.icon,
+                          color: baseColor,
+                          size: 20,
+                        ),
+                  const SizedBox(height: 2),
+                  Text(
+                    widget.label,
+                    style: TextStyle(
+                      color: baseColor,
+                      fontSize: 11,
+                      fontWeight: isActive ? FontWeight.w700 : FontWeight.w500,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _OpenCommandPaletteIntent extends Intent {
+  const _OpenCommandPaletteIntent();
 }

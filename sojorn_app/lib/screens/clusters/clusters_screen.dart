@@ -16,6 +16,7 @@ import 'group_screen.dart';
 import '../../widgets/skeleton_loader.dart';
 import '../../widgets/group_card.dart';
 import '../../widgets/group_creation_modal.dart';
+import '../../widgets/desktop/desktop_dialog_helper.dart';
 
 /// ClustersScreen — Discovery-first groups page.
 /// Shows "Your Groups" at top, then "Discover Communities" with category filtering.
@@ -130,12 +131,14 @@ class _ClustersScreenState extends ConsumerState<ClustersScreen>
   }
 
   void _navigateToCluster(Cluster cluster) {
-    Navigator.of(context).push(MaterialPageRoute(
-      builder: (_) => GroupScreen(
+    openDesktopDialog(
+      context,
+      width: 800,
+      child: GroupScreen(
         group: cluster,
         encryptedGroupKey: _encryptedKeys[cluster.id],
       ),
-    ));
+    );
   }
 
   // Groups system methods
@@ -176,29 +179,68 @@ class _ClustersScreenState extends ConsumerState<ClustersScreen>
       category: group.category,
       createdAt: group.createdAt,
     );
-    Navigator.of(context).push(
-      MaterialPageRoute(builder: (_) => GroupScreen(group: cluster)),
+    openDesktopDialog(
+      context,
+      width: 800,
+      child: GroupScreen(group: cluster),
     );
   }
 
   @override
   Widget build(BuildContext context) {
+    final isDesktop = MediaQuery.of(context).size.width >= 900;
+
+    final tabBar = TabBar(
+      controller: _tabController,
+      indicatorColor: AppTheme.navyBlue,
+      labelColor: AppTheme.navyBlue,
+      unselectedLabelColor: SojornColors.textDisabled,
+      tabs: const [
+        Tab(text: 'Groups'),
+        Tab(text: 'Encrypted'),
+      ],
+    );
+
+    final body = TabBarView(
+      controller: _tabController,
+      children: [
+        _buildGroupsTab(),
+        _buildCapsuleTab(),
+      ],
+    );
+
+    if (isDesktop) {
+      return Column(
+        children: [
+          // Compact header row
+          Container(
+            color: AppTheme.scaffoldBg,
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+            child: Row(
+              children: [
+                const Text('Communities', style: TextStyle(fontWeight: FontWeight.w800, fontSize: 20)),
+                const Spacer(),
+                IconButton(
+                  icon: const Icon(Icons.add),
+                  onPressed: () => _showCreateSheet(context),
+                  tooltip: 'Create Group',
+                ),
+              ],
+            ),
+          ),
+          tabBar,
+          Expanded(child: body),
+        ],
+      );
+    }
+
     return Scaffold(
       backgroundColor: AppTheme.scaffoldBg,
       appBar: AppBar(
         title: const Text('Communities', style: TextStyle(fontWeight: FontWeight.w800)),
         backgroundColor: AppTheme.scaffoldBg,
         surfaceTintColor: SojornColors.transparent,
-        bottom: TabBar(
-          controller: _tabController,
-          indicatorColor: AppTheme.navyBlue,
-          labelColor: AppTheme.navyBlue,
-          unselectedLabelColor: SojornColors.textDisabled,
-          tabs: const [
-            Tab(text: 'Groups'),
-            Tab(text: 'Encrypted'),
-          ],
-        ),
+        bottom: tabBar,
         actions: [
           IconButton(
             icon: const Icon(Icons.add),
@@ -207,13 +249,7 @@ class _ClustersScreenState extends ConsumerState<ClustersScreen>
           ),
         ],
       ),
-      body: TabBarView(
-        controller: _tabController,
-        children: [
-          _buildGroupsTab(),
-          _buildCapsuleTab(),
-        ],
-      ),
+      body: body,
     );
   }
 

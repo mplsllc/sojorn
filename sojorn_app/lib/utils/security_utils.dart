@@ -104,7 +104,7 @@ class SecurityUtils {
     // Check for SQL injection patterns
     final sqlPatterns = [
       RegExp(r'(\b(SELECT|INSERT|UPDATE|DELETE|DROP|CREATE|ALTER|EXEC|UNION|SCRIPT)\b)', caseSensitive: false),
-      RegExp(r'(--|#|/\*|\*/)', caseSensitive: false),
+      RegExp(r'(--|#(?!\w)|/\*|\*/)', caseSensitive: false),
       RegExp(r'\bOR\b.*?=.*=', caseSensitive: false),
       RegExp(r'\bAND\b.*?=.*=', caseSensitive: false),
     ];

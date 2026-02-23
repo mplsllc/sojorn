@@ -33,6 +33,8 @@ class QuipVideoItem extends StatefulWidget {
   final VoidCallback? onFollow;
   final VoidCallback? onScrollUp;
   final VoidCallback? onScrollDown;
+  final int currentIndex;
+  final int totalCount;
 
   const QuipVideoItem({
     super.key,
@@ -53,6 +55,8 @@ class QuipVideoItem extends StatefulWidget {
     this.onFollow,
     this.onScrollUp,
     this.onScrollDown,
+    this.currentIndex = 0,
+    this.totalCount = 0,
   });
 
   @override
@@ -67,6 +71,7 @@ class _QuipVideoItemState extends State<QuipVideoItem>
   Offset _heartPosition = Offset.zero;
   bool _showHeart = false;
   bool _isCaptionExpanded = false;
+  bool _isMuted = false;
 
   // Cached overlay data — parsed once, not on every build
   late String _audioLabel;
@@ -210,13 +215,14 @@ class _QuipVideoItemState extends State<QuipVideoItem>
   Widget _buildProgressBar() {
     final ctrl = widget.controller;
     if (ctrl == null || !ctrl.value.isInitialized) return const SizedBox.shrink();
+    final isDesktop = MediaQuery.of(context).size.width >= 900;
     return Positioned(
       left: 0,
       right: 0,
       bottom: 0,
       child: VideoProgressIndicator(
         ctrl,
-        allowScrubbing: false,
+        allowScrubbing: isDesktop,
         padding: EdgeInsets.zero,
         colors: const VideoProgressColors(
           playedColor: Color(0xCCFFFFFF),
@@ -245,54 +251,60 @@ class _QuipVideoItemState extends State<QuipVideoItem>
       inner = _fallbackAvatarInner(letter);
     }
 
-    return Stack(
-      clipBehavior: Clip.none,
-      children: [
-        GestureDetector(
-          onTap: _navigateToProfile,
-          child: Container(
-            width: 48,
-            height: 48,
-            decoration: BoxDecoration(
-              borderRadius: BorderRadius.circular(13),
-              border: Border.all(color: SojornColors.basicWhite, width: 2),
-            ),
-            child: ClipRRect(
-              borderRadius: BorderRadius.circular(11),
-              child: inner,
+    return Tooltip(
+      message: '@${widget.quip.username}',
+      child: Stack(
+        clipBehavior: Clip.none,
+        children: [
+          GestureDetector(
+            onTap: _navigateToProfile,
+            child: Container(
+              width: 48,
+              height: 48,
+              decoration: BoxDecoration(
+                borderRadius: BorderRadius.circular(13),
+                border: Border.all(color: SojornColors.basicWhite, width: 2),
+              ),
+              child: ClipRRect(
+                borderRadius: BorderRadius.circular(11),
+                child: inner,
+              ),
             ),
           ),
-        ),
-        // Follow badge — tapping follows/unfollows the author
-        if (widget.onFollow != null)
-          Positioned(
-            bottom: -6,
-            left: 0,
-            right: 0,
-            child: Center(
-              child: GestureDetector(
-                onTap: widget.onFollow,
-                child: AnimatedContainer(
-                  duration: const Duration(milliseconds: 200),
-                  width: 22,
-                  height: 22,
-                  decoration: BoxDecoration(
-                    color: widget.isFollowing
-                        ? const Color(0xFF4CAF50)
-                        : const Color(0xFF2979FF),
-                    shape: BoxShape.circle,
-                    border: Border.all(color: SojornColors.basicWhite, width: 1.5),
-                  ),
-                  child: Icon(
-                    widget.isFollowing ? Icons.check : Icons.add,
-                    color: Colors.white,
-                    size: 13,
+          // Follow badge — tapping follows/unfollows the author
+          if (widget.onFollow != null)
+            Positioned(
+              bottom: -6,
+              left: 0,
+              right: 0,
+              child: Center(
+                child: Tooltip(
+                  message: widget.isFollowing ? 'Following @${widget.quip.username}' : 'Follow @${widget.quip.username}',
+                  child: GestureDetector(
+                    onTap: widget.onFollow,
+                    child: AnimatedContainer(
+                      duration: const Duration(milliseconds: 200),
+                      width: 22,
+                      height: 22,
+                      decoration: BoxDecoration(
+                        color: widget.isFollowing
+                            ? const Color(0xFF4CAF50)
+                            : const Color(0xFF2979FF),
+                        shape: BoxShape.circle,
+                        border: Border.all(color: SojornColors.basicWhite, width: 1.5),
+                      ),
+                      child: Icon(
+                        widget.isFollowing ? Icons.check : Icons.add,
+                        color: Colors.white,
+                        size: 13,
+                      ),
+                    ),
                   ),
                 ),
               ),
             ),
-          ),
-      ],
+        ],
+      ),
     );
   }
 
@@ -326,33 +338,45 @@ class _QuipVideoItemState extends State<QuipVideoItem>
         _buildAvatar(),
         const SizedBox(height: 24),
         // Reaction button — tap to quick-react ❤️, long-press to open full picker
-        _buildActionBtn(
-          child: _buildReactionIcon(),
-          onTap: () => widget.onReact(_quickReactEmoji),
-          onLongPressAt: widget.onOpenReactionPicker,
-          label: reactionLabel,
+        Tooltip(
+          message: 'React',
+          child: _buildActionBtn(
+            child: _buildReactionIcon(),
+            onTap: () => widget.onReact(_quickReactEmoji),
+            onLongPressAt: widget.onOpenReactionPicker,
+            label: reactionLabel,
+          ),
         ),
         const SizedBox(height: 20),
         // Comment
-        _buildActionBtn(
-          child: const Icon(Icons.chat_bubble_outline,
-              color: SojornColors.basicWhite, size: 28),
-          onTap: widget.onComment,
-          label: commentLabel,
+        Tooltip(
+          message: 'Comments',
+          child: _buildActionBtn(
+            child: const Icon(Icons.chat_bubble_outline,
+                color: SojornColors.basicWhite, size: 28),
+            onTap: widget.onComment,
+            label: commentLabel,
+          ),
         ),
         const SizedBox(height: 20),
         // Share
-        _buildActionBtn(
-          child: const Icon(Icons.send_outlined,
-              color: SojornColors.basicWhite, size: 28),
-          onTap: widget.onShare,
+        Tooltip(
+          message: 'Share',
+          child: _buildActionBtn(
+            child: const Icon(Icons.send_outlined,
+                color: SojornColors.basicWhite, size: 28),
+            onTap: widget.onShare,
+          ),
         ),
         const SizedBox(height: 20),
         // More (three dots)
-        _buildActionBtn(
-          child: const Icon(Icons.more_horiz,
-              color: SojornColors.basicWhite, size: 28),
-          onTap: _showMoreSheet,
+        Tooltip(
+          message: 'More options',
+          child: _buildActionBtn(
+            child: const Icon(Icons.more_horiz,
+                color: SojornColors.basicWhite, size: 28),
+            onTap: _showMoreSheet,
+          ),
         ),
         const SizedBox(height: 32),
         // Up/Down navigation arrows
@@ -715,6 +739,50 @@ class _QuipVideoItemState extends State<QuipVideoItem>
               _buildPauseOverlay(),
               // Double-tap heart burst
               _buildHeartBurst(),
+              // Video count indicator — top-left on desktop
+              if (widget.totalCount > 0 && MediaQuery.of(context).size.width >= 900)
+                Positioned(
+                  top: 12,
+                  left: 12,
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+                    decoration: BoxDecoration(
+                      color: const Color(0x99000000),
+                      borderRadius: BorderRadius.circular(SojornRadii.sm),
+                    ),
+                    child: Text(
+                      '${widget.currentIndex + 1} / ${widget.totalCount}',
+                      style: const TextStyle(
+                        color: SojornColors.basicWhite,
+                        fontSize: 12,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                  ),
+                ),
+              // Mute/unmute button — bottom-right
+              Positioned(
+                right: 12,
+                bottom: 16,
+                child: GestureDetector(
+                  onTap: () {
+                    setState(() => _isMuted = !_isMuted);
+                    widget.controller?.setVolume(_isMuted ? 0.0 : 1.0);
+                  },
+                  child: Container(
+                    padding: const EdgeInsets.all(8),
+                    decoration: const BoxDecoration(
+                      color: Color(0x66000000),
+                      shape: BoxShape.circle,
+                    ),
+                    child: Icon(
+                      _isMuted ? Icons.volume_off : Icons.volume_up,
+                      color: SojornColors.basicWhite,
+                      size: 18,
+                    ),
+                  ),
+                ),
+              ),
               // Thin video progress bar at very bottom
               _buildProgressBar(),
               // Buffering spinner

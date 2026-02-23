@@ -3,7 +3,6 @@
 // See LICENSE file for details
 
 import 'package:flutter/material.dart';
-import 'package:google_fonts/google_fonts.dart';
 import 'package:intl/intl.dart';
 import '../../models/event.dart';
 import '../../models/profile.dart';
@@ -66,18 +65,19 @@ class _FlipCardState extends State<_FlipCard> with SingleTickerProviderStateMixi
             children: [
               widget.front,
               Positioned(
-                top: 8,
-                right: 8,
+                top: 10,
+                right: 10,
                 child: GestureDetector(
                   onTap: _flip,
                   child: Container(
-                    width: 26,
-                    height: 26,
+                    width: 28,
+                    height: 28,
                     decoration: BoxDecoration(
-                      color: Colors.black.withValues(alpha: 0.06),
+                      color: AppTheme.royalPurple.withValues(alpha: 0.12),
                       shape: BoxShape.circle,
+                      border: Border.all(color: AppTheme.royalPurple.withValues(alpha: 0.2)),
                     ),
-                    child: Icon(Icons.tune, size: 14, color: Colors.grey.shade400),
+                    child: Icon(Icons.tune, size: 14, color: AppTheme.royalPurple.withValues(alpha: 0.7)),
                   ),
                 ),
               ),
@@ -184,75 +184,40 @@ class DesktopProfileCard extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          // ── Header with avatar floating to top-right ──
-          Stack(
-            clipBehavior: Clip.none,
-            children: [
-              _buildHeader(),
-              // Avatar at top-right, overlapping the header bottom edge
-              Positioned(
-                top: 48,
-                right: 14,
-                child: GestureDetector(
-                  onTap: onProfileTap,
-                  child: Container(
-                    decoration: BoxDecoration(
-                      borderRadius: BorderRadius.circular(18),
-                      border: Border.all(color: AppTheme.cardSurface, width: 3),
-                      boxShadow: [
-                        BoxShadow(
-                          color: AppTheme.royalPurple.withValues(alpha: 0.35),
-                          blurRadius: 12,
-                          spreadRadius: 1,
-                        ),
-                      ],
-                    ),
-                    child: SojornAvatar(
-                      displayName: profile.displayName,
-                      avatarUrl: profile.avatarUrl,
-                      size: 58,
-                    ),
-                  ),
-                ),
-              ),
-            ],
-          ),
+          // ── Header with PFP inside the gradient ──
+          _buildHeader(),
           // ── Name, handle, bio, stats, button ──
           Padding(
             padding: const EdgeInsets.fromLTRB(16, 14, 16, 16),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                // Name + handle, right-padded to avoid avatar overlap
-                Padding(
-                  padding: const EdgeInsets.only(right: 76),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      GestureDetector(
-                        onTap: onProfileTap,
-                        child: Text(
-                          profile.displayName,
-                          style: TextStyle(
-                            color: AppTheme.navyText,
-                            fontSize: 16,
-                            fontWeight: FontWeight.w800,
-                          ),
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                        ),
-                      ),
-                      const SizedBox(height: 2),
-                      Text(
-                        '@${profile.handle}',
+                Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    GestureDetector(
+                      onTap: onProfileTap,
+                      child: Text(
+                        profile.displayName,
                         style: TextStyle(
-                          color: AppTheme.royalPurple.withValues(alpha: 0.6),
-                          fontSize: 12,
-                          fontWeight: FontWeight.w500,
+                          color: AppTheme.navyText,
+                          fontSize: 16,
+                          fontWeight: FontWeight.w800,
                         ),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
                       ),
-                    ],
-                  ),
+                    ),
+                    const SizedBox(height: 2),
+                    Text(
+                      '@${profile.handle}',
+                      style: TextStyle(
+                        color: AppTheme.royalPurple.withValues(alpha: 0.6),
+                        fontSize: 12,
+                        fontWeight: FontWeight.w500,
+                      ),
+                    ),
+                  ],
                 ),
                 if (profile.bio != null && profile.bio!.isNotEmpty) ...[
                   const SizedBox(height: 8),
@@ -306,40 +271,88 @@ class DesktopProfileCard extends StatelessWidget {
   }
 
   Widget _buildHeader() {
+    Widget avatarWidget = GestureDetector(
+      onTap: onProfileTap,
+      child: Container(
+        decoration: BoxDecoration(
+          borderRadius: BorderRadius.circular(18),
+          border: Border.all(color: SojornColors.basicWhite.withValues(alpha: 0.5), width: 2),
+          boxShadow: [
+            BoxShadow(
+              color: SojornColors.basicBlack.withValues(alpha: 0.3),
+              blurRadius: 10,
+              spreadRadius: 1,
+            ),
+          ],
+        ),
+        child: SojornAvatar(
+          displayName: profile.displayName,
+          avatarUrl: profile.avatarUrl,
+          size: 52,
+        ),
+      ),
+    );
+
     // If user has a cover image, show that
     if (profile.coverUrl != null && profile.coverUrl!.isNotEmpty) {
+      final hour = DateTime.now().hour;
+      final coverGreeting = hour < 12 ? 'Good morning' : hour < 17 ? 'Good afternoon' : 'Good evening';
       return SizedBox(
         height: 90,
         child: Stack(
           fit: StackFit.expand,
           children: [
             Image.network(profile.coverUrl!, fit: BoxFit.cover),
-            // Gradient overlay for text readability
+            // Gradient overlay — stronger at top for text legibility
             Container(
               decoration: BoxDecoration(
                 gradient: LinearGradient(
                   begin: Alignment.topCenter,
                   end: Alignment.bottomCenter,
                   colors: [
-                    SojornColors.basicBlack.withValues(alpha: 0.1),
-                    SojornColors.basicBlack.withValues(alpha: 0.4),
+                    SojornColors.basicBlack.withValues(alpha: 0.45),
+                    SojornColors.basicBlack.withValues(alpha: 0.15),
+                    SojornColors.basicBlack.withValues(alpha: 0.0),
+                    SojornColors.basicBlack.withValues(alpha: 0.35),
+                  ],
+                  stops: const [0.0, 0.3, 0.55, 1.0],
+                ),
+              ),
+            ),
+            Positioned(
+              top: 10,
+              left: 12,
+              child: Text(
+                '$coverGreeting, ${profile.displayName.split(' ').first}',
+                style: TextStyle(
+                  color: SojornColors.basicWhite,
+                  fontSize: 11,
+                  fontWeight: FontWeight.w600,
+                  shadows: [
+                    Shadow(
+                      color: SojornColors.basicBlack.withValues(alpha: 0.6),
+                      blurRadius: 6,
+                      offset: const Offset(0, 1),
+                    ),
+                    Shadow(
+                      color: SojornColors.basicBlack.withValues(alpha: 0.3),
+                      blurRadius: 12,
+                      offset: Offset.zero,
+                    ),
                   ],
                 ),
               ),
             ),
-            // Large username on cover
-            Positioned(
-              left: 12,
-              bottom: 8,
-              right: 12,
-              child: _buildUsernameOverlay(),
-            ),
+            Center(child: avatarWidget),
           ],
         ),
       );
     }
 
-    // Default: vibrant gradient header like the mockup
+    // Default: vibrant gradient header with PFP centered + greeting
+    final hour = DateTime.now().hour;
+    final greeting = hour < 12 ? 'Good morning' : hour < 17 ? 'Good afternoon' : 'Good evening';
+
     return Container(
       height: 90,
       decoration: BoxDecoration(
@@ -357,39 +370,31 @@ class DesktopProfileCard extends StatelessWidget {
       ),
       child: Stack(
         children: [
-          // Subtle pattern overlay
           Positioned.fill(
             child: CustomPaint(painter: _GradientPatternPainter()),
           ),
-          // Large username overlay
           Positioned(
+            top: 10,
             left: 12,
-            bottom: 8,
-            right: 12,
-            child: _buildUsernameOverlay(),
+            child: Text(
+              '$greeting, ${profile.displayName.split(' ').first}',
+              style: TextStyle(
+                color: SojornColors.basicWhite,
+                fontSize: 11,
+                fontWeight: FontWeight.w600,
+                shadows: [
+                  Shadow(
+                    color: SojornColors.basicBlack.withValues(alpha: 0.5),
+                    blurRadius: 4,
+                    offset: const Offset(0, 1),
+                  ),
+                ],
+              ),
+            ),
           ),
+          Center(child: avatarWidget),
         ],
       ),
-    );
-  }
-
-  Widget _buildUsernameOverlay() {
-    return Text(
-      profile.handle.toUpperCase(),
-      style: GoogleFonts.outfit(
-        color: SojornColors.basicWhite.withValues(alpha: 0.85),
-        fontSize: 18,
-        fontWeight: FontWeight.w900,
-        letterSpacing: 1.5,
-        shadows: [
-          Shadow(
-            color: SojornColors.basicBlack.withValues(alpha: 0.3),
-            blurRadius: 8,
-          ),
-        ],
-      ),
-      maxLines: 1,
-      overflow: TextOverflow.ellipsis,
     );
   }
 
@@ -532,30 +537,13 @@ class _Top8FriendsGridState extends State<Top8FriendsGrid> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              Text(
-                'Top 8',
-                style: TextStyle(
-                  color: AppTheme.navyText,
-                  fontSize: 14,
-                  fontWeight: FontWeight.w800,
-                ),
-              ),
-              if (widget.onViewAll != null)
-                GestureDetector(
-                  onTap: widget.onViewAll,
-                  child: Text(
-                    'View all',
-                    style: TextStyle(
-                      color: AppTheme.royalPurple,
-                      fontSize: 11,
-                      fontWeight: FontWeight.w600,
-                    ),
-                  ),
-                ),
-            ],
+          Text(
+            'Top 8',
+            style: TextStyle(
+              color: AppTheme.navyText,
+              fontSize: 14,
+              fontWeight: FontWeight.w800,
+            ),
           ),
           const SizedBox(height: 12),
           GridView.builder(
@@ -565,7 +553,7 @@ class _Top8FriendsGridState extends State<Top8FriendsGrid> {
               crossAxisCount: 4,
               mainAxisSpacing: 10,
               crossAxisSpacing: 6,
-              childAspectRatio: 0.75,
+              childAspectRatio: 0.72,
             ),
             itemCount: widget.friends.length.clamp(0, _maxCount),
             itemBuilder: (context, index) {
@@ -576,42 +564,66 @@ class _Top8FriendsGridState extends State<Top8FriendsGrid> {
 
               return GestureDetector(
                 onTap: () => widget.onFriendTap?.call(handle),
-                child: Column(
-                  children: [
-                    Container(
-                      decoration: BoxDecoration(
-                        borderRadius: BorderRadius.circular(14),
-                        boxShadow: [
-                          BoxShadow(
-                            color: AppTheme.royalPurple.withValues(alpha: 0.15),
-                            blurRadius: 8,
-                            offset: const Offset(0, 2),
+                child: LayoutBuilder(
+                  builder: (context, constraints) {
+                    // Calculate avatar size to fit within the cell, leaving room for text
+                    final avatarSize = (constraints.maxWidth * 0.78).clamp(28.0, 42.0);
+                    return Column(
+                      mainAxisSize: MainAxisSize.min,
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        Container(
+                          decoration: BoxDecoration(
+                            borderRadius: BorderRadius.circular(14),
+                            boxShadow: [
+                              BoxShadow(
+                                color: AppTheme.royalPurple.withValues(alpha: 0.15),
+                                blurRadius: 8,
+                                offset: const Offset(0, 2),
+                              ),
+                            ],
                           ),
-                        ],
-                      ),
-                      child: SojornAvatar(
-                        displayName: name,
-                        avatarUrl: avatar,
-                        size: 42,
-                      ),
-                    ),
-                    const SizedBox(height: 4),
-                    Text(
-                      name.split(' ').first,
-                      style: TextStyle(
-                        color: AppTheme.navyText.withValues(alpha: 0.7),
-                        fontSize: 10,
-                        fontWeight: FontWeight.w500,
-                      ),
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      textAlign: TextAlign.center,
-                    ),
-                  ],
+                          child: SojornAvatar(
+                            displayName: name,
+                            avatarUrl: avatar,
+                            size: avatarSize,
+                          ),
+                        ),
+                        const SizedBox(height: 3),
+                        Text(
+                          name.split(' ').first,
+                          style: TextStyle(
+                            color: AppTheme.navyText.withValues(alpha: 0.7),
+                            fontSize: 10,
+                            fontWeight: FontWeight.w500,
+                          ),
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          textAlign: TextAlign.center,
+                        ),
+                      ],
+                    );
+                  },
                 ),
               );
             },
           ),
+          if (widget.onViewAll != null) ...[
+            const SizedBox(height: 12),
+            Center(
+              child: GestureDetector(
+                onTap: widget.onViewAll,
+                child: Text(
+                  'View all friends',
+                  style: TextStyle(
+                    color: AppTheme.royalPurple,
+                    fontSize: 12,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+              ),
+            ),
+          ],
         ],
       ),
     );
@@ -1159,79 +1171,86 @@ class NowPlayingCard extends StatelessWidget {
             color: AppTheme.royalPurple.withValues(alpha: 0.15),
           ),
         ),
-        child: Row(
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            // Album art
-            Container(
-              width: 48,
-              height: 48,
-              decoration: BoxDecoration(
-                borderRadius: BorderRadius.circular(10),
-                gradient: LinearGradient(
-                  colors: [AppTheme.brightNavy, AppTheme.royalPurple],
-                ),
-                boxShadow: [
-                  BoxShadow(
-                    color: AppTheme.royalPurple.withValues(alpha: 0.3),
-                    blurRadius: 8,
-                  ),
-                ],
-              ),
-              clipBehavior: Clip.antiAlias,
-              child: albumArtUrl != null
-                  ? Image.network(albumArtUrl!, fit: BoxFit.cover)
-                  : const Icon(Icons.music_note, color: SojornColors.basicWhite, size: 24),
-            ),
-            const SizedBox(width: 12),
-            // Track info
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    'Music',
-                    style: TextStyle(
-                      color: AppTheme.royalPurple,
-                      fontSize: 10,
-                      fontWeight: FontWeight.w700,
-                      letterSpacing: 0.5,
-                    ),
-                  ),
-                  const SizedBox(height: 2),
-                  Text(
-                    trackTitle,
-                    style: TextStyle(
-                      color: AppTheme.navyText,
-                      fontSize: 14,
-                      fontWeight: FontWeight.w700,
-                    ),
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                  ),
-                  Text(
-                    artistName,
-                    style: TextStyle(
-                      color: AppTheme.navyText.withValues(alpha: 0.5),
-                      fontSize: 12,
-                    ),
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                  ),
-                ],
-              ),
-            ),
-            // Waveform placeholder + controls
             Row(
-              mainAxisSize: MainAxisSize.min,
               children: [
-                // Mini waveform visualization
-                CustomPaint(
-                  size: const Size(48, 24),
-                  painter: _WaveformPainter(color: AppTheme.royalPurple),
+                Text(
+                  'NOW PLAYING',
+                  style: TextStyle(
+                    color: AppTheme.royalPurple,
+                    fontSize: 10,
+                    fontWeight: FontWeight.w700,
+                    letterSpacing: 0.8,
+                  ),
                 ),
-                const SizedBox(width: 8),
-                Icon(Icons.play_circle_filled, color: AppTheme.royalPurple, size: 28),
+                const Spacer(),
+                Icon(Icons.play_circle_filled, color: AppTheme.royalPurple, size: 24),
               ],
+            ),
+            const SizedBox(height: 8),
+            Row(
+              children: [
+                // Album art
+                Container(
+                  width: 44,
+                  height: 44,
+                  decoration: BoxDecoration(
+                    borderRadius: BorderRadius.circular(10),
+                    gradient: LinearGradient(
+                      colors: [AppTheme.brightNavy, AppTheme.royalPurple],
+                    ),
+                    boxShadow: [
+                      BoxShadow(
+                        color: AppTheme.royalPurple.withValues(alpha: 0.3),
+                        blurRadius: 8,
+                      ),
+                    ],
+                  ),
+                  clipBehavior: Clip.antiAlias,
+                  child: albumArtUrl != null
+                      ? Image.network(albumArtUrl!, fit: BoxFit.cover)
+                      : const Icon(Icons.music_note, color: SojornColors.basicWhite, size: 20),
+                ),
+                const SizedBox(width: 10),
+                // Track info — takes remaining width
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        trackTitle,
+                        style: TextStyle(
+                          color: AppTheme.navyText,
+                          fontSize: 13,
+                          fontWeight: FontWeight.w700,
+                        ),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        softWrap: false,
+                      ),
+                      const SizedBox(height: 2),
+                      Text(
+                        artistName,
+                        style: TextStyle(
+                          color: AppTheme.navyText.withValues(alpha: 0.5),
+                          fontSize: 12,
+                        ),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        softWrap: false,
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 6),
+            // Mini waveform visualization — full width
+            CustomPaint(
+              size: const Size(double.infinity, 20),
+              painter: _WaveformPainter(color: AppTheme.royalPurple),
             ),
           ],
         ),

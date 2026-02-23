@@ -98,6 +98,145 @@ class _GroupThreadDetailScreenState extends State<GroupThreadDetailScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final isDesktop = MediaQuery.of(context).size.width >= 900;
+
+    final bodyContent = _loading
+        ? const Center(child: CircularProgressIndicator())
+        : Column(
+            children: [
+              Expanded(
+                child: ListView(
+                  padding: const EdgeInsets.all(16),
+                  children: [
+                    // Original post (highlighted)
+                    if (_thread != null) ...[
+                      Container(
+                        padding: const EdgeInsets.all(14),
+                        decoration: BoxDecoration(
+                          color: AppTheme.cardSurface,
+                          borderRadius: BorderRadius.circular(14),
+                          border: Border.all(color: AppTheme.brightNavy.withValues(alpha: 0.25), width: 1.5),
+                        ),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              _thread!['title'] as String? ?? '',
+                              style: TextStyle(color: AppTheme.navyBlue, fontSize: 18, fontWeight: FontWeight.w700),
+                            ),
+                            const SizedBox(height: 8),
+                            Row(
+                              children: [
+                                Text(
+                                  _thread!['author_display_name'] as String? ??
+                                      _thread!['author_handle'] as String? ?? '',
+                                  style: TextStyle(color: AppTheme.brightNavy, fontSize: 12, fontWeight: FontWeight.w500),
+                                ),
+                                const SizedBox(width: 8),
+                                Text(
+                                  _timeAgo(_thread!['created_at']?.toString()),
+                                  style: TextStyle(color: SojornColors.textDisabled, fontSize: 11),
+                                ),
+                              ],
+                            ),
+                            if ((_thread!['body'] as String? ?? '').isNotEmpty) ...[
+                              const SizedBox(height: 12),
+                              Text(
+                                _thread!['body'] as String,
+                                style: TextStyle(color: SojornColors.postContent, fontSize: 14, height: 1.5),
+                              ),
+                            ],
+                          ],
+                        ),
+                      ),
+                      const SizedBox(height: 16),
+                      // Chain metadata
+                      Row(
+                        children: [
+                          Icon(Icons.forum_outlined, size: 14, color: AppTheme.navyBlue.withValues(alpha: 0.5)),
+                          const SizedBox(width: 6),
+                          Text(
+                            '${_replies.length} ${_replies.length == 1 ? 'reply' : 'replies'}',
+                            style: TextStyle(color: AppTheme.navyBlue, fontWeight: FontWeight.w600, fontSize: 13),
+                          ),
+                          const SizedBox(width: 12),
+                          Icon(Icons.people_outline, size: 14, color: AppTheme.navyBlue.withValues(alpha: 0.5)),
+                          const SizedBox(width: 4),
+                          Text(
+                            '${_uniqueParticipants()} participants',
+                            style: TextStyle(color: SojornColors.textDisabled, fontSize: 12),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 12),
+                    ],
+                    if (widget.isEncrypted && _replies.isEmpty)
+                      Padding(
+                        padding: const EdgeInsets.symmetric(vertical: 20),
+                        child: Center(
+                          child: Text(
+                            'Encrypted thread replies coming soon',
+                            style: TextStyle(color: SojornColors.textDisabled, fontSize: 13),
+                          ),
+                        ),
+                      ),
+                    // Replies with thread connector
+                    for (int i = 0; i < _replies.length; i++)
+                      _ReplyCard(
+                        reply: _replies[i],
+                        timeAgo: _timeAgo(_replies[i]['created_at']?.toString()),
+                        showConnector: i < _replies.length - 1,
+                      ),
+                  ],
+                ),
+              ),
+              // Reply composer
+              if (!widget.isEncrypted)
+                Container(
+                  padding: EdgeInsets.fromLTRB(12, 8, 8, isDesktop ? 8 : MediaQuery.of(context).padding.bottom + 8),
+                  decoration: BoxDecoration(
+                    color: AppTheme.cardSurface,
+                    border: Border(top: BorderSide(color: AppTheme.navyBlue.withValues(alpha: 0.08))),
+                  ),
+                  child: ComposerBar(
+                    config: ComposerConfig.threadReply,
+                    onSend: _sendReply,
+                  ),
+                ),
+            ],
+          );
+
+    if (isDesktop) {
+      return Column(
+        children: [
+          // Compact header with close button
+          Container(
+            padding: const EdgeInsets.fromLTRB(16, 10, 8, 10),
+            decoration: BoxDecoration(
+              color: AppTheme.cardSurface,
+              border: Border(bottom: BorderSide(color: AppTheme.navyBlue.withValues(alpha: 0.08))),
+            ),
+            child: Row(
+              children: [
+                Expanded(
+                  child: Text(widget.threadTitle,
+                    style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 16),
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                ),
+                IconButton(
+                  icon: const Icon(Icons.close),
+                  onPressed: () => Navigator.of(context).pop(),
+                  tooltip: 'Close',
+                ),
+              ],
+            ),
+          ),
+          Expanded(child: bodyContent),
+        ],
+      );
+    }
+
     return Scaffold(
       backgroundColor: AppTheme.scaffoldBg,
       appBar: AppBar(
@@ -106,111 +245,7 @@ class _GroupThreadDetailScreenState extends State<GroupThreadDetailScreen> {
         surfaceTintColor: SojornColors.transparent,
         title: Text(widget.threadTitle, style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 16)),
       ),
-      body: _loading
-          ? const Center(child: CircularProgressIndicator())
-          : Column(
-              children: [
-                Expanded(
-                  child: ListView(
-                    padding: const EdgeInsets.all(16),
-                    children: [
-                      // Original post (highlighted)
-                      if (_thread != null) ...[
-                        Container(
-                          padding: const EdgeInsets.all(14),
-                          decoration: BoxDecoration(
-                            color: AppTheme.cardSurface,
-                            borderRadius: BorderRadius.circular(14),
-                            border: Border.all(color: AppTheme.brightNavy.withValues(alpha: 0.25), width: 1.5),
-                          ),
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Text(
-                                _thread!['title'] as String? ?? '',
-                                style: TextStyle(color: AppTheme.navyBlue, fontSize: 18, fontWeight: FontWeight.w700),
-                              ),
-                              const SizedBox(height: 8),
-                              Row(
-                                children: [
-                                  Text(
-                                    _thread!['author_display_name'] as String? ??
-                                        _thread!['author_handle'] as String? ?? '',
-                                    style: TextStyle(color: AppTheme.brightNavy, fontSize: 12, fontWeight: FontWeight.w500),
-                                  ),
-                                  const SizedBox(width: 8),
-                                  Text(
-                                    _timeAgo(_thread!['created_at']?.toString()),
-                                    style: TextStyle(color: SojornColors.textDisabled, fontSize: 11),
-                                  ),
-                                ],
-                              ),
-                              if ((_thread!['body'] as String? ?? '').isNotEmpty) ...[
-                                const SizedBox(height: 12),
-                                Text(
-                                  _thread!['body'] as String,
-                                  style: TextStyle(color: SojornColors.postContent, fontSize: 14, height: 1.5),
-                                ),
-                              ],
-                            ],
-                          ),
-                        ),
-                        const SizedBox(height: 16),
-                        // Chain metadata
-                        Row(
-                          children: [
-                            Icon(Icons.forum_outlined, size: 14, color: AppTheme.navyBlue.withValues(alpha: 0.5)),
-                            const SizedBox(width: 6),
-                            Text(
-                              '${_replies.length} ${_replies.length == 1 ? 'reply' : 'replies'}',
-                              style: TextStyle(color: AppTheme.navyBlue, fontWeight: FontWeight.w600, fontSize: 13),
-                            ),
-                            const SizedBox(width: 12),
-                            Icon(Icons.people_outline, size: 14, color: AppTheme.navyBlue.withValues(alpha: 0.5)),
-                            const SizedBox(width: 4),
-                            Text(
-                              '${_uniqueParticipants()} participants',
-                              style: TextStyle(color: SojornColors.textDisabled, fontSize: 12),
-                            ),
-                          ],
-                        ),
-                        const SizedBox(height: 12),
-                      ],
-                      if (widget.isEncrypted && _replies.isEmpty)
-                        Padding(
-                          padding: const EdgeInsets.symmetric(vertical: 20),
-                          child: Center(
-                            child: Text(
-                              'Encrypted thread replies coming soon',
-                              style: TextStyle(color: SojornColors.textDisabled, fontSize: 13),
-                            ),
-                          ),
-                        ),
-                      // Replies with thread connector
-                      for (int i = 0; i < _replies.length; i++)
-                        _ReplyCard(
-                          reply: _replies[i],
-                          timeAgo: _timeAgo(_replies[i]['created_at']?.toString()),
-                          showConnector: i < _replies.length - 1,
-                        ),
-                    ],
-                  ),
-                ),
-                // Reply composer
-                if (!widget.isEncrypted)
-                  Container(
-                    padding: EdgeInsets.fromLTRB(12, 8, 8, MediaQuery.of(context).padding.bottom + 8),
-                    decoration: BoxDecoration(
-                      color: AppTheme.cardSurface,
-                      border: Border(top: BorderSide(color: AppTheme.navyBlue.withValues(alpha: 0.08))),
-                    ),
-                    child: ComposerBar(
-                      config: ComposerConfig.threadReply,
-                      onSend: _sendReply,
-                    ),
-                  ),
-              ],
-            ),
+      body: bodyContent,
     );
   }
 }

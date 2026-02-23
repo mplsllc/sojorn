@@ -12,6 +12,7 @@ import '../providers/settings_provider.dart';
 
 import '../theme/app_theme.dart';
 import '../theme/tokens.dart';
+import 'desktop/desktop_context_menu.dart';
 import 'post/post_actions.dart';
 import 'post/post_body.dart';
 import 'post/post_header.dart';
@@ -73,6 +74,7 @@ class sojornPostCard extends ConsumerStatefulWidget {
 
 class _sojornPostCardState extends ConsumerState<sojornPostCard> {
   bool _nsfwRevealed = false;
+  bool _hovering = false;
 
   Post get post => widget.post;
   PostViewMode get mode => widget.mode;
@@ -124,9 +126,9 @@ class _sojornPostCardState extends ConsumerState<sojornPostCard> {
     switch (mode) {
       case PostViewMode.feed:
       case PostViewMode.sponsored:
-        return 42.0;
+        return 48.0;
       case PostViewMode.detail:
-        return 44.0;
+        return 50.0;
       case PostViewMode.compact:
         return 28.0;
       case PostViewMode.thread:
@@ -144,9 +146,20 @@ class _sojornPostCardState extends ConsumerState<sojornPostCard> {
     // Completely hide NSFW posts when user hasn't enabled NSFW
     if (_shouldHideNsfw) return const SizedBox.shrink();
 
-    return Material(
+    final isDesktop = MediaQuery.of(context).size.width >= 900;
+
+    return GestureDetector(
+      onSecondaryTapDown: isDesktop
+          ? (details) => _showContextMenu(context, details.globalPosition)
+          : null,
+      child: MouseRegion(
+      onEnter: isDesktop ? (_) => setState(() => _hovering = true) : null,
+      onExit: isDesktop ? (_) => setState(() => _hovering = false) : null,
+      child: Material(
       color: SojornColors.transparent,
-      child: Container(
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 200),
+        curve: Curves.easeOut,
         margin: EdgeInsets.only(bottom: _isThread ? 4 : 16),
         decoration: BoxDecoration(
           color: AppTheme.cardSurface,
@@ -158,9 +171,9 @@ class _sojornPostCardState extends ConsumerState<sojornPostCard> {
               ? []
               : [
                   BoxShadow(
-                    color: AppTheme.brightNavy.withValues(alpha: 0.12),
-                    blurRadius: 20,
-                    offset: const Offset(0, 6),
+                    color: AppTheme.brightNavy.withValues(alpha: _hovering && isDesktop ? 0.18 : 0.12),
+                    blurRadius: _hovering && isDesktop ? 28 : 20,
+                    offset: Offset(0, _hovering && isDesktop ? 10 : 6),
                   ),
                 ],
         ),
@@ -496,6 +509,46 @@ class _sojornPostCardState extends ConsumerState<sojornPostCard> {
           ),
         ),
       ),
+    ),
+    ),
+    );
+  }
+
+  void _showContextMenu(BuildContext context, Offset position) {
+    DesktopContextMenu.show(
+      context,
+      position: position,
+      items: [
+        ContextMenuItem(
+          icon: Icons.link,
+          label: 'Copy link',
+          onTap: () {
+            // Copy post link to clipboard
+          },
+        ),
+        ContextMenuItem(
+          icon: Icons.share_outlined,
+          label: 'Share',
+          onTap: () {
+            // Trigger share
+          },
+        ),
+        ContextMenuItem(
+          icon: Icons.bookmark_border,
+          label: 'Save',
+          onTap: () {
+            // Trigger save
+          },
+        ),
+        ContextMenuItem(
+          icon: Icons.flag_outlined,
+          label: 'Report',
+          onTap: () {
+            // Open report flow
+          },
+          isDestructive: true,
+        ),
+      ],
     );
   }
 }

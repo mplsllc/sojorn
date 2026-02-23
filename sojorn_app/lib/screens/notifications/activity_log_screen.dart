@@ -135,47 +135,67 @@ class _ActivityLogScreenState extends ConsumerState<ActivityLogScreen> {
   @override
   Widget build(BuildContext context) {
     final displayed = _filtered;
+    final isDesktop = MediaQuery.of(context).size.width >= 900;
+
+    final body = Column(
+      children: [
+        _buildFilterRow(),
+        Expanded(
+          child: _error != null
+              ? _buildError()
+              : displayed.isEmpty && !_isLoading
+                  ? _buildEmpty()
+                  : RefreshIndicator(
+                      onRefresh: () => _load(refresh: true),
+                      child: ListView.builder(
+                        itemCount: displayed.length + (_hasMore ? 1 : 0),
+                        padding: EdgeInsets.zero,
+                        itemBuilder: (context, index) {
+                          if (index == displayed.length) {
+                            if (!_isLoading) _load();
+                            return const Padding(
+                              padding: EdgeInsets.all(16),
+                              child: Center(child: CircularProgressIndicator()),
+                            );
+                          }
+                          final item = displayed[index];
+                          final prevItem = index > 0 ? displayed[index - 1] : null;
+                          final showHeader = prevItem == null ||
+                              !_sameSection(prevItem.createdAt, item.createdAt);
+                          return Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              if (showHeader) _buildDateHeader(item.createdAt),
+                              _ActivityItem(item: item, onTap: () => _onTap(item)),
+                            ],
+                          );
+                        },
+                      ),
+                    ),
+        ),
+      ],
+    );
+
+    if (isDesktop) {
+      return Scaffold(
+        backgroundColor: AppTheme.scaffoldBg,
+        appBar: AppBar(
+          backgroundColor: AppTheme.scaffoldBg,
+          elevation: 0,
+          leading: IconButton(
+            icon: const Icon(Icons.close),
+            onPressed: () => Navigator.of(context).pop(),
+          ),
+          title: Text('Activity Log',
+            style: TextStyle(color: AppTheme.navyBlue, fontSize: 18, fontWeight: FontWeight.w600)),
+        ),
+        body: body,
+      );
+    }
 
     return FullScreenShell(
       titleText: 'Activity Log',
-      body: Column(
-        children: [
-          _buildFilterRow(),
-          Expanded(
-            child: _error != null
-                ? _buildError()
-                : displayed.isEmpty && !_isLoading
-                    ? _buildEmpty()
-                    : RefreshIndicator(
-                        onRefresh: () => _load(refresh: true),
-                        child: ListView.builder(
-                          itemCount: displayed.length + (_hasMore ? 1 : 0),
-                          padding: EdgeInsets.zero,
-                          itemBuilder: (context, index) {
-                            if (index == displayed.length) {
-                              if (!_isLoading) _load();
-                              return const Padding(
-                                padding: EdgeInsets.all(16),
-                                child: Center(child: CircularProgressIndicator()),
-                              );
-                            }
-                            final item = displayed[index];
-                            final prevItem = index > 0 ? displayed[index - 1] : null;
-                            final showHeader = prevItem == null ||
-                                !_sameSection(prevItem.createdAt, item.createdAt);
-                            return Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                if (showHeader) _buildDateHeader(item.createdAt),
-                                _ActivityItem(item: item, onTap: () => _onTap(item)),
-                              ],
-                            );
-                          },
-                        ),
-                      ),
-          ),
-        ],
-      ),
+      body: body,
     );
   }
 

@@ -618,11 +618,11 @@ class _QuipsFeedScreenState extends ConsumerState<QuipsFeedScreen>
       backgroundColor: SojornColors.basicBlack,
       body: Row(
         children: [
-          // Centered video player in phone-shaped container
+          // Centered video player — larger on desktop
           Expanded(
             child: Center(
               child: Container(
-                constraints: const BoxConstraints(maxWidth: 400),
+                constraints: const BoxConstraints(maxWidth: 520),
                 child: AspectRatio(
                   aspectRatio: 9 / 16,
                   child: ClipRRect(
@@ -713,6 +713,8 @@ class _QuipsFeedScreenState extends ConsumerState<QuipsFeedScreen>
               onTogglePause: _toggleUserPause,
               onNotInterested: () => _handleNotInterested(quip),
               onFollow: quip.authorId.isNotEmpty ? () => _toggleFollow(quip) : null,
+              currentIndex: index,
+              totalCount: _quips.length,
               onScrollUp: _currentIndex > 0 ? () => _pageController.previousPage(duration: const Duration(milliseconds: 300), curve: Curves.easeInOut) : null,
               onScrollDown: _currentIndex < _quips.length - 1 ? () => _pageController.nextPage(duration: const Duration(milliseconds: 300), curve: Curves.easeInOut) : null,
             ),
