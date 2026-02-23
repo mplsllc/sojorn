@@ -122,6 +122,9 @@ class BeaconScreenState extends ConsumerState<BeaconScreen> with TickerProviderS
   // Sheet size tracking (for toggle button and tap-outside-to-close overlay)
   double _sheetSize = 0.15;
 
+  // Beacon map type filter (hidden = not shown on map/list)
+  Set<BeaconType> _hiddenTypes = {};
+
   // Beacon search state
   final _searchController = TextEditingController();
   bool _isSearching = false;
@@ -903,11 +906,13 @@ class BeaconScreenState extends ConsumerState<BeaconScreen> with TickerProviderS
     );
   }
 
-  /// Active geo-alerts only: no discussion types, no expired unverified reports.
+  /// Active geo-alerts only: no discussion types, no expired unverified reports,
+  /// and respecting the user's hidden-type filter selections.
   List<Post> get _activeGeoAlerts {
     final now = DateTime.now();
     return [..._beacons, ..._officialPosts].where((p) {
       if (!(p.beaconType?.isGeoAlert ?? false)) return false;
+      if (_hiddenTypes.contains(p.beaconType)) return false;
       // Official MN511 alerts: never expire client-side (server controls TTL)
       if (p.isOfficial == true) return true;
       final b = p.toBeacon();
@@ -1267,6 +1272,9 @@ class BeaconScreenState extends ConsumerState<BeaconScreen> with TickerProviderS
               ),
             ),
           const Spacer(),
+          // Filter button — badge shows how many types are hidden
+          _mapFilterButton(),
+          const SizedBox(width: 8),
           // My location button
           _mapIconButton(Icons.my_location,
             onTap: _isLoadingLocation ? null : () => _getCurrentLocation(forceCenter: true)),
@@ -1274,6 +1282,56 @@ class BeaconScreenState extends ConsumerState<BeaconScreen> with TickerProviderS
           // Refresh button
           _mapIconButton(Icons.refresh, onTap: () => _loadBeacons()),
         ],
+      ),
+    );
+  }
+
+  Widget _mapFilterButton() {
+    final hiddenCount = _hiddenTypes.length;
+    return GestureDetector(
+      onTap: _showBeaconFilterSheet,
+      child: ClipRRect(
+        borderRadius: BorderRadius.circular(18),
+        child: BackdropFilter(
+          filter: ImageFilter.blur(sigmaX: 12, sigmaY: 12),
+          child: Stack(
+            clipBehavior: Clip.none,
+            children: [
+              Container(
+                width: 36, height: 36,
+                decoration: BoxDecoration(
+                  color: hiddenCount > 0
+                      ? AppTheme.navyBlue.withValues(alpha: 0.85)
+                      : SojornColors.basicWhite.withValues(alpha: 0.70),
+                  shape: BoxShape.circle,
+                  border: Border.all(color: SojornColors.basicWhite.withValues(alpha: 0.5), width: 0.5),
+                  boxShadow: [BoxShadow(color: SojornColors.basicBlack.withValues(alpha: 0.08), blurRadius: 6)],
+                ),
+                child: Icon(Icons.tune, size: 18,
+                  color: hiddenCount > 0
+                      ? Colors.white
+                      : AppTheme.navyBlue.withValues(alpha: 0.75)),
+              ),
+              if (hiddenCount > 0)
+                Positioned(
+                  top: -3, right: -3,
+                  child: Container(
+                    width: 16, height: 16,
+                    decoration: const BoxDecoration(
+                      color: Color(0xFFFF5722),
+                      shape: BoxShape.circle,
+                    ),
+                    child: Center(
+                      child: Text(
+                        '$hiddenCount',
+                        style: const TextStyle(color: Colors.white, fontSize: 10, fontWeight: FontWeight.w800),
+                      ),
+                    ),
+                  ),
+                ),
+            ],
+          ),
+        ),
       ),
     );
   }
@@ -1296,6 +1354,226 @@ class BeaconScreenState extends ConsumerState<BeaconScreen> with TickerProviderS
             child: Icon(icon, size: 18, color: AppTheme.navyBlue.withValues(alpha: 0.75)),
           ),
         ),
+      ),
+    );
+  }
+
+  // ─── Beacon type filter sheet ─────────────────────────────────────────
+  void _showBeaconFilterSheet() {
+    // Define broad filter categories grouping related BeaconTypes
+    final categories = <({String label, IconData icon, Color color, List<BeaconType> types})>[
+      (
+        label: 'Safety',
+        icon: Icons.shield,
+        color: const Color(0xFFF44336),
+        types: [
+          BeaconType.safety,
+          BeaconType.suspiciousActivity,
+          BeaconType.officialPresence,
+          BeaconType.checkpoint,
+          BeaconType.taskForce,
+        ],
+      ),
+      (
+        label: 'Hazards',
+        icon: Icons.warning_rounded,
+        color: const Color(0xFFFF5722),
+        types: [
+          BeaconType.hazard,
+          BeaconType.fire,
+          BeaconType.utilityAlert,
+        ],
+      ),
+      (
+        label: 'Traffic',
+        icon: Icons.traffic,
+        color: const Color(0xFFFFAB00),
+        types: [
+          BeaconType.camera,
+          BeaconType.sign,
+          BeaconType.weatherStation,
+        ],
+      ),
+      (
+        label: 'Community',
+        icon: Icons.people,
+        color: const Color(0xFF607D8B),
+        types: [
+          BeaconType.packageTheft,
+          BeaconType.noiseReport,
+          BeaconType.development,
+        ],
+      ),
+    ];
+
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: Colors.transparent,
+      isScrollControlled: true,
+      builder: (_) => StatefulBuilder(
+        builder: (ctx, setSheetState) {
+          return Container(
+            decoration: const BoxDecoration(
+              color: Colors.white,
+              borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+            ),
+            padding: const EdgeInsets.fromLTRB(20, 12, 20, 32),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                // Handle
+                Center(
+                  child: Container(
+                    width: 36, height: 4,
+                    decoration: BoxDecoration(
+                      color: Colors.grey.shade300,
+                      borderRadius: BorderRadius.circular(2),
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 16),
+                Row(
+                  children: [
+                    const Text('Filter Map Alerts',
+                      style: TextStyle(fontSize: 17, fontWeight: FontWeight.w700)),
+                    const Spacer(),
+                    if (_hiddenTypes.isNotEmpty)
+                      TextButton(
+                        onPressed: () {
+                          setState(() => _hiddenTypes = {});
+                          setSheetState(() {});
+                        },
+                        child: const Text('Show All'),
+                      ),
+                  ],
+                ),
+                const SizedBox(height: 4),
+                const Text(
+                  'Tap a category to hide those alerts from the map.',
+                  style: TextStyle(fontSize: 13, color: Colors.grey),
+                ),
+                const SizedBox(height: 16),
+                // Category toggles
+                ...categories.map((cat) {
+                  final allHidden = cat.types.every((t) => _hiddenTypes.contains(t));
+                  final someHidden = !allHidden && cat.types.any((t) => _hiddenTypes.contains(t));
+                  return Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      // Category header row
+                      InkWell(
+                        borderRadius: BorderRadius.circular(10),
+                        onTap: () {
+                          setState(() {
+                            if (allHidden) {
+                              _hiddenTypes.removeAll(cat.types);
+                            } else {
+                              _hiddenTypes.addAll(cat.types);
+                            }
+                          });
+                          setSheetState(() {});
+                        },
+                        child: Padding(
+                          padding: const EdgeInsets.symmetric(vertical: 6),
+                          child: Row(
+                            children: [
+                              Container(
+                                width: 32, height: 32,
+                                decoration: BoxDecoration(
+                                  color: allHidden
+                                      ? Colors.grey.shade200
+                                      : cat.color.withValues(alpha: 0.15),
+                                  borderRadius: BorderRadius.circular(8),
+                                ),
+                                child: Icon(cat.icon, size: 16,
+                                  color: allHidden ? Colors.grey : cat.color),
+                              ),
+                              const SizedBox(width: 12),
+                              Text(cat.label,
+                                style: TextStyle(
+                                  fontSize: 15,
+                                  fontWeight: FontWeight.w600,
+                                  color: allHidden ? Colors.grey : Colors.black87,
+                                )),
+                              if (someHidden)
+                                Padding(
+                                  padding: const EdgeInsets.only(left: 6),
+                                  child: Text('(partial)',
+                                    style: TextStyle(fontSize: 12, color: Colors.grey.shade500)),
+                                ),
+                              const Spacer(),
+                              Icon(
+                                allHidden ? Icons.visibility_off : Icons.visibility,
+                                size: 18,
+                                color: allHidden ? Colors.grey : cat.color,
+                              ),
+                            ],
+                          ),
+                        ),
+                      ),
+                      // Individual type chips
+                      Padding(
+                        padding: const EdgeInsets.only(left: 44, bottom: 8),
+                        child: Wrap(
+                          spacing: 6,
+                          runSpacing: 4,
+                          children: cat.types.map((type) {
+                            final hidden = _hiddenTypes.contains(type);
+                            return GestureDetector(
+                              onTap: () {
+                                setState(() {
+                                  if (hidden) {
+                                    _hiddenTypes.remove(type);
+                                  } else {
+                                    _hiddenTypes.add(type);
+                                  }
+                                });
+                                setSheetState(() {});
+                              },
+                              child: AnimatedContainer(
+                                duration: const Duration(milliseconds: 150),
+                                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+                                decoration: BoxDecoration(
+                                  color: hidden
+                                      ? Colors.grey.shade100
+                                      : type.color.withValues(alpha: 0.12),
+                                  borderRadius: BorderRadius.circular(20),
+                                  border: Border.all(
+                                    color: hidden
+                                        ? Colors.grey.shade300
+                                        : type.color.withValues(alpha: 0.4),
+                                  ),
+                                ),
+                                child: Row(
+                                  mainAxisSize: MainAxisSize.min,
+                                  children: [
+                                    Icon(type.icon, size: 12,
+                                      color: hidden ? Colors.grey.shade400 : type.color),
+                                    const SizedBox(width: 4),
+                                    Text(type.displayName,
+                                      style: TextStyle(
+                                        fontSize: 12,
+                                        fontWeight: FontWeight.w500,
+                                        color: hidden
+                                            ? Colors.grey.shade400
+                                            : type.color.withValues(alpha: 0.9),
+                                        decoration: hidden ? TextDecoration.lineThrough : null,
+                                      )),
+                                  ],
+                                ),
+                              ),
+                            );
+                          }).toList(),
+                        ),
+                      ),
+                    ],
+                  );
+                }),
+              ],
+            ),
+          );
+        },
       ),
     );
   }
@@ -2878,7 +3156,10 @@ class BeaconScreenState extends ConsumerState<BeaconScreen> with TickerProviderS
   // Builds the flat list of all beacon Markers for the cluster layer
   List<Marker> _buildAllBeaconMarkers() {
     return [..._beacons, ..._officialPosts]
-        .where((p) => p.isBeaconPost && (p.beaconType?.isGeoAlert ?? false))
+        .where((p) =>
+            p.isBeaconPost &&
+            (p.beaconType?.isGeoAlert ?? false) &&
+            !_hiddenTypes.contains(p.beaconType))
         .map((p) => _createMarker(p))
         .toList();
   }
