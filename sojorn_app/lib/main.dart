@@ -183,11 +183,18 @@ class _sojornAppState extends ConsumerState<sojornApp> with WidgetsBindingObserv
   void didChangeAppLifecycleState(AppLifecycleState state) {
     if (kDebugMode) debugPrint('[APP] Lifecycle: $state  ${DateTime.now().toIso8601String()}');
     if (state == AppLifecycleState.resumed && _authService.isAuthenticated) {
-      // Quick check: if chat keys were wiped (cache clear, etc.),
-      // re-evaluate the vault gate so it can prompt for restore.
+      // If keys aren't in memory, try to reload them from local storage first.
+      // Only surface the vault gate if initialization genuinely cannot find keys
+      // (needsVaultRestore=true) — avoids false-positive prompts during normal
+      // init timing.
       if (!SimpleE2EEService().isReady) {
-        if (kDebugMode) debugPrint('[APP] Keys missing after resume — re-checking vault');
-        ref.invalidate(vaultSetupProvider);
+        if (kDebugMode) debugPrint('[APP] Keys missing after resume — attempting silent re-init');
+        SimpleE2EEService().initialize().then((_) {
+          if (SimpleE2EEService().needsVaultRestore) {
+            if (kDebugMode) debugPrint('[APP] Vault restore required — surfacing gate');
+            ref.invalidate(vaultSetupProvider);
+          }
+        });
       }
     }
   }
