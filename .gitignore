@@ -26,6 +26,8 @@ authorized_keys
 
 # Firebase
 .firebaserc
+sojorn_app/web/firebase-config.js
+sojorn_app/dart-defines.env
 
 # Platform / Auth Secrets
 firebase-auth-*.json

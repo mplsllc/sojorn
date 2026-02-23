@@ -4,27 +4,26 @@
 
 import 'package:firebase_core/firebase_core.dart';
 
+// Firebase config is injected at build time via --dart-define flags.
+// For local web builds, create sojorn_app/dart-defines.env (gitignored):
+//   FIREBASE_API_KEY=AIzaSy...
+//   FIREBASE_APP_ID=1:486753572104:web:...
+// Then build with: flutter build web $(cat dart-defines.env | sed 's/^/--dart-define=/' | tr '\n' ' ')
+
 class FirebaseWebConfig {
   static const FirebaseOptions options = FirebaseOptions(
-    apiKey: 'FIREBASE_API_KEY_REDACTED',
+    apiKey: String.fromEnvironment('FIREBASE_API_KEY'),
     authDomain: 'sojorn-a7a78.firebaseapp.com',
     projectId: 'sojorn-a7a78',
     storageBucket: 'sojorn-a7a78.firebasestorage.app',
     messagingSenderId: '486753572104',
-    appId: '1:486753572104:web:d3e6ab825d1e008f9fc8bd',
+    appId: String.fromEnvironment('FIREBASE_APP_ID'),
     // measurementId intentionally omitted — Sojorn does not use Firebase Analytics.
     // Adding firebase_analytics package + measurementId would enable behavioral tracking,
     // which violates our privacy policy.
   );
 
-  // IMPORTANT: Web push notifications require a VAPID key.
-  // To generate one:
-  // 1. Go to Firebase Console > Project Settings > Cloud Messaging
-  // 2. Under "Web configuration", click "Generate key pair"
-  // 3. Copy the public key and paste it below
-  // Without a valid VAPID key, web push notifications will not work.
-  
-  // VAPID key for web push notifications
+  // VAPID key for web push notifications (public key — safe to commit).
   // From Firebase Console > Cloud Messaging > Web Push certificates
   static const String _vapidKey = 'BKD_nCyWx5aIrsHQ_bXj4nKK0_N1dURrJU0t9t2FxjzlExaOC7dpvnPKsbGZ228yP7EEAU60dGq1UER8sjwQ4Ls';
 

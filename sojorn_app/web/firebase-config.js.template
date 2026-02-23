@@ -1,0 +1,13 @@
+// Firebase web configuration — generated at deploy time from this template.
+// DO NOT commit firebase-config.js (it is gitignored).
+// To generate: sed 's|%%FIREBASE_API_KEY%%|YOUR_KEY|g; s|%%FIREBASE_APP_ID%%|YOUR_APP_ID|g' firebase-config.js.template > firebase-config.js
+//
+// Get values from: Firebase Console → Project Settings → Your apps → Web app
+const FIREBASE_CONFIG = {
+  apiKey: '%%FIREBASE_API_KEY%%',
+  authDomain: 'sojorn-a7a78.firebaseapp.com',
+  projectId: 'sojorn-a7a78',
+  storageBucket: 'sojorn-a7a78.firebasestorage.app',
+  messagingSenderId: '486753572104',
+  appId: '%%FIREBASE_APP_ID%%',
+};
