@@ -245,6 +245,9 @@ func main() {
 	repostHandler := handlers.NewRepostHandler(dbPool)
 	profileLayoutHandler := handlers.NewProfileLayoutHandler(dbPool)
 
+	// Image proxy (CORS bypass for web.archive.org, imgur, giphy)
+	imageProxyHandler := handlers.NewImageProxyHandler()
+
 	// Audio library proxy (Freesound — gracefully returns 503 until FREESOUND_API_KEY is set)
 	audioHandler := handlers.NewAudioHandler(cfg.FreesoundAPIKey)
 
@@ -303,6 +306,9 @@ func main() {
 				c.JSON(200, gin.H{"message": "You're on the list!"})
 			})
 		}
+
+		// Image proxy (public — no auth needed, CORS bypass for Flutter web)
+		v1.GET("/image-proxy", imageProxyHandler.ProxyImage)
 
 		auth := v1.Group("/auth")
 		{
@@ -562,6 +568,8 @@ func main() {
 				groups.DELETE("/:id/events/:eventId", eventHandler.DeleteEvent)
 				groups.POST("/:id/events/:eventId/rsvp", eventHandler.RSVPEvent)
 				groups.DELETE("/:id/events/:eventId/rsvp", eventHandler.RemoveRSVP)
+				groups.POST("/:id/events/:eventId/approve", eventHandler.ApproveEvent)
+				groups.POST("/:id/events/:eventId/reject", eventHandler.RejectEvent)
 			}
 
 			// Capsule system (E2EE groups + clusters)
