@@ -38,6 +38,7 @@ type GroupEvent struct {
 	MaxAttendees  *int       `json:"max_attendees"`
 	AttendeeCount int        `json:"attendee_count"`
 	MyRSVP        *string    `json:"my_rsvp,omitempty"`
+	Status        string     `json:"status"`
 	CreatedAt     time.Time  `json:"created_at"`
 	UpdatedAt     time.Time  `json:"updated_at"`
 }
@@ -48,12 +49,20 @@ func (h *EventHandler) CreateEvent(c *gin.Context) {
 	userIDStr := userID.(string)
 	groupID := c.Param("id")
 
-	// Check user is admin/owner of the group
+	// Check user is admin/owner of the group (or any member for neighborhood groups)
 	var role string
+	var groupType string
 	err := h.db.QueryRow(c.Request.Context(), `
-		SELECT role FROM group_members WHERE group_id = $1 AND user_id = $2::uuid
-	`, groupID, userIDStr).Scan(&role)
-	if err != nil || (role != "owner" && role != "admin") {
+		SELECT gm.role, g.type FROM group_members gm
+		JOIN groups g ON g.id = gm.group_id
+		WHERE gm.group_id = $1 AND gm.user_id = $2::uuid
+	`, groupID, userIDStr).Scan(&role, &groupType)
+	if err != nil {
+		c.JSON(http.StatusForbidden, gin.H{"error": "only group admins can create events"})
+		return
+	}
+	// Neighborhood groups: any member can create events; regular groups: admin/owner only
+	if groupType != "neighborhood" && role != "owner" && role != "admin" {
 		c.JSON(http.StatusForbidden, gin.H{"error": "only group admins can create events"})
 		return
 	}
@@ -89,15 +98,21 @@ func (h *EventHandler) CreateEvent(c *gin.Context) {
 		}
 	}
 
+	// Determine event status: admins/owners auto-approved, neighborhood members need approval
+	eventStatus := "approved"
+	if groupType == "neighborhood" && role != "owner" && role != "admin" {
+		eventStatus = "pending"
+	}
+
 	var event GroupEvent
 	err = h.db.QueryRow(c.Request.Context(), `
-		INSERT INTO group_events (group_id, created_by, title, description, location_name, lat, long, starts_at, ends_at, is_public, cover_image_url, max_attendees)
-		VALUES ($1, $2::uuid, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
-		RETURNING id, group_id, created_by, title, description, location_name, lat, long, starts_at, ends_at, is_public, cover_image_url, max_attendees, created_at, updated_at
-	`, groupID, userIDStr, req.Title, req.Description, req.LocationName, req.Lat, req.Long, startsAt, endsAt, req.IsPublic, req.CoverImageURL, req.MaxAttendees,
+		INSERT INTO group_events (group_id, created_by, title, description, location_name, lat, long, starts_at, ends_at, is_public, cover_image_url, max_attendees, status)
+		VALUES ($1, $2::uuid, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)
+		RETURNING id, group_id, created_by, title, description, location_name, lat, long, starts_at, ends_at, is_public, cover_image_url, max_attendees, status, created_at, updated_at
+	`, groupID, userIDStr, req.Title, req.Description, req.LocationName, req.Lat, req.Long, startsAt, endsAt, req.IsPublic, req.CoverImageURL, req.MaxAttendees, eventStatus,
 	).Scan(&event.ID, &event.GroupID, &event.CreatedBy, &event.Title, &event.Description,
 		&event.LocationName, &event.Lat, &event.Long, &event.StartsAt, &event.EndsAt,
-		&event.IsPublic, &event.CoverImageURL, &event.MaxAttendees, &event.CreatedAt, &event.UpdatedAt)
+		&event.IsPublic, &event.CoverImageURL, &event.MaxAttendees, &event.Status, &event.CreatedAt, &event.UpdatedAt)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to create event"})
 		return
@@ -116,21 +131,31 @@ func (h *EventHandler) CreateEvent(c *gin.Context) {
 }
 
 // ListGroupEvents — GET /groups/:id/events
+// Returns approved events to everyone. Admins and event creators also see pending events.
 func (h *EventHandler) ListGroupEvents(c *gin.Context) {
 	userID, _ := c.Get("user_id")
 	userIDStr := userID.(string)
 	groupID := c.Param("id")
 
+	// Check if user is admin/owner (they see pending events)
+	var userRole string
+	_ = h.db.QueryRow(c.Request.Context(), `
+		SELECT role FROM group_members WHERE group_id = $1 AND user_id = $2::uuid
+	`, groupID, userIDStr).Scan(&userRole)
+	isAdmin := userRole == "owner" || userRole == "admin"
+
 	rows, err := h.db.Query(c.Request.Context(), `
 		SELECT e.id, e.group_id, e.created_by, e.title, e.description, e.location_name,
 		       e.lat, e.long, e.starts_at, e.ends_at, e.is_public, e.cover_image_url,
-		       e.max_attendees, e.created_at, e.updated_at,
+		       e.max_attendees, e.status, e.created_at, e.updated_at,
 		       (SELECT COUNT(*) FROM group_event_rsvps WHERE event_id = e.id AND status = 'going') AS attendee_count,
 		       (SELECT status FROM group_event_rsvps WHERE event_id = e.id AND user_id = $2::uuid) AS my_rsvp
 		FROM group_events e
 		WHERE e.group_id = $1
+		  AND (e.status = 'approved' OR ($3 = true) OR e.created_by = $2::uuid)
+		  AND e.status != 'rejected'
 		ORDER BY e.starts_at ASC
-	`, groupID, userIDStr)
+	`, groupID, userIDStr, isAdmin)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to fetch events"})
 		return
@@ -142,7 +167,7 @@ func (h *EventHandler) ListGroupEvents(c *gin.Context) {
 		var e GroupEvent
 		if err := rows.Scan(&e.ID, &e.GroupID, &e.CreatedBy, &e.Title, &e.Description,
 			&e.LocationName, &e.Lat, &e.Long, &e.StartsAt, &e.EndsAt, &e.IsPublic,
-			&e.CoverImageURL, &e.MaxAttendees, &e.CreatedAt, &e.UpdatedAt,
+			&e.CoverImageURL, &e.MaxAttendees, &e.Status, &e.CreatedAt, &e.UpdatedAt,
 			&e.AttendeeCount, &e.MyRSVP); err != nil {
 			continue
 		}
@@ -162,7 +187,7 @@ func (h *EventHandler) GetEvent(c *gin.Context) {
 	err := h.db.QueryRow(c.Request.Context(), `
 		SELECT e.id, e.group_id, e.created_by, e.title, e.description, e.location_name,
 		       e.lat, e.long, e.starts_at, e.ends_at, e.is_public, e.cover_image_url,
-		       e.max_attendees, e.created_at, e.updated_at,
+		       e.max_attendees, e.status, e.created_at, e.updated_at,
 		       g.name AS group_name,
 		       (SELECT COUNT(*) FROM group_event_rsvps WHERE event_id = e.id AND status = 'going') AS attendee_count,
 		       (SELECT status FROM group_event_rsvps WHERE event_id = e.id AND user_id = $2::uuid) AS my_rsvp
@@ -171,7 +196,7 @@ func (h *EventHandler) GetEvent(c *gin.Context) {
 		WHERE e.id = $1
 	`, eventID, userIDStr).Scan(&e.ID, &e.GroupID, &e.CreatedBy, &e.Title, &e.Description,
 		&e.LocationName, &e.Lat, &e.Long, &e.StartsAt, &e.EndsAt, &e.IsPublic,
-		&e.CoverImageURL, &e.MaxAttendees, &e.CreatedAt, &e.UpdatedAt,
+		&e.CoverImageURL, &e.MaxAttendees, &e.Status, &e.CreatedAt, &e.UpdatedAt,
 		&e.GroupName, &e.AttendeeCount, &e.MyRSVP)
 	if err != nil {
 		c.JSON(http.StatusNotFound, gin.H{"error": "event not found"})
@@ -250,7 +275,7 @@ func (h *EventHandler) UpdateEvent(c *gin.Context) {
 	err = h.db.QueryRow(c.Request.Context(), `
 		SELECT e.id, e.group_id, e.created_by, e.title, e.description, e.location_name,
 		       e.lat, e.long, e.starts_at, e.ends_at, e.is_public, e.cover_image_url,
-		       e.max_attendees, e.created_at, e.updated_at,
+		       e.max_attendees, e.status, e.created_at, e.updated_at,
 		       g.name AS group_name,
 		       (SELECT COUNT(*) FROM group_event_rsvps WHERE event_id = e.id AND status = 'going') AS attendee_count,
 		       (SELECT status FROM group_event_rsvps WHERE event_id = e.id AND user_id = $2::uuid) AS my_rsvp
@@ -259,7 +284,7 @@ func (h *EventHandler) UpdateEvent(c *gin.Context) {
 		WHERE e.id = $1
 	`, eventID, userIDStr).Scan(&updated.ID, &updated.GroupID, &updated.CreatedBy, &updated.Title, &updated.Description,
 		&updated.LocationName, &updated.Lat, &updated.Long, &updated.StartsAt, &updated.EndsAt, &updated.IsPublic,
-		&updated.CoverImageURL, &updated.MaxAttendees, &updated.CreatedAt, &updated.UpdatedAt,
+		&updated.CoverImageURL, &updated.MaxAttendees, &updated.Status, &updated.CreatedAt, &updated.UpdatedAt,
 		&updated.GroupName, &updated.AttendeeCount, &updated.MyRSVP)
 	if err != nil {
 		c.JSON(http.StatusOK, gin.H{"message": "event updated"})
@@ -357,13 +382,13 @@ func (h *EventHandler) GetUpcomingPublicEvents(c *gin.Context) {
 	rows, err := h.db.Query(c.Request.Context(), `
 		SELECT e.id, e.group_id, e.created_by, e.title, e.description, e.location_name,
 		       e.lat, e.long, e.starts_at, e.ends_at, e.is_public, e.cover_image_url,
-		       e.max_attendees, e.created_at, e.updated_at,
+		       e.max_attendees, e.status, e.created_at, e.updated_at,
 		       g.name AS group_name,
 		       (SELECT COUNT(*) FROM group_event_rsvps WHERE event_id = e.id AND status = 'going') AS attendee_count,
 		       (SELECT status FROM group_event_rsvps WHERE event_id = e.id AND user_id = $2::uuid) AS my_rsvp
 		FROM group_events e
 		JOIN groups g ON g.id = e.group_id
-		WHERE e.is_public = true AND e.starts_at >= now()
+		WHERE e.is_public = true AND e.starts_at >= now() AND e.status = 'approved'
 		ORDER BY e.starts_at ASC
 		LIMIT $1
 	`, limit, userIDStr)
@@ -378,7 +403,7 @@ func (h *EventHandler) GetUpcomingPublicEvents(c *gin.Context) {
 		var e GroupEvent
 		if err := rows.Scan(&e.ID, &e.GroupID, &e.CreatedBy, &e.Title, &e.Description,
 			&e.LocationName, &e.Lat, &e.Long, &e.StartsAt, &e.EndsAt, &e.IsPublic,
-			&e.CoverImageURL, &e.MaxAttendees, &e.CreatedAt, &e.UpdatedAt,
+			&e.CoverImageURL, &e.MaxAttendees, &e.Status, &e.CreatedAt, &e.UpdatedAt,
 			&e.GroupName, &e.AttendeeCount, &e.MyRSVP); err != nil {
 			continue
 		}
@@ -402,7 +427,7 @@ func (h *EventHandler) GetMyEvents(c *gin.Context) {
 	rows, err := h.db.Query(c.Request.Context(), `
 		SELECT e.id, e.group_id, e.created_by, e.title, e.description, e.location_name,
 		       e.lat, e.long, e.starts_at, e.ends_at, e.is_public, e.cover_image_url,
-		       e.max_attendees, e.created_at, e.updated_at,
+		       e.max_attendees, e.status, e.created_at, e.updated_at,
 		       g.name AS group_name,
 		       (SELECT COUNT(*) FROM group_event_rsvps WHERE event_id = e.id AND status = 'going') AS attendee_count,
 		       (SELECT status FROM group_event_rsvps WHERE event_id = e.id AND user_id = $2::uuid) AS my_rsvp
@@ -410,6 +435,8 @@ func (h *EventHandler) GetMyEvents(c *gin.Context) {
 		JOIN groups g ON g.id = e.group_id
 		WHERE e.group_id IN (SELECT group_id FROM group_members WHERE user_id = $2::uuid)
 		  AND e.starts_at >= now()
+		  AND (e.status = 'approved' OR e.created_by = $2::uuid)
+		  AND e.status != 'rejected'
 		ORDER BY e.starts_at ASC
 		LIMIT $1
 	`, limit, userIDStr)
@@ -424,7 +451,7 @@ func (h *EventHandler) GetMyEvents(c *gin.Context) {
 		var e GroupEvent
 		if err := rows.Scan(&e.ID, &e.GroupID, &e.CreatedBy, &e.Title, &e.Description,
 			&e.LocationName, &e.Lat, &e.Long, &e.StartsAt, &e.EndsAt, &e.IsPublic,
-			&e.CoverImageURL, &e.MaxAttendees, &e.CreatedAt, &e.UpdatedAt,
+			&e.CoverImageURL, &e.MaxAttendees, &e.Status, &e.CreatedAt, &e.UpdatedAt,
 			&e.GroupName, &e.AttendeeCount, &e.MyRSVP); err != nil {
 			continue
 		}
@@ -432,4 +459,70 @@ func (h *EventHandler) GetMyEvents(c *gin.Context) {
 	}
 
 	c.JSON(http.StatusOK, gin.H{"events": events})
+}
+
+// ApproveEvent — POST /groups/:id/events/:eventId/approve
+func (h *EventHandler) ApproveEvent(c *gin.Context) {
+	userID, _ := c.Get("user_id")
+	userIDStr := userID.(string)
+	groupID := c.Param("id")
+	eventID := c.Param("eventId")
+
+	// Check admin/owner
+	var role string
+	err := h.db.QueryRow(c.Request.Context(), `
+		SELECT role FROM group_members WHERE group_id = $1 AND user_id = $2::uuid
+	`, groupID, userIDStr).Scan(&role)
+	if err != nil || (role != "owner" && role != "admin") {
+		c.JSON(http.StatusForbidden, gin.H{"error": "only admins can approve events"})
+		return
+	}
+
+	tag, err := h.db.Exec(c.Request.Context(), `
+		UPDATE group_events SET status = 'approved', updated_at = now()
+		WHERE id = $1 AND group_id = $2 AND status = 'pending'
+	`, eventID, groupID)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to approve event"})
+		return
+	}
+	if tag.RowsAffected() == 0 {
+		c.JSON(http.StatusNotFound, gin.H{"error": "event not found or already processed"})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{"message": "event approved"})
+}
+
+// RejectEvent — POST /groups/:id/events/:eventId/reject
+func (h *EventHandler) RejectEvent(c *gin.Context) {
+	userID, _ := c.Get("user_id")
+	userIDStr := userID.(string)
+	groupID := c.Param("id")
+	eventID := c.Param("eventId")
+
+	// Check admin/owner
+	var role string
+	err := h.db.QueryRow(c.Request.Context(), `
+		SELECT role FROM group_members WHERE group_id = $1 AND user_id = $2::uuid
+	`, groupID, userIDStr).Scan(&role)
+	if err != nil || (role != "owner" && role != "admin") {
+		c.JSON(http.StatusForbidden, gin.H{"error": "only admins can reject events"})
+		return
+	}
+
+	tag, err := h.db.Exec(c.Request.Context(), `
+		UPDATE group_events SET status = 'rejected', updated_at = now()
+		WHERE id = $1 AND group_id = $2 AND status = 'pending'
+	`, eventID, groupID)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to reject event"})
+		return
+	}
+	if tag.RowsAffected() == 0 {
+		c.JSON(http.StatusNotFound, gin.H{"error": "event not found or already processed"})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{"message": "event rejected"})
 }
