@@ -60,7 +60,15 @@ func (h *AdminHandler) FetchSocialContent(c *gin.Context) {
 	// Detect platform from URL
 	platform := detectPlatform(req.ProfileURL)
 	if platform == "" {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "Unsupported platform. Supported: YouTube, TikTok, Facebook, Instagram"})
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Unsupported platform. Supported: YouTube, TikTok"})
+		return
+	}
+
+	// Facebook and Instagram require login cookies — yt-dlp cannot scrape them without auth
+	if platform == "facebook" || platform == "instagram" {
+		c.JSON(http.StatusBadRequest, gin.H{
+			"error": fmt.Sprintf("%s requires login to access content. yt-dlp cannot fetch without browser cookies.", platform),
+		})
 		return
 	}
 
