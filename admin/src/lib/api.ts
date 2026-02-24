@@ -664,10 +664,10 @@ class ApiClient {
     });
   }
   // Social Media Import
-  async fetchSocialContent(profileUrl: string, limit = 20) {
+  async fetchSocialContent(profileUrl: string, limit = 20, dateAfter?: string, dateBefore?: string) {
     return this.request<any>('/api/v1/admin/social/fetch', {
       method: 'POST',
-      body: JSON.stringify({ profile_url: profileUrl, limit }),
+      body: JSON.stringify({ profile_url: profileUrl, limit, date_after: dateAfter, date_before: dateBefore }),
     });
   }
 

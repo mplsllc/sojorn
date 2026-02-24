@@ -632,6 +632,8 @@ function SocialImportPanel() {
   const [downloadedUrls, setDownloadedUrls] = useState<Record<string, string>>({});
   const [importResult, setImportResult] = useState<any>(null);
   const [fetchLimit, setFetchLimit] = useState(20);
+  const [dateAfter, setDateAfter] = useState('');
+  const [dateBefore, setDateBefore] = useState('');
   const [editingItem, setEditingItem] = useState<string | null>(null);
 
   const handleFetch = async () => {
@@ -645,7 +647,7 @@ function SocialImportPanel() {
     setDownloadProgress({});
     setDownloadedUrls({});
     try {
-      const data = await api.fetchSocialContent(profileUrl.trim(), fetchLimit);
+      const data = await api.fetchSocialContent(profileUrl.trim(), fetchLimit, dateAfter || undefined, dateBefore || undefined);
       setItems(data.items || []);
       setPlatform(data.platform || '');
       // Initialize overrides with original data
@@ -784,7 +786,7 @@ function SocialImportPanel() {
     // Re-fetch to update imported status
     if (profileUrl.trim()) {
       try {
-        const data = await api.fetchSocialContent(profileUrl.trim(), fetchLimit);
+        const data = await api.fetchSocialContent(profileUrl.trim(), fetchLimit, dateAfter || undefined, dateBefore || undefined);
         setItems(data.items || []);
       } catch { /* ignore refresh errors */ }
     }
@@ -825,17 +827,15 @@ function SocialImportPanel() {
               placeholder="https://www.youtube.com/@channel or https://tiktok.com/@user"
             />
             <div className="flex items-center gap-2">
-              <select
+              <input
+                type="number"
                 value={fetchLimit}
-                onChange={(e) => setFetchLimit(Number(e.target.value))}
-                className="px-2 py-2 border border-warm-300 rounded-lg text-sm w-16"
+                onChange={(e) => setFetchLimit(Math.max(1, Number(e.target.value) || 20))}
+                className="px-2 py-2 border border-warm-300 rounded-lg text-sm w-16 text-center"
                 title="Number of items to fetch"
-              >
-                <option value={10}>10</option>
-                <option value={20}>20</option>
-                <option value={30}>30</option>
-                <option value={50}>50</option>
-              </select>
+                min={1}
+                max={500}
+              />
               <button
                 type="button"
                 onClick={handleFetch}
@@ -851,6 +851,40 @@ function SocialImportPanel() {
         <div>
           <UserSearch value={authorId} onChange={(id) => setAuthorId(id)} />
         </div>
+      </div>
+
+      {/* Date Range Filter */}
+      <div className="flex items-center gap-3 mb-4">
+        <div className="flex items-center gap-2">
+          <label className="text-xs font-medium text-gray-500 whitespace-nowrap">From</label>
+          <input
+            type="date"
+            value={dateAfter}
+            onChange={(e) => setDateAfter(e.target.value)}
+            title="Filter content uploaded after this date"
+            className="px-2 py-1.5 border border-warm-300 rounded-lg text-sm focus:ring-1 focus:ring-brand-500"
+          />
+        </div>
+        <div className="flex items-center gap-2">
+          <label className="text-xs font-medium text-gray-500 whitespace-nowrap">To</label>
+          <input
+            type="date"
+            value={dateBefore}
+            onChange={(e) => setDateBefore(e.target.value)}
+            title="Filter content uploaded before this date"
+            className="px-2 py-1.5 border border-warm-300 rounded-lg text-sm focus:ring-1 focus:ring-brand-500"
+          />
+        </div>
+        {(dateAfter || dateBefore) && (
+          <button
+            type="button"
+            onClick={() => { setDateAfter(''); setDateBefore(''); }}
+            className="text-xs text-gray-500 hover:text-gray-700"
+          >
+            Clear dates
+          </button>
+        )}
+        <span className="text-[10px] text-gray-400">Leave blank for no date filter</span>
       </div>
 
       {error && (

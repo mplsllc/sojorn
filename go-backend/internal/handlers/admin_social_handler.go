@@ -41,6 +41,8 @@ func (h *AdminHandler) FetchSocialContent(c *gin.Context) {
 	var req struct {
 		ProfileURL string `json:"profile_url" binding:"required"`
 		Limit      int    `json:"limit"`
+		DateAfter  string `json:"date_after"`  // YYYY-MM-DD
+		DateBefore string `json:"date_before"` // YYYY-MM-DD
 	}
 
 	if err := c.ShouldBindJSON(&req); err != nil {
@@ -48,8 +50,11 @@ func (h *AdminHandler) FetchSocialContent(c *gin.Context) {
 		return
 	}
 
-	if req.Limit <= 0 || req.Limit > 50 {
+	if req.Limit <= 0 {
 		req.Limit = 20
+	}
+	if req.Limit > 500 {
+		req.Limit = 500
 	}
 
 	// Detect platform from URL
@@ -76,6 +81,21 @@ func (h *AdminHandler) FetchSocialContent(c *gin.Context) {
 		"--playlist-end", fmt.Sprintf("%d", req.Limit),
 	}
 
+	// Date range filters (yt-dlp expects YYYYMMDD)
+	if req.DateAfter != "" {
+		// Convert YYYY-MM-DD to YYYYMMDD
+		d := strings.ReplaceAll(req.DateAfter, "-", "")
+		if len(d) == 8 {
+			args = append(args, "--dateafter", d)
+		}
+	}
+	if req.DateBefore != "" {
+		d := strings.ReplaceAll(req.DateBefore, "-", "")
+		if len(d) == 8 {
+			args = append(args, "--datebefore", d)
+		}
+	}
+
 	// Platform-specific flags
 	switch platform {
 	case "youtube":
@@ -97,7 +117,7 @@ func (h *AdminHandler) FetchSocialContent(c *gin.Context) {
 	}()
 
 	select {
-	case <-time.After(90 * time.Second):
+	case <-time.After(150 * time.Second):
 		if cmd.Process != nil {
 			cmd.Process.Kill()
 		}
