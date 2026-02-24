@@ -5050,3 +5050,249 @@ func (h *AdminHandler) AdminDeleteEvent(c *gin.Context) {
 
 	c.JSON(http.StatusOK, gin.H{"message": "Event deleted"})
 }
+
+// ──────────────────────────────────────────────
+// Ollama Model Management
+// ──────────────────────────────────────────────
+
+// OllamaModelStatus returns all installed models with their running/loaded status.
+func (h *AdminHandler) OllamaModelStatus(c *gin.Context) {
+	ctx := c.Request.Context()
+	client := &http.Client{Timeout: 5 * time.Second}
+
+	// Get installed models
+	tagsReq, err := http.NewRequestWithContext(ctx, "GET", "http://localhost:11434/api/tags", nil)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to create request"})
+		return
+	}
+	tagsResp, err := client.Do(tagsReq)
+	if err != nil {
+		c.JSON(http.StatusServiceUnavailable, gin.H{"error": "Ollama not reachable", "models": []any{}, "ollama_running": false})
+		return
+	}
+	defer tagsResp.Body.Close()
+
+	var tagsResult struct {
+		Models []struct {
+			Name       string `json:"name"`
+			Model      string `json:"model"`
+			ModifiedAt string `json:"modified_at"`
+			Size       int64  `json:"size"`
+			Digest     string `json:"digest"`
+			Details    struct {
+				Family          string `json:"family"`
+				ParameterSize   string `json:"parameter_size"`
+				QuantizationLvl string `json:"quantization_level"`
+			} `json:"details"`
+		} `json:"models"`
+	}
+	if err := json.NewDecoder(tagsResp.Body).Decode(&tagsResult); err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to parse Ollama tags response"})
+		return
+	}
+
+	// Get running models
+	psReq, err := http.NewRequestWithContext(ctx, "GET", "http://localhost:11434/api/ps", nil)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to create ps request"})
+		return
+	}
+	psResp, err := client.Do(psReq)
+	runningModels := map[string]struct {
+		SizeVRAM      int64  `json:"size_vram"`
+		ContextLength int    `json:"context_length"`
+		ExpiresAt     string `json:"expires_at"`
+	}{}
+	if err == nil {
+		defer psResp.Body.Close()
+		var psResult struct {
+			Models []struct {
+				Name          string `json:"name"`
+				SizeVRAM      int64  `json:"size_vram"`
+				ContextLength int    `json:"context_length"`
+				ExpiresAt     string `json:"expires_at"`
+			} `json:"models"`
+		}
+		if json.NewDecoder(psResp.Body).Decode(&psResult) == nil {
+			for _, m := range psResult.Models {
+				runningModels[m.Name] = struct {
+					SizeVRAM      int64  `json:"size_vram"`
+					ContextLength int    `json:"context_length"`
+					ExpiresAt     string `json:"expires_at"`
+				}{SizeVRAM: m.SizeVRAM, ContextLength: m.ContextLength, ExpiresAt: m.ExpiresAt}
+			}
+		}
+	}
+
+	type modelInfo struct {
+		Name              string `json:"name"`
+		ParameterSize     string `json:"parameter_size"`
+		QuantizationLevel string `json:"quantization_level"`
+		Family            string `json:"family"`
+		SizeBytes         int64  `json:"size_bytes"`
+		SizeMB            int64  `json:"size_mb"`
+		Digest            string `json:"digest"`
+		ModifiedAt        string `json:"modified_at"`
+		Running           bool   `json:"running"`
+		VRAMBytes         int64  `json:"vram_bytes"`
+		ContextLength     int    `json:"context_length"`
+		ExpiresAt         string `json:"expires_at,omitempty"`
+	}
+
+	models := make([]modelInfo, 0, len(tagsResult.Models))
+	for _, m := range tagsResult.Models {
+		info := modelInfo{
+			Name:              m.Name,
+			ParameterSize:     m.Details.ParameterSize,
+			QuantizationLevel: m.Details.QuantizationLvl,
+			Family:            m.Details.Family,
+			SizeBytes:         m.Size,
+			SizeMB:            m.Size / (1024 * 1024),
+			Digest:            m.Digest,
+			ModifiedAt:        m.ModifiedAt,
+		}
+		if running, ok := runningModels[m.Name]; ok {
+			info.Running = true
+			info.VRAMBytes = running.SizeVRAM
+			info.ContextLength = running.ContextLength
+			info.ExpiresAt = running.ExpiresAt
+		}
+		models = append(models, info)
+	}
+
+	c.JSON(http.StatusOK, gin.H{"models": models, "total": len(models), "ollama_running": true})
+}
+
+// OllamaLoadModel loads a model into Ollama memory (warm it up).
+func (h *AdminHandler) OllamaLoadModel(c *gin.Context) {
+	modelName := c.Param("name")
+	if modelName == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "model name required"})
+		return
+	}
+
+	ctx := c.Request.Context()
+	payload, _ := json.Marshal(map[string]any{"model": modelName})
+	req, err := http.NewRequestWithContext(ctx, "POST", "http://localhost:11434/api/generate", bytes.NewReader(payload))
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to create request"})
+		return
+	}
+	req.Header.Set("Content-Type", "application/json")
+
+	client := &http.Client{Timeout: 120 * time.Second}
+	resp, err := client.Do(req)
+	if err != nil {
+		c.JSON(http.StatusServiceUnavailable, gin.H{"error": fmt.Sprintf("Ollama not reachable: %v", err)})
+		return
+	}
+	defer resp.Body.Close()
+	io.Copy(io.Discard, resp.Body)
+
+	if resp.StatusCode != http.StatusOK {
+		c.JSON(resp.StatusCode, gin.H{"error": fmt.Sprintf("Ollama returned status %d", resp.StatusCode)})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{"message": fmt.Sprintf("Model %s loaded", modelName)})
+}
+
+// OllamaUnloadModel unloads a model from Ollama memory.
+func (h *AdminHandler) OllamaUnloadModel(c *gin.Context) {
+	modelName := c.Param("name")
+	if modelName == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "model name required"})
+		return
+	}
+
+	ctx := c.Request.Context()
+	payload, _ := json.Marshal(map[string]any{"model": modelName, "keep_alive": 0})
+	req, err := http.NewRequestWithContext(ctx, "POST", "http://localhost:11434/api/generate", bytes.NewReader(payload))
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to create request"})
+		return
+	}
+	req.Header.Set("Content-Type", "application/json")
+
+	client := &http.Client{Timeout: 30 * time.Second}
+	resp, err := client.Do(req)
+	if err != nil {
+		c.JSON(http.StatusServiceUnavailable, gin.H{"error": fmt.Sprintf("Ollama not reachable: %v", err)})
+		return
+	}
+	defer resp.Body.Close()
+	io.Copy(io.Discard, resp.Body)
+
+	c.JSON(http.StatusOK, gin.H{"message": fmt.Sprintf("Model %s unloaded", modelName)})
+}
+
+// OllamaDeleteModel removes a model from Ollama entirely.
+func (h *AdminHandler) OllamaDeleteModel(c *gin.Context) {
+	modelName := c.Param("name")
+	if modelName == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "model name required"})
+		return
+	}
+
+	ctx := c.Request.Context()
+	payload, _ := json.Marshal(map[string]string{"name": modelName})
+	req, err := http.NewRequestWithContext(ctx, "DELETE", "http://localhost:11434/api/delete", bytes.NewReader(payload))
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to create request"})
+		return
+	}
+	req.Header.Set("Content-Type", "application/json")
+
+	client := &http.Client{Timeout: 30 * time.Second}
+	resp, err := client.Do(req)
+	if err != nil {
+		c.JSON(http.StatusServiceUnavailable, gin.H{"error": fmt.Sprintf("Ollama not reachable: %v", err)})
+		return
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		body, _ := io.ReadAll(resp.Body)
+		c.JSON(resp.StatusCode, gin.H{"error": fmt.Sprintf("Ollama delete failed: %s", string(body))})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{"message": fmt.Sprintf("Model %s deleted", modelName)})
+}
+
+// OllamaPullModel pulls (downloads) a model from the Ollama registry.
+func (h *AdminHandler) OllamaPullModel(c *gin.Context) {
+	var req struct {
+		Name string `json:"name" binding:"required"`
+	}
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "model name required"})
+		return
+	}
+
+	ctx := c.Request.Context()
+	payload, _ := json.Marshal(map[string]any{"name": req.Name, "stream": false})
+	httpReq, err := http.NewRequestWithContext(ctx, "POST", "http://localhost:11434/api/pull", bytes.NewReader(payload))
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to create request"})
+		return
+	}
+	httpReq.Header.Set("Content-Type", "application/json")
+
+	client := &http.Client{Timeout: 600 * time.Second}
+	resp, err := client.Do(httpReq)
+	if err != nil {
+		c.JSON(http.StatusServiceUnavailable, gin.H{"error": fmt.Sprintf("Ollama not reachable: %v", err)})
+		return
+	}
+	defer resp.Body.Close()
+
+	body, _ := io.ReadAll(resp.Body)
+	if resp.StatusCode != http.StatusOK {
+		c.JSON(resp.StatusCode, gin.H{"error": fmt.Sprintf("Pull failed: %s", string(body))})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{"message": fmt.Sprintf("Model %s pulled successfully", req.Name)})
+}

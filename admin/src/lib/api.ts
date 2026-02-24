@@ -461,6 +461,30 @@ class ApiClient {
     return this.request<any>('/api/v1/admin/ai-engines');
   }
 
+  // Ollama Model Management
+  async getOllamaStatus() {
+    return this.request<any>('/api/v1/admin/ai/ollama/status');
+  }
+
+  async ollamaLoadModel(name: string) {
+    return this.request<any>(`/api/v1/admin/ai/ollama/load/${encodeURIComponent(name)}`, { method: 'POST' });
+  }
+
+  async ollamaUnloadModel(name: string) {
+    return this.request<any>(`/api/v1/admin/ai/ollama/unload/${encodeURIComponent(name)}`, { method: 'POST' });
+  }
+
+  async ollamaDeleteModel(name: string) {
+    return this.request<any>(`/api/v1/admin/ai/ollama/models/${encodeURIComponent(name)}`, { method: 'DELETE' });
+  }
+
+  async ollamaPullModel(name: string) {
+    return this.request<any>('/api/v1/admin/ai/ollama/pull', {
+      method: 'POST',
+      body: JSON.stringify({ name }),
+    });
+  }
+
   // AI Moderation
   async listLocalModels() {
     return this.request<any>('/api/v1/admin/ai/models/local');

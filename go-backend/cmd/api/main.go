@@ -750,6 +750,13 @@ func main() {
 		admin.GET("/usernames/claims", adminHandler.ListClaimRequests)
 		admin.PATCH("/usernames/claims/:id", adminHandler.ReviewClaimRequest)
 
+		// Ollama Model Management
+		admin.GET("/ai/ollama/status", adminHandler.OllamaModelStatus)
+		admin.POST("/ai/ollama/load/:name", adminHandler.OllamaLoadModel)
+		admin.POST("/ai/ollama/unload/:name", adminHandler.OllamaUnloadModel)
+		admin.DELETE("/ai/ollama/models/:name", adminHandler.OllamaDeleteModel)
+		admin.POST("/ai/ollama/pull", adminHandler.OllamaPullModel)
+
 		// AI Moderation Config
 		admin.GET("/ai/models", adminHandler.ListModels)
 		admin.GET("/ai/models/local", adminHandler.ListLocalModels)

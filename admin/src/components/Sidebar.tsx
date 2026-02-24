@@ -12,7 +12,7 @@ import {
   LayoutDashboard, Users, FileText, Shield, ShieldCheck, Scale, Flag,
   Settings, Activity, LogOut, ChevronLeft, ChevronRight, ChevronDown,
   Sliders, FolderTree, HardDrive, AtSign, Brain, ScrollText, Wrench, Bot,
-  UserCog, ShieldAlert, Cog, Mail, MapPinned, Users2, Video, ClipboardList, Clock, Calendar,
+  UserCog, ShieldAlert, Cog, Mail, MapPinned, Users2, Video, ClipboardList, Clock, Calendar, Cpu,
 } from 'lucide-react';
 import { useState } from 'react';
 
@@ -48,6 +48,7 @@ const navigation: NavEntry[] = [
       { href: '/moderation', label: 'Moderation Queue', icon: Shield },
       { href: '/ai-moderation', label: 'AI Moderation', icon: Brain },
       { href: '/ai-audit-log', label: 'AI Audit Log', icon: ScrollText },
+      { href: '/ai-models', label: 'AI Models', icon: Cpu },
       { href: '/appeals', label: 'Appeals', icon: Scale },
       { href: '/reports', label: 'Reports', icon: Flag },
       { href: '/capsule-reports', label: 'Capsule Reports', icon: ShieldAlert },
