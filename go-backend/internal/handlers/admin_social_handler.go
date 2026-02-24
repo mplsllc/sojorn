@@ -81,20 +81,8 @@ func (h *AdminHandler) FetchSocialContent(c *gin.Context) {
 		"--playlist-end", fmt.Sprintf("%d", req.Limit),
 	}
 
-	// Date range filters (yt-dlp expects YYYYMMDD)
-	if req.DateAfter != "" {
-		// Convert YYYY-MM-DD to YYYYMMDD
-		d := strings.ReplaceAll(req.DateAfter, "-", "")
-		if len(d) == 8 {
-			args = append(args, "--dateafter", d)
-		}
-	}
-	if req.DateBefore != "" {
-		d := strings.ReplaceAll(req.DateBefore, "-", "")
-		if len(d) == 8 {
-			args = append(args, "--datebefore", d)
-		}
-	}
+	// Date filtering is done server-side after parsing (--dateafter/--datebefore
+	// don't work with --flat-playlist mode)
 
 	// Platform-specific flags
 	switch platform {
@@ -214,6 +202,28 @@ func (h *AdminHandler) FetchSocialContent(c *gin.Context) {
 		}
 
 		items = append(items, item)
+	}
+
+	// Server-side date filtering (upload_date is YYYYMMDD from yt-dlp)
+	if req.DateAfter != "" || req.DateBefore != "" {
+		dateAfter := strings.ReplaceAll(req.DateAfter, "-", "")
+		dateBefore := strings.ReplaceAll(req.DateBefore, "-", "")
+		filtered := make([]SocialMediaItem, 0, len(items))
+		for _, item := range items {
+			d := strings.ReplaceAll(item.UploadDate, "-", "")
+			if d == "" {
+				filtered = append(filtered, item) // keep items without dates
+				continue
+			}
+			if dateAfter != "" && d < dateAfter {
+				continue
+			}
+			if dateBefore != "" && d > dateBefore {
+				continue
+			}
+			filtered = append(filtered, item)
+		}
+		items = filtered
 	}
 
 	// Check which items are already imported
