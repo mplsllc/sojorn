@@ -8,7 +8,7 @@ import AdminShell from '@/components/AdminShell';
 import { api } from '@/lib/api';
 import { formatDate } from '@/lib/utils';
 import { useEffect, useState } from 'react';
-import { Search, Trash2, Users, RotateCcw } from 'lucide-react';
+import { Search, Trash2, Users, RotateCcw, Pencil, Save, X } from 'lucide-react';
 
 export default function GroupsPage() {
   const [groups, setGroups] = useState<any[]>([]);
@@ -18,6 +18,9 @@ export default function GroupsPage() {
   const [selectedGroup, setSelectedGroup] = useState<any | null>(null);
   const [members, setMembers] = useState<any[]>([]);
   const [membersLoading, setMembersLoading] = useState(false);
+  const [editGroup, setEditGroup] = useState<any | null>(null);
+  const [editForm, setEditForm] = useState({ name: '', description: '', is_private: false, is_active: true });
+  const [editSaving, setEditSaving] = useState(false);
   const limit = 50;
 
   const fetchGroups = () => {
@@ -58,6 +61,25 @@ export default function GroupsPage() {
     } catch (e: any) {
       alert(e.message);
     }
+  };
+
+  const openEditGroup = (g: any, e: React.MouseEvent) => {
+    e.stopPropagation();
+    setEditGroup(g);
+    setEditForm({ name: g.name, description: g.description || '', is_private: g.is_private, is_active: g.is_active });
+  };
+
+  const saveGroup = async () => {
+    if (!editGroup) return;
+    setEditSaving(true);
+    try {
+      await api.updateGroup(editGroup.id, editForm);
+      setEditGroup(null);
+      fetchGroups();
+    } catch (e: any) {
+      alert(e.message);
+    }
+    setEditSaving(false);
   };
 
   const removeMember = async (groupId: string, userId: string) => {
@@ -136,13 +158,24 @@ export default function GroupsPage() {
                     </td>
                     <td className="px-4 py-3 text-gray-500">{formatDate(g.created_at)}</td>
                     <td className="px-4 py-3 text-right">
-                      <button
-                        onClick={(e) => { e.stopPropagation(); deactivateGroup(g.id); }}
-                        className="text-red-500 hover:text-red-700 p-1"
-                        title="Deactivate group"
-                      >
-                        <Trash2 className="w-4 h-4" />
-                      </button>
+                      <div className="flex items-center justify-end gap-1">
+                        <button
+                          onClick={(e) => openEditGroup(g, e)}
+                          className="text-brand-500 hover:text-brand-700 p-1"
+                          title="Edit group"
+                          type="button"
+                        >
+                          <Pencil className="w-4 h-4" />
+                        </button>
+                        <button
+                          onClick={(e) => { e.stopPropagation(); deactivateGroup(g.id); }}
+                          className="text-red-500 hover:text-red-700 p-1"
+                          title="Deactivate group"
+                          type="button"
+                        >
+                          <Trash2 className="w-4 h-4" />
+                        </button>
+                      </div>
                     </td>
                   </tr>
                 ))}
@@ -200,6 +233,41 @@ export default function GroupsPage() {
           </div>
         )}
       </div>
+
+      {/* Edit Group Modal */}
+      {editGroup && (
+        <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50" onClick={() => setEditGroup(null)}>
+          <div className="bg-white rounded-xl p-6 w-full max-w-md mx-4 shadow-xl" onClick={(e) => e.stopPropagation()}>
+            <h3 className="text-lg font-semibold text-gray-900 mb-4">Edit Group</h3>
+            <div className="space-y-3">
+              <div>
+                <label className="block text-xs font-medium text-gray-500 mb-1">Name</label>
+                <input className="w-full px-3 py-2 border rounded-lg text-sm" title="Group name" value={editForm.name} onChange={(e) => setEditForm({ ...editForm, name: e.target.value })} />
+              </div>
+              <div>
+                <label className="block text-xs font-medium text-gray-500 mb-1">Description</label>
+                <textarea className="w-full px-3 py-2 border rounded-lg text-sm" title="Group description" rows={3} value={editForm.description} onChange={(e) => setEditForm({ ...editForm, description: e.target.value })} />
+              </div>
+              <div className="flex gap-4">
+                <label className="flex items-center gap-2 text-sm">
+                  <input type="checkbox" checked={editForm.is_private} onChange={(e) => setEditForm({ ...editForm, is_private: e.target.checked })} className="rounded" />
+                  Private (Capsule)
+                </label>
+                <label className="flex items-center gap-2 text-sm">
+                  <input type="checkbox" checked={editForm.is_active} onChange={(e) => setEditForm({ ...editForm, is_active: e.target.checked })} className="rounded" />
+                  Active
+                </label>
+              </div>
+            </div>
+            <div className="flex gap-2 justify-end mt-5">
+              <button type="button" onClick={() => setEditGroup(null)} className="px-4 py-2 text-sm text-gray-600 hover:text-gray-800">Cancel</button>
+              <button type="button" onClick={saveGroup} disabled={editSaving} className="btn-primary text-sm flex items-center gap-1">
+                <Save className="w-4 h-4" /> {editSaving ? 'Saving...' : 'Save'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </AdminShell>
   );
 }

@@ -123,6 +123,13 @@ class ApiClient {
     });
   }
 
+  async adminUpdateUserEmail(id: string, email: string) {
+    return this.request<any>(`/api/v1/admin/users/${id}/email`, {
+      method: 'PATCH',
+      body: JSON.stringify({ email }),
+    });
+  }
+
   async adminListFollows(id: string, relation: 'followers' | 'following', limit = 50) {
     return this.request<any>(`/api/v1/admin/users/${id}/follows?relation=${relation}&limit=${limit}`);
   }
@@ -147,6 +154,13 @@ class ApiClient {
 
   async getPost(id: string) {
     return this.request<any>(`/api/v1/admin/posts/${id}`);
+  }
+
+  async updatePost(id: string, data: { body?: string; is_nsfw?: boolean; visibility?: string; category_id?: string }) {
+    return this.request<any>(`/api/v1/admin/posts/${id}`, {
+      method: 'PATCH',
+      body: JSON.stringify(data),
+    });
   }
 
   async updatePostStatus(id: string, status: string, reason?: string) {
@@ -283,6 +297,10 @@ class ApiClient {
     });
   }
 
+  async deleteCategory(id: string) {
+    return this.request<any>(`/api/v1/admin/categories/${id}`, { method: 'DELETE' });
+  }
+
   // Neighborhoods
   async listNeighborhoods(params: {
     limit?: number;
@@ -302,6 +320,24 @@ class ApiClient {
     if (params.sort) qs.set('sort', params.sort);
     if (params.order) qs.set('order', params.order);
     return this.request<any>(`/api/v1/admin/neighborhoods?${qs}`);
+  }
+
+  async createNeighborhood(data: { name: string; city: string; state: string; zip_code?: string; country?: string; lat: number; lng: number; radius_meters: number }) {
+    return this.request<any>('/api/v1/admin/neighborhoods', {
+      method: 'POST',
+      body: JSON.stringify(data),
+    });
+  }
+
+  async updateNeighborhood(id: string, data: { name?: string; city?: string; state?: string; zip_code?: string; radius_meters?: number }) {
+    return this.request<any>(`/api/v1/admin/neighborhoods/${id}`, {
+      method: 'PATCH',
+      body: JSON.stringify(data),
+    });
+  }
+
+  async deleteNeighborhood(id: string) {
+    return this.request<any>(`/api/v1/admin/neighborhoods/${id}`, { method: 'DELETE' });
   }
 
   async setNeighborhoodAdmin(id: string, userId: string, action: 'assign' | 'remove') {
@@ -664,6 +700,17 @@ class ApiClient {
     return this.request<any>(`/api/v1/admin/groups?${qs}`);
   }
 
+  async getGroup(id: string) {
+    return this.request<any>(`/api/v1/admin/groups/${id}`);
+  }
+
+  async updateGroup(id: string, data: { name?: string; description?: string; is_private?: boolean; is_active?: boolean }) {
+    return this.request<any>(`/api/v1/admin/groups/${id}`, {
+      method: 'PATCH',
+      body: JSON.stringify(data),
+    });
+  }
+
   async deleteGroup(id: string) {
     return this.request<any>(`/api/v1/admin/groups/${id}`, { method: 'DELETE' });
   }
@@ -713,6 +760,28 @@ class ApiClient {
   // Feed impression reset
   async resetFeedImpressions(userId: string) {
     return this.request<any>(`/api/v1/admin/users/${userId}/feed-impressions`, { method: 'DELETE' });
+  }
+
+  // Events admin
+  async listEvents(params: { limit?: number; offset?: number; search?: string; status?: string; group_id?: string } = {}) {
+    const qs = new URLSearchParams();
+    if (params.limit) qs.set('limit', String(params.limit));
+    if (params.offset) qs.set('offset', String(params.offset));
+    if (params.search) qs.set('search', params.search);
+    if (params.status) qs.set('status', params.status);
+    if (params.group_id) qs.set('group_id', params.group_id);
+    return this.request<any>(`/api/v1/admin/events?${qs}`);
+  }
+
+  async updateEvent(id: string, data: { title?: string; description?: string; status?: string }) {
+    return this.request<any>(`/api/v1/admin/events/${id}`, {
+      method: 'PATCH',
+      body: JSON.stringify(data),
+    });
+  }
+
+  async deleteEvent(id: string) {
+    return this.request<any>(`/api/v1/admin/events/${id}`, { method: 'DELETE' });
   }
 }
 

@@ -8,7 +8,7 @@ import AdminShell from '@/components/AdminShell';
 import { api } from '@/lib/api';
 import { formatDate } from '@/lib/utils';
 import { useEffect, useState } from 'react';
-import { FolderTree, Plus, Save } from 'lucide-react';
+import { FolderTree, Plus, Save, Trash2 } from 'lucide-react';
 
 export default function CategoriesPage() {
   const [categories, setCategories] = useState<any[]>([]);
@@ -44,6 +44,17 @@ export default function CategoriesPage() {
       setEditingId(null);
       fetchCategories();
     } catch {}
+  };
+
+  const handleDelete = async (id: string, name: string) => {
+    if (!confirm(`Delete category "${name}"? Posts using it will become uncategorized.`)) return;
+    try {
+      const result = await api.deleteCategory(id);
+      alert(`Category deleted. ${result.affected_posts ?? 0} posts uncategorized.`);
+      fetchCategories();
+    } catch (e: any) {
+      alert(e.message);
+    }
   };
 
   return (
@@ -132,12 +143,23 @@ export default function CategoriesPage() {
                         <button onClick={() => setEditingId(null)} className="text-xs text-gray-500 hover:text-gray-700 px-2">Cancel</button>
                       </div>
                     ) : (
-                      <button
-                        onClick={() => { setEditingId(cat.id); setEditData({ name: cat.name, description: cat.description || '', is_sensitive: cat.is_sensitive }); }}
-                        className="text-brand-500 hover:text-brand-700 text-xs font-medium"
-                      >
-                        Edit
-                      </button>
+                      <div className="flex items-center gap-2">
+                        <button
+                          onClick={() => { setEditingId(cat.id); setEditData({ name: cat.name, description: cat.description || '', is_sensitive: cat.is_sensitive }); }}
+                          className="text-brand-500 hover:text-brand-700 text-xs font-medium"
+                          type="button"
+                        >
+                          Edit
+                        </button>
+                        <button
+                          onClick={() => handleDelete(cat.id, cat.name)}
+                          className="text-red-500 hover:text-red-700 p-1"
+                          title="Delete category"
+                          type="button"
+                        >
+                          <Trash2 className="w-3.5 h-3.5" />
+                        </button>
+                      </div>
                     )}
                   </td>
                 </tr>

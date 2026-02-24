@@ -7,7 +7,7 @@
 import AdminShell from '@/components/AdminShell';
 import { api } from '@/lib/api';
 import { formatDate, truncate } from '@/lib/utils';
-import { ChevronLeft, ChevronRight, Search, Shield, ShieldOff, MessageSquare, Users, Building2, Pin, PinOff } from 'lucide-react';
+import { ChevronLeft, ChevronRight, Search, Shield, ShieldOff, MessageSquare, Users, Building2, Pin, PinOff, Plus, Pencil, Trash2, Save } from 'lucide-react';
 import { useEffect, useMemo, useState } from 'react';
 
 type Neighborhood = {
@@ -50,6 +50,11 @@ export default function NeighborhoodsPage() {
   const [adminUserId, setAdminUserId] = useState('');
   const [admins, setAdmins] = useState<NeighborhoodAdmin[]>([]);
   const [adminLoading, setAdminLoading] = useState(false);
+  const [showCreate, setShowCreate] = useState(false);
+  const [createForm, setCreateForm] = useState({ name: '', city: '', state: '', zip_code: '', country: 'US', lat: '', lng: '', radius_meters: '1000' });
+  const [editModal, setEditModal] = useState<Neighborhood | null>(null);
+  const [editForm, setEditForm] = useState({ name: '', city: '', state: '', zip_code: '', radius_meters: '' });
+  const [saving, setSaving] = useState(false);
   const limit = 25;
 
   const selectedStats = useMemo(() => {
@@ -129,6 +134,64 @@ export default function NeighborhoodsPage() {
     fetchNeighborhoodAdmins(selected.id);
   };
 
+  const handleCreate = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setSaving(true);
+    try {
+      await api.createNeighborhood({
+        name: createForm.name,
+        city: createForm.city,
+        state: createForm.state,
+        zip_code: createForm.zip_code,
+        country: createForm.country,
+        lat: parseFloat(createForm.lat),
+        lng: parseFloat(createForm.lng),
+        radius_meters: parseFloat(createForm.radius_meters),
+      });
+      setShowCreate(false);
+      setCreateForm({ name: '', city: '', state: '', zip_code: '', country: 'US', lat: '', lng: '', radius_meters: '1000' });
+      fetchNeighborhoods();
+    } catch (e: any) {
+      alert(e.message);
+    }
+    setSaving(false);
+  };
+
+  const openEdit = (n: Neighborhood) => {
+    setEditModal(n);
+    setEditForm({ name: n.name, city: n.city, state: n.state, zip_code: n.zip_code || '', radius_meters: '' });
+  };
+
+  const handleEdit = async () => {
+    if (!editModal) return;
+    setSaving(true);
+    try {
+      const data: any = {};
+      if (editForm.name !== editModal.name) data.name = editForm.name;
+      if (editForm.city !== editModal.city) data.city = editForm.city;
+      if (editForm.state !== editModal.state) data.state = editForm.state;
+      if (editForm.zip_code !== (editModal.zip_code || '')) data.zip_code = editForm.zip_code;
+      if (editForm.radius_meters) data.radius_meters = parseFloat(editForm.radius_meters);
+      await api.updateNeighborhood(editModal.id, data);
+      setEditModal(null);
+      fetchNeighborhoods();
+    } catch (e: any) {
+      alert(e.message);
+    }
+    setSaving(false);
+  };
+
+  const handleDeleteNeighborhood = async (n: Neighborhood) => {
+    if (!confirm(`Delete neighborhood "${n.name}"? This will fail if users are associated.`)) return;
+    try {
+      await api.deleteNeighborhood(n.id);
+      if (selected?.id === n.id) setSelected(null);
+      fetchNeighborhoods();
+    } catch (e: any) {
+      alert(e.message);
+    }
+  };
+
   const toggleBoardPin = async (entryId: string, current: boolean) => {
     if (!selected) return;
     await api.pinNeighborhoodBoardEntry(selected.id, entryId, !current);
@@ -137,10 +200,36 @@ export default function NeighborhoodsPage() {
 
   return (
     <AdminShell>
-      <div className="mb-6">
-        <h1 className="text-2xl font-bold text-gray-900">Neighborhoods</h1>
-        <p className="text-sm text-gray-500 mt-1">Search, organize, and moderate neighborhood communities by name and ZIP.</p>
+      <div className="mb-6 flex items-center justify-between">
+        <div>
+          <h1 className="text-2xl font-bold text-gray-900">Neighborhoods</h1>
+          <p className="text-sm text-gray-500 mt-1">Search, organize, and moderate neighborhood communities by name and ZIP.</p>
+        </div>
+        <button type="button" onClick={() => setShowCreate(!showCreate)} className="btn-primary text-sm flex items-center gap-1">
+          <Plus className="w-4 h-4" /> New Neighborhood
+        </button>
       </div>
+
+      {showCreate && (
+        <form onSubmit={handleCreate} className="card p-5 mb-4 space-y-3">
+          <h3 className="font-semibold text-gray-900">Create Neighborhood</h3>
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+            <input className="input" placeholder="Name" value={createForm.name} onChange={(e) => setCreateForm({ ...createForm, name: e.target.value })} required />
+            <input className="input" placeholder="City" value={createForm.city} onChange={(e) => setCreateForm({ ...createForm, city: e.target.value })} required />
+            <input className="input" placeholder="State" value={createForm.state} onChange={(e) => setCreateForm({ ...createForm, state: e.target.value })} required />
+          </div>
+          <div className="grid grid-cols-1 md:grid-cols-4 gap-3">
+            <input className="input" placeholder="ZIP Code" value={createForm.zip_code} onChange={(e) => setCreateForm({ ...createForm, zip_code: e.target.value })} />
+            <input className="input" placeholder="Latitude" type="number" step="any" value={createForm.lat} onChange={(e) => setCreateForm({ ...createForm, lat: e.target.value })} required />
+            <input className="input" placeholder="Longitude" type="number" step="any" value={createForm.lng} onChange={(e) => setCreateForm({ ...createForm, lng: e.target.value })} required />
+            <input className="input" placeholder="Radius (meters)" type="number" value={createForm.radius_meters} onChange={(e) => setCreateForm({ ...createForm, radius_meters: e.target.value })} required />
+          </div>
+          <div className="flex gap-2">
+            <button type="button" onClick={() => setShowCreate(false)} className="btn-secondary text-sm">Cancel</button>
+            <button type="submit" disabled={saving} className="btn-primary text-sm">{saving ? 'Creating...' : 'Create'}</button>
+          </div>
+        </form>
+      )}
 
       <div className="card p-4 mb-4 flex flex-wrap gap-3 items-center">
         <form onSubmit={onSearch} className="flex-1 min-w-[220px] relative">
@@ -236,9 +325,19 @@ export default function NeighborhoodsPage() {
             <p className="text-sm text-gray-500">Select a neighborhood to manage admins and board content.</p>
           ) : (
             <div className="space-y-4">
-              <div>
-                <h2 className="text-lg font-semibold text-gray-900">{selected.name}</h2>
-                <p className="text-sm text-gray-500">{selected.city}, {selected.state} {selected.zip_code ? `· ${selected.zip_code}` : ''}</p>
+              <div className="flex items-start justify-between">
+                <div>
+                  <h2 className="text-lg font-semibold text-gray-900">{selected.name}</h2>
+                  <p className="text-sm text-gray-500">{selected.city}, {selected.state} {selected.zip_code ? `· ${selected.zip_code}` : ''}</p>
+                </div>
+                <div className="flex gap-1">
+                  <button type="button" onClick={() => openEdit(selected)} className="text-brand-500 hover:text-brand-700 p-1" title="Edit neighborhood">
+                    <Pencil className="w-4 h-4" />
+                  </button>
+                  <button type="button" onClick={() => handleDeleteNeighborhood(selected)} className="text-red-500 hover:text-red-700 p-1" title="Delete neighborhood">
+                    <Trash2 className="w-4 h-4" />
+                  </button>
+                </div>
               </div>
 
               <div className="grid grid-cols-2 gap-2">
@@ -334,6 +433,47 @@ export default function NeighborhoodsPage() {
           )}
         </div>
       </div>
+
+      {/* Edit Neighborhood Modal */}
+      {editModal && (
+        <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50" onClick={() => setEditModal(null)}>
+          <div className="bg-white rounded-xl p-6 w-full max-w-md mx-4 shadow-xl" onClick={(e) => e.stopPropagation()}>
+            <h3 className="text-lg font-semibold text-gray-900 mb-4">Edit Neighborhood</h3>
+            <div className="space-y-3">
+              <div>
+                <label className="block text-xs font-medium text-gray-500 mb-1">Name</label>
+                <input className="w-full px-3 py-2 border rounded-lg text-sm" title="Neighborhood name" value={editForm.name} onChange={(e) => setEditForm({ ...editForm, name: e.target.value })} />
+              </div>
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-xs font-medium text-gray-500 mb-1">City</label>
+                  <input className="w-full px-3 py-2 border rounded-lg text-sm" title="City" value={editForm.city} onChange={(e) => setEditForm({ ...editForm, city: e.target.value })} />
+                </div>
+                <div>
+                  <label className="block text-xs font-medium text-gray-500 mb-1">State</label>
+                  <input className="w-full px-3 py-2 border rounded-lg text-sm" title="State" value={editForm.state} onChange={(e) => setEditForm({ ...editForm, state: e.target.value })} />
+                </div>
+              </div>
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-xs font-medium text-gray-500 mb-1">ZIP Code</label>
+                  <input className="w-full px-3 py-2 border rounded-lg text-sm" title="ZIP code" value={editForm.zip_code} onChange={(e) => setEditForm({ ...editForm, zip_code: e.target.value })} />
+                </div>
+                <div>
+                  <label className="block text-xs font-medium text-gray-500 mb-1">Radius (meters)</label>
+                  <input className="w-full px-3 py-2 border rounded-lg text-sm" title="Radius in meters" type="number" placeholder="Leave blank to keep current" value={editForm.radius_meters} onChange={(e) => setEditForm({ ...editForm, radius_meters: e.target.value })} />
+                </div>
+              </div>
+            </div>
+            <div className="flex gap-2 justify-end mt-5">
+              <button type="button" onClick={() => setEditModal(null)} className="px-4 py-2 text-sm text-gray-600 hover:text-gray-800">Cancel</button>
+              <button type="button" onClick={handleEdit} disabled={saving} className="btn-primary text-sm flex items-center gap-1">
+                <Save className="w-4 h-4" /> {saving ? 'Saving...' : 'Save'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </AdminShell>
   );
 }

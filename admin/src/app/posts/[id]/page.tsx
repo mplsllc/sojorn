@@ -9,7 +9,7 @@ import { api } from '@/lib/api';
 import { statusColor, formatDateTime } from '@/lib/utils';
 import { useEffect, useState } from 'react';
 import { useParams, useRouter } from 'next/navigation';
-import { ArrowLeft, Image, Video, MapPin, Trash2, CheckCircle, AlertTriangle } from 'lucide-react';
+import { ArrowLeft, Image, Video, MapPin, Trash2, CheckCircle, AlertTriangle, Pencil, Save, X } from 'lucide-react';
 import Link from 'next/link';
 
 export default function PostDetailPage() {
@@ -17,6 +17,9 @@ export default function PostDetailPage() {
   const router = useRouter();
   const [post, setPost] = useState<any>(null);
   const [loading, setLoading] = useState(true);
+  const [editing, setEditing] = useState(false);
+  const [editForm, setEditForm] = useState({ body: '', is_nsfw: false, visibility: 'public', category_id: '' });
+  const [editSaving, setEditSaving] = useState(false);
 
   const fetchPost = () => {
     setLoading(true);
@@ -33,6 +36,28 @@ export default function PostDetailPage() {
       await api.updatePostStatus(params.id as string, status, 'Admin action');
       fetchPost();
     } catch {}
+  };
+
+  const startEdit = () => {
+    setEditForm({
+      body: post?.body || post?.content || '',
+      is_nsfw: post?.is_nsfw ?? false,
+      visibility: post?.visibility || 'public',
+      category_id: post?.category_id || '',
+    });
+    setEditing(true);
+  };
+
+  const handleEditSave = async () => {
+    setEditSaving(true);
+    try {
+      await api.updatePost(params.id as string, editForm);
+      setEditing(false);
+      fetchPost();
+    } catch (e: any) {
+      alert(`Save failed: ${e.message}`);
+    }
+    setEditSaving(false);
   };
 
   const handleDelete = async () => {
@@ -76,7 +101,43 @@ export default function PostDetailPage() {
 
             {/* Content */}
             <div className="bg-warm-100 rounded-lg p-4 mb-4">
-              <p className="text-gray-800 whitespace-pre-wrap">{post.body || 'No text content'}</p>
+              {editing ? (
+                <div className="space-y-3">
+                  <textarea
+                    className="w-full px-3 py-2 border border-warm-300 rounded-lg text-sm"
+                    rows={5}
+                    value={editForm.body}
+                    onChange={(e) => setEditForm({ ...editForm, body: e.target.value })}
+                  />
+                  <div className="flex flex-wrap gap-3 items-center">
+                    <label className="flex items-center gap-2 text-sm">
+                      <input type="checkbox" checked={editForm.is_nsfw} onChange={(e) => setEditForm({ ...editForm, is_nsfw: e.target.checked })} className="rounded" title="Mark as NSFW" />
+                      NSFW
+                    </label>
+                    <select className="input text-sm py-1 w-auto" title="Visibility" value={editForm.visibility} onChange={(e) => setEditForm({ ...editForm, visibility: e.target.value })}>
+                      <option value="public">Public</option>
+                      <option value="followers">Followers</option>
+                      <option value="private">Private</option>
+                    </select>
+                    <input className="input text-sm py-1 w-48" placeholder="Category ID (optional)" value={editForm.category_id} onChange={(e) => setEditForm({ ...editForm, category_id: e.target.value })} />
+                  </div>
+                  <div className="flex gap-2">
+                    <button onClick={handleEditSave} disabled={editSaving} className="btn-primary text-sm flex items-center gap-1">
+                      <Save className="w-4 h-4" /> {editSaving ? 'Saving...' : 'Save'}
+                    </button>
+                    <button onClick={() => setEditing(false)} className="btn-secondary text-sm flex items-center gap-1">
+                      <X className="w-4 h-4" /> Cancel
+                    </button>
+                  </div>
+                </div>
+              ) : (
+                <div className="flex items-start justify-between">
+                  <p className="text-gray-800 whitespace-pre-wrap flex-1">{post.body || 'No text content'}</p>
+                  <button onClick={startEdit} className="text-brand-500 hover:text-brand-700 p-1 ml-2 flex-shrink-0" title="Edit content">
+                    <Pencil className="w-4 h-4" />
+                  </button>
+                </div>
+              )}
             </div>
 
             {/* Media */}

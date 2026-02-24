@@ -12,7 +12,7 @@ import {
   LayoutDashboard, Users, FileText, Shield, ShieldCheck, Scale, Flag,
   Settings, Activity, LogOut, ChevronLeft, ChevronRight, ChevronDown,
   Sliders, FolderTree, HardDrive, AtSign, Brain, ScrollText, Wrench, Bot,
-  UserCog, ShieldAlert, Cog, Mail, MapPinned, Users2, Video, ClipboardList, Clock,
+  UserCog, ShieldAlert, Cog, Mail, MapPinned, Users2, Video, ClipboardList, Clock, Calendar,
 } from 'lucide-react';
 import { useState } from 'react';
 
@@ -36,6 +36,7 @@ const navigation: NavEntry[] = [
       { href: '/neighborhoods', label: 'Neighborhoods', icon: MapPinned },
       { href: '/official-accounts', label: 'Official Accounts', icon: Bot },
       { href: '/groups', label: 'Groups & Capsules', icon: Users2 },
+      { href: '/events', label: 'Events', icon: Calendar },
       { href: '/waitlist', label: 'Waitlist', icon: Clock },
     ],
   },

@@ -677,12 +677,14 @@ func main() {
 		admin.PATCH("/users/:id/verification", adminHandler.UpdateUserVerification)
 		admin.POST("/users/:id/reset-strikes", adminHandler.ResetUserStrikes)
 		admin.PATCH("/users/:id/profile", adminHandler.AdminUpdateProfile)
+		admin.PATCH("/users/:id/email", adminHandler.AdminUpdateUserEmail)
 		admin.POST("/users/:id/follows", adminHandler.AdminManageFollow)
 		admin.GET("/users/:id/follows", adminHandler.AdminListFollows)
 
 		// Post Management
 		admin.GET("/posts", adminHandler.ListPosts)
 		admin.GET("/posts/:id", adminHandler.GetPost)
+		admin.PATCH("/posts/:id", adminHandler.AdminUpdatePost)
 		admin.PATCH("/posts/:id/status", adminHandler.UpdatePostStatus)
 		admin.DELETE("/posts/:id", adminHandler.DeletePost)
 		admin.POST("/posts/bulk", adminHandler.BulkUpdatePosts)
@@ -716,9 +718,13 @@ func main() {
 		admin.GET("/categories", adminHandler.ListCategories)
 		admin.POST("/categories", adminHandler.CreateCategory)
 		admin.PATCH("/categories/:id", adminHandler.UpdateCategory)
+		admin.DELETE("/categories/:id", adminHandler.AdminDeleteCategory)
 
 		// Neighborhoods
 		admin.GET("/neighborhoods", adminHandler.ListNeighborhoods)
+		admin.POST("/neighborhoods", adminHandler.AdminCreateNeighborhood)
+		admin.PATCH("/neighborhoods/:id", adminHandler.AdminUpdateNeighborhood)
+		admin.DELETE("/neighborhoods/:id", adminHandler.AdminDeleteNeighborhood)
 		admin.POST("/neighborhoods/:id/admins", adminHandler.SetNeighborhoodAdmin)
 		admin.GET("/neighborhoods/:id/admins", adminHandler.ListNeighborhoodAdmins)
 		admin.GET("/neighborhoods/:id/board", adminHandler.ListNeighborhoodBoardEntries)
@@ -799,6 +805,7 @@ func main() {
 		// Groups admin
 		admin.GET("/groups", adminHandler.AdminListGroups)
 		admin.GET("/groups/:id", adminHandler.AdminGetGroup)
+		admin.PATCH("/groups/:id", adminHandler.AdminUpdateGroup)
 		admin.DELETE("/groups/:id", adminHandler.AdminDeleteGroup)
 		admin.GET("/groups/:id/members", adminHandler.AdminListGroupMembers)
 		admin.DELETE("/groups/:id/members/:userId", adminHandler.AdminRemoveGroupMember)
@@ -810,6 +817,11 @@ func main() {
 
 		// Feed scores viewer
 		admin.GET("/feed-scores", adminHandler.AdminGetFeedScores)
+
+		// Events admin
+		admin.GET("/events", adminHandler.AdminListEvents)
+		admin.PATCH("/events/:id", adminHandler.AdminUpdateEvent)
+		admin.DELETE("/events/:id", adminHandler.AdminDeleteEvent)
 
 		// Waitlist management
 		admin.GET("/waitlist", adminHandler.AdminListWaitlist)

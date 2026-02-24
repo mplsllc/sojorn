@@ -139,6 +139,7 @@ func (h *PostHandler) CreateComment(c *gin.Context) {
 	// AI Moderation — cascade through all admin-enabled engines
 	var cachedScores *services.ThreePoisonsScore
 	var cachedReason string
+	var cachedEngine string
 	commentStatus := "active"
 	ctx := c.Request.Context()
 
@@ -146,6 +147,7 @@ func (h *PostHandler) CreateComment(c *gin.Context) {
 		modResult := h.contentModerator.ModerateText(ctx, "text", req.Body)
 		cachedScores = modResult.Scores
 		cachedReason = modResult.Reason
+		cachedEngine = modResult.Engine
 
 		switch modResult.Action {
 		case "flag":
@@ -196,16 +198,18 @@ func (h *PostHandler) CreateComment(c *gin.Context) {
 	// Log AI moderation decision for comment — async
 	if h.moderationService != nil {
 		postID := post.ID
-		postStatus := post.Status
 		reqBody := req.Body
+		logScores := cachedScores
+		logReason := cachedReason
+		logEngine := cachedEngine
+		logAction := "pass"
+		if commentStatus == "removed" {
+			logAction = "flag"
+		} else if commentStatus == "pending_moderation" {
+			logAction = "nsfw"
+		}
 		go func() {
-			decision := "pass"
-			if postStatus == "pending_moderation" {
-				decision = "flag"
-			}
-			invCis := 1.0 - cis
-			scores := &services.ThreePoisonsScore{Hate: invCis, Greed: 0, Delusion: 0}
-			h.moderationService.LogAIDecision(context.Background(), "comment", postID, userID, reqBody, scores, nil, decision, tone, "", nil)
+			h.moderationService.LogAIDecision(context.Background(), "comment", postID, userID, reqBody, logScores, nil, logAction, logReason, logEngine, "", nil)
 		}()
 	}
 
@@ -588,12 +592,14 @@ func (h *PostHandler) CreatePost(c *gin.Context) {
 	orDecision := ""
 	var cachedScores *services.ThreePoisonsScore
 	var cachedReason string
+	var cachedEngine string
 	ctx := c.Request.Context()
 
 	if h.contentModerator != nil {
 		modResult := h.contentModerator.ModerateText(ctx, "text", req.Body)
 		cachedScores = modResult.Scores
 		cachedReason = modResult.Reason
+		cachedEngine = modResult.Engine
 		orDecision = modResult.Action
 
 		switch modResult.Action {
@@ -684,33 +690,23 @@ func (h *PostHandler) CreatePost(c *gin.Context) {
 		}()
 	}
 
-	// Log AI moderation decision to audit log — async
+	// Log AI moderation decision to audit log — async (use actual engine scores, not reconstructed)
 	if h.moderationService != nil {
 		postID := post.ID
 		postStatus := post.Status
 		postIsNSFW := post.IsNSFW
-		postCIS := post.CISScore
-		postTone := post.ToneLabel
 		reqBody := req.Body
+		logScores := cachedScores
+		logReason := cachedReason
+		logEngine := cachedEngine
 		go func() {
 			decision := "pass"
-			flagReason := ""
-			if postTone != nil && *postTone != "" {
-				flagReason = *postTone
-			}
 			if postStatus == "removed" || postStatus == "pending_moderation" {
 				decision = "flag"
 			} else if postIsNSFW {
 				decision = "nsfw"
 			}
-			var scores *services.ThreePoisonsScore
-			if postCIS != nil {
-				invCis := 1.0 - *postCIS
-				scores = &services.ThreePoisonsScore{Hate: invCis, Greed: 0, Delusion: 0}
-			} else {
-				scores = &services.ThreePoisonsScore{}
-			}
-			h.moderationService.LogAIDecision(context.Background(), "post", postID, userID, reqBody, scores, nil, decision, flagReason, orDecision, nil)
+			h.moderationService.LogAIDecision(context.Background(), "post", postID, userID, reqBody, logScores, nil, decision, logReason, logEngine, orDecision, nil)
 		}()
 	}
 

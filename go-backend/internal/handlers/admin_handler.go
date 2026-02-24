@@ -4488,3 +4488,565 @@ func (h *AdminHandler) AdminGetFeedScores(c *gin.Context) {
 	}
 	c.JSON(http.StatusOK, gin.H{"scores": scores})
 }
+
+// ──────────────────────────────────────────────
+// Post Content Editing
+// ──────────────────────────────────────────────
+
+// AdminUpdatePost PATCH /admin/posts/:id — edit post body, NSFW flag, visibility, category.
+func (h *AdminHandler) AdminUpdatePost(c *gin.Context) {
+	ctx := c.Request.Context()
+	adminID, _ := c.Get("user_id")
+	postID := c.Param("id")
+
+	var req struct {
+		Body       *string `json:"body"`
+		IsNSFW     *bool   `json:"is_nsfw"`
+		Visibility *string `json:"visibility"`
+		CategoryID *string `json:"category_id"`
+	}
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+
+	sets := []string{}
+	args := []interface{}{}
+	idx := 1
+
+	addField := func(col string, val interface{}) {
+		sets = append(sets, fmt.Sprintf("%s = $%d", col, idx))
+		args = append(args, val)
+		idx++
+	}
+
+	if req.Body != nil {
+		addField("content", *req.Body)
+	}
+	if req.IsNSFW != nil {
+		addField("is_nsfw", *req.IsNSFW)
+	}
+	if req.Visibility != nil {
+		addField("visibility", *req.Visibility)
+	}
+	if req.CategoryID != nil {
+		if *req.CategoryID == "" {
+			sets = append(sets, fmt.Sprintf("category_id = $%d", idx))
+			args = append(args, nil)
+			idx++
+		} else {
+			addField("category_id", *req.CategoryID)
+		}
+	}
+
+	if len(sets) == 0 {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "No fields to update"})
+		return
+	}
+
+	sets = append(sets, fmt.Sprintf("updated_at = $%d", idx))
+	args = append(args, time.Now())
+	idx++
+
+	query := fmt.Sprintf("UPDATE posts SET %s WHERE id = $%d::uuid", strings.Join(sets, ", "), idx)
+	args = append(args, postID)
+
+	_, err := h.pool.Exec(ctx, query, args...)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to update post: " + err.Error()})
+		return
+	}
+
+	adminUUID, _ := uuid.Parse(adminID.(string))
+	h.pool.Exec(ctx, `
+		INSERT INTO audit_log (actor_id, action, target_type, target_id, details)
+		VALUES ($1, 'post_edit', 'post', $2::uuid, $3)
+	`, adminUUID, postID, fmt.Sprintf(`{"fields_changed":%d}`, len(sets)-1))
+
+	c.JSON(http.StatusOK, gin.H{"message": "Post updated"})
+}
+
+// ──────────────────────────────────────────────
+// Group Editing
+// ──────────────────────────────────────────────
+
+// AdminUpdateGroup PATCH /admin/groups/:id — edit group name, description, privacy, active status.
+func (h *AdminHandler) AdminUpdateGroup(c *gin.Context) {
+	ctx := c.Request.Context()
+	adminID, _ := c.Get("user_id")
+	groupID := c.Param("id")
+
+	var req struct {
+		Name        *string `json:"name"`
+		Description *string `json:"description"`
+		IsPrivate   *bool   `json:"is_private"`
+		IsActive    *bool   `json:"is_active"`
+	}
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+
+	sets := []string{}
+	args := []interface{}{}
+	idx := 1
+
+	addField := func(col string, val interface{}) {
+		sets = append(sets, fmt.Sprintf("%s = $%d", col, idx))
+		args = append(args, val)
+		idx++
+	}
+
+	if req.Name != nil {
+		addField("name", *req.Name)
+	}
+	if req.Description != nil {
+		addField("description", *req.Description)
+	}
+	if req.IsPrivate != nil {
+		addField("is_private", *req.IsPrivate)
+	}
+	if req.IsActive != nil {
+		addField("is_active", *req.IsActive)
+	}
+
+	if len(sets) == 0 {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "No fields to update"})
+		return
+	}
+
+	sets = append(sets, fmt.Sprintf("updated_at = $%d", idx))
+	args = append(args, time.Now())
+	idx++
+
+	query := fmt.Sprintf("UPDATE groups SET %s WHERE id = $%d::uuid", strings.Join(sets, ", "), idx)
+	args = append(args, groupID)
+
+	_, err := h.pool.Exec(ctx, query, args...)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to update group: " + err.Error()})
+		return
+	}
+
+	adminUUID, _ := uuid.Parse(adminID.(string))
+	h.pool.Exec(ctx, `
+		INSERT INTO audit_log (actor_id, action, target_type, target_id, details)
+		VALUES ($1, 'group_edit', 'group', $2::uuid, $3)
+	`, adminUUID, groupID, fmt.Sprintf(`{"fields_changed":%d}`, len(sets)-1))
+
+	c.JSON(http.StatusOK, gin.H{"message": "Group updated"})
+}
+
+// ──────────────────────────────────────────────
+// Category Deletion
+// ──────────────────────────────────────────────
+
+// AdminDeleteCategory DELETE /admin/categories/:id — nullify category_id on posts, then delete.
+func (h *AdminHandler) AdminDeleteCategory(c *gin.Context) {
+	ctx := c.Request.Context()
+	adminID, _ := c.Get("user_id")
+	catID := c.Param("id")
+
+	// Count affected posts
+	var affected int
+	h.pool.QueryRow(ctx, `SELECT COUNT(*) FROM posts WHERE category_id = $1::uuid`, catID).Scan(&affected)
+
+	// Nullify references
+	_, err := h.pool.Exec(ctx, `UPDATE posts SET category_id = NULL WHERE category_id = $1::uuid`, catID)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to unlink posts: " + err.Error()})
+		return
+	}
+
+	// Delete category
+	tag, err := h.pool.Exec(ctx, `DELETE FROM categories WHERE id = $1::uuid`, catID)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to delete category: " + err.Error()})
+		return
+	}
+	if tag.RowsAffected() == 0 {
+		c.JSON(http.StatusNotFound, gin.H{"error": "Category not found"})
+		return
+	}
+
+	adminUUID, _ := uuid.Parse(adminID.(string))
+	h.pool.Exec(ctx, `
+		INSERT INTO audit_log (actor_id, action, target_type, target_id, details)
+		VALUES ($1, 'category_delete', 'category', $2::uuid, $3)
+	`, adminUUID, catID, fmt.Sprintf(`{"affected_posts":%d}`, affected))
+
+	c.JSON(http.StatusOK, gin.H{"message": "Category deleted", "affected_posts": affected})
+}
+
+// ──────────────────────────────────────────────
+// Neighborhood CRUD
+// ──────────────────────────────────────────────
+
+// AdminCreateNeighborhood POST /admin/neighborhoods
+func (h *AdminHandler) AdminCreateNeighborhood(c *gin.Context) {
+	ctx := c.Request.Context()
+	adminID, _ := c.Get("user_id")
+
+	var req struct {
+		Name         string  `json:"name" binding:"required"`
+		City         string  `json:"city" binding:"required"`
+		State        string  `json:"state" binding:"required"`
+		ZipCode      string  `json:"zip_code"`
+		Country      string  `json:"country"`
+		Lat          float64 `json:"lat" binding:"required"`
+		Lng          float64 `json:"lng" binding:"required"`
+		RadiusMeters float64 `json:"radius_meters" binding:"required"`
+	}
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+
+	var id uuid.UUID
+	err := h.pool.QueryRow(ctx, `
+		INSERT INTO neighborhood_seeds (name, city, state, zip_code, country, lat, lng, radius_meters)
+		VALUES ($1, $2, $3, $4, $5, $6, $7, $8) RETURNING id
+	`, req.Name, req.City, req.State, req.ZipCode, req.Country, req.Lat, req.Lng, req.RadiusMeters).Scan(&id)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to create neighborhood: " + err.Error()})
+		return
+	}
+
+	adminUUID, _ := uuid.Parse(adminID.(string))
+	h.pool.Exec(ctx, `
+		INSERT INTO audit_log (actor_id, action, target_type, target_id, details)
+		VALUES ($1, 'neighborhood_create', 'neighborhood', $2, $3)
+	`, adminUUID, id, fmt.Sprintf(`{"name":"%s","city":"%s"}`, req.Name, req.City))
+
+	c.JSON(http.StatusCreated, gin.H{"id": id, "message": "Neighborhood created"})
+}
+
+// AdminUpdateNeighborhood PATCH /admin/neighborhoods/:id
+func (h *AdminHandler) AdminUpdateNeighborhood(c *gin.Context) {
+	ctx := c.Request.Context()
+	adminID, _ := c.Get("user_id")
+	nID := c.Param("id")
+
+	var req struct {
+		Name         *string  `json:"name"`
+		City         *string  `json:"city"`
+		State        *string  `json:"state"`
+		ZipCode      *string  `json:"zip_code"`
+		RadiusMeters *float64 `json:"radius_meters"`
+	}
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+
+	sets := []string{}
+	args := []interface{}{}
+	idx := 1
+
+	addField := func(col string, val interface{}) {
+		sets = append(sets, fmt.Sprintf("%s = $%d", col, idx))
+		args = append(args, val)
+		idx++
+	}
+
+	if req.Name != nil {
+		addField("name", *req.Name)
+	}
+	if req.City != nil {
+		addField("city", *req.City)
+	}
+	if req.State != nil {
+		addField("state", *req.State)
+	}
+	if req.ZipCode != nil {
+		addField("zip_code", *req.ZipCode)
+	}
+	if req.RadiusMeters != nil {
+		addField("radius_meters", *req.RadiusMeters)
+	}
+
+	if len(sets) == 0 {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "No fields to update"})
+		return
+	}
+
+	query := fmt.Sprintf("UPDATE neighborhood_seeds SET %s WHERE id = $%d::uuid", strings.Join(sets, ", "), idx)
+	args = append(args, nID)
+
+	tag, err := h.pool.Exec(ctx, query, args...)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to update neighborhood: " + err.Error()})
+		return
+	}
+	if tag.RowsAffected() == 0 {
+		c.JSON(http.StatusNotFound, gin.H{"error": "Neighborhood not found"})
+		return
+	}
+
+	adminUUID, _ := uuid.Parse(adminID.(string))
+	h.pool.Exec(ctx, `
+		INSERT INTO audit_log (actor_id, action, target_type, target_id, details)
+		VALUES ($1, 'neighborhood_update', 'neighborhood', $2::uuid, $3)
+	`, adminUUID, nID, fmt.Sprintf(`{"fields_changed":%d}`, len(sets)))
+
+	c.JSON(http.StatusOK, gin.H{"message": "Neighborhood updated"})
+}
+
+// AdminDeleteNeighborhood DELETE /admin/neighborhoods/:id — blocks if users are associated.
+func (h *AdminHandler) AdminDeleteNeighborhood(c *gin.Context) {
+	ctx := c.Request.Context()
+	adminID, _ := c.Get("user_id")
+	nID := c.Param("id")
+
+	// Check if any users reference this neighborhood
+	var userCount int
+	h.pool.QueryRow(ctx, `SELECT COUNT(*) FROM profiles WHERE neighborhood_id = $1::uuid`, nID).Scan(&userCount)
+	if userCount > 0 {
+		c.JSON(http.StatusConflict, gin.H{
+			"error":      fmt.Sprintf("Cannot delete: %d users are associated with this neighborhood", userCount),
+			"user_count": userCount,
+		})
+		return
+	}
+
+	tag, err := h.pool.Exec(ctx, `DELETE FROM neighborhood_seeds WHERE id = $1::uuid`, nID)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to delete neighborhood: " + err.Error()})
+		return
+	}
+	if tag.RowsAffected() == 0 {
+		c.JSON(http.StatusNotFound, gin.H{"error": "Neighborhood not found"})
+		return
+	}
+
+	adminUUID, _ := uuid.Parse(adminID.(string))
+	h.pool.Exec(ctx, `
+		INSERT INTO audit_log (actor_id, action, target_type, target_id, details)
+		VALUES ($1, 'neighborhood_delete', 'neighborhood', $2::uuid, '{}')
+	`, adminUUID, nID)
+
+	c.JSON(http.StatusOK, gin.H{"message": "Neighborhood deleted"})
+}
+
+// ──────────────────────────────────────────────
+// User Email Editing
+// ──────────────────────────────────────────────
+
+// AdminUpdateUserEmail PATCH /admin/users/:id/email — admin-only email change (no re-verification).
+func (h *AdminHandler) AdminUpdateUserEmail(c *gin.Context) {
+	ctx := c.Request.Context()
+	adminID, _ := c.Get("user_id")
+	targetUserID := c.Param("id")
+
+	var req struct {
+		Email string `json:"email" binding:"required,email"`
+	}
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+
+	// Uniqueness check
+	var existsCount int
+	h.pool.QueryRow(ctx, `SELECT COUNT(*) FROM users WHERE email = $1 AND id != $2::uuid`, req.Email, targetUserID).Scan(&existsCount)
+	if existsCount > 0 {
+		c.JSON(http.StatusConflict, gin.H{"error": "Email already in use by another account"})
+		return
+	}
+
+	_, err := h.pool.Exec(ctx, `UPDATE users SET email = $1, updated_at = NOW() WHERE id = $2::uuid`, req.Email, targetUserID)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to update email: " + err.Error()})
+		return
+	}
+
+	adminUUID, _ := uuid.Parse(adminID.(string))
+	h.pool.Exec(ctx, `
+		INSERT INTO audit_log (actor_id, action, target_type, target_id, details)
+		VALUES ($1, 'user_email_change', 'user', $2::uuid, $3)
+	`, adminUUID, targetUserID, fmt.Sprintf(`{"new_email":"%s"}`, req.Email))
+
+	c.JSON(http.StatusOK, gin.H{"message": "Email updated"})
+}
+
+// ──────────────────────────────────────────────
+// Events Admin
+// ──────────────────────────────────────────────
+
+// AdminListEvents GET /admin/events?limit=50&offset=0&search=&status=&group_id=
+func (h *AdminHandler) AdminListEvents(c *gin.Context) {
+	ctx := c.Request.Context()
+	limit, _ := strconv.Atoi(c.DefaultQuery("limit", "50"))
+	offset, _ := strconv.Atoi(c.DefaultQuery("offset", "0"))
+	search := c.Query("search")
+	status := c.Query("status")
+	groupID := c.Query("group_id")
+
+	if limit <= 0 || limit > 200 {
+		limit = 50
+	}
+
+	where := []string{"1=1"}
+	args := []interface{}{}
+	idx := 1
+
+	if search != "" {
+		where = append(where, fmt.Sprintf("(e.title ILIKE $%d OR e.description ILIKE $%d)", idx, idx))
+		args = append(args, "%"+search+"%")
+		idx++
+	}
+	if status != "" {
+		where = append(where, fmt.Sprintf("e.status = $%d", idx))
+		args = append(args, status)
+		idx++
+	}
+	if groupID != "" {
+		where = append(where, fmt.Sprintf("e.group_id = $%d::uuid", idx))
+		args = append(args, groupID)
+		idx++
+	}
+
+	query := fmt.Sprintf(`
+		SELECT e.id, e.group_id, g.name AS group_name,
+		       e.title, e.description, e.location_name,
+		       e.starts_at, e.ends_at, e.is_public, e.status,
+		       e.max_attendees, e.created_at,
+		       (SELECT COUNT(*) FROM group_event_rsvps r WHERE r.event_id = e.id) AS rsvp_count
+		FROM group_events e
+		LEFT JOIN groups g ON g.id = e.group_id
+		WHERE %s
+		ORDER BY e.starts_at DESC
+		LIMIT $%d OFFSET $%d
+	`, strings.Join(where, " AND "), idx, idx+1)
+	args = append(args, limit, offset)
+
+	rows, err := h.pool.Query(ctx, query, args...)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+	defer rows.Close()
+
+	type eventRow struct {
+		ID            string     `json:"id"`
+		GroupID       string     `json:"group_id"`
+		GroupName     *string    `json:"group_name"`
+		Title         string     `json:"title"`
+		Description   string     `json:"description"`
+		LocationName  *string    `json:"location_name"`
+		StartsAt      *time.Time `json:"starts_at"`
+		EndsAt        *time.Time `json:"ends_at"`
+		IsPublic      bool       `json:"is_public"`
+		Status        string     `json:"status"`
+		MaxAttendees  *int       `json:"max_attendees"`
+		CreatedAt     time.Time  `json:"created_at"`
+		RSVPCount     int        `json:"rsvp_count"`
+	}
+	var events []eventRow
+	for rows.Next() {
+		var e eventRow
+		if err := rows.Scan(&e.ID, &e.GroupID, &e.GroupName, &e.Title, &e.Description,
+			&e.LocationName, &e.StartsAt, &e.EndsAt, &e.IsPublic, &e.Status,
+			&e.MaxAttendees, &e.CreatedAt, &e.RSVPCount); err != nil {
+			continue
+		}
+		events = append(events, e)
+	}
+
+	c.JSON(http.StatusOK, gin.H{"events": events, "limit": limit, "offset": offset})
+}
+
+// AdminUpdateEvent PATCH /admin/events/:id — edit event status, title, description.
+func (h *AdminHandler) AdminUpdateEvent(c *gin.Context) {
+	ctx := c.Request.Context()
+	adminID, _ := c.Get("user_id")
+	eventID := c.Param("id")
+
+	var req struct {
+		Title       *string `json:"title"`
+		Description *string `json:"description"`
+		Status      *string `json:"status"`
+	}
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+
+	sets := []string{}
+	args := []interface{}{}
+	idx := 1
+
+	addField := func(col string, val interface{}) {
+		sets = append(sets, fmt.Sprintf("%s = $%d", col, idx))
+		args = append(args, val)
+		idx++
+	}
+
+	if req.Title != nil {
+		addField("title", *req.Title)
+	}
+	if req.Description != nil {
+		addField("description", *req.Description)
+	}
+	if req.Status != nil {
+		addField("status", *req.Status)
+	}
+
+	if len(sets) == 0 {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "No fields to update"})
+		return
+	}
+
+	sets = append(sets, fmt.Sprintf("updated_at = $%d", idx))
+	args = append(args, time.Now())
+	idx++
+
+	query := fmt.Sprintf("UPDATE group_events SET %s WHERE id = $%d::uuid", strings.Join(sets, ", "), idx)
+	args = append(args, eventID)
+
+	tag, err := h.pool.Exec(ctx, query, args...)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to update event: " + err.Error()})
+		return
+	}
+	if tag.RowsAffected() == 0 {
+		c.JSON(http.StatusNotFound, gin.H{"error": "Event not found"})
+		return
+	}
+
+	adminUUID, _ := uuid.Parse(adminID.(string))
+	h.pool.Exec(ctx, `
+		INSERT INTO audit_log (actor_id, action, target_type, target_id, details)
+		VALUES ($1, 'event_edit', 'event', $2::uuid, $3)
+	`, adminUUID, eventID, fmt.Sprintf(`{"fields_changed":%d}`, len(sets)-1))
+
+	c.JSON(http.StatusOK, gin.H{"message": "Event updated"})
+}
+
+// AdminDeleteEvent DELETE /admin/events/:id
+func (h *AdminHandler) AdminDeleteEvent(c *gin.Context) {
+	ctx := c.Request.Context()
+	adminID, _ := c.Get("user_id")
+	eventID := c.Param("id")
+
+	// Delete RSVPs first
+	h.pool.Exec(ctx, `DELETE FROM group_event_rsvps WHERE event_id = $1::uuid`, eventID)
+
+	tag, err := h.pool.Exec(ctx, `DELETE FROM group_events WHERE id = $1::uuid`, eventID)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to delete event: " + err.Error()})
+		return
+	}
+	if tag.RowsAffected() == 0 {
+		c.JSON(http.StatusNotFound, gin.H{"error": "Event not found"})
+		return
+	}
+
+	adminUUID, _ := uuid.Parse(adminID.(string))
+	h.pool.Exec(ctx, `
+		INSERT INTO audit_log (actor_id, action, target_type, target_id, details)
+		VALUES ($1, 'event_delete', 'event', $2::uuid, '{}')
+	`, adminUUID, eventID)
+
+	c.JSON(http.StatusOK, gin.H{"message": "Event deleted"})
+}

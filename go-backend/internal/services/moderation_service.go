@@ -320,17 +320,22 @@ func (s *ModerationService) UpdateUserStatus(ctx context.Context, userID uuid.UU
 // AI Moderation Audit Log
 // ============================================================================
 
-// LogAIDecision records an AI moderation decision to the audit log
-func (s *ModerationService) LogAIDecision(ctx context.Context, contentType string, contentID uuid.UUID, authorID uuid.UUID, contentSnippet string, scores *ThreePoisonsScore, rawScores json.RawMessage, decision string, flagReason string, orDecision string, orScores json.RawMessage) {
+// LogAIDecision records an AI moderation decision to the audit log.
+// aiProvider should be "local_ai" or "sightengine" (the engine that produced the decision).
+func (s *ModerationService) LogAIDecision(ctx context.Context, contentType string, contentID uuid.UUID, authorID uuid.UUID, contentSnippet string, scores *ThreePoisonsScore, rawScores json.RawMessage, decision string, flagReason string, aiProvider string, orDecision string, orScores json.RawMessage) {
 	snippet := contentSnippet
 	if len(snippet) > 200 {
 		snippet = snippet[:200]
 	}
 
+	if scores == nil {
+		scores = &ThreePoisonsScore{}
+	}
+
 	_, err := s.pool.Exec(ctx, `
-		INSERT INTO ai_moderation_log (content_type, content_id, author_id, content_snippet, decision, flag_reason, scores_hate, scores_greed, scores_delusion, raw_scores, or_decision, or_scores)
-		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
-	`, contentType, contentID, authorID, snippet, decision, flagReason, scores.Hate, scores.Greed, scores.Delusion, rawScores, orDecision, orScores)
+		INSERT INTO ai_moderation_log (content_type, content_id, author_id, content_snippet, decision, flag_reason, ai_provider, scores_hate, scores_greed, scores_delusion, raw_scores, or_decision, or_scores)
+		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)
+	`, contentType, contentID, authorID, snippet, decision, flagReason, aiProvider, scores.Hate, scores.Greed, scores.Delusion, rawScores, orDecision, orScores)
 	if err != nil {
 		fmt.Printf("Failed to log AI moderation decision: %v\n", err)
 	}

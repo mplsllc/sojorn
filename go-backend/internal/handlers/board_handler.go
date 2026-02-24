@@ -688,7 +688,7 @@ func (h *BoardHandler) aiModerateEntry(entryID uuid.UUID, body string, authorID 
 	// Always log AI decision for audit
 	if h.moderationService != nil {
 		rawScore, _ := json.Marshal(scores)
-		h.moderationService.LogAIDecision(ctx, "board_entry", entryID, authorID, body, scores, rawScore, decision, reason, engine, nil)
+		h.moderationService.LogAIDecision(ctx, "board_entry", entryID, authorID, body, scores, rawScore, decision, reason, engine, "", nil)
 	}
 
 	if decision == "clean" || decision == "nsfw" {
@@ -733,7 +733,7 @@ func (h *BoardHandler) aiModerateReply(replyID uuid.UUID, body string, authorID 
 
 	if h.moderationService != nil {
 		rawScore, _ := json.Marshal(scores)
-		h.moderationService.LogAIDecision(ctx, "board_reply", replyID, authorID, body, scores, rawScore, decision, reason, engine, nil)
+		h.moderationService.LogAIDecision(ctx, "board_reply", replyID, authorID, body, scores, rawScore, decision, reason, engine, "", nil)
 	}
 
 	if decision == "clean" || decision == "nsfw" {

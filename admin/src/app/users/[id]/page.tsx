@@ -9,7 +9,7 @@ import { api } from '@/lib/api';
 import { statusColor, formatDateTime } from '@/lib/utils';
 import { useEffect, useState } from 'react';
 import { useParams, useRouter } from 'next/navigation';
-import { ArrowLeft, Shield, Ban, CheckCircle, XCircle, Star, RotateCcw, Pencil, UserPlus, UserMinus, Users, Save, X, RefreshCcw } from 'lucide-react';
+import { ArrowLeft, Shield, Ban, CheckCircle, XCircle, Star, RotateCcw, Pencil, UserPlus, UserMinus, Users, Save, X, RefreshCcw, Mail } from 'lucide-react';
 import Link from 'next/link';
 
 export default function UserDetailPage() {
@@ -280,6 +280,9 @@ export default function UserDetailPage() {
             </div>
           </div>
 
+          {/* Email Editor */}
+          <EmailEditor userId={user.id} currentEmail={user.email} onSaved={fetchUser} />
+
           {/* Editable Profile */}
           <OfficialProfileEditor user={user} onSaved={fetchUser} />
 
@@ -461,6 +464,58 @@ function OfficialProfileEditor({ user, onSaved }: { user: any; onSaved: () => vo
   );
 }
 
+// ─── Email Editor ─────────────────────────
+function EmailEditor({ userId, currentEmail, onSaved }: { userId: string; currentEmail: string; onSaved: () => void }) {
+  const [editing, setEditing] = useState(false);
+  const [email, setEmail] = useState(currentEmail || '');
+  const [saving, setSaving] = useState(false);
+  const [result, setResult] = useState<{ ok: boolean; msg: string } | null>(null);
+
+  useEffect(() => { setEmail(currentEmail || ''); }, [currentEmail]);
+
+  const handleSave = async () => {
+    setSaving(true);
+    setResult(null);
+    try {
+      await api.adminUpdateUserEmail(userId, email);
+      setResult({ ok: true, msg: 'Email updated' });
+      setEditing(false);
+      onSaved();
+    } catch (e: any) {
+      setResult({ ok: false, msg: e.message });
+    }
+    setSaving(false);
+  };
+
+  return (
+    <div className="card p-5">
+      <div className="flex items-center justify-between mb-3">
+        <h3 className="text-sm font-semibold text-gray-700 flex items-center gap-2">
+          <Mail className="w-4 h-4" /> Email Address
+        </h3>
+        {!editing ? (
+          <button type="button" onClick={() => setEditing(true)} className="btn-secondary text-xs py-1 px-3">Edit</button>
+        ) : (
+          <div className="flex gap-2">
+            <button type="button" onClick={() => { setEditing(false); setEmail(currentEmail || ''); setResult(null); }} className="btn-secondary text-xs py-1 px-3 flex items-center gap-1">
+              <X className="w-3 h-3" /> Cancel
+            </button>
+            <button type="button" onClick={handleSave} disabled={saving} className="btn-primary text-xs py-1 px-3 flex items-center gap-1">
+              <Save className="w-3 h-3" /> {saving ? 'Saving...' : 'Save'}
+            </button>
+          </div>
+        )}
+      </div>
+      {result && <p className={`text-xs mb-2 ${result.ok ? 'text-green-600' : 'text-red-600'}`}>{result.msg}</p>}
+      {editing ? (
+        <input type="email" className="w-full px-3 py-2 border border-warm-300 rounded-lg text-sm" placeholder="user@example.com" value={email} onChange={(e) => setEmail(e.target.value)} />
+      ) : (
+        <p className="text-sm text-gray-900">{currentEmail || '—'}</p>
+      )}
+    </div>
+  );
+}
+
 // ─── Follower/Following Manager ─────────────────────────
 function FollowManager({ userId }: { userId: string }) {
   const [tab, setTab] = useState<'followers' | 'following'>('followers');
@@ -565,7 +620,8 @@ function FollowManager({ userId }: { userId: string }) {
                 </div>
               </div>
               <button onClick={() => handleRemove(u.id, u.handle)} disabled={actionLoading}
-                className="text-red-500 hover:text-red-700 p-1 rounded hover:bg-red-50 disabled:opacity-50 flex-shrink-0">
+                className="text-red-500 hover:text-red-700 p-1 rounded hover:bg-red-50 disabled:opacity-50 flex-shrink-0"
+                title="Remove" type="button">
                 <UserMinus className="w-3.5 h-3.5" />
               </button>
             </div>
