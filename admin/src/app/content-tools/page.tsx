@@ -609,13 +609,19 @@ type SocialItem = {
   platform: string;
 };
 
+type ItemOverrides = {
+  title: string;
+  description: string;
+  importAs: 'post' | 'quip';
+};
+
 function SocialImportPanel() {
   const [profileUrl, setProfileUrl] = useState('');
   const [authorId, setAuthorId] = useState('');
   const [fetching, setFetching] = useState(false);
   const [items, setItems] = useState<SocialItem[]>([]);
   const [selected, setSelected] = useState<Set<string>>(new Set());
-  const [importAs, setImportAs] = useState<Record<string, 'post' | 'quip'>>({});
+  const [overrides, setOverrides] = useState<Record<string, ItemOverrides>>({});
   const [platform, setPlatform] = useState('');
   const [error, setError] = useState('');
   const [importing, setImporting] = useState(false);
@@ -623,6 +629,7 @@ function SocialImportPanel() {
   const [downloadedUrls, setDownloadedUrls] = useState<Record<string, string>>({});
   const [importResult, setImportResult] = useState<any>(null);
   const [fetchLimit, setFetchLimit] = useState(20);
+  const [editingItem, setEditingItem] = useState<string | null>(null);
 
   const handleFetch = async () => {
     if (!profileUrl.trim()) return;
@@ -630,18 +637,24 @@ function SocialImportPanel() {
     setError('');
     setItems([]);
     setSelected(new Set());
-    setImportAs({});
+    setOverrides({});
     setImportResult(null);
+    setDownloadProgress({});
+    setDownloadedUrls({});
     try {
       const data = await api.fetchSocialContent(profileUrl.trim(), fetchLimit);
       setItems(data.items || []);
       setPlatform(data.platform || '');
-      // Default: videos → quip, images → post
-      const defaults: Record<string, 'post' | 'quip'> = {};
+      // Initialize overrides with original data
+      const defaults: Record<string, ItemOverrides> = {};
       (data.items || []).forEach((item: SocialItem) => {
-        defaults[item.id] = item.media_type === 'video' ? 'quip' : 'post';
+        defaults[item.id] = {
+          title: item.title || '',
+          description: item.description || '',
+          importAs: item.media_type === 'video' ? 'quip' : 'post',
+        };
       });
-      setImportAs(defaults);
+      setOverrides(defaults);
     } catch (e: any) {
       setError(e.message || 'Failed to fetch content');
     }
@@ -649,6 +662,7 @@ function SocialImportPanel() {
   };
 
   const toggleSelect = (id: string) => {
+    if (importing) return;
     setSelected((prev) => {
       const next = new Set(prev);
       if (next.has(id)) next.delete(id); else next.add(id);
@@ -662,6 +676,13 @@ function SocialImportPanel() {
     } else {
       setSelected(new Set(items.map((i) => i.id)));
     }
+  };
+
+  const updateOverride = (id: string, field: keyof ItemOverrides, value: string) => {
+    setOverrides((prev) => ({
+      ...prev,
+      [id]: { ...prev[id], [field]: value },
+    }));
   };
 
   const handleImport = async () => {
@@ -688,7 +709,6 @@ function SocialImportPanel() {
         urls[item.id] = result.media_url || result.local_path || item.url;
         progress[item.id] = 'done';
       } catch {
-        // Fall back to using the original URL (thumbnail for display)
         urls[item.id] = item.url;
         progress[item.id] = 'error';
       }
@@ -696,9 +716,9 @@ function SocialImportPanel() {
       setDownloadedUrls({ ...urls });
     }
 
-    // Step 2: Group by content type and import
-    const postItems = selectedItems.filter((i) => importAs[i.id] === 'post');
-    const quipItems = selectedItems.filter((i) => importAs[i.id] === 'quip');
+    // Step 2: Group by content type and import, using overrides for body text
+    const postItems = selectedItems.filter((i) => overrides[i.id]?.importAs === 'post');
+    const quipItems = selectedItems.filter((i) => overrides[i.id]?.importAs !== 'post');
 
     let totalSuccess = 0;
     let totalFailures = 0;
@@ -711,13 +731,18 @@ function SocialImportPanel() {
         const resp = await api.adminImportContent({
           author_id: authorId.trim(),
           content_type: type,
-          items: batch.map((item) => ({
-            body: item.description || item.title || '',
-            media_url: urls[item.id] || item.url,
-            thumbnail_url: item.thumbnail_url,
-            duration_ms: item.duration ? item.duration * 1000 : undefined,
-            visibility: 'public',
-          })),
+          items: batch.map((item) => {
+            const ov = overrides[item.id];
+            // Use override description first, then title, then original values
+            const body = (ov?.description || ov?.title || item.description || item.title || '').trim();
+            return {
+              body,
+              media_url: urls[item.id] || item.url,
+              thumbnail_url: item.thumbnail_url,
+              duration_ms: item.duration ? item.duration * 1000 : undefined,
+              visibility: 'public',
+            };
+          }),
         });
         totalSuccess += resp.success || 0;
         totalFailures += resp.failures || 0;
@@ -754,10 +779,10 @@ function SocialImportPanel() {
   };
 
   return (
-    <div className="bg-white rounded-xl border border-warm-300 p-6 max-w-5xl">
+    <div className="bg-white rounded-xl border border-warm-300 p-6 max-w-6xl">
       <h2 className="text-lg font-semibold text-gray-900 mb-1">Social Media Import</h2>
       <p className="text-sm text-gray-500 mb-6">
-        Fetch public content from YouTube, TikTok, Facebook, or Instagram and import as posts or quips. Requires <code className="text-xs bg-warm-100 px-1 rounded">yt-dlp</code> on the server.
+        Fetch public content from YouTube, TikTok, Facebook, or Instagram. Select items, edit titles and descriptions, then import as posts or quips. Requires <code className="text-xs bg-warm-100 px-1 rounded">yt-dlp</code> on the server.
       </p>
 
       {/* Profile URL + Author */}
@@ -778,6 +803,7 @@ function SocialImportPanel() {
                 value={fetchLimit}
                 onChange={(e) => setFetchLimit(Number(e.target.value))}
                 className="px-2 py-2 border border-warm-300 rounded-lg text-sm w-16"
+                title="Number of items to fetch"
               >
                 <option value={10}>10</option>
                 <option value={20}>20</option>
@@ -785,6 +811,7 @@ function SocialImportPanel() {
                 <option value={50}>50</option>
               </select>
               <button
+                type="button"
                 onClick={handleFetch}
                 disabled={fetching || !profileUrl.trim()}
                 className="flex items-center gap-2 px-4 py-2 bg-brand-500 text-white rounded-lg text-sm font-medium hover:bg-brand-600 disabled:opacity-50 transition-colors whitespace-nowrap"
@@ -813,6 +840,7 @@ function SocialImportPanel() {
           <div className="flex items-center justify-between mb-3">
             <div className="flex items-center gap-3">
               <button
+                type="button"
                 onClick={selectAll}
                 className="text-sm text-brand-600 hover:text-brand-700 font-medium"
               >
@@ -827,6 +855,7 @@ function SocialImportPanel() {
             </div>
 
             <button
+              type="button"
               onClick={handleImport}
               disabled={importing || selected.size === 0 || !authorId}
               className="flex items-center gap-2 px-5 py-2 bg-brand-500 text-white rounded-lg text-sm font-medium hover:bg-brand-600 disabled:opacity-50 transition-colors"
@@ -836,93 +865,155 @@ function SocialImportPanel() {
             </button>
           </div>
 
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 max-h-[600px] overflow-y-auto">
+          <div className="space-y-2 max-h-[700px] overflow-y-auto">
             {items.map((item) => {
               const isSelected = selected.has(item.id);
               const dlStatus = downloadProgress[item.id];
+              const ov = overrides[item.id];
+              const isEditing = editingItem === item.id;
               return (
                 <div
                   key={item.id}
-                  onClick={() => !importing && toggleSelect(item.id)}
-                  className={`relative rounded-lg border-2 overflow-hidden cursor-pointer transition-all ${
+                  className={`rounded-lg border-2 overflow-hidden transition-all ${
                     isSelected
-                      ? 'border-brand-500 ring-2 ring-brand-200'
+                      ? 'border-brand-500 bg-brand-50/30'
                       : 'border-warm-200 hover:border-warm-400'
                   }`}
                 >
-                  {/* Thumbnail */}
-                  <div className="relative aspect-video bg-warm-100">
-                    {item.thumbnail_url ? (
-                      <img src={item.thumbnail_url} alt="" className="w-full h-full object-cover" />
-                    ) : (
-                      <div className="w-full h-full flex items-center justify-center text-gray-400">
-                        {item.media_type === 'video' ? <Play className="w-8 h-8" /> : <ImageIcon className="w-8 h-8" />}
+                  <div className="flex gap-3 p-3">
+                    {/* Thumbnail + checkbox */}
+                    <div
+                      className="relative w-40 flex-shrink-0 cursor-pointer"
+                      onClick={() => toggleSelect(item.id)}
+                    >
+                      <div className="relative aspect-video bg-warm-100 rounded-md overflow-hidden">
+                        {item.thumbnail_url ? (
+                          <img src={item.thumbnail_url} alt="" className="w-full h-full object-cover" />
+                        ) : (
+                          <div className="w-full h-full flex items-center justify-center text-gray-400">
+                            {item.media_type === 'video' ? <Play className="w-6 h-6" /> : <ImageIcon className="w-6 h-6" />}
+                          </div>
+                        )}
+                        {item.duration > 0 && (
+                          <span className="absolute bottom-1 right-1 bg-black/75 text-white text-[10px] px-1 py-0.5 rounded">
+                            {formatDuration(item.duration)}
+                          </span>
+                        )}
+                        <div className={`absolute top-1.5 left-1.5 w-5 h-5 rounded border-2 flex items-center justify-center transition-colors ${
+                          isSelected ? 'bg-brand-500 border-brand-500' : 'bg-white/80 border-gray-400'
+                        }`}>
+                          {isSelected && <Check className="w-3 h-3 text-white" />}
+                        </div>
+                        {dlStatus && (
+                          <div className={`absolute top-1.5 right-1.5 w-5 h-5 rounded-full flex items-center justify-center ${
+                            dlStatus === 'downloading' ? 'bg-yellow-400' :
+                            dlStatus === 'done' ? 'bg-green-500' :
+                            dlStatus === 'error' ? 'bg-red-500' : 'bg-gray-300'
+                          }`}>
+                            {dlStatus === 'downloading' && <Loader2 className="w-3 h-3 text-white animate-spin" />}
+                            {dlStatus === 'done' && <Check className="w-3 h-3 text-white" />}
+                            {dlStatus === 'error' && <X className="w-3 h-3 text-white" />}
+                          </div>
+                        )}
                       </div>
-                    )}
-
-                    {/* Duration badge */}
-                    {item.duration > 0 && (
-                      <span className="absolute bottom-1 right-1 bg-black/75 text-white text-[10px] px-1.5 py-0.5 rounded">
-                        {formatDuration(item.duration)}
-                      </span>
-                    )}
-
-                    {/* Selection check */}
-                    <div className={`absolute top-2 left-2 w-5 h-5 rounded border-2 flex items-center justify-center transition-colors ${
-                      isSelected ? 'bg-brand-500 border-brand-500' : 'bg-white/80 border-gray-400'
-                    }`}>
-                      {isSelected && <Check className="w-3 h-3 text-white" />}
                     </div>
 
-                    {/* Download status */}
-                    {dlStatus && (
-                      <div className={`absolute top-2 right-2 w-5 h-5 rounded-full flex items-center justify-center ${
-                        dlStatus === 'downloading' ? 'bg-yellow-400' :
-                        dlStatus === 'done' ? 'bg-green-500' :
-                        dlStatus === 'error' ? 'bg-red-500' : 'bg-gray-300'
-                      }`}>
-                        {dlStatus === 'downloading' && <Loader2 className="w-3 h-3 text-white animate-spin" />}
-                        {dlStatus === 'done' && <Check className="w-3 h-3 text-white" />}
-                        {dlStatus === 'error' && <X className="w-3 h-3 text-white" />}
-                      </div>
-                    )}
-                  </div>
-
-                  {/* Info */}
-                  <div className="p-2">
-                    <p className="text-xs font-medium text-gray-900 line-clamp-2 leading-tight">{item.title || item.description || 'Untitled'}</p>
-                    <div className="flex items-center justify-between mt-1.5">
-                      <div className="flex items-center gap-2 text-[10px] text-gray-500">
-                        {item.view_count > 0 && <span>{formatCount(item.view_count)} views</span>}
-                        {item.like_count > 0 && <span>{formatCount(item.like_count)} likes</span>}
-                      </div>
-                      {/* Import as toggle */}
-                      {isSelected && (
-                        <select
-                          value={importAs[item.id] || 'quip'}
-                          onClick={(e) => e.stopPropagation()}
-                          onChange={(e) => {
-                            e.stopPropagation();
-                            setImportAs((prev) => ({ ...prev, [item.id]: e.target.value as 'post' | 'quip' }));
-                          }}
-                          className="text-[10px] px-1 py-0.5 border border-warm-300 rounded bg-white"
-                        >
-                          <option value="quip">Quip</option>
-                          <option value="post">Post</option>
-                        </select>
+                    {/* Content info */}
+                    <div className="flex-1 min-w-0">
+                      {isEditing ? (
+                        <div className="space-y-2" onClick={(e) => e.stopPropagation()}>
+                          <div>
+                            <label className="block text-[10px] font-medium text-gray-500 mb-0.5">Title</label>
+                            <input
+                              type="text"
+                              value={ov?.title || ''}
+                              onChange={(e) => updateOverride(item.id, 'title', e.target.value)}
+                              className="w-full px-2 py-1.5 border border-warm-300 rounded text-sm focus:ring-1 focus:ring-brand-500 focus:border-brand-500"
+                              placeholder="Title for this content"
+                            />
+                          </div>
+                          <div>
+                            <label className="block text-[10px] font-medium text-gray-500 mb-0.5">Description / Caption</label>
+                            <textarea
+                              value={ov?.description || ''}
+                              onChange={(e) => updateOverride(item.id, 'description', e.target.value)}
+                              rows={2}
+                              className="w-full px-2 py-1.5 border border-warm-300 rounded text-sm focus:ring-1 focus:ring-brand-500 focus:border-brand-500"
+                              placeholder="Caption that will appear on the post"
+                            />
+                          </div>
+                          <div className="flex items-center gap-3">
+                            <select
+                              value={ov?.importAs || 'quip'}
+                              onChange={(e) => updateOverride(item.id, 'importAs', e.target.value)}
+                              className="px-2 py-1 border border-warm-300 rounded text-xs"
+                              title="Import as"
+                            >
+                              <option value="quip">Import as Quip (video)</option>
+                              <option value="post">Import as Post (image)</option>
+                            </select>
+                            <button
+                              type="button"
+                              onClick={() => setEditingItem(null)}
+                              className="text-xs text-brand-600 hover:text-brand-700 font-medium"
+                            >
+                              Done
+                            </button>
+                          </div>
+                        </div>
+                      ) : (
+                        <>
+                          <div className="flex items-start justify-between gap-2">
+                            <div className="min-w-0">
+                              <p className="text-sm font-medium text-gray-900 truncate">
+                                {ov?.title || item.title || item.description || 'Untitled'}
+                              </p>
+                              {(ov?.description || item.description) && (ov?.description || item.description) !== (ov?.title || item.title) && (
+                                <p className="text-xs text-gray-500 line-clamp-2 mt-0.5">
+                                  {ov?.description || item.description}
+                                </p>
+                              )}
+                            </div>
+                            {isSelected && (
+                              <button
+                                type="button"
+                                onClick={(e) => { e.stopPropagation(); setEditingItem(item.id); }}
+                                className="text-xs text-brand-500 hover:text-brand-600 font-medium whitespace-nowrap flex-shrink-0"
+                              >
+                                Edit
+                              </button>
+                            )}
+                          </div>
+                          <div className="flex items-center gap-3 mt-1.5 flex-wrap">
+                            <div className="flex items-center gap-2 text-[10px] text-gray-500">
+                              {item.view_count > 0 && <span>{formatCount(item.view_count)} views</span>}
+                              {item.like_count > 0 && <span>{formatCount(item.like_count)} likes</span>}
+                              {item.upload_date && <span>{item.upload_date}</span>}
+                            </div>
+                            {isSelected && (
+                              <span className={`text-[10px] px-1.5 py-0.5 rounded-full font-medium ${
+                                ov?.importAs === 'post'
+                                  ? 'bg-blue-100 text-blue-700'
+                                  : 'bg-purple-100 text-purple-700'
+                              }`}>
+                                {ov?.importAs === 'post' ? 'Post' : 'Quip'}
+                              </span>
+                            )}
+                            {item.url && (
+                              <a
+                                href={item.url}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                onClick={(e) => e.stopPropagation()}
+                                className="text-[10px] text-brand-500 hover:text-brand-600 flex items-center gap-0.5"
+                              >
+                                <ExternalLink className="w-2.5 h-2.5" /> Original
+                              </a>
+                            )}
+                          </div>
+                        </>
                       )}
                     </div>
-                    {item.url && (
-                      <a
-                        href={item.url}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        onClick={(e) => e.stopPropagation()}
-                        className="mt-1 text-[10px] text-brand-500 hover:text-brand-600 flex items-center gap-0.5"
-                      >
-                        <ExternalLink className="w-2.5 h-2.5" /> View original
-                      </a>
-                    )}
                   </div>
                 </div>
               );
@@ -954,6 +1045,7 @@ function SocialImportPanel() {
               <div className="flex items-center gap-2 mb-1">
                 <p className="text-xs font-semibold text-green-700">Created IDs:</p>
                 <button
+                  type="button"
                   onClick={() => navigator.clipboard.writeText(importResult.created.join('\n'))}
                   className="text-xs text-brand-500 hover:text-brand-600 flex items-center gap-1"
                 >

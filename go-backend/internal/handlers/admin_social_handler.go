@@ -71,11 +71,16 @@ func (h *AdminHandler) FetchSocialContent(c *gin.Context) {
 		"--no-warnings",
 		"--no-download",
 		"--playlist-end", fmt.Sprintf("%d", req.Limit),
-		"--extractor-args", "youtube:player_skip=webpage",
 	}
 
-	// For TikTok, add cookies workaround
-	if platform == "tiktok" {
+	// Platform-specific flags
+	switch platform {
+	case "youtube":
+		args = append(args, "--extractor-args", "youtube:player_skip=webpage")
+	case "tiktok":
+		args = append(args, "--cookies-from-browser", "none")
+	case "facebook":
+		// Facebook may require different extraction strategy
 		args = append(args, "--cookies-from-browser", "none")
 	}
 
@@ -84,7 +89,6 @@ func (h *AdminHandler) FetchSocialContent(c *gin.Context) {
 	ctx := c.Request.Context()
 	cmd := exec.CommandContext(ctx, "yt-dlp", args...)
 
-	// Set a timeout
 	done := make(chan error, 1)
 	var output []byte
 	var cmdErr error
@@ -95,18 +99,17 @@ func (h *AdminHandler) FetchSocialContent(c *gin.Context) {
 	}()
 
 	select {
-	case <-time.After(60 * time.Second):
+	case <-time.After(90 * time.Second):
 		if cmd.Process != nil {
 			cmd.Process.Kill()
 		}
-		c.JSON(http.StatusGatewayTimeout, gin.H{"error": "Fetching timed out after 60 seconds"})
+		c.JSON(http.StatusGatewayTimeout, gin.H{"error": "Fetching timed out after 90 seconds"})
 		return
 	case <-done:
 	}
 
 	if cmdErr != nil {
 		errMsg := string(output)
-		// Trim to a reasonable length
 		if len(errMsg) > 500 {
 			errMsg = errMsg[:500]
 		}
@@ -222,9 +225,13 @@ func (h *AdminHandler) DownloadSocialMedia(c *gin.Context) {
 		return
 	}
 
-	// Download to a temp file then upload to R2
-	tmpDir := "/tmp/sojorn-social-import"
-	exec.Command("mkdir", "-p", tmpDir).Run()
+	// Create a unique temp directory per download to avoid collisions
+	tmpDir := fmt.Sprintf("/tmp/sojorn-social-import/%d", time.Now().UnixNano())
+	if err := os.MkdirAll(tmpDir, 0755); err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to create temp directory"})
+		return
+	}
+	defer os.RemoveAll(tmpDir) // Clean up entire temp dir after we're done
 
 	outputTemplate := tmpDir + "/%(id)s.%(ext)s"
 	args := []string{
@@ -233,36 +240,78 @@ func (h *AdminHandler) DownloadSocialMedia(c *gin.Context) {
 		"--no-playlist",
 		"-f", "mp4/best[ext=mp4]/best",
 		"--max-filesize", "100M",
-		req.URL,
+		"--print", "after_move:filepath", // Print the final filename to stdout
 	}
+
+	// Platform-specific workarounds
+	if req.Platform == "tiktok" {
+		args = append(args, "--cookies-from-browser", "none")
+	}
+
+	args = append(args, req.URL)
 
 	ctx := c.Request.Context()
 	cmd := exec.CommandContext(ctx, "yt-dlp", args...)
 
-	outputBytes, err := cmd.CombinedOutput()
-	if err != nil {
-		errMsg := string(outputBytes)
-		if len(errMsg) > 500 {
-			errMsg = errMsg[:500]
+	var stdout, stderr bytes.Buffer
+	cmd.Stdout = &stdout
+	cmd.Stderr = &stderr
+
+	done := make(chan error, 1)
+	go func() { done <- cmd.Run() }()
+
+	select {
+	case <-time.After(120 * time.Second):
+		if cmd.Process != nil {
+			cmd.Process.Kill()
 		}
-		c.JSON(http.StatusBadGateway, gin.H{
-			"error":   "Failed to download content",
-			"details": strings.TrimSpace(errMsg),
-		})
+		c.JSON(http.StatusGatewayTimeout, gin.H{"error": "Download timed out after 120 seconds"})
 		return
+	case err := <-done:
+		if err != nil {
+			errMsg := stderr.String()
+			if errMsg == "" {
+				errMsg = stdout.String()
+			}
+			if len(errMsg) > 500 {
+				errMsg = errMsg[:500]
+			}
+			c.JSON(http.StatusBadGateway, gin.H{
+				"error":   "Failed to download content",
+				"details": strings.TrimSpace(errMsg),
+			})
+			return
+		}
 	}
 
-	// Find the downloaded file
-	findCmd := exec.Command("find", tmpDir, "-type", "f", "-newer", "/tmp", "-name", "*.mp4", "-o", "-name", "*.webm", "-o", "-name", "*.mkv")
-	findOutput, _ := findCmd.Output()
-	files := strings.Split(strings.TrimSpace(string(findOutput)), "\n")
+	// Get the file path from yt-dlp's --print output
+	filePath := strings.TrimSpace(stdout.String())
+	// --print may output multiple lines if there are metadata lines; take the last non-empty line
+	if lines := strings.Split(filePath, "\n"); len(lines) > 0 {
+		for i := len(lines) - 1; i >= 0; i-- {
+			l := strings.TrimSpace(lines[i])
+			if l != "" && strings.HasPrefix(l, tmpDir) {
+				filePath = l
+				break
+			}
+		}
+	}
 
-	if len(files) == 0 || files[0] == "" {
+	if filePath == "" || !strings.HasPrefix(filePath, tmpDir) {
+		// Fallback: scan the temp directory for any file
+		entries, _ := os.ReadDir(tmpDir)
+		for _, e := range entries {
+			if !e.IsDir() {
+				filePath = tmpDir + "/" + e.Name()
+				break
+			}
+		}
+	}
+
+	if filePath == "" {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Download completed but no file found"})
 		return
 	}
-
-	filePath := strings.TrimSpace(files[0])
 
 	// Upload to R2 via S3 client
 	if h.s3Client == nil {
@@ -273,7 +322,7 @@ func (h *AdminHandler) DownloadSocialMedia(c *gin.Context) {
 		return
 	}
 
-	fileName := strings.TrimPrefix(filePath, tmpDir+"/")
+	fileName := filePath[strings.LastIndex(filePath, "/")+1:]
 	bucket := h.videoBucket
 	r2Key := fmt.Sprintf("imports/social/%d/%s", time.Now().Unix(), fileName)
 
@@ -284,8 +333,15 @@ func (h *AdminHandler) DownloadSocialMedia(c *gin.Context) {
 	}
 
 	contentType := "video/mp4"
-	if strings.HasSuffix(filePath, ".webm") {
+	switch {
+	case strings.HasSuffix(filePath, ".webm"):
 		contentType = "video/webm"
+	case strings.HasSuffix(filePath, ".mkv"):
+		contentType = "video/x-matroska"
+	case strings.HasSuffix(filePath, ".jpg"), strings.HasSuffix(filePath, ".jpeg"):
+		contentType = "image/jpeg"
+	case strings.HasSuffix(filePath, ".png"):
+		contentType = "image/png"
 	}
 
 	_, err = h.s3Client.PutObject(ctx, &s3.PutObjectInput{
@@ -296,20 +352,18 @@ func (h *AdminHandler) DownloadSocialMedia(c *gin.Context) {
 	})
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{
-			"error":      "Downloaded but failed to upload to R2",
-			"local_path": filePath,
+			"error":   "Downloaded but failed to upload to R2",
+			"details": err.Error(),
 		})
 		return
 	}
 
 	mediaURL := fmt.Sprintf("https://%s/%s", h.vidDomain, r2Key)
 
-	// Clean up temp file
-	exec.Command("rm", "-f", filePath).Run()
-
 	c.JSON(http.StatusOK, gin.H{
 		"media_url": mediaURL,
 		"r2_key":    r2Key,
+		"size":      len(fileData),
 	})
 }
 
