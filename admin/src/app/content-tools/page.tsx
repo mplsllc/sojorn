@@ -7,7 +7,7 @@
 import AdminShell from '@/components/AdminShell';
 import { api } from '@/lib/api';
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { UserPlus, Upload, AlertCircle, CheckCircle, Copy, FileText, Link2, Search, Globe, Download, Check, X, Loader2, ExternalLink, Play, Image as ImageIcon } from 'lucide-react';
+import { UserPlus, Upload, AlertCircle, CheckCircle, Copy, FileText, Link2, Search, Globe, Download, Check, X, Loader2, ExternalLink, Play, Image as ImageIcon, Cookie, Trash2, TestTube, ChevronDown, ChevronRight, Shield } from 'lucide-react';
 
 // ─── CSV Parser ───────────────────────────────────────
 function parseCsvLine(line: string): string[] {
@@ -618,6 +618,191 @@ type ItemOverrides = {
   importAs: 'post' | 'quip';
 };
 
+// ─── Platform Cookie Manager ─────────────────────────
+type CookieStatus = {
+  platform: string;
+  has_cookie: boolean;
+  file_name?: string;
+  file_size?: number;
+  updated_at?: string;
+};
+
+function CookieManager() {
+  const [cookies, setCookies] = useState<CookieStatus[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [expanded, setExpanded] = useState(false);
+  const [testing, setTesting] = useState<string | null>(null);
+  const [testResult, setTestResult] = useState<Record<string, { valid: boolean; message: string } | null>>({});
+  const [uploading, setUploading] = useState<string | null>(null);
+  const fileInputRefs = useRef<Record<string, HTMLInputElement | null>>({});
+
+  const fetchCookies = useCallback(async () => {
+    try {
+      const data = await api.listSocialCookies();
+      setCookies(data.cookies || []);
+    } catch { /* ignore */ }
+    setLoading(false);
+  }, []);
+
+  useEffect(() => { fetchCookies(); }, [fetchCookies]);
+
+  const handleUpload = async (platform: string, file: File) => {
+    setUploading(platform);
+    setTestResult((prev) => ({ ...prev, [platform]: null }));
+    try {
+      await api.uploadSocialCookies(platform, file);
+      await fetchCookies();
+    } catch (e: any) {
+      setTestResult((prev) => ({ ...prev, [platform]: { valid: false, message: e.message } }));
+    }
+    setUploading(null);
+  };
+
+  const handleDelete = async (platform: string) => {
+    if (!confirm(`Remove cookies for ${platform}?`)) return;
+    try {
+      await api.deleteSocialCookies(platform);
+      setTestResult((prev) => ({ ...prev, [platform]: null }));
+      await fetchCookies();
+    } catch { /* ignore */ }
+  };
+
+  const handleTest = async (platform: string) => {
+    setTesting(platform);
+    setTestResult((prev) => ({ ...prev, [platform]: null }));
+    try {
+      const data = await api.testSocialCookies(platform);
+      setTestResult((prev) => ({ ...prev, [platform]: { valid: data.valid, message: data.message || data.error || '' } }));
+    } catch (e: any) {
+      setTestResult((prev) => ({ ...prev, [platform]: { valid: false, message: e.message } }));
+    }
+    setTesting(null);
+  };
+
+  const hasCookies = cookies.some((c) => c.has_cookie);
+
+  return (
+    <div className="mb-5 border border-warm-300 rounded-lg overflow-hidden">
+      <button
+        type="button"
+        onClick={() => setExpanded(!expanded)}
+        className="w-full flex items-center justify-between px-4 py-3 bg-warm-50 hover:bg-warm-100 transition-colors text-left"
+      >
+        <div className="flex items-center gap-2">
+          <Cookie className="w-4 h-4 text-gray-500" />
+          <span className="text-sm font-medium text-gray-700">Platform Cookies</span>
+          {hasCookies && (
+            <span className="text-xs bg-green-100 text-green-700 px-2 py-0.5 rounded-full">
+              {cookies.filter((c) => c.has_cookie).length} configured
+            </span>
+          )}
+          {!hasCookies && !loading && (
+            <span className="text-xs text-gray-400">Required for Facebook &amp; Instagram</span>
+          )}
+        </div>
+        {expanded ? <ChevronDown className="w-4 h-4 text-gray-400" /> : <ChevronRight className="w-4 h-4 text-gray-400" />}
+      </button>
+
+      {expanded && (
+        <div className="p-4 border-t border-warm-200">
+          <p className="text-xs text-gray-500 mb-3">
+            Facebook and Instagram require login cookies to access content. Export cookies from your browser using an extension like{' '}
+            <strong>Get cookies.txt LOCALLY</strong>, then upload the file here.
+          </p>
+
+          {loading ? (
+            <div className="flex items-center gap-2 text-sm text-gray-400"><Loader2 className="w-4 h-4 animate-spin" /> Loading...</div>
+          ) : (
+            <div className="space-y-2">
+              {cookies.map((c) => (
+                <div key={c.platform} className="flex items-center gap-3 py-2 px-3 rounded-lg bg-warm-50">
+                  <span className="text-sm font-medium capitalize w-24">{c.platform}</span>
+
+                  {c.has_cookie ? (
+                    <>
+                      <Shield className="w-4 h-4 text-green-500" />
+                      <span className="text-xs text-green-700">
+                        Cookies loaded ({(c.file_size! / 1024).toFixed(1)} KB)
+                      </span>
+                      {c.updated_at && (
+                        <span className="text-[10px] text-gray-400">
+                          Updated {new Date(c.updated_at).toLocaleDateString()}
+                        </span>
+                      )}
+                      <div className="ml-auto flex items-center gap-1">
+                        <button
+                          type="button"
+                          onClick={() => handleTest(c.platform)}
+                          disabled={testing === c.platform}
+                          className="text-xs px-2 py-1 rounded bg-brand-50 text-brand-600 hover:bg-brand-100 disabled:opacity-50 flex items-center gap-1"
+                        >
+                          {testing === c.platform ? <Loader2 className="w-3 h-3 animate-spin" /> : <TestTube className="w-3 h-3" />}
+                          Test
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => fileInputRefs.current[c.platform]?.click()}
+                          disabled={uploading === c.platform}
+                          className="text-xs px-2 py-1 rounded bg-warm-200 text-gray-600 hover:bg-warm-300 disabled:opacity-50"
+                        >
+                          Replace
+                        </button>
+                        <button
+                          type="button"
+                          title={`Delete cookies for ${c.platform}`}
+                          onClick={() => handleDelete(c.platform)}
+                          className="text-xs px-2 py-1 rounded bg-red-50 text-red-600 hover:bg-red-100 flex items-center gap-1"
+                        >
+                          <Trash2 className="w-3 h-3" />
+                        </button>
+                      </div>
+                    </>
+                  ) : (
+                    <>
+                      <span className="text-xs text-gray-400">No cookies</span>
+                      <div className="ml-auto">
+                        <button
+                          type="button"
+                          onClick={() => fileInputRefs.current[c.platform]?.click()}
+                          disabled={uploading === c.platform}
+                          className="text-xs px-3 py-1 rounded bg-brand-500 text-white hover:bg-brand-600 disabled:opacity-50 flex items-center gap-1"
+                        >
+                          {uploading === c.platform ? <Loader2 className="w-3 h-3 animate-spin" /> : <Upload className="w-3 h-3" />}
+                          Upload cookies.txt
+                        </button>
+                      </div>
+                    </>
+                  )}
+
+                  <input
+                    type="file"
+                    accept=".txt,.cookies"
+                    title={`Upload cookies file for ${c.platform}`}
+                    className="hidden"
+                    ref={(el) => { fileInputRefs.current[c.platform] = el; }}
+                    onChange={(e) => {
+                      const f = e.target.files?.[0];
+                      if (f) handleUpload(c.platform, f);
+                      e.target.value = '';
+                    }}
+                  />
+
+                  {testResult[c.platform] && (
+                    <div className={`text-xs ${testResult[c.platform]!.valid ? 'text-green-600' : 'text-red-600'}`}>
+                      {testResult[c.platform]!.valid ? <Check className="w-3 h-3 inline" /> : <X className="w-3 h-3 inline" />}{' '}
+                      {testResult[c.platform]!.message}
+                    </div>
+                  )}
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
 function SocialImportPanel() {
   const [profileUrl, setProfileUrl] = useState('');
   const [authorId, setAuthorId] = useState('');
@@ -812,6 +997,8 @@ function SocialImportPanel() {
       <p className="text-sm text-gray-500 mb-6">
         Fetch public content from YouTube, TikTok, Facebook, or Instagram. Select items, edit titles and descriptions, then import as posts or quips. Requires <code className="text-xs bg-warm-100 px-1 rounded">yt-dlp</code> on the server.
       </p>
+
+      <CookieManager />
 
       {/* Profile URL + Author */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 mb-4">

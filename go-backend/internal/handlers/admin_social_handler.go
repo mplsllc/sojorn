@@ -5,18 +5,244 @@
 package handlers
 
 import (
+	"bufio"
 	"bytes"
 	"encoding/json"
 	"fmt"
+	"io"
 	"net/http"
 	"os"
 	"os/exec"
+	"path/filepath"
 	"strings"
 	"time"
 
 	"github.com/aws/aws-sdk-go-v2/service/s3"
 	"github.com/gin-gonic/gin"
 )
+
+const socialCookiesDir = "/opt/sojorn/data/social-cookies"
+
+// cookiesPathForPlatform returns the path to the cookies file for a given platform.
+func cookiesPathForPlatform(platform string) string {
+	return filepath.Join(socialCookiesDir, platform+"_cookies.txt")
+}
+
+// SocialCookieStatus represents the status of cookies for a platform.
+type SocialCookieStatus struct {
+	Platform  string  `json:"platform"`
+	HasCookie bool    `json:"has_cookie"`
+	FileName  string  `json:"file_name,omitempty"`
+	FileSize  int64   `json:"file_size,omitempty"`
+	UpdatedAt *string `json:"updated_at,omitempty"`
+}
+
+// ListSocialCookies returns which platforms have cookies configured.
+func (h *AdminHandler) ListSocialCookies(c *gin.Context) {
+	platforms := []string{"youtube", "tiktok", "facebook", "instagram"}
+	statuses := make([]SocialCookieStatus, 0, len(platforms))
+
+	for _, p := range platforms {
+		status := SocialCookieStatus{Platform: p}
+		path := cookiesPathForPlatform(p)
+		if info, err := os.Stat(path); err == nil {
+			status.HasCookie = true
+			status.FileName = info.Name()
+			status.FileSize = info.Size()
+			modTime := info.ModTime().Format(time.RFC3339)
+			status.UpdatedAt = &modTime
+		}
+		statuses = append(statuses, status)
+	}
+
+	c.JSON(http.StatusOK, gin.H{"cookies": statuses})
+}
+
+// UploadSocialCookies accepts a cookies.txt file upload for a specific platform.
+func (h *AdminHandler) UploadSocialCookies(c *gin.Context) {
+	platform := c.Param("platform")
+	validPlatforms := map[string]bool{"youtube": true, "tiktok": true, "facebook": true, "instagram": true}
+	if !validPlatforms[platform] {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid platform. Supported: youtube, tiktok, facebook, instagram"})
+		return
+	}
+
+	file, header, err := c.Request.FormFile("cookies")
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "No cookies file provided. Upload a Netscape-format cookies.txt file."})
+		return
+	}
+	defer file.Close()
+
+	// Limit to 1MB
+	if header.Size > 1<<20 {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Cookies file too large (max 1MB)"})
+		return
+	}
+
+	// Read and validate it looks like a Netscape cookies file
+	data, err := io.ReadAll(io.LimitReader(file, 1<<20+1))
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to read uploaded file"})
+		return
+	}
+
+	if !isValidCookiesFile(data) {
+		c.JSON(http.StatusBadRequest, gin.H{
+			"error": "Invalid cookies file format. Must be Netscape/Mozilla cookies.txt format. Use a browser extension like 'Get cookies.txt LOCALLY' to export.",
+		})
+		return
+	}
+
+	// Ensure directory exists
+	if err := os.MkdirAll(socialCookiesDir, 0700); err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to create cookies directory"})
+		return
+	}
+
+	path := cookiesPathForPlatform(platform)
+	if err := os.WriteFile(path, data, 0600); err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to save cookies file"})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{
+		"message":  fmt.Sprintf("Cookies uploaded for %s", platform),
+		"platform": platform,
+		"size":     len(data),
+	})
+}
+
+// DeleteSocialCookies removes the cookies file for a platform.
+func (h *AdminHandler) DeleteSocialCookies(c *gin.Context) {
+	platform := c.Param("platform")
+	path := cookiesPathForPlatform(platform)
+
+	if _, err := os.Stat(path); os.IsNotExist(err) {
+		c.JSON(http.StatusNotFound, gin.H{"error": fmt.Sprintf("No cookies file found for %s", platform)})
+		return
+	}
+
+	if err := os.Remove(path); err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to delete cookies file"})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{"message": fmt.Sprintf("Cookies removed for %s", platform)})
+}
+
+// TestSocialCookies tests whether the stored cookies for a platform are valid by running yt-dlp.
+func (h *AdminHandler) TestSocialCookies(c *gin.Context) {
+	platform := c.Param("platform")
+	path := cookiesPathForPlatform(platform)
+
+	if _, err := os.Stat(path); os.IsNotExist(err) {
+		c.JSON(http.StatusNotFound, gin.H{"error": fmt.Sprintf("No cookies file found for %s", platform)})
+		return
+	}
+
+	if _, err := exec.LookPath("yt-dlp"); err != nil {
+		c.JSON(http.StatusServiceUnavailable, gin.H{"error": "yt-dlp is not installed"})
+		return
+	}
+
+	// Pick a test URL per platform
+	var testURL string
+	switch platform {
+	case "facebook":
+		testURL = "https://www.facebook.com/Meta"
+	case "instagram":
+		testURL = "https://www.instagram.com/instagram/"
+	case "youtube":
+		testURL = "https://www.youtube.com/@YouTube"
+	case "tiktok":
+		testURL = "https://www.tiktok.com/@tiktok"
+	default:
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Unknown platform"})
+		return
+	}
+
+	args := []string{
+		"--flat-playlist",
+		"--dump-json",
+		"--no-warnings",
+		"--no-download",
+		"--playlist-end", "1",
+		"--cookies", path,
+		testURL,
+	}
+
+	ctx := c.Request.Context()
+	cmd := exec.CommandContext(ctx, "yt-dlp", args...)
+
+	done := make(chan error, 1)
+	var output []byte
+	var cmdErr error
+	go func() {
+		output, cmdErr = cmd.CombinedOutput()
+		done <- cmdErr
+	}()
+
+	select {
+	case <-time.After(30 * time.Second):
+		if cmd.Process != nil {
+			cmd.Process.Kill()
+		}
+		c.JSON(http.StatusGatewayTimeout, gin.H{
+			"valid":   false,
+			"error":   "Test timed out",
+			"details": "yt-dlp took too long to respond",
+		})
+		return
+	case <-done:
+	}
+
+	if cmdErr != nil {
+		errMsg := string(output)
+		if len(errMsg) > 500 {
+			errMsg = errMsg[:500]
+		}
+		c.JSON(http.StatusOK, gin.H{
+			"valid":    false,
+			"platform": platform,
+			"error":    "Cookies appear invalid or expired",
+			"details":  strings.TrimSpace(errMsg),
+		})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{
+		"valid":    true,
+		"platform": platform,
+		"message":  fmt.Sprintf("Cookies for %s are valid — successfully fetched content", platform),
+	})
+}
+
+func fileExists(path string) bool {
+	_, err := os.Stat(path)
+	return err == nil
+}
+
+// isValidCookiesFile does a basic check that the data looks like a Netscape cookies.txt file.
+func isValidCookiesFile(data []byte) bool {
+	scanner := bufio.NewScanner(bytes.NewReader(data))
+	lineCount := 0
+	cookieLines := 0
+	for scanner.Scan() && lineCount < 50 {
+		line := strings.TrimSpace(scanner.Text())
+		lineCount++
+		// Skip comments and empty lines
+		if line == "" || strings.HasPrefix(line, "#") {
+			continue
+		}
+		// Netscape cookies have tab-separated fields: domain, flag, path, secure, expiration, name, value
+		fields := strings.Split(line, "\t")
+		if len(fields) >= 6 {
+			cookieLines++
+		}
+	}
+	return cookieLines > 0
+}
 
 // SocialMediaItem represents a single piece of content fetched from a social platform.
 type SocialMediaItem struct {
@@ -64,10 +290,16 @@ func (h *AdminHandler) FetchSocialContent(c *gin.Context) {
 		return
 	}
 
-	// Facebook and Instagram require login cookies — yt-dlp cannot scrape them without auth
-	if platform == "facebook" || platform == "instagram" {
+	// Facebook and Instagram require login cookies
+	cookiesPath := cookiesPathForPlatform(platform)
+	hasCookies := false
+	if _, err := os.Stat(cookiesPath); err == nil {
+		hasCookies = true
+	}
+	if (platform == "facebook" || platform == "instagram") && !hasCookies {
 		c.JSON(http.StatusBadRequest, gin.H{
-			"error": fmt.Sprintf("%s requires login to access content. yt-dlp cannot fetch without browser cookies.", platform),
+			"error":   fmt.Sprintf("%s requires login cookies. Upload a cookies.txt file via the cookie management panel first.", platform),
+			"need_cookies": true,
 		})
 		return
 	}
@@ -91,6 +323,11 @@ func (h *AdminHandler) FetchSocialContent(c *gin.Context) {
 
 	// Date filtering is done server-side after parsing (--dateafter/--datebefore
 	// don't work with --flat-playlist mode)
+
+	// Inject cookies if available
+	if hasCookies {
+		args = append(args, "--cookies", cookiesPath)
+	}
 
 	// Platform-specific flags
 	switch platform {
@@ -298,6 +535,12 @@ func (h *AdminHandler) DownloadSocialMedia(c *gin.Context) {
 		return
 	}
 
+	// Detect platform for cookie injection
+	dlPlatform := req.Platform
+	if dlPlatform == "" {
+		dlPlatform = detectPlatform(req.URL)
+	}
+
 	// Create a unique temp directory per download to avoid collisions
 	tmpDir := fmt.Sprintf("/tmp/sojorn-social-import/%d", time.Now().UnixNano())
 	if err := os.MkdirAll(tmpDir, 0755); err != nil {
@@ -314,6 +557,13 @@ func (h *AdminHandler) DownloadSocialMedia(c *gin.Context) {
 		"-f", "mp4/best[ext=mp4]/best",
 		"--max-filesize", "100M",
 		"--print", "after_move:filepath", // Print the final filename to stdout
+	}
+
+	// Inject cookies if available for this platform
+	if dlPlatform != "" {
+		if cp := cookiesPathForPlatform(dlPlatform); fileExists(cp) {
+			args = append(args, "--cookies", cp)
+		}
 	}
 
 	args = append(args, req.URL)

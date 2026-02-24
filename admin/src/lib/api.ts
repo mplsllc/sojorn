@@ -678,6 +678,36 @@ class ApiClient {
     });
   }
 
+  async listSocialCookies() {
+    return this.request<any>('/api/v1/admin/social/cookies');
+  }
+
+  async uploadSocialCookies(platform: string, file: File) {
+    const formData = new FormData();
+    formData.append('cookies', file);
+    const token = this.getToken();
+    const headers: Record<string, string> = {};
+    if (token) headers['Authorization'] = `Bearer ${token}`;
+    const res = await fetch(`${API_BASE}/api/v1/admin/social/cookies/${platform}`, {
+      method: 'POST',
+      headers,
+      body: formData,
+    });
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({ error: res.statusText }));
+      throw new Error(err.error || res.statusText);
+    }
+    return res.json();
+  }
+
+  async deleteSocialCookies(platform: string) {
+    return this.request<any>(`/api/v1/admin/social/cookies/${platform}`, { method: 'DELETE' });
+  }
+
+  async testSocialCookies(platform: string) {
+    return this.request<any>(`/api/v1/admin/social/cookies/${platform}/test`, { method: 'POST' });
+  }
+
   // Safe Domains
   async listSafeDomains(category?: string) {
     const params = category ? `?category=${category}` : '';

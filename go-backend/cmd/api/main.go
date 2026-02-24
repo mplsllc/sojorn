@@ -776,6 +776,10 @@ func main() {
 		// Social Media Import
 		admin.POST("/social/fetch", adminHandler.FetchSocialContent)
 		admin.POST("/social/download", adminHandler.DownloadSocialMedia)
+		admin.GET("/social/cookies", adminHandler.ListSocialCookies)
+		admin.POST("/social/cookies/:platform", adminHandler.UploadSocialCookies)
+		admin.DELETE("/social/cookies/:platform", adminHandler.DeleteSocialCookies)
+		admin.POST("/social/cookies/:platform/test", adminHandler.TestSocialCookies)
 
 		// Official Accounts Management
 		admin.GET("/official-profiles", adminHandler.ListOfficialProfiles)
