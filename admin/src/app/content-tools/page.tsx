@@ -607,6 +607,9 @@ type SocialItem = {
   view_count: number;
   like_count: number;
   platform: string;
+  imported: boolean;
+  imported_at?: string;
+  imported_as_id?: string;
 };
 
 type ItemOverrides = {
@@ -670,12 +673,20 @@ function SocialImportPanel() {
     });
   };
 
+  const newItems = items.filter((i) => !i.imported);
+  const importedItems = items.filter((i) => i.imported);
+
   const selectAll = () => {
-    if (selected.size === items.length) {
+    if (selected.size === newItems.length) {
       setSelected(new Set());
     } else {
-      setSelected(new Set(items.map((i) => i.id)));
+      // Select only new (not-yet-imported) items by default
+      setSelected(new Set(newItems.map((i) => i.id)));
     }
+  };
+
+  const selectAllIncluding = () => {
+    setSelected(new Set(items.map((i) => i.id)));
   };
 
   const updateOverride = (id: string, field: keyof ItemOverrides, value: string) => {
@@ -741,6 +752,11 @@ function SocialImportPanel() {
               thumbnail_url: item.thumbnail_url,
               duration_ms: item.duration ? item.duration * 1000 : undefined,
               visibility: 'public',
+              // Social import tracking
+              original_date: item.upload_date || undefined,
+              external_id: item.id,
+              external_url: item.url,
+              platform: item.platform || platform,
             };
           }),
         });
@@ -748,6 +764,7 @@ function SocialImportPanel() {
         totalFailures += resp.failures || 0;
         if (resp.errors) allErrors.push(...resp.errors);
         if (resp.created) allCreated.push(...resp.created);
+        if (resp.updated) allCreated.push(...resp.updated);
       } catch (e: any) {
         allErrors.push(`${type} batch failed: ${e.message}`);
         totalFailures += batch.length;
@@ -762,6 +779,15 @@ function SocialImportPanel() {
       message: `Imported ${totalSuccess} items`,
     });
     setImporting(false);
+    setSelected(new Set());
+
+    // Re-fetch to update imported status
+    if (profileUrl.trim()) {
+      try {
+        const data = await api.fetchSocialContent(profileUrl.trim(), fetchLimit);
+        setItems(data.items || []);
+      } catch { /* ignore refresh errors */ }
+    }
   };
 
   const formatDuration = (s: number) => {
@@ -844,11 +870,25 @@ function SocialImportPanel() {
                 onClick={selectAll}
                 className="text-sm text-brand-600 hover:text-brand-700 font-medium"
               >
-                {selected.size === items.length ? 'Deselect All' : 'Select All'}
+                {selected.size >= newItems.length && selected.size > 0 ? 'Deselect All' : `Select New (${newItems.length})`}
               </button>
+              {importedItems.length > 0 && (
+                <button
+                  type="button"
+                  onClick={selectAllIncluding}
+                  className="text-sm text-gray-500 hover:text-gray-700 font-medium"
+                >
+                  Select All ({items.length})
+                </button>
+              )}
               <span className="text-sm text-gray-500">
-                {selected.size} of {items.length} selected
+                {selected.size} selected
               </span>
+              {importedItems.length > 0 && (
+                <span className="text-xs bg-green-100 text-green-700 px-2 py-0.5 rounded-full font-medium">
+                  {importedItems.length} already imported
+                </span>
+              )}
               {platform && (
                 <span className="text-xs bg-warm-200 px-2 py-0.5 rounded-full text-gray-600 capitalize">{platform}</span>
               )}
@@ -877,7 +917,9 @@ function SocialImportPanel() {
                   className={`rounded-lg border-2 overflow-hidden transition-all ${
                     isSelected
                       ? 'border-brand-500 bg-brand-50/30'
-                      : 'border-warm-200 hover:border-warm-400'
+                      : item.imported
+                        ? 'border-green-200 bg-green-50/30'
+                        : 'border-warm-200 hover:border-warm-400'
                   }`}
                 >
                   <div className="flex gap-3 p-3">
@@ -990,6 +1032,11 @@ function SocialImportPanel() {
                               {item.like_count > 0 && <span>{formatCount(item.like_count)} likes</span>}
                               {item.upload_date && <span>{item.upload_date}</span>}
                             </div>
+                            {item.imported && (
+                              <span className="text-[10px] px-1.5 py-0.5 rounded-full font-medium bg-green-100 text-green-700" title={item.imported_at ? `Imported ${new Date(item.imported_at).toLocaleDateString()}` : 'Already imported'}>
+                                {isSelected ? 'Re-import' : 'Imported'}
+                              </span>
+                            )}
                             {isSelected && (
                               <span className={`text-[10px] px-1.5 py-0.5 rounded-full font-medium ${
                                 ov?.importAs === 'post'

@@ -135,7 +135,7 @@ class PostMedia extends StatelessWidget {
               borderRadius: BorderRadius.circular(AppTheme.radiusMd),
               child: Container(
                 width: double.infinity,
-                child: InkWell(
+                child: GestureDetector(
                   onTap: isVideo
                       ? (onVideoTap ?? () {
                           final url = '${AppRoutes.quips}?postId=${post!.id}';

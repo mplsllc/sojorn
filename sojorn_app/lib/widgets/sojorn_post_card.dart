@@ -363,9 +363,8 @@ class _sojornPostCardState extends ConsumerState<sojornPostCard> {
                           ),
                         ),
                       ] else ...[
-                        InkWell(
+                        GestureDetector(
                           onTap: onTap,
-                          borderRadius: BorderRadius.circular(AppTheme.radiusMd),
                           child: Container(
                             width: double.infinity,
                             padding: const EdgeInsets.symmetric(vertical: 4),

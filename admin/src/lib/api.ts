@@ -652,6 +652,10 @@ class ApiClient {
       beacon_type?: string;
       lat?: number;
       long?: number;
+      original_date?: string;
+      external_id?: string;
+      external_url?: string;
+      platform?: string;
     }>;
   }) {
     return this.request<any>('/api/v1/admin/content/import', {

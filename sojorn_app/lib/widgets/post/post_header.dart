@@ -275,9 +275,8 @@ class _PrivacyIcon extends StatelessWidget {
       _ => Icons.public,
     };
 
-    return InkResponse(
+    return GestureDetector(
       onTap: onTap,
-      radius: 14,
       child: Icon(
         icon,
         size: 12,

@@ -20,17 +20,20 @@ import (
 
 // SocialMediaItem represents a single piece of content fetched from a social platform.
 type SocialMediaItem struct {
-	ID           string `json:"id"`
-	Title        string `json:"title"`
-	Description  string `json:"description"`
-	URL          string `json:"url"`
-	ThumbnailURL string `json:"thumbnail_url"`
-	MediaType    string `json:"media_type"` // video, image
-	Duration     int    `json:"duration"`   // seconds
-	UploadDate   string `json:"upload_date"`
-	ViewCount    int    `json:"view_count"`
-	LikeCount    int    `json:"like_count"`
-	Platform     string `json:"platform"`
+	ID           string  `json:"id"`
+	Title        string  `json:"title"`
+	Description  string  `json:"description"`
+	URL          string  `json:"url"`
+	ThumbnailURL string  `json:"thumbnail_url"`
+	MediaType    string  `json:"media_type"` // video, image
+	Duration     int     `json:"duration"`   // seconds
+	UploadDate   string  `json:"upload_date"`
+	ViewCount    int     `json:"view_count"`
+	LikeCount    int     `json:"like_count"`
+	Platform     string  `json:"platform"`
+	Imported     bool    `json:"imported"`
+	ImportedAt   *string `json:"imported_at,omitempty"`
+	ImportedAsID *string `json:"imported_as_id,omitempty"`
 }
 
 // FetchSocialContent uses yt-dlp to list public content from a social media profile.
@@ -193,6 +196,43 @@ func (h *AdminHandler) FetchSocialContent(c *gin.Context) {
 		items = append(items, item)
 	}
 
+	// Check which items are already imported
+	if len(items) > 0 {
+		extIDs := make([]string, len(items))
+		for i, item := range items {
+			extIDs[i] = item.ID
+		}
+
+		rows, err := h.pool.Query(ctx,
+			`SELECT external_id, post_id, created_at FROM social_imports
+			 WHERE platform = $1 AND external_id = ANY($2)`,
+			platform, extIDs)
+		if err == nil {
+			defer rows.Close()
+			imported := make(map[string]struct {
+				postID    string
+				createdAt string
+			})
+			for rows.Next() {
+				var extID, postID string
+				var createdAt time.Time
+				if err := rows.Scan(&extID, &postID, &createdAt); err == nil {
+					imported[extID] = struct {
+						postID    string
+						createdAt string
+					}{postID, createdAt.Format(time.RFC3339)}
+				}
+			}
+			for i := range items {
+				if imp, ok := imported[items[i].ID]; ok {
+					items[i].Imported = true
+					items[i].ImportedAt = &imp.createdAt
+					items[i].ImportedAsID = &imp.postID
+				}
+			}
+		}
+	}
+
 	c.JSON(http.StatusOK, gin.H{
 		"platform": platform,
 		"items":    items,
@@ -237,8 +277,6 @@ func (h *AdminHandler) DownloadSocialMedia(c *gin.Context) {
 		"--max-filesize", "100M",
 		"--print", "after_move:filepath", // Print the final filename to stdout
 	}
-
-	// No platform-specific workarounds needed currently
 
 	args = append(args, req.URL)
 

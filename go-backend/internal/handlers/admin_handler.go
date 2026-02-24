@@ -3064,6 +3064,11 @@ func (h *AdminHandler) AdminImportContent(c *gin.Context) {
 			BeaconType   string   `json:"beacon_type"`
 			Lat          float64  `json:"lat"`
 			Long         float64  `json:"long"`
+			// Social import tracking fields
+			OriginalDate string `json:"original_date"` // YYYYMMDD or RFC3339
+			ExternalID   string `json:"external_id"`   // platform content ID
+			ExternalURL  string `json:"external_url"`  // original URL
+			Platform     string `json:"platform"`      // youtube, tiktok, etc.
 		} `json:"items" binding:"required,min=1"`
 	}
 
@@ -3092,11 +3097,13 @@ func (h *AdminHandler) AdminImportContent(c *gin.Context) {
 		return
 	}
 
+	adminUUID, _ := uuid.Parse(adminID.(string))
+
 	var created []string
+	var updated []string
 	var errors []string
 
 	for i, item := range req.Items {
-		postID := uuid.New()
 		visibility := item.Visibility
 		if visibility == "" {
 			visibility = "public"
@@ -3144,34 +3151,119 @@ func (h *AdminHandler) AdminImportContent(c *gin.Context) {
 			}
 		}
 
+		// Parse original date for created_at override
+		var createdAt *time.Time
+		if item.OriginalDate != "" {
+			// Try YYYYMMDD first (yt-dlp format)
+			if t, err := time.Parse("20060102", item.OriginalDate); err == nil {
+				createdAt = &t
+			} else if t, err := time.Parse(time.RFC3339, item.OriginalDate); err == nil {
+				createdAt = &t
+			}
+		}
+
+		// Check if this is a re-import (external_id + platform already exist)
+		var existingPostID *uuid.UUID
+		if item.ExternalID != "" && item.Platform != "" {
+			var epID uuid.UUID
+			err := h.pool.QueryRow(ctx,
+				`SELECT post_id FROM social_imports WHERE platform = $1 AND external_id = $2`,
+				item.Platform, item.ExternalID).Scan(&epID)
+			if err == nil {
+				existingPostID = &epID
+			}
+		}
+
 		tx, err := h.pool.Begin(ctx)
 		if err != nil {
 			errors = append(errors, fmt.Sprintf("item %d: tx start failed", i))
 			continue
 		}
 
-		_, err = tx.Exec(ctx, `
-			INSERT INTO public.posts (
-				id, author_id, category_id, body, status, tone_label, cis_score,
-				image_url, video_url, thumbnail_url, duration_ms, body_format, tags,
-				is_beacon, beacon_type, location, confidence_score,
-				is_active_beacon, allow_chain, visibility,
-				is_nsfw, nsfw_reason
-			) VALUES (
-				$1, $2, $3, $4, 'active', 'neutral', 0.8,
-				$5, $6, $7, $8, 'plain', $9,
-				$10, $11,
-				CASE WHEN ($12::double precision) IS NOT NULL AND ($13::double precision) IS NOT NULL
-					THEN ST_SetSRID(ST_MakePoint(($13::double precision), ($12::double precision)), 4326)::geography
-					ELSE NULL END,
-				0.5, $10, true, $14,
-				$15, $16
-			) RETURNING id
-		`, postID, authorUUID, categoryID, item.Body,
-			imageURL, videoURL, thumbnailURL, durationMS, item.Tags,
-			isBeacon, beaconType, lat, long, visibility,
-			item.IsNSFW, item.NSFWReason,
-		)
+		if existingPostID != nil {
+			// Re-import: update existing post
+			_, err = tx.Exec(ctx, `
+				UPDATE public.posts SET
+					body = COALESCE(NULLIF($2, ''), body),
+					image_url = COALESCE($3, image_url),
+					video_url = COALESCE($4, video_url),
+					thumbnail_url = COALESCE($5, thumbnail_url),
+					duration_ms = CASE WHEN $6 > 0 THEN $6 ELSE duration_ms END,
+					visibility = $7,
+					updated_at = now()
+				WHERE id = $1`,
+				existingPostID, item.Body,
+				imageURL, videoURL, thumbnailURL, durationMS, visibility)
+			if err != nil {
+				tx.Rollback(ctx)
+				errors = append(errors, fmt.Sprintf("item %d: update failed: %s", i, err.Error()))
+				continue
+			}
+
+			// Update social_imports record with new media URL
+			if mediaURL != "" {
+				tx.Exec(ctx, `UPDATE social_imports SET media_url = $1 WHERE platform = $2 AND external_id = $3`,
+					mediaURL, item.Platform, item.ExternalID)
+			}
+
+			if err := tx.Commit(ctx); err != nil {
+				errors = append(errors, fmt.Sprintf("item %d: commit failed", i))
+				continue
+			}
+			updated = append(updated, existingPostID.String())
+			continue
+		}
+
+		// New import: create post
+		postID := uuid.New()
+
+		if createdAt != nil {
+			_, err = tx.Exec(ctx, `
+				INSERT INTO public.posts (
+					id, author_id, category_id, body, status, tone_label, cis_score,
+					image_url, video_url, thumbnail_url, duration_ms, body_format, tags,
+					is_beacon, beacon_type, location, confidence_score,
+					is_active_beacon, allow_chain, visibility,
+					is_nsfw, nsfw_reason, created_at
+				) VALUES (
+					$1, $2, $3, $4, 'active', 'neutral', 0.8,
+					$5, $6, $7, $8, 'plain', $9,
+					$10, $11,
+					CASE WHEN ($12::double precision) IS NOT NULL AND ($13::double precision) IS NOT NULL
+						THEN ST_SetSRID(ST_MakePoint(($13::double precision), ($12::double precision)), 4326)::geography
+						ELSE NULL END,
+					0.5, $10, true, $14,
+					$15, $16, $17
+				) RETURNING id
+			`, postID, authorUUID, categoryID, item.Body,
+				imageURL, videoURL, thumbnailURL, durationMS, item.Tags,
+				isBeacon, beaconType, lat, long, visibility,
+				item.IsNSFW, item.NSFWReason, createdAt,
+			)
+		} else {
+			_, err = tx.Exec(ctx, `
+				INSERT INTO public.posts (
+					id, author_id, category_id, body, status, tone_label, cis_score,
+					image_url, video_url, thumbnail_url, duration_ms, body_format, tags,
+					is_beacon, beacon_type, location, confidence_score,
+					is_active_beacon, allow_chain, visibility,
+					is_nsfw, nsfw_reason
+				) VALUES (
+					$1, $2, $3, $4, 'active', 'neutral', 0.8,
+					$5, $6, $7, $8, 'plain', $9,
+					$10, $11,
+					CASE WHEN ($12::double precision) IS NOT NULL AND ($13::double precision) IS NOT NULL
+						THEN ST_SetSRID(ST_MakePoint(($13::double precision), ($12::double precision)), 4326)::geography
+						ELSE NULL END,
+					0.5, $10, true, $14,
+					$15, $16
+				) RETURNING id
+			`, postID, authorUUID, categoryID, item.Body,
+				imageURL, videoURL, thumbnailURL, durationMS, item.Tags,
+				isBeacon, beaconType, lat, long, visibility,
+				item.IsNSFW, item.NSFWReason,
+			)
+		}
 		if err != nil {
 			tx.Rollback(ctx)
 			errors = append(errors, fmt.Sprintf("item %d: %s", i, err.Error()))
@@ -3186,6 +3278,24 @@ func (h *AdminHandler) AdminImportContent(c *gin.Context) {
 			continue
 		}
 
+		// Record in social_imports for tracking
+		if item.ExternalID != "" && item.Platform != "" {
+			var origDate *time.Time
+			if createdAt != nil {
+				origDate = createdAt
+			}
+			_, err = tx.Exec(ctx, `
+				INSERT INTO social_imports (platform, external_id, external_url, post_id, author_id, imported_by, media_url, original_date)
+				VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+				ON CONFLICT (platform, external_id) DO UPDATE SET
+					post_id = EXCLUDED.post_id, media_url = EXCLUDED.media_url`,
+				item.Platform, item.ExternalID, item.ExternalURL, postID, authorUUID, adminUUID, mediaURL, origDate)
+			if err != nil {
+				// Non-fatal: log but don't fail the import
+				log.Warn().Err(err).Str("external_id", item.ExternalID).Msg("Failed to record social import tracking")
+			}
+		}
+
 		if err := tx.Commit(ctx); err != nil {
 			errors = append(errors, fmt.Sprintf("item %d: commit failed", i))
 			continue
@@ -3196,16 +3306,17 @@ func (h *AdminHandler) AdminImportContent(c *gin.Context) {
 
 	// Audit log
 	h.pool.Exec(ctx, `INSERT INTO audit_log (actor_id, action, target_type, target_id, details) VALUES ($1, 'admin_import_content', 'post', $2, $3)`,
-		adminID, req.AuthorID, fmt.Sprintf(`{"type":"%s","count":%d,"errors":%d}`, req.ContentType, len(created), len(errors)))
+		adminID, req.AuthorID, fmt.Sprintf(`{"type":"%s","created":%d,"updated":%d,"errors":%d}`, req.ContentType, len(created), len(updated), len(errors)))
 
-	log.Info().Str("admin", adminID.(string)).Str("type", req.ContentType).Int("created", len(created)).Int("errors", len(errors)).Msg("Admin import content")
+	log.Info().Str("admin", adminID.(string)).Str("type", req.ContentType).Int("created", len(created)).Int("updated", len(updated)).Int("errors", len(errors)).Msg("Admin import content")
 
 	c.JSON(http.StatusOK, gin.H{
-		"message":  fmt.Sprintf("Imported %d/%d items", len(created), len(req.Items)),
+		"message":  fmt.Sprintf("Imported %d, updated %d of %d items", len(created), len(updated), len(req.Items)),
 		"created":  created,
+		"updated":  updated,
 		"errors":   errors,
 		"total":    len(req.Items),
-		"success":  len(created),
+		"success":  len(created) + len(updated),
 		"failures": len(errors),
 	})
 }
