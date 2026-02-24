@@ -77,11 +77,6 @@ func (h *AdminHandler) FetchSocialContent(c *gin.Context) {
 	switch platform {
 	case "youtube":
 		args = append(args, "--extractor-args", "youtube:player_skip=webpage")
-	case "tiktok":
-		args = append(args, "--cookies-from-browser", "none")
-	case "facebook":
-		// Facebook may require different extraction strategy
-		args = append(args, "--cookies-from-browser", "none")
 	}
 
 	args = append(args, req.ProfileURL)
@@ -243,10 +238,7 @@ func (h *AdminHandler) DownloadSocialMedia(c *gin.Context) {
 		"--print", "after_move:filepath", // Print the final filename to stdout
 	}
 
-	// Platform-specific workarounds
-	if req.Platform == "tiktok" {
-		args = append(args, "--cookies-from-browser", "none")
-	}
+	// No platform-specific workarounds needed currently
 
 	args = append(args, req.URL)
 
