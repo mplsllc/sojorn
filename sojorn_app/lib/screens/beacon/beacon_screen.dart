@@ -1365,6 +1365,28 @@ class BeaconScreenState extends ConsumerState<BeaconScreen> with TickerProviderS
   }
 
 
+  Widget _mapIconButton(IconData icon, {VoidCallback? onTap}) {
+    return GestureDetector(
+      onTap: onTap,
+      child: ClipRRect(
+        borderRadius: BorderRadius.circular(18),
+        child: BackdropFilter(
+          filter: ImageFilter.blur(sigmaX: 12, sigmaY: 12),
+          child: Container(
+            width: 36, height: 36,
+            decoration: BoxDecoration(
+              color: SojornColors.basicWhite.withValues(alpha: 0.70),
+              shape: BoxShape.circle,
+              border: Border.all(color: SojornColors.basicWhite.withValues(alpha: 0.5), width: 0.5),
+              boxShadow: [BoxShadow(color: SojornColors.basicBlack.withValues(alpha: 0.08), blurRadius: 6)],
+            ),
+            child: Icon(icon, size: 18, color: AppTheme.navyBlue.withValues(alpha: 0.75)),
+          ),
+        ),
+      ),
+    );
+  }
+
   // ─── Map layer filter chips — inline toggle row on the map overlay ───────
   static const _mapLayerGroups = <({
     String label,
