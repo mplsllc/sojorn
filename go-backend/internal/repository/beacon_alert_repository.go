@@ -377,6 +377,16 @@ func (r *BeaconAlertRepository) GetNearbyAlerts(ctx context.Context, lat, lng fl
 	return results, nil
 }
 
+// CountBySource returns the number of active records for a given source.
+func (r *BeaconAlertRepository) CountBySource(ctx context.Context, source string) (int, error) {
+	var count int
+	err := r.pool.QueryRow(ctx,
+		`SELECT COUNT(*) FROM beacon_alerts WHERE source = $1 AND status = 'active'`,
+		source,
+	).Scan(&count)
+	return count, err
+}
+
 // ExpireStaleUserBeacons marks user-created beacon posts as expired when:
 //   - They are older than 4 hours and have no explicit expires_at (legacy/no-TTL beacons), OR
 //   - They have an expires_at that has passed.

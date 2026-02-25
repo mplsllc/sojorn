@@ -226,7 +226,7 @@ func main() {
 	// Unified beacon alerts system
 	beaconAlertRepo := repository.NewBeaconAlertRepository(dbPool)
 	beaconUnifiedHandler := handlers.NewBeaconUnifiedHandler(beaconAlertRepo)
-	beaconIngestion := services.NewBeaconIngestionService(beaconAlertRepo, "http://127.0.0.1:8787", cfg.IcedAPIBase)
+	beaconIngestion := services.NewBeaconIngestionService(beaconAlertRepo, "http://127.0.0.1:8787", cfg.IcedAPIBase, s3Client, cfg.R2MediaBucket, cfg.R2ImgDomain)
 	beaconIngestion.Start()
 	defer beaconIngestion.Stop()
 

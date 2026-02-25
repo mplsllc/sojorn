@@ -485,13 +485,16 @@ class PublicResource {
     return result;
   }
 
-  /// Formatted distance string
+  /// Formatted distance string in US units
   String get formattedDistance {
     if (distanceMeters == null) return '';
-    if (distanceMeters! < 1000) {
-      return '${distanceMeters!.round()}m';
+    final miles = distanceMeters! / 1609.344;
+    if (miles < 0.1) {
+      return '${(distanceMeters! * 3.28084).round()}ft';
+    } else if (miles < 10) {
+      return '${miles.toStringAsFixed(1)}mi';
     }
-    return '${(distanceMeters! / 1000).toStringAsFixed(1)}km';
+    return '${miles.round()}mi';
   }
 }
 

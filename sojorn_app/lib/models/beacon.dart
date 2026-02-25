@@ -278,13 +278,16 @@ class Beacon {
     }
   }
 
-  /// Get human-readable distance
+  /// Get human-readable distance in US units.
   String getFormattedDistance() {
-    if (distanceMeters < 1000) {
-      return '${distanceMeters.round()}m';
+    final miles = distanceMeters / 1609.344;
+    if (miles < 0.1) {
+      final feet = (distanceMeters * 3.28084).round();
+      return '${feet}ft';
+    } else if (miles < 10) {
+      return '${miles.toStringAsFixed(1)}mi';
     } else {
-      final km = distanceMeters / 1000;
-      return '${km.toStringAsFixed(1)}km';
+      return '${miles.round()}mi';
     }
   }
 

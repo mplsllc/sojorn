@@ -5,7 +5,9 @@
 package services
 
 import (
+	"bytes"
 	"context"
+	"crypto/md5"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -14,6 +16,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/aws/aws-sdk-go-v2/service/s3"
 	"github.com/rs/zerolog/log"
 	"gitlab.com/patrickbritton3/sojorn/go-backend/internal/repository"
 )
@@ -21,13 +24,16 @@ import (
 // BeaconIngestionService periodically fetches alerts from external sources
 // (MN511, IcedCoffee) and upserts them into the beacon_alerts table.
 type BeaconIngestionService struct {
-	repo        *repository.BeaconAlertRepository
-	mn511Base   string
-	icedBase    string
-	client      *http.Client
-	interval    time.Duration
-	stopCh      chan struct{}
-	wg          sync.WaitGroup
+	repo         *repository.BeaconAlertRepository
+	mn511Base    string
+	icedBase     string
+	s3Client     *s3.Client  // optional — used to cache sign images in R2
+	r2Bucket     string
+	r2ImgDomain  string
+	client       *http.Client
+	interval     time.Duration
+	stopCh       chan struct{}
+	wg           sync.WaitGroup
 	manualSyncCh chan string // admin-triggered sync: "" = all, or specific source name
 }
 
@@ -35,11 +41,17 @@ func NewBeaconIngestionService(
 	repo *repository.BeaconAlertRepository,
 	mn511Base string,
 	icedBase string,
+	s3Client *s3.Client,
+	r2Bucket string,
+	r2ImgDomain string,
 ) *BeaconIngestionService {
 	return &BeaconIngestionService{
 		repo:         repo,
 		mn511Base:    mn511Base,
 		icedBase:     icedBase,
+		s3Client:     s3Client,
+		r2Bucket:     r2Bucket,
+		r2ImgDomain:  r2ImgDomain,
 		client:       &http.Client{Timeout: 15 * time.Second},
 		interval:     2 * time.Minute,
 		stopCh:       make(chan struct{}),
@@ -325,88 +337,126 @@ type mn511CamIngestionResp struct {
 	Cameras []mn511CamIngestion `json:"cameras"`
 }
 
+// ingestMN511Cameras upserts MN511 camera views into beacon_alerts.
+// Cameras are permanent infrastructure — we NEVER call CleanOrphaned for them.
+// On first run (< 200 cameras in DB), performs a tiled sweep across Minnesota
+// to overcome the MN511 API 500-record cap. Subsequent runs skip periodic
+// re-fetch entirely (camera locations and stream URLs rarely change).
 func (s *BeaconIngestionService) ingestMN511Cameras(ctx context.Context) (int, error) {
-	apiURL := fmt.Sprintf("%s/api/camera-views?bbox=-97.5,43.0,-89.0,49.5&limit=500", s.mn511Base)
-	body, err := s.fetchJSON(apiURL)
-	if err != nil {
-		log.Error().Err(err).Msg("beacon ingestion: mn511 cameras fetch failed")
-		return 0, err
+	// Check existing count — if we already have a good set, skip the fetch.
+	// Cameras are permanent; there's no need to re-ingest them every 2 minutes.
+	existing, err := s.repo.CountBySource(ctx, "mn511_camera")
+	if err == nil && existing >= 200 {
+		log.Debug().Int("existing", existing).Msg("beacon ingestion: mn511 cameras — skip (already populated)")
+		return 0, nil
 	}
 
-	var resp mn511CamIngestionResp
-	if err := json.Unmarshal(body, &resp); err != nil {
-		log.Error().Err(err).Msg("beacon ingestion: mn511 cameras parse failed")
-		return 0, err
+	log.Info().Int("existing", existing).Msg("beacon ingestion: mn511 cameras — full tiled sweep starting")
+
+	// Tile Minnesota (43.5–49.5°N, 97.5–89.5°W) in 0.5° steps.
+	// Dense metro tiles may still cap at 500, but we'll capture far more
+	// than the previous single-request approach.
+	type tile struct{ minLon, minLat, maxLon, maxLat float64 }
+	var tiles []tile
+	step := 0.5
+	for lat := 43.5; lat < 49.5; lat += step {
+		for lon := -97.5; lon < -89.5; lon += step {
+			tiles = append(tiles, tile{lon, lat, lon + step, lat + step})
+		}
 	}
 
-	alerts := make([]*repository.BeaconAlert, 0, len(resp.Cameras))
-	activeIDs := make([]string, 0, len(resp.Cameras))
+	seen := map[string]struct{}{}
+	var allAlerts []*repository.BeaconAlert
 
-	for _, cam := range resp.Cameras {
-		if cam.Lat == 0 || cam.Lon == 0 {
+	src := "MN 511"
+	handle := "@mn511"
+	display := "MN 511"
+	authorID := "00000000-0000-0000-0000-000000000511"
+
+	for _, t := range tiles {
+		bbox := fmt.Sprintf("%.2f,%.2f,%.2f,%.2f", t.minLon, t.minLat, t.maxLon, t.maxLat)
+		apiURL := fmt.Sprintf("%s/api/camera-views?bbox=%s", s.mn511Base, bbox)
+		body, err := s.fetchJSON(apiURL)
+		if err != nil {
+			log.Warn().Err(err).Str("bbox", bbox).Msg("beacon ingestion: mn511 cameras tile fetch failed — skipping tile")
 			continue
 		}
 
-		streamURL := ""
-		for _, src := range cam.Sources {
-			if src.Type == "application/x-mpegURL" || src.Src != "" {
-				streamURL = src.Src
-				break
+		var resp mn511CamIngestionResp
+		if err := json.Unmarshal(body, &resp); err != nil {
+			continue
+		}
+
+		for _, cam := range resp.Cameras {
+			if cam.Lat == 0 || cam.Lon == 0 {
+				continue
 			}
+			if _, dup := seen[cam.ID]; dup {
+				continue
+			}
+			seen[cam.ID] = struct{}{}
+
+			streamURL := ""
+			for _, s := range cam.Sources {
+				if s.Type == "application/x-mpegURL" || s.Src != "" {
+					streamURL = s.Src
+					break
+				}
+			}
+
+			displayTitle := cam.Title
+			if cam.ParentRouteDesignator != "" {
+				displayTitle = cam.ParentRouteDesignator + " — " + cam.Title
+			}
+
+			var imgPtr, vidPtr *string
+			if cam.URL != "" {
+				imgPtr = &cam.URL
+			}
+			if streamURL != "" {
+				vidPtr = &streamURL
+			}
+
+			allAlerts = append(allAlerts, &repository.BeaconAlert{
+				ExternalID:     cam.ID,
+				Source:         "mn511_camera",
+				BeaconType:     "camera",
+				Severity:       "low",
+				Title:          displayTitle,
+				Body:           displayTitle,
+				Lat:            cam.Lat,
+				Lng:            cam.Lon,
+				Radius:         50,
+				ImageURL:       imgPtr,
+				VideoURL:       vidPtr,
+				IsOfficial:     true,
+				OfficialSource: &src,
+				AuthorID:       &authorID,
+				AuthorHandle:   &handle,
+				AuthorDisplay:  &display,
+				Status:         "active",
+				IncidentStatus: "active",
+				Confidence:     1.0,
+				Tags:           []string{},
+				CreatedAt:      time.Now().UTC(),
+			})
 		}
 
-		displayTitle := cam.Title
-		if cam.ParentRouteDesignator != "" {
-			displayTitle = cam.ParentRouteDesignator + " — " + cam.Title
-		}
-
-		src := "MN 511"
-		handle := "@mn511"
-		display := "MN 511"
-		authorID := "00000000-0000-0000-0000-000000000511"
-
-		var imgPtr, vidPtr *string
-		if cam.URL != "" {
-			imgPtr = &cam.URL
-		}
-		if streamURL != "" {
-			vidPtr = &streamURL
-		}
-
-		alerts = append(alerts, &repository.BeaconAlert{
-			ExternalID:     cam.ID,
-			Source:         "mn511_camera",
-			BeaconType:     "camera",
-			Severity:       "low",
-			Title:          displayTitle,
-			Body:           displayTitle,
-			Lat:            cam.Lat,
-			Lng:            cam.Lon,
-			Radius:         50,
-			ImageURL:       imgPtr,
-			VideoURL:       vidPtr,
-			IsOfficial:     true,
-			OfficialSource: &src,
-			AuthorID:       &authorID,
-			AuthorHandle:   &handle,
-			AuthorDisplay:  &display,
-			Status:         "active",
-			IncidentStatus: "active",
-			Confidence:     1.0,
-			Tags:           []string{},
-			// No expiry — cameras are permanent, refreshed each cycle
-			CreatedAt: time.Now().UTC(),
-		})
-		activeIDs = append(activeIDs, cam.ID)
+		// Brief pause to avoid hammering the MN511 proxy
+		time.Sleep(50 * time.Millisecond)
 	}
 
-	count, upsertErr := s.repo.BulkUpsert(ctx, alerts)
+	if len(allAlerts) == 0 {
+		return 0, nil
+	}
+
+	count, upsertErr := s.repo.BulkUpsert(ctx, allAlerts)
 	if upsertErr != nil {
-		log.Error().Err(upsertErr).Msg("beacon ingestion: mn511 cameras upsert failed — skipping orphan cleanup")
+		log.Error().Err(upsertErr).Msg("beacon ingestion: mn511 cameras upsert failed")
 		return count, upsertErr
 	}
-	removed, _ := s.repo.CleanOrphaned(ctx, "mn511_camera", activeIDs)
-	log.Info().Int("upserted", count).Int64("removed", removed).Msg("beacon ingestion: mn511 cameras")
+	// NO CleanOrphaned — cameras are permanent infrastructure.
+	log.Info().Int("upserted", count).Int("tiles", len(tiles)).Int("unique", len(seen)).Msg("beacon ingestion: mn511 cameras tiled sweep complete")
 	return count, nil
 }
 
@@ -464,9 +514,15 @@ func (s *BeaconIngestionService) ingestMN511Signs(ctx context.Context) (int, err
 			continue
 		}
 
+		// Cache sign image in R2 so the app loads from CDN instead of MN511 each time.
 		var imgPtr *string
 		if len(props.Views) > 0 && props.Views[0].ImageURL != "" {
-			imgPtr = &props.Views[0].ImageURL
+			r2URL := s.cacheSignImage(ctx, f.ID, props.Views[0].ImageURL)
+			if r2URL != "" {
+				imgPtr = &r2URL
+			} else {
+				imgPtr = &props.Views[0].ImageURL // fallback to original URL
+			}
 		}
 
 		displayTitle := props.Title
@@ -698,6 +754,50 @@ func (s *BeaconIngestionService) ingestIced(ctx context.Context) (int, error) {
 	removed, _ := s.repo.CleanOrphaned(ctx, "iced", activeIDs)
 	log.Info().Int("upserted", count).Int64("removed", removed).Msg("beacon ingestion: iced")
 	return count, nil
+}
+
+// ── Sign image cache ─────────────────────────────────────────────────────
+
+// cacheSignImage downloads the MN511 sign GIF and stores it in R2 so the
+// Flutter app loads from CDN instead of hitting MN511 on every request.
+// Returns the R2 public URL, or "" if caching is unavailable/failed.
+func (s *BeaconIngestionService) cacheSignImage(ctx context.Context, signID, mnURL string) string {
+	if s.s3Client == nil || s.r2Bucket == "" || mnURL == "" {
+		return ""
+	}
+
+	// Fetch the image from MN511.
+	resp, err := s.client.Get(mnURL)
+	if err != nil || resp.StatusCode != 200 {
+		return ""
+	}
+	defer resp.Body.Close()
+
+	imgBytes, err := io.ReadAll(resp.Body)
+	if err != nil || len(imgBytes) == 0 {
+		return ""
+	}
+
+	// Key: signs/{signID}/{contentHash}.gif — same message = same key = no re-upload.
+	hash := fmt.Sprintf("%x", md5.Sum(imgBytes))
+	key := fmt.Sprintf("signs/%s/%s.gif", signID, hash[:8])
+
+	contentType := "image/gif"
+	_, err = s.s3Client.PutObject(ctx, &s3.PutObjectInput{
+		Bucket:      &s.r2Bucket,
+		Key:         &key,
+		Body:        bytes.NewReader(imgBytes),
+		ContentType: &contentType,
+	})
+	if err != nil {
+		log.Warn().Err(err).Str("sign", signID).Msg("beacon ingestion: sign image R2 upload failed")
+		return ""
+	}
+
+	if s.r2ImgDomain != "" {
+		return fmt.Sprintf("https://%s/%s", s.r2ImgDomain, key)
+	}
+	return ""
 }
 
 // ── Helpers ──────────────────────────────────────────────────────────────
