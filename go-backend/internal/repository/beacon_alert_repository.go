@@ -115,10 +115,13 @@ func (r *BeaconAlertRepository) BulkUpsert(ctx context.Context, alerts []*Beacon
 
 // ExpireStale marks alerts as 'expired' when their expires_at has passed.
 func (r *BeaconAlertRepository) ExpireStale(ctx context.Context) (int64, error) {
+	// Only expire user-created beacons by their expires_at.
+	// Official/external alerts are managed by CleanOrphaned (source-of-truth).
 	tag, err := r.pool.Exec(ctx, `
 		UPDATE beacon_alerts
 		SET status = 'expired'
 		WHERE expires_at < NOW() AND status = 'active'
+		  AND is_official = false
 	`)
 	if err != nil {
 		return 0, err
@@ -126,14 +129,14 @@ func (r *BeaconAlertRepository) ExpireStale(ctx context.Context) (int64, error) 
 	return tag.RowsAffected(), nil
 }
 
-// CleanOrphaned removes alerts from a source that are no longer in the upstream feed.
-// activeIDs is the set of external_ids that were present in the latest fetch.
+// CleanOrphaned deletes alerts from a source that are no longer in the upstream feed.
+// Official sources are the authority — if the API no longer returns an alert, it's gone.
 func (r *BeaconAlertRepository) CleanOrphaned(ctx context.Context, source string, activeIDs []string) (int64, error) {
 	if len(activeIDs) == 0 {
-		// No active IDs means upstream returned nothing — mark all from this source as expired
+		// Upstream returned nothing — delete all active alerts from this source
 		tag, err := r.pool.Exec(ctx, `
-			UPDATE beacon_alerts SET status = 'expired'
-			WHERE source = $1 AND status = 'active'
+			DELETE FROM beacon_alerts
+			WHERE source = $1
 		`, source)
 		if err != nil {
 			return 0, err
@@ -142,8 +145,8 @@ func (r *BeaconAlertRepository) CleanOrphaned(ctx context.Context, source string
 	}
 
 	tag, err := r.pool.Exec(ctx, `
-		UPDATE beacon_alerts SET status = 'expired'
-		WHERE source = $1 AND status = 'active'
+		DELETE FROM beacon_alerts
+		WHERE source = $1
 		  AND external_id != ALL($2)
 	`, source, activeIDs)
 	if err != nil {

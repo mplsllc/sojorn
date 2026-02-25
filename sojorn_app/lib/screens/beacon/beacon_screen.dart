@@ -41,6 +41,7 @@ import '../../widgets/media/sojorn_avatar.dart';
 import '../../widgets/neighborhood/neighborhood_picker_sheet.dart';
 import 'package:url_launcher/url_launcher.dart';
 import '../../widgets/desktop/desktop_dialog_helper.dart';
+import '../../config/api_config.dart';
 
 enum BeaconTab { map, board, search, groups }
 enum NeighborhoodHubTab { feed, chat, forum, members }
@@ -1322,10 +1323,13 @@ class BeaconScreenState extends ConsumerState<BeaconScreen> with TickerProviderS
   }
 
   final GlobalKey _filterButtonKey = GlobalKey();
+  final LayerLink _filterLayerLink = LayerLink();
 
   Widget _mapFilterButton() {
     final hiddenCount = _hiddenTypes.length;
-    return GestureDetector(
+    return CompositedTransformTarget(
+      link: _filterLayerLink,
+      child: GestureDetector(
       key: _filterButtonKey,
       onTap: _showFilterDropdown,
       child: ClipRRect(
@@ -1371,6 +1375,7 @@ class BeaconScreenState extends ConsumerState<BeaconScreen> with TickerProviderS
           ),
         ),
       ),
+    ),
     );
   }
 
@@ -1428,13 +1433,13 @@ class BeaconScreenState extends ConsumerState<BeaconScreen> with TickerProviderS
   void _showFilterDropdown() {
     final renderBox = _filterButtonKey.currentContext?.findRenderObject() as RenderBox?;
     if (renderBox == null) return;
-    final buttonPos = renderBox.localToGlobal(Offset.zero);
     final buttonSize = renderBox.size;
 
     late OverlayEntry overlay;
     overlay = OverlayEntry(
       builder: (_) => _FilterDropdownOverlay(
-        anchorRect: Rect.fromLTWH(buttonPos.dx, buttonPos.dy, buttonSize.width, buttonSize.height),
+        layerLink: _filterLayerLink,
+        buttonSize: buttonSize,
         hiddenTypes: Set.of(_hiddenTypes),
         categories: _filterCategories,
         onToggleCategory: (cat) {
@@ -3145,17 +3150,21 @@ class BeaconScreenState extends ConsumerState<BeaconScreen> with TickerProviderS
       return Marker(
         key: ValueKey('camera:${cam.id}'),
         point: LatLng(cam.beaconLat!, cam.beaconLong!),
-        width: 28,
-        height: 28,
+        width: 44,
+        height: 44,
         child: GestureDetector(
+          behavior: HitTestBehavior.opaque,
           onTap: () => _showCameraSheet(cam),
-          child: Container(
-            decoration: BoxDecoration(
-              color: const Color(0xFF0097A7),
-              shape: BoxShape.circle,
-              boxShadow: [BoxShadow(color: Colors.black26, blurRadius: 4, offset: const Offset(0, 2))],
+          child: Center(
+            child: Container(
+              width: 28, height: 28,
+              decoration: BoxDecoration(
+                color: const Color(0xFF0097A7),
+                shape: BoxShape.circle,
+                boxShadow: [BoxShadow(color: Colors.black26, blurRadius: 4, offset: const Offset(0, 2))],
+              ),
+              child: const Icon(Icons.videocam, color: Colors.white, size: 16),
             ),
-            child: const Icon(Icons.videocam, color: Colors.white, size: 16),
           ),
         ),
       );
@@ -3179,17 +3188,21 @@ class BeaconScreenState extends ConsumerState<BeaconScreen> with TickerProviderS
       return Marker(
         key: ValueKey('sign:${sign.id}'),
         point: LatLng(sign.beaconLat!, sign.beaconLong!),
-        width: 28,
-        height: 28,
+        width: 44,
+        height: 44,
         child: GestureDetector(
+          behavior: HitTestBehavior.opaque,
           onTap: () => _showSignSheet(sign),
-          child: Container(
-            decoration: BoxDecoration(
-              color: const Color(0xFFFFAB00),
-              shape: BoxShape.circle,
-              boxShadow: [BoxShadow(color: Colors.black26, blurRadius: 4, offset: const Offset(0, 2))],
+          child: Center(
+            child: Container(
+              width: 28, height: 28,
+              decoration: BoxDecoration(
+                color: const Color(0xFFFFAB00),
+                shape: BoxShape.circle,
+                boxShadow: [BoxShadow(color: Colors.black26, blurRadius: 4, offset: const Offset(0, 2))],
+              ),
+              child: const Icon(Icons.signpost, color: Colors.white, size: 16),
             ),
-            child: const Icon(Icons.signpost, color: Colors.white, size: 16),
           ),
         ),
       );
@@ -3214,17 +3227,21 @@ class BeaconScreenState extends ConsumerState<BeaconScreen> with TickerProviderS
       return Marker(
         key: ValueKey('weather:${wx.id}'),
         point: LatLng(wx.beaconLat!, wx.beaconLong!),
-        width: 28,
-        height: 28,
+        width: 44,
+        height: 44,
         child: GestureDetector(
+          behavior: HitTestBehavior.opaque,
           onTap: () => _showWeatherSheet(wx),
-          child: Container(
-            decoration: BoxDecoration(
-              color: color,
-              shape: BoxShape.circle,
-              boxShadow: [BoxShadow(color: Colors.black26, blurRadius: 4, offset: const Offset(0, 2))],
+          child: Center(
+            child: Container(
+              width: 28, height: 28,
+              decoration: BoxDecoration(
+                color: color,
+                shape: BoxShape.circle,
+                boxShadow: [BoxShadow(color: Colors.black26, blurRadius: 4, offset: const Offset(0, 2))],
+              ),
+              child: const Icon(Icons.cloud, color: Colors.white, size: 16),
             ),
-            child: const Icon(Icons.cloud, color: Colors.white, size: 16),
           ),
         ),
       );
@@ -3802,7 +3819,7 @@ class _SignDetailSheet extends StatelessWidget {
             ClipRRect(
               borderRadius: BorderRadius.circular(10),
               child: Image.network(
-                sign.imageUrl!,
+                '${ApiConfig.baseUrl}/api/v1/image-proxy?url=${Uri.encodeComponent(sign.imageUrl!)}',
                 fit: BoxFit.contain,
                 height: 140,
                 errorBuilder: (_, __, ___) => const SizedBox.shrink(),
@@ -4158,7 +4175,8 @@ class _VoteChip extends StatelessWidget {
 
 // ─── Compact filter dropdown overlay ──────────────────────────────────────
 class _FilterDropdownOverlay extends StatelessWidget {
-  final Rect anchorRect;
+  final LayerLink layerLink;
+  final Size buttonSize;
   final Set<BeaconType> hiddenTypes;
   final List<({String label, IconData icon, Color color, List<BeaconType> types})> categories;
   final void Function(({String label, IconData icon, Color color, List<BeaconType> types})) onToggleCategory;
@@ -4166,7 +4184,8 @@ class _FilterDropdownOverlay extends StatelessWidget {
   final VoidCallback onDismiss;
 
   const _FilterDropdownOverlay({
-    required this.anchorRect,
+    required this.layerLink,
+    required this.buttonSize,
     required this.hiddenTypes,
     required this.categories,
     required this.onToggleCategory,
@@ -4176,13 +4195,7 @@ class _FilterDropdownOverlay extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final screenWidth = MediaQuery.of(context).size.width;
     const dropdownWidth = 180.0;
-    // Position dropdown below the button, right-aligned to button
-    double left = anchorRect.right - dropdownWidth;
-    if (left < 8) left = 8;
-    if (left + dropdownWidth > screenWidth - 8) left = screenWidth - dropdownWidth - 8;
-    final top = anchorRect.bottom + 6;
 
     return Stack(
       children: [
@@ -4192,9 +4205,11 @@ class _FilterDropdownOverlay extends StatelessWidget {
           behavior: HitTestBehavior.opaque,
           child: const SizedBox.expand(),
         ),
-        Positioned(
-          left: left,
-          top: top,
+        CompositedTransformFollower(
+          link: layerLink,
+          targetAnchor: Alignment.bottomRight,
+          followerAnchor: Alignment.topRight,
+          offset: const Offset(0, 6),
           child: Material(
             color: Colors.transparent,
             child: Container(

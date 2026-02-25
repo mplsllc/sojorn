@@ -253,9 +253,6 @@ func (s *BeaconIngestionService) ingestMN511Alerts(ctx context.Context) (int, er
 			}
 		}
 
-		// Default 6-hour expiry for incidents
-		expiresAt := createdAt.Add(6 * time.Hour)
-
 		src := "MN 511"
 		handle := "@mn511"
 		display := "MN 511"
@@ -281,15 +278,14 @@ func (s *BeaconIngestionService) ingestMN511Alerts(ctx context.Context) (int, er
 			Confidence:     1.0,
 			VouchCount:     10,
 			Tags:           []string{},
-			ExpiresAt:      &expiresAt,
 			CreatedAt:      createdAt,
 		})
 		activeIDs = append(activeIDs, f.ID)
 	}
 
 	count, _ := s.repo.BulkUpsert(ctx, alerts)
-	orphaned, _ := s.repo.CleanOrphaned(ctx, "mn511", activeIDs)
-	log.Info().Int("upserted", count).Int64("orphaned", orphaned).Int("upstream", len(resp.Features)).Msg("beacon ingestion: mn511 alerts")
+	removed, _ := s.repo.CleanOrphaned(ctx, "mn511", activeIDs)
+	log.Info().Int("upserted", count).Int64("removed", removed).Int("upstream", len(resp.Features)).Msg("beacon ingestion: mn511 alerts")
 	return count, nil
 }
 
@@ -391,8 +387,8 @@ func (s *BeaconIngestionService) ingestMN511Cameras(ctx context.Context) (int, e
 	}
 
 	count, _ := s.repo.BulkUpsert(ctx, alerts)
-	orphaned, _ := s.repo.CleanOrphaned(ctx, "mn511_camera", activeIDs)
-	log.Info().Int("upserted", count).Int64("orphaned", orphaned).Msg("beacon ingestion: mn511 cameras")
+	removed, _ := s.repo.CleanOrphaned(ctx, "mn511_camera", activeIDs)
+	log.Info().Int("upserted", count).Int64("removed", removed).Msg("beacon ingestion: mn511 cameras")
 	return count, nil
 }
 
@@ -494,8 +490,8 @@ func (s *BeaconIngestionService) ingestMN511Signs(ctx context.Context) (int, err
 	}
 
 	count, _ := s.repo.BulkUpsert(ctx, alerts)
-	orphaned, _ := s.repo.CleanOrphaned(ctx, "mn511_sign", activeIDs)
-	log.Info().Int("upserted", count).Int64("orphaned", orphaned).Msg("beacon ingestion: mn511 signs")
+	removed, _ := s.repo.CleanOrphaned(ctx, "mn511_sign", activeIDs)
+	log.Info().Int("upserted", count).Int64("removed", removed).Msg("beacon ingestion: mn511 signs")
 	return count, nil
 }
 
@@ -575,8 +571,8 @@ func (s *BeaconIngestionService) ingestMN511Weather(ctx context.Context) (int, e
 	}
 
 	count, _ := s.repo.BulkUpsert(ctx, alerts)
-	orphaned, _ := s.repo.CleanOrphaned(ctx, "mn511_weather", activeIDs)
-	log.Info().Int("upserted", count).Int64("orphaned", orphaned).Msg("beacon ingestion: mn511 weather")
+	removed, _ := s.repo.CleanOrphaned(ctx, "mn511_weather", activeIDs)
+	log.Info().Int("upserted", count).Int64("removed", removed).Msg("beacon ingestion: mn511 weather")
 	return count, nil
 }
 
@@ -643,9 +639,6 @@ func (s *BeaconIngestionService) ingestIced(ctx context.Context) (int, error) {
 			radius = int(v)
 		}
 
-		// 4-hour default expiry for iced alerts
-		expiresAt := time.Now().UTC().Add(4 * time.Hour)
-
 		alerts = append(alerts, &repository.BeaconAlert{
 			ExternalID:     id,
 			Source:         "iced",
@@ -666,15 +659,14 @@ func (s *BeaconIngestionService) ingestIced(ctx context.Context) (int, error) {
 			IncidentStatus: "active",
 			Confidence:     1.0,
 			Tags:           []string{},
-			ExpiresAt:      &expiresAt,
 			CreatedAt:      time.Now().UTC(),
 		})
 		activeIDs = append(activeIDs, id)
 	}
 
 	count, _ := s.repo.BulkUpsert(ctx, alerts)
-	orphaned, _ := s.repo.CleanOrphaned(ctx, "iced", activeIDs)
-	log.Info().Int("upserted", count).Int64("orphaned", orphaned).Msg("beacon ingestion: iced")
+	removed, _ := s.repo.CleanOrphaned(ctx, "iced", activeIDs)
+	log.Info().Int("upserted", count).Int64("removed", removed).Msg("beacon ingestion: iced")
 	return count, nil
 }
 

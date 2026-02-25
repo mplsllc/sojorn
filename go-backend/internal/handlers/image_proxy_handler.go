@@ -30,9 +30,10 @@ func NewImageProxyHandler() *ImageProxyHandler {
 // allowedHosts restricts which origins the proxy will fetch from
 // to prevent open-relay abuse.
 var allowedProxyHosts = map[string]bool{
-	"web.archive.org": true,
-	"i.imgur.com":     true,
-	"media.giphy.com": true,
+	"web.archive.org":                          true,
+	"i.imgur.com":                              true,
+	"media.giphy.com":                          true,
+	"crc-signs-s3.s3.us-west-2.amazonaws.com": true,
 }
 
 // ProxyImage handles GET /image-proxy?url=<encoded-url>
