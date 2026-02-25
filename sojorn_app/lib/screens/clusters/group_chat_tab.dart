@@ -431,10 +431,12 @@ class _ChatBubble extends StatelessWidget {
         ? Colors.white.withValues(alpha: 0.65)
         : SojornColors.textDisabled;
 
+    final isDesktop = MediaQuery.of(context).size.width >= 900;
+
     Widget bubble = Container(
       margin: const EdgeInsets.symmetric(vertical: 2),
-      constraints: BoxConstraints(maxWidth: MediaQuery.of(context).size.width * 0.72),
-      padding: const EdgeInsets.symmetric(horizontal: 13, vertical: 9),
+      constraints: BoxConstraints(maxWidth: MediaQuery.of(context).size.width * (isDesktop ? 0.5 : 0.72)),
+      padding: EdgeInsets.symmetric(horizontal: isDesktop ? 16 : 13, vertical: isDesktop ? 11 : 9),
       decoration: BoxDecoration(
         color: bubbleBg,
         borderRadius: BorderRadius.only(
@@ -456,18 +458,18 @@ class _ChatBubble extends StatelessWidget {
                   displayName.isNotEmpty ? displayName : handle,
                   style: TextStyle(
                     color: AppTheme.navyBlue,
-                    fontSize: 11,
+                    fontSize: isDesktop ? 13 : 11,
                     fontWeight: FontWeight.w700,
                   ),
                 ),
                 const SizedBox(width: 4),
               ],
-              Text(timeStr, style: TextStyle(color: metaColor, fontSize: 10)),
+              Text(timeStr, style: TextStyle(color: metaColor, fontSize: isDesktop ? 12 : 10)),
             ],
           ),
           const SizedBox(height: 3),
           if (body.isNotEmpty)
-            Text(body, style: TextStyle(color: textColor, fontSize: 14, height: 1.35)),
+            Text(body, style: TextStyle(color: textColor, fontSize: isDesktop ? 15 : 14, height: 1.4)),
           if (gifUrl != null) ...[
             if (body.isNotEmpty) const SizedBox(height: 6),
             ClipRRect(
@@ -516,7 +518,7 @@ class _ChatBubble extends StatelessWidget {
   }
 }
 
-/// 28px rounded-square avatar for chat bubbles.
+/// Rounded-square avatar for chat bubbles (responsive: 28px mobile, 36px desktop).
 class _MiniAvatar extends StatelessWidget {
   final String handle;
   final String? avatarUrl;
@@ -524,28 +526,32 @@ class _MiniAvatar extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final isDesktop = MediaQuery.of(context).size.width >= 900;
+    final size = isDesktop ? 36.0 : 28.0;
+    final radius = isDesktop ? 10.0 : 8.0;
+    final fontSize = isDesktop ? 14.0 : 12.0;
     final initial = handle.isNotEmpty ? handle[0].toUpperCase() : '?';
     final hue = (handle.hashCode % 360).toDouble();
     final bg = HSLColor.fromAHSL(1.0, hue, 0.45, 0.55).toColor();
     return Container(
-      width: 28, height: 28,
-      decoration: BoxDecoration(color: bg, borderRadius: BorderRadius.circular(8)),
+      width: size, height: size,
+      decoration: BoxDecoration(color: bg, borderRadius: BorderRadius.circular(radius)),
       child: avatarUrl != null && avatarUrl!.isNotEmpty
           ? ClipRRect(
-              borderRadius: BorderRadius.circular(8),
+              borderRadius: BorderRadius.circular(radius),
               child: CachedNetworkImage(
                 imageUrl: avatarUrl!,
-                width: 28, height: 28,
+                width: size, height: size,
                 fit: BoxFit.cover,
                 errorWidget: (_, __, ___) => Center(
                   child: Text(initial,
-                      style: const TextStyle(color: Colors.white, fontSize: 12, fontWeight: FontWeight.w700)),
+                      style: TextStyle(color: Colors.white, fontSize: fontSize, fontWeight: FontWeight.w700)),
                 ),
               ),
             )
           : Center(
               child: Text(initial,
-                  style: const TextStyle(color: Colors.white, fontSize: 12, fontWeight: FontWeight.w700)),
+                  style: TextStyle(color: Colors.white, fontSize: fontSize, fontWeight: FontWeight.w700)),
             ),
     );
   }

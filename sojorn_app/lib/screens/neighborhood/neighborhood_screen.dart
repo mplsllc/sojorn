@@ -378,7 +378,7 @@ class _NeighborhoodScreenState extends State<NeighborhoodScreen>
   Widget _buildDesktopLayout(double totalWidth) {
     final hood = _neighborhood;
     final hoodData = hood?['neighborhood'] as Map<String, dynamic>?;
-    final name = hoodData?['name'] as String? ?? 'Neighborhood';
+    final name = hoodData?['name'] as String? ?? 'Commons';
     final city = hoodData?['city'] as String? ?? '';
     final memberCount = hood?['member_count'] as int? ?? 0;
     final activeNow = hood?['active_now'] as int? ?? 0;
@@ -444,7 +444,7 @@ class _NeighborhoodScreenState extends State<NeighborhoodScreen>
   Widget _buildMobileLayout() {
     final hoodData =
         _neighborhood?['neighborhood'] as Map<String, dynamic>?;
-    final name = hoodData?['name'] as String? ?? 'Neighborhood';
+    final name = hoodData?['name'] as String? ?? 'Commons';
     final city = hoodData?['city'] as String? ?? '';
     final memberCount = _neighborhood?['member_count'] as int? ?? 0;
     final activeNow = _neighborhood?['active_now'] as int? ?? 0;
@@ -806,7 +806,7 @@ class _NeighborhoodScreenState extends State<NeighborhoodScreen>
                         Icon(t.icon,
                             size: 12,
                             color: isSelected
-                                ? t.color
+                                ? Colors.white
                                 : SojornColors.textDisabled),
                         const SizedBox(width: 4),
                         Text(t.displayName),
@@ -815,14 +815,19 @@ class _NeighborhoodScreenState extends State<NeighborhoodScreen>
                     selected: isSelected,
                     onSelected: (_) =>
                         setState(() => _composeTopic = t),
+                    selectedColor: t.color,
+                    backgroundColor: AppTheme.cardSurface,
                     labelStyle: TextStyle(
                       fontSize: 10,
                       fontWeight: isSelected
                           ? FontWeight.w600
                           : FontWeight.normal,
                       color: isSelected
-                          ? t.color
+                          ? Colors.white
                           : SojornColors.postContentLight,
+                    ),
+                    side: BorderSide(
+                      color: isSelected ? t.color : AppTheme.navyText.withValues(alpha: 0.15),
                     ),
                     visualDensity: VisualDensity.compact,
                     padding:
@@ -1867,7 +1872,7 @@ class _NeighborhoodScreenState extends State<NeighborhoodScreen>
                         avatarUrl: avatarUrl.isNotEmpty
                             ? avatarUrl
                             : null,
-                        size: 28,
+                        size: 36,
                       );
                     }).toList(),
                   ),
@@ -2142,14 +2147,14 @@ class _NeighborhoodScreenState extends State<NeighborhoodScreen>
                   avatarUrl: entry.authorAvatarUrl.isNotEmpty
                       ? entry.authorAvatarUrl
                       : null,
-                  size: 20,
+                  size: 36,
                 ),
-                const SizedBox(width: 7),
+                const SizedBox(width: 8),
                 Flexible(
                   child: Text(authorName,
                       style: TextStyle(
                           color: SojornColors.postContent,
-                          fontSize: 12,
+                          fontSize: 14,
                           fontWeight: FontWeight.w600),
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis),
@@ -2162,8 +2167,8 @@ class _NeighborhoodScreenState extends State<NeighborhoodScreen>
                 overflow: TextOverflow.ellipsis,
                 style: TextStyle(
                     color: SojornColors.postContentLight,
-                    fontSize: 13,
-                    height: 1.4)),
+                    fontSize: 15,
+                    height: 1.45)),
             if (entry.imageUrl != null) ...[
               const SizedBox(height: 8),
               ClipRRect(

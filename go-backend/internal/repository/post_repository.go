@@ -661,6 +661,7 @@ func (r *PostRepository) GetNearbyBeacons(ctx context.Context, lat float64, long
 		  AND ST_DWithin(p.location, ST_SetSRID(ST_Point($2, $1), 4326)::geography, $3)
 		  AND p.status = 'active'
 		  AND COALESCE(p.incident_status, 'active') = 'active'
+		  AND (p.expires_at IS NULL OR p.expires_at > NOW())
 		ORDER BY p.is_priority DESC, p.created_at DESC
 	`
 	rows, err := r.pool.Query(ctx, query, lat, long, radius, userID)

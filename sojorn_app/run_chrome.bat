@@ -5,4 +5,6 @@ echo Starting Sojorn on Chrome...
 echo.
 
 flutter run -d chrome ^
-  --dart-define=API_BASE_URL=https://api.sojorn.net/api/v1
+  --web-renderer canvaskit ^
+  --dart-define=API_BASE_URL=https://api.sojorn.net/api/v1 ^
+  --dart-define-from-file=dart-defines.env

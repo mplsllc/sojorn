@@ -221,6 +221,13 @@ func main() {
 	icedHandler := handlers.NewIcedHandler(cfg.IcedAPIBase)
 	moderationHandler := handlers.NewModerationHandler(moderationService, sightEngineService, localAIService)
 
+	// Unified beacon alerts system
+	beaconAlertRepo := repository.NewBeaconAlertRepository(dbPool)
+	beaconUnifiedHandler := handlers.NewBeaconUnifiedHandler(beaconAlertRepo)
+	beaconIngestion := services.NewBeaconIngestionService(beaconAlertRepo, "http://127.0.0.1:8787", cfg.IcedAPIBase)
+	beaconIngestion.Start()
+	defer beaconIngestion.Stop()
+
 	adminHandler := handlers.NewAdminHandler(dbPool, moderationService, appealService, emailService, sightEngineService, officialAccountsService, linkPreviewService, localAIService, cfg.JWTSecret, s3Client, cfg.R2MediaBucket, cfg.R2VideoBucket, cfg.R2ImgDomain, cfg.R2VidDomain)
 
 	accountHandler := handlers.NewAccountHandler(userRepo, emailService, cfg)
@@ -423,6 +430,7 @@ func main() {
 			authorized.GET("/feed/personal", postHandler.GetFeed)
 			authorized.POST("/beacons", middleware.UserRateLimit(3.0/3600.0, 3), postHandler.CreateBeacon)
 			authorized.GET("/beacons/nearby", postHandler.GetNearbyBeacons)
+			authorized.GET("/beacons/unified", beaconUnifiedHandler.GetUnifiedBeacons)
 			authorized.GET("/beacons/official", postHandler.GetOfficialAlerts)
 			authorized.GET("/beacons/cameras", postHandler.GetOfficialCameras)
 			authorized.GET("/beacons/signs", postHandler.GetOfficialSigns)

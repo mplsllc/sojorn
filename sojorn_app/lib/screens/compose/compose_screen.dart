@@ -314,7 +314,7 @@ class _ComposeScreenState extends ConsumerState<ComposeScreen> {
   static const _visibilityOptions = [
     ('public', Icons.public, 'Public', 'Visible to everyone'),
     ('followers', Icons.people_outline, 'Followers', 'Only your followers'),
-    ('neighborhood', Icons.location_city_outlined, 'Neighborhood', 'Your home neighborhood'),
+    ('neighborhood', Icons.location_city_outlined, 'Commons', 'Your home commons'),
     ('only_me', Icons.lock_outline, 'Only Me', 'Private, just for you'),
   ];
 

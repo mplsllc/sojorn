@@ -503,7 +503,7 @@ class _HomeShellState extends ConsumerState<HomeShell> with WidgetsBindingObserv
                   _buildDesktopNavItem(Icons.home_outlined, Icons.home, 'Home', 0, currentIndex),
                   _buildDesktopNavItem(Icons.video_collection_outlined, Icons.video_collection, 'Quips', 1, currentIndex),
                   _buildDesktopNavItem(Icons.sensors_outlined, Icons.sensors, 'Beacons', 2, currentIndex),
-                  _buildDesktopNavItem(Icons.location_city_outlined, Icons.location_city, 'Neighborhood', 6, currentIndex),
+                  _buildDesktopNavItem(Icons.location_city_outlined, Icons.location_city, 'Commons', 6, currentIndex),
                   _buildDesktopNavItem(Icons.groups_outlined, Icons.groups, 'Groups', 7, currentIndex),
                   _buildDesktopNavItem(Icons.explore_outlined, Icons.explore, 'Discover', 4, currentIndex),
                   _buildDesktopNavItem(Icons.mail_outline, Icons.mail, 'Messages', 5, currentIndex),

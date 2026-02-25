@@ -70,12 +70,13 @@ class BeaconScreenState extends ConsumerState<BeaconScreen> with TickerProviderS
   Timer? _beaconLoadDebounce;
   late final TabController _tabController;
 
-  List<Post> _beacons = [];
-  List<Post> _officialPosts = []; // MN511 government alerts
+  List<Post> _allBeaconPosts = []; // unified: all sources combined
+  List<Post> _beacons = [];       // user-created beacons (non-official)
+  List<Post> _officialPosts = []; // official alerts (MN511, IcedCoffee)
   List<GroupEvent> _mapEvents = []; // public events with coordinates
-  List<Beacon> _cameraPosts = []; // MN511 traffic cameras
-  List<Beacon> _signPosts = []; // MN511 DMS road signs
-  List<Beacon> _weatherPosts = []; // MN511 RWIS weather stations
+  List<Beacon> _cameraPosts = []; // cameras (filtered from unified)
+  List<Beacon> _signPosts = [];   // signs (filtered from unified)
+  List<Beacon> _weatherPosts = []; // weather stations (filtered from unified)
   List<Beacon> _beaconModels = [];
   bool _isLoading = false;
   bool _isLoadingLocation = false;
@@ -143,7 +144,7 @@ class BeaconScreenState extends ConsumerState<BeaconScreen> with TickerProviderS
     _tabController = TabController(length: 4, vsync: this);
     _tabController.addListener(() {
       if (!_tabController.indexIsChanging) {
-        final tabNames = ['Map', 'Board', 'Hub', 'Clusters'];
+        final tabNames = ['Map', 'Commons', 'Hub', 'Clusters'];
         debugPrint('[BEACON] Tab switched to: ${_tabController.index < tabNames.length ? tabNames[_tabController.index] : _tabController.index}');
         setState(() => _activeTab = _tabOrder[_tabController.index]);
         if (_tabController.index == 1 && _boardEntries.isEmpty) _loadBoardEntries();
@@ -407,59 +408,39 @@ class BeaconScreenState extends ConsumerState<BeaconScreen> with TickerProviderS
     setState(() => _isLoading = true);
     try {
       final apiService = ref.read(apiServiceProvider);
-      final results = await Future.wait([
-        apiService.fetchNearbyBeacons(
-          lat: target.latitude,
-          long: target.longitude,
-          radius: 16000,
-        ),
-        apiService.fetchOfficialAlerts(
-          lat: target.latitude,
-          long: target.longitude,
-          radius: 16000,
-        ),
-        apiService.fetchOfficialCameras(
-          lat: target.latitude,
-          long: target.longitude,
-          radius: 16000,
-        ),
-        apiService.fetchOfficialSigns(
-          lat: target.latitude,
-          long: target.longitude,
-          radius: 16000,
-        ),
-        apiService.fetchOfficialWeatherStations(
-          lat: target.latitude,
-          long: target.longitude,
-          radius: 16000,
-        ),
-        apiService.fetchIcedAlerts(
-          lat: target.latitude,
-          long: target.longitude,
-          radius: 16000,
-        ),
-      ]);
-      final beacons = results[0];
-      final official = results[1];
-      final cameras = results[2];
-      final signs = results[3];
-      final weather = results[4];
-      final iced = results[5];
-      debugPrint('[Beacon] fetched ${beacons.length} user beacons + ${official.length} official alerts + ${cameras.length} cameras + ${signs.length} signs + ${weather.length} weather + ${iced.length} iced');
+      final allPosts = await apiService.fetchUnifiedBeacons(
+        lat: target.latitude,
+        long: target.longitude,
+        radius: 16000,
+      );
+      debugPrint('[Beacon] fetched ${allPosts.length} unified beacons');
       if (mounted) {
         setState(() {
-          _beacons = beacons.where((p) => p.isBeaconPost).toList()
+          _allBeaconPosts = allPosts.where((p) => p.isBeaconPost).toList();
+
+          // Split into sub-lists by beacon_type and official status
+          const layerTypes = {BeaconType.camera, BeaconType.sign, BeaconType.weatherStation};
+          _beacons = _allBeaconPosts
+              .where((p) => p.isOfficial != true && !layerTypes.contains(p.beaconType))
+              .toList()
             ..sort((a, b) {
-              // Priority beacons (3+ vouches) float to top, then by distance
               final aPriority = a.isPriority ?? false;
               final bPriority = b.isPriority ?? false;
               if (aPriority != bPriority) return aPriority ? -1 : 1;
               return (a.distanceMeters ?? 0).compareTo(b.distanceMeters ?? 0);
             });
-          _officialPosts = [...official, ...iced].where((p) => p.isBeaconPost).toList();
-          _cameraPosts = cameras.where((p) => p.isBeaconPost).map((p) => p.toBeacon()).toList();
-          _signPosts = signs.where((p) => p.isBeaconPost).map((p) => p.toBeacon()).toList();
-          _weatherPosts = weather.where((p) => p.isBeaconPost).map((p) => p.toBeacon()).toList();
+          _officialPosts = _allBeaconPosts
+              .where((p) => p.isOfficial == true && !layerTypes.contains(p.beaconType))
+              .toList();
+          _cameraPosts = _allBeaconPosts
+              .where((p) => p.beaconType == BeaconType.camera)
+              .map((p) => p.toBeacon()).toList();
+          _signPosts = _allBeaconPosts
+              .where((p) => p.beaconType == BeaconType.sign)
+              .map((p) => p.toBeacon()).toList();
+          _weatherPosts = _allBeaconPosts
+              .where((p) => p.beaconType == BeaconType.weatherStation)
+              .map((p) => p.toBeacon()).toList();
           _beaconModels = [..._beacons, ..._officialPosts].map((p) => p.toBeacon()).toList();
           _isLoading = false;
         });
@@ -704,12 +685,12 @@ class BeaconScreenState extends ConsumerState<BeaconScreen> with TickerProviderS
   }
 
   String get _neighborhoodName {
-    if (_neighborhood == null) return 'Neighborhood';
+    if (_neighborhood == null) return 'Commons';
     final direct = _neighborhood!['name'] as String?;
     if (direct != null && direct.isNotEmpty) return direct;
     final nested = _neighborhood!['neighborhood'] as Map<String, dynamic>?;
     final nestedName = nested?['name'] as String?;
-    return (nestedName != null && nestedName.isNotEmpty) ? nestedName : 'Neighborhood';
+    return (nestedName != null && nestedName.isNotEmpty) ? nestedName : 'Commons';
   }
 
   Future<void> _loadNeighborhoodHubMeta(String groupId) async {
@@ -943,7 +924,7 @@ class BeaconScreenState extends ConsumerState<BeaconScreen> with TickerProviderS
               unselectedLabelStyle: const TextStyle(fontSize: 13, fontWeight: FontWeight.w500),
               tabs: const [
                 Tab(text: 'Map', icon: Icon(Icons.map_outlined, size: SojornNav.beaconTabIconSize), iconMargin: EdgeInsets.only(bottom: 2)),
-                Tab(text: 'Board', icon: Icon(Icons.forum_outlined, size: SojornNav.beaconTabIconSize), iconMargin: EdgeInsets.only(bottom: 2)),
+                Tab(text: 'Commons', icon: Icon(Icons.location_city_outlined, size: SojornNav.beaconTabIconSize), iconMargin: EdgeInsets.only(bottom: 2)),
                 Tab(text: 'Groups', icon: Icon(Icons.groups_outlined, size: SojornNav.beaconTabIconSize), iconMargin: EdgeInsets.only(bottom: 2)),
                 Tab(text: 'Search', icon: Icon(Icons.search, size: SojornNav.beaconTabIconSize), iconMargin: EdgeInsets.only(bottom: 2)),
               ],
@@ -965,19 +946,14 @@ class BeaconScreenState extends ConsumerState<BeaconScreen> with TickerProviderS
     });
   }
 
-  /// Active geo-alerts only: no discussion types, no expired unverified reports,
+  /// Active geo-alerts only: no discussion types,
   /// and respecting the user's hidden-type filter selections.
+  /// Expiration is handled server-side — expired beacons are not returned.
   List<Post> get _activeGeoAlerts {
-    final now = DateTime.now();
     return [..._beacons, ..._officialPosts].where((p) {
       if (!(p.beaconType?.isGeoAlert ?? false)) return false;
       if (_hiddenTypes.contains(p.beaconType)) return false;
-      // Official MN511 alerts: never expire client-side (server controls TTL)
-      if (p.isOfficial == true) return true;
-      final b = p.toBeacon();
-      final isExpired = b.verificationCount < 3 &&
-          now.difference(p.createdAt).inHours >= 4;
-      return !isExpired;
+      return true;
     }).toList();
   }
 

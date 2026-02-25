@@ -82,8 +82,8 @@ class _UserHoverCardState extends State<UserHoverCard> {
     final top = showAbove ? null : cursorY + 12;
     final bottom = showAbove ? screenSize.height - cursorY + 12 : null;
 
-    // Center horizontally on cursor, but clamp to screen edges
-    var left = cursorX - cardWidth / 2;
+    // Anchor left edge to cursor (offset slightly left so card doesn't cover text)
+    var left = cursorX - 20;
     if (left + cardWidth > screenSize.width - 10) left = screenSize.width - cardWidth - 10;
     if (left < 10) left = 10;
 

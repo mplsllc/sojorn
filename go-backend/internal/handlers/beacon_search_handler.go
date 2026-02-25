@@ -88,6 +88,7 @@ func (h *BeaconSearchHandler) searchBeacons(c *gin.Context, userID uuid.UUID, qu
 		       COALESCE(p.image_url, '') as image_url
 		FROM posts p
 		WHERE p.is_beacon = TRUE AND p.deleted_at IS NULL
+		  AND (p.expires_at IS NULL OR p.expires_at > NOW())
 	`
 	args := []any{}
 	argIdx := 1

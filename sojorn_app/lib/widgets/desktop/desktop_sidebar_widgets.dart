@@ -709,7 +709,7 @@ class _Top8FriendsGridState extends State<Top8FriendsGrid> {
                     child: Row(
                       children: [
                         SojornAvatar(
-                            displayName: name, avatarUrl: avatar, size: 26),
+                            displayName: name, avatarUrl: avatar, size: 32),
                         const SizedBox(width: 8),
                         Expanded(
                           child: Text(name,
@@ -817,7 +817,7 @@ class _Top8FriendsGridState extends State<Top8FriendsGrid> {
                 child: LayoutBuilder(
                   builder: (context, constraints) {
                     final avatarSize =
-                        (constraints.maxWidth * 0.78).clamp(28.0, 42.0);
+                        (constraints.maxWidth * 0.78).clamp(32.0, 52.0);
                     return Column(
                       mainAxisSize: MainAxisSize.max,
                       mainAxisAlignment: MainAxisAlignment.center,
@@ -978,7 +978,7 @@ class WhosOnlineList extends StatelessWidget {
                 SojornAvatar(
                   displayName: name,
                   avatarUrl: avatar,
-                  size: 32,
+                  size: 38,
                 ),
                 Positioned(
                   right: 0,
@@ -2835,7 +2835,7 @@ class _FriendActivityWidgetState extends State<FriendActivityWidget> {
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          SojornAvatar(displayName: name, avatarUrl: avatarUrl, size: 28),
+          SojornAvatar(displayName: name, avatarUrl: avatarUrl, size: 34),
           const SizedBox(width: 8),
           Expanded(
             child: Column(

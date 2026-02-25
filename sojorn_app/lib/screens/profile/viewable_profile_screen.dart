@@ -41,7 +41,6 @@ import '../../widgets/desktop/desktop_slide_panel.dart';
 import '../../models/profile_widgets.dart';
 import '../../widgets/harmony_explainer_modal.dart';
 import '../../widgets/media/sojorn_avatar.dart';
-import '../../widgets/profile_widgets/profile_widget_renderer.dart';
 import '../../widgets/composer/composer_bar.dart';
 import '../../utils/snackbar_ext.dart';
 
@@ -92,8 +91,6 @@ class _UnifiedProfileScreenState extends ConsumerState<UnifiedProfileScreen>
   List<Map<String, dynamic>> _mutualFollowers = [];
   bool _isMutualFollowersLoading = false;
 
-  ProfileLayout? _profileLayout;
-  bool _isLayoutLoading = false;
   bool _isBannerUploading = false;
   double _bannerUploadProgress = 0.0;
   final ImagePicker _imagePicker = ImagePicker();
@@ -205,7 +202,6 @@ class _UnifiedProfileScreenState extends ConsumerState<UnifiedProfileScreen>
       if (isOwnProfile) {
         await _loadPrivacySettings();
       }
-      _loadProfileLayout();
       await _loadPosts(refresh: true);
     } catch (error) {
       debugPrint('[PROFILE] Load error: $error');
@@ -227,25 +223,6 @@ class _UnifiedProfileScreenState extends ConsumerState<UnifiedProfileScreen>
           _isLoadingProfile = false;
         });
       }
-    }
-  }
-
-  Future<void> _loadProfileLayout() async {
-    if (_profile == null) return;
-    setState(() => _isLayoutLoading = true);
-    try {
-      final apiService = ref.read(apiServiceProvider);
-      final data = _isOwnProfile
-          ? await apiService.callGoApi('/profile/layout', method: 'GET')
-          : await apiService.getPublicProfileLayout(_profile!.id);
-      if (mounted) {
-        setState(() {
-          _profileLayout = ProfileLayout.fromJson(data);
-          _isLayoutLoading = false;
-        });
-      }
-    } catch (_) {
-      if (mounted) setState(() => _isLayoutLoading = false);
     }
   }
 
@@ -1895,8 +1872,6 @@ class _UnifiedProfileScreenState extends ConsumerState<UnifiedProfileScreen>
           headerSliverBuilder: (context, innerBoxIsScrolled) {
             return [
               _buildSliverAppBar(_profile!),
-              if (_profileLayout != null && _profileLayout!.widgets.isNotEmpty)
-                SliverToBoxAdapter(child: _buildProfileWidgetBanner()),
               _buildSliverTabBar(),
             ];
           },
@@ -1925,25 +1900,10 @@ class _UnifiedProfileScreenState extends ConsumerState<UnifiedProfileScreen>
         headerSliverBuilder: (context, innerBoxIsScrolled) {
           return [
             _buildSliverAppBar(_profile!),
-            if (_profileLayout != null && _profileLayout!.widgets.isNotEmpty)
-              SliverToBoxAdapter(child: _buildProfileWidgetBanner()),
             _buildSliverTabBar(),
           ];
         },
         body: _buildTabBarView(),
-      ),
-    );
-  }
-
-  Widget _buildProfileWidgetBanner() {
-    return Container(
-      color: AppTheme.cardSurface,
-      padding: const EdgeInsets.symmetric(horizontal: SojornSpacing.lg, vertical: SojornSpacing.md),
-      child: ProfileWidgetRenderer(
-        layout: _profileLayout!,
-        isOwnProfile: _isOwnProfile,
-        stats: _stats,
-        profileId: _profile?.id,
       ),
     );
   }
@@ -1974,36 +1934,25 @@ class _UnifiedProfileScreenState extends ConsumerState<UnifiedProfileScreen>
   }
 
   Widget _buildSliverAppBar(Profile profile) {
-    final topPad = MediaQuery.of(context).padding.top;
-    final hasBanner = (profile.coverUrl ?? '').isNotEmpty;
-    return SliverAppBar(
-      expandedHeight: topPad + (hasBanner ? 360.0 : 320.0),
-      pinned: true,
-      toolbarHeight: 0,
-      collapsedHeight: 0,
-      automaticallyImplyLeading: false,
-      backgroundColor: SojornColors.transparent,
-      elevation: 0,
-      flexibleSpace: FlexibleSpaceBar(
-        background: _ProfileHeader(
-          profile: profile,
-          stats: _stats,
-          isFollowing: _isFollowing,
-          isFriend: _isFriend,
-          followStatus: _followStatus,
-          isPrivate: _isPrivate,
-          isFollowActionLoading: _isFollowActionLoading,
-          isOwnProfile: _isOwnProfile,
-          onFollowToggle: _toggleFollow,
-          onMessageTap: _openMessage,
-          onSettingsTap: _openSettings,
-          onPrivacyTap: _openPrivacyMenu,
-          onAvatarTap: _isOwnProfile ? _showAvatarActions : null,
-          onBannerTap: _isOwnProfile ? _showBannerActions : null,
-          isBannerUploading: _isBannerUploading,
-          bannerUploadProgress: _bannerUploadProgress,
-          onConnectionsTap: _isOwnProfile ? _navigateToConnections : null,
-        ),
+    return SliverToBoxAdapter(
+      child: _ProfileHeader(
+        profile: profile,
+        stats: _stats,
+        isFollowing: _isFollowing,
+        isFriend: _isFriend,
+        followStatus: _followStatus,
+        isPrivate: _isPrivate,
+        isFollowActionLoading: _isFollowActionLoading,
+        isOwnProfile: _isOwnProfile,
+        onFollowToggle: _toggleFollow,
+        onMessageTap: _openMessage,
+        onSettingsTap: _openSettings,
+        onPrivacyTap: _openPrivacyMenu,
+        onAvatarTap: _isOwnProfile ? _showAvatarActions : null,
+        onBannerTap: _isOwnProfile ? _showBannerActions : null,
+        isBannerUploading: _isBannerUploading,
+        bannerUploadProgress: _bannerUploadProgress,
+        onConnectionsTap: _isOwnProfile ? _navigateToConnections : null,
       ),
     );
   }
@@ -2607,325 +2556,295 @@ class _ProfileHeader extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    const bannerHeight = 200.0;
-    const avatarRadius = 44.0;
-    const avatarOverlap = 44.0;
+    const bannerHeight = 150.0;
     final flag = getCountryFlag(profile.originCountry ?? 'US');
     final hasBanner = (profile.coverUrl ?? '').isNotEmpty;
+
+    const avatarSize = 88.0;
+    const avatarRingExtra = 11.0; // strokeWidth*2 + 4 from _HarmonyAvatar
+    const avatarTotalSize = avatarSize + avatarRingExtra;
+    const avatarOverlap = avatarTotalSize / 2;
 
     return Column(
       mainAxisSize: MainAxisSize.min,
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        // ── Banner (200px) ────────────────────────────────────────────────
+        // ── Banner + avatar overlap area ─────────────────────────────────
         SizedBox(
-          height: bannerHeight,
+          height: bannerHeight + avatarOverlap, // extra space for avatar overhang
           child: Stack(
-            fit: StackFit.expand,
+            clipBehavior: Clip.none,
             children: [
-              // Background: image or gradient
-              if (hasBanner)
-                SignedMediaImage(url: profile.coverUrl!, fit: BoxFit.cover)
-              else
-                Container(decoration: BoxDecoration(gradient: _generateGradient(profile.handle))),
-              // Dark overlay for image readability
-              if (hasBanner)
-                Container(
-                  decoration: BoxDecoration(
-                    gradient: LinearGradient(
-                      begin: Alignment.topCenter,
-                      end: Alignment.bottomCenter,
-                      colors: [
-                        Colors.black.withValues(alpha: 0.15),
-                        Colors.black.withValues(alpha: 0.45),
-                      ],
-                    ),
-                  ),
-                ),
-              // Top-right: settings icons (own profile)
-              if (isOwnProfile)
-                Positioned(
-                  top: 8,
-                  right: 4,
-                  child: Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      IconButton(
-                        onPressed: onPrivacyTap,
-                        icon: const Icon(Icons.lock_outline, color: Colors.white, size: 20),
-                        tooltip: 'Privacy',
-                        visualDensity: VisualDensity.compact,
-                        padding: EdgeInsets.zero,
+              // Banner image/gradient (only fills top bannerHeight)
+              Positioned(
+                top: 0, left: 0, right: 0,
+                height: bannerHeight,
+                child: Stack(
+                  fit: StackFit.expand,
+                  children: [
+                    if (hasBanner)
+                      SignedMediaImage(url: profile.coverUrl!, fit: BoxFit.cover)
+                    else
+                      Container(decoration: BoxDecoration(gradient: _generateGradient(profile.handle))),
+                    if (hasBanner)
+                      Container(
+                        decoration: BoxDecoration(
+                          gradient: LinearGradient(
+                            begin: Alignment.topCenter,
+                            end: Alignment.bottomCenter,
+                            colors: [
+                              Colors.black.withValues(alpha: 0.15),
+                              Colors.black.withValues(alpha: 0.45),
+                            ],
+                          ),
+                        ),
                       ),
-                      IconButton(
-                        onPressed: onSettingsTap,
-                        icon: const Icon(Icons.settings_outlined, color: Colors.white, size: 20),
-                        tooltip: 'Settings',
-                        visualDensity: VisualDensity.compact,
-                        padding: EdgeInsets.zero,
+                    // Top-right: settings icons (own profile)
+                    if (isOwnProfile)
+                      Positioned(
+                        top: 8, right: 4,
+                        child: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            IconButton(
+                              onPressed: onPrivacyTap,
+                              icon: const Icon(Icons.lock_outline, color: Colors.white, size: 20),
+                              tooltip: 'Privacy',
+                              visualDensity: VisualDensity.compact,
+                              padding: EdgeInsets.zero,
+                            ),
+                            IconButton(
+                              onPressed: onSettingsTap,
+                              icon: const Icon(Icons.settings_outlined, color: Colors.white, size: 20),
+                              tooltip: 'Settings',
+                              visualDensity: VisualDensity.compact,
+                              padding: EdgeInsets.zero,
+                            ),
+                          ],
+                        ),
                       ),
-                    ],
-                  ),
-                ),
-              // Banner upload loading overlay with progress
-              if (isBannerUploading)
-                Positioned.fill(
-                  child: Container(
-                    color: Colors.black.withValues(alpha: 0.5),
-                    child: Center(
-                      child: Column(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          SizedBox(
-                            width: 44,
-                            height: 44,
-                            child: Stack(
-                              alignment: Alignment.center,
+                    // Banner upload loading overlay
+                    if (isBannerUploading)
+                      Positioned.fill(
+                        child: Container(
+                          color: Colors.black.withValues(alpha: 0.5),
+                          child: Center(
+                            child: Column(
+                              mainAxisSize: MainAxisSize.min,
                               children: [
-                                CircularProgressIndicator(
-                                  value: bannerUploadProgress > 0 ? bannerUploadProgress : null,
-                                  strokeWidth: 3,
-                                  color: Colors.white,
-                                  backgroundColor: Colors.white.withValues(alpha: 0.2),
-                                ),
-                                if (bannerUploadProgress > 0)
-                                  Text(
-                                    '${(bannerUploadProgress * 100).toInt()}%',
-                                    style: const TextStyle(color: Colors.white, fontSize: 10, fontWeight: FontWeight.w700),
+                                SizedBox(
+                                  width: 44, height: 44,
+                                  child: Stack(
+                                    alignment: Alignment.center,
+                                    children: [
+                                      CircularProgressIndicator(
+                                        value: bannerUploadProgress > 0 ? bannerUploadProgress : null,
+                                        strokeWidth: 3,
+                                        color: Colors.white,
+                                        backgroundColor: Colors.white.withValues(alpha: 0.2),
+                                      ),
+                                      if (bannerUploadProgress > 0)
+                                        Text(
+                                          '${(bannerUploadProgress * 100).toInt()}%',
+                                          style: const TextStyle(color: Colors.white, fontSize: 10, fontWeight: FontWeight.w700),
+                                        ),
+                                    ],
                                   ),
+                                ),
+                                const SizedBox(height: 10),
+                                const Text('Uploading cover...', style: TextStyle(color: Colors.white, fontSize: 12)),
                               ],
                             ),
                           ),
-                          const SizedBox(height: 10),
-                          const Text('Uploading cover...', style: TextStyle(color: Colors.white, fontSize: 12)),
-                        ],
+                        ),
                       ),
-                    ),
-                  ),
-                ),
-              // Bottom-right: edit cover chip (own profile)
-              if (isOwnProfile && !isBannerUploading)
-                Positioned(
-                  bottom: 10,
-                  right: 10,
-                  child: GestureDetector(
-                    onTap: onBannerTap,
-                    child: Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-                      decoration: BoxDecoration(
-                        color: Colors.black.withValues(alpha: 0.55),
-                        borderRadius: BorderRadius.circular(20),
-                        border: Border.all(color: Colors.white.withValues(alpha: 0.3), width: 1),
-                      ),
-                      child: Row(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          const Icon(Icons.camera_alt_outlined, color: Colors.white, size: 14),
-                          const SizedBox(width: 5),
-                          Text(
-                            hasBanner ? 'Edit cover' : 'Add cover',
-                            style: const TextStyle(
-                              color: Colors.white,
-                              fontSize: 12,
-                              fontWeight: FontWeight.w600,
+                    // Bottom-right: edit cover chip
+                    if (isOwnProfile && !isBannerUploading)
+                      Positioned(
+                        bottom: 10, right: 10,
+                        child: GestureDetector(
+                          onTap: onBannerTap,
+                          child: Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                            decoration: BoxDecoration(
+                              color: Colors.black.withValues(alpha: 0.55),
+                              borderRadius: BorderRadius.circular(20),
+                              border: Border.all(color: Colors.white.withValues(alpha: 0.3), width: 1),
+                            ),
+                            child: Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                const Icon(Icons.camera_alt_outlined, color: Colors.white, size: 14),
+                                const SizedBox(width: 5),
+                                Text(
+                                  hasBanner ? 'Edit cover' : 'Add cover',
+                                  style: const TextStyle(color: Colors.white, fontSize: 12, fontWeight: FontWeight.w600),
+                                ),
+                              ],
                             ),
                           ),
-                        ],
+                        ),
                       ),
-                    ),
-                  ),
+                  ],
                 ),
+              ),
+              // Background fill below banner (so avatar area has scaffoldBg)
+              Positioned(
+                top: bannerHeight, left: 0, right: 0, bottom: 0,
+                child: Container(color: AppTheme.scaffoldBg),
+              ),
+              // Avatar (straddles the banner/content boundary)
+              Positioned(
+                top: bannerHeight - avatarOverlap,
+                left: 20,
+                child: GestureDetector(
+                  onTap: onAvatarTap,
+                  child: _HarmonyAvatar(profile: profile, radius: avatarSize / 2),
+                ),
+              ),
+              // Action buttons (right-aligned, bottom of overlap area)
+              Positioned(
+                right: 20,
+                bottom: 4,
+                child: isOwnProfile
+                  ? Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        _buildCompactIconButton(Icons.edit_outlined, onSettingsTap, tooltip: 'Edit profile'),
+                        const SizedBox(width: 8),
+                        _buildCompactIconButton(Icons.ios_share_outlined, () {}, tooltip: 'Share profile'),
+                      ],
+                    )
+                  : _buildRelationshipActions(),
+              ),
             ],
           ),
         ),
 
-        // ── Info section (avatar overlaps banner) ──────────────────────────
+        // ── Info section (below banner+avatar area) ──────────────────────
         Container(
           color: AppTheme.scaffoldBg,
-          child: Stack(
-            clipBehavior: Clip.none,
+          padding: const EdgeInsets.fromLTRB(20, 10, 20, 14),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            mainAxisSize: MainAxisSize.min,
             children: [
-              // Avatar: positioned to overlap the banner above
-              Positioned(
-                top: -avatarOverlap,
-                left: 16,
-                child: GestureDetector(
-                  onTap: onAvatarTap,
-                  child: Container(
-                    decoration: BoxDecoration(
-                      borderRadius: BorderRadius.circular(SojornRadii.card + 4),
-                      border: Border.all(color: AppTheme.scaffoldBg, width: 3),
+              // ── Name ──────────────────────────────────────────────
+              Text(
+                profile.displayName,
+                style: AppTheme.headlineMedium.copyWith(
+                  fontSize: 20,
+                  fontWeight: FontWeight.w700,
+                ),
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+              ),
+              const SizedBox(height: 1),
+              // ── @handle ───────────────────────────────────────────
+              Row(
+                children: [
+                  Text(
+                    '@${profile.handle}',
+                    style: AppTheme.bodyMedium.copyWith(
+                      fontSize: 13,
+                      color: AppTheme.navyText.withValues(alpha: 0.5),
                     ),
-                    child: _HarmonyAvatar(profile: profile, radius: avatarRadius),
+                  ),
+                  if (flag != null) ...[
+                    const SizedBox(width: 4),
+                    Text(flag, style: const TextStyle(fontSize: 13)),
+                  ],
+                ],
+              ),
+              // ── Bio ───────────────────────────────────────────────
+              if (profile.bio != null && profile.bio!.isNotEmpty) ...[
+                const SizedBox(height: 8),
+                Text(
+                  profile.bio!,
+                  style: AppTheme.bodyMedium.copyWith(fontSize: 14, height: 1.5),
+                  maxLines: 3,
+                  overflow: TextOverflow.ellipsis,
+                ),
+              ] else if (isOwnProfile) ...[
+                const SizedBox(height: 6),
+                GestureDetector(
+                  onTap: onSettingsTap,
+                  child: Text(
+                    'Add a bio to tell people about yourself',
+                    style: AppTheme.bodyMedium.copyWith(
+                      fontSize: 13,
+                      fontStyle: FontStyle.italic,
+                      color: AppTheme.navyText.withValues(alpha: 0.4),
+                    ),
                   ),
                 ),
-              ),
-              // Content (left-padded to clear the avatar)
-              Padding(
-                padding: EdgeInsets.fromLTRB(avatarRadius * 2 + 28, 12, 16, 16),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  mainAxisSize: MainAxisSize.min,
+              ],
+              // ── Status line ───────────────────────────────────────
+              if (profile.statusText != null && profile.statusText!.isNotEmpty) ...[
+                const SizedBox(height: 4),
+                Row(
                   children: [
-                    // ── Name + action buttons ───────────────────────────
-                    Row(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Expanded(
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            mainAxisSize: MainAxisSize.min,
-                            children: [
-                              Text(
-                                profile.displayName,
-                                style: AppTheme.headlineMedium.copyWith(
-                                  fontSize: 17,
-                                  fontWeight: FontWeight.w700,
-                                ),
-                                maxLines: 1,
-                                overflow: TextOverflow.ellipsis,
-                              ),
-                              Row(
-                                children: [
-                                  Text(
-                                    '@${profile.handle}',
-                                    style: AppTheme.bodyMedium.copyWith(
-                                      fontSize: 12,
-                                      color: AppTheme.navyText.withValues(alpha: 0.55),
-                                    ),
-                                  ),
-                                  if (flag != null) ...[
-                                    const SizedBox(width: 4),
-                                    Text(flag, style: const TextStyle(fontSize: 12)),
-                                  ],
-                                ],
-                              ),
-                            ],
-                          ),
-                        ),
-                        const SizedBox(width: 8),
-                        if (isOwnProfile)
-                          Row(
-                            mainAxisSize: MainAxisSize.min,
-                            children: [
-                              OutlinedButton.icon(
-                                onPressed: onSettingsTap,
-                                icon: const Icon(Icons.edit_outlined, size: 14),
-                                label: const Text(
-                                  'Edit',
-                                  style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600),
-                                ),
-                                style: OutlinedButton.styleFrom(
-                                  foregroundColor: AppTheme.royalPurple,
-                                  side: BorderSide(color: AppTheme.royalPurple.withValues(alpha: 0.6)),
-                                  shape: RoundedRectangleBorder(
-                                    borderRadius: BorderRadius.circular(20),
-                                  ),
-                                  padding: const EdgeInsets.symmetric(vertical: 6, horizontal: 10),
-                                  tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                                  visualDensity: VisualDensity.compact,
-                                ),
-                              ),
-                              const SizedBox(width: 6),
-                              OutlinedButton.icon(
-                                onPressed: () {},
-                                icon: const Icon(Icons.ios_share_outlined, size: 14),
-                                label: const Text(
-                                  'Share',
-                                  style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600),
-                                ),
-                                style: OutlinedButton.styleFrom(
-                                  foregroundColor: AppTheme.navyText.withValues(alpha: 0.65),
-                                  side: BorderSide(color: AppTheme.navyText.withValues(alpha: 0.25)),
-                                  shape: RoundedRectangleBorder(
-                                    borderRadius: BorderRadius.circular(20),
-                                  ),
-                                  padding: const EdgeInsets.symmetric(vertical: 6, horizontal: 10),
-                                  tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                                  visualDensity: VisualDensity.compact,
-                                ),
-                              ),
-                            ],
-                          )
-                        else
-                          _buildRelationshipActions(),
-                      ],
-                    ),
-                    // ── Stats ───────────────────────────────────────────
-                    if (stats != null) ...[
-                      const SizedBox(height: 8),
-                      _buildInlineStats(stats!),
-                    ],
-                    // ── Bio ─────────────────────────────────────────────
-                    if (profile.bio != null && profile.bio!.isNotEmpty) ...[
-                      const SizedBox(height: 8),
-                      Text(
-                        profile.bio!,
-                        style: AppTheme.bodyMedium.copyWith(fontSize: 13, height: 1.4),
-                        maxLines: 3,
-                        overflow: TextOverflow.ellipsis,
-                      ),
-                    ] else if (isOwnProfile) ...[
-                      const SizedBox(height: 6),
-                      GestureDetector(
-                        onTap: onSettingsTap,
-                        child: Text(
-                          'Add a bio to tell people about yourself',
-                          style: AppTheme.bodyMedium.copyWith(
-                            fontSize: 12,
-                            fontStyle: FontStyle.italic,
-                            color: AppTheme.navyText.withValues(alpha: 0.4),
-                          ),
-                        ),
-                      ),
-                    ],
-                    // ── Status line ─────────────────────────────────────
-                    if (profile.statusText != null && profile.statusText!.isNotEmpty) ...[
-                      const SizedBox(height: 6),
-                      Row(
-                        children: [
-                          Container(
-                            width: 7,
-                            height: 7,
-                            decoration: BoxDecoration(
-                              color: const Color(0xFF43A047),
-                              shape: BoxShape.circle,
-                              boxShadow: [
-                                BoxShadow(
-                                  color: const Color(0xFF43A047).withValues(alpha: 0.5),
-                                  blurRadius: 5,
-                                ),
-                              ],
-                            ),
-                          ),
-                          const SizedBox(width: 6),
-                          Flexible(
-                            child: Text(
-                              profile.statusText!,
-                              style: AppTheme.bodyMedium.copyWith(
-                                fontSize: 12,
-                                fontStyle: FontStyle.italic,
-                                color: AppTheme.navyText.withValues(alpha: 0.65),
-                              ),
-                              maxLines: 1,
-                              overflow: TextOverflow.ellipsis,
-                            ),
-                          ),
+                    Container(
+                      width: 7, height: 7,
+                      decoration: BoxDecoration(
+                        color: const Color(0xFF43A047),
+                        shape: BoxShape.circle,
+                        boxShadow: [
+                          BoxShadow(color: const Color(0xFF43A047).withValues(alpha: 0.5), blurRadius: 5),
                         ],
                       ),
-                    ],
-                    // ── Trust badge ─────────────────────────────────────
-                    if (profile.trustState != null) ...[
-                      const SizedBox(height: 6),
-                      _ProfileTrustBadge(trustState: profile.trustState!),
-                    ],
+                    ),
+                    const SizedBox(width: 6),
+                    Flexible(
+                      child: Text(
+                        profile.statusText!,
+                        style: AppTheme.bodyMedium.copyWith(
+                          fontSize: 12, fontStyle: FontStyle.italic,
+                          color: AppTheme.navyText.withValues(alpha: 0.65),
+                        ),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                    ),
                   ],
                 ),
-              ),
+              ],
+              // ── Trust badge ───────────────────────────────────────
+              if (profile.trustState != null) ...[
+                const SizedBox(height: 4),
+                _ProfileTrustBadge(trustState: profile.trustState!),
+              ],
+              // ── Stats ─────────────────────────────────────────────
+              if (stats != null) ...[
+                const SizedBox(height: 12),
+                _buildInlineStats(stats!),
+              ],
             ],
           ),
         ),
       ],
+    );
+  }
+
+  Widget _buildCompactIconButton(IconData icon, VoidCallback? onTap, {String? tooltip}) {
+    return Tooltip(
+      message: tooltip ?? '',
+      child: Material(
+        color: Colors.transparent,
+        child: InkWell(
+          onTap: onTap,
+          borderRadius: BorderRadius.circular(100),
+          child: Container(
+            width: 36,
+            height: 36,
+            decoration: BoxDecoration(
+              shape: BoxShape.circle,
+              border: Border.all(color: AppTheme.navyText.withValues(alpha: 0.2)),
+            ),
+            child: Icon(icon, size: 16, color: AppTheme.navyText.withValues(alpha: 0.6)),
+          ),
+        ),
+      ),
     );
   }
 
@@ -2936,13 +2855,13 @@ class _ProfileHeader extends StatelessWidget {
           value: stats.posts.toString(),
           label: 'Posts',
         ),
-        const SizedBox(width: 16),
+        const SizedBox(width: 24),
         _InlineStat(
           value: stats.followers.toString(),
           label: 'Followers',
           onTap: onConnectionsTap != null ? () => onConnectionsTap!(0) : null,
         ),
-        const SizedBox(width: 16),
+        const SizedBox(width: 24),
         _InlineStat(
           value: stats.following.toString(),
           label: 'Following',

@@ -61,10 +61,14 @@ class _BeaconDetailScreenState extends ConsumerState<BeaconDetailScreen>
   Beacon get _beacon => widget.beaconPost.toBeacon();
   Post get _post => widget.beaconPost;
 
-  /// Unverified reports auto-expire 4 hours after creation.
-  bool get _isExpired =>
-      _beacon.verificationCount < 3 &&
-      DateTime.now().difference(_beacon.createdAt).inHours >= 4;
+  /// Beacon is expired if the server set an expires_at and it has passed,
+  /// or as a fallback, unverified reports expire 4 hours after creation.
+  bool get _isExpired {
+    final ea = _post.expiresAt;
+    if (ea != null) return DateTime.now().isAfter(ea);
+    return _beacon.verificationCount < 3 &&
+        DateTime.now().difference(_beacon.createdAt).inHours >= 4;
+  }
 
   @override
   Widget build(BuildContext context) {

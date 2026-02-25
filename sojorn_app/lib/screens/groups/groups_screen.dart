@@ -483,54 +483,32 @@ class _GroupsScreenState extends ConsumerState<GroupsScreen> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          // ── Suggested for You / Browse by Category ──
-          if (_searchQuery.isEmpty && _categoryFilter == null) ...[
-            if (_suggestedGroups.isNotEmpty) ...[
-              Text(
-                'Suggested for you',
-                style: TextStyle(
-                  fontSize: 18,
-                  fontWeight: FontWeight.w700,
-                  color: AppTheme.navyText,
-                ),
+          // ── Suggested for You ──
+          if (_searchQuery.isEmpty && _categoryFilter == null && _suggestedGroups.isNotEmpty) ...[
+            Text(
+              'Suggested for you',
+              style: TextStyle(
+                fontSize: 18,
+                fontWeight: FontWeight.w700,
+                color: AppTheme.navyText,
               ),
-              const SizedBox(height: 4),
-              Text(
-                'Groups based on your interests',
-                style: TextStyle(
-                  fontSize: 13,
-                  color: SojornColors.textDisabled,
-                ),
+            ),
+            const SizedBox(height: 4),
+            Text(
+              'Groups based on your interests',
+              style: TextStyle(
+                fontSize: 13,
+                color: SojornColors.textDisabled,
               ),
-              const SizedBox(height: 16),
-              _buildGroupGrid(
-                _suggestedGroups.map((s) => s.group).toList(),
-                reasons: {
-                  for (var s in _suggestedGroups) s.group.id: s.reason,
-                },
-              ),
-              const SizedBox(height: 32),
-            ] else ...[
-              Text(
-                'Browse by Category',
-                style: TextStyle(
-                  fontSize: 18,
-                  fontWeight: FontWeight.w700,
-                  color: AppTheme.navyText,
-                ),
-              ),
-              const SizedBox(height: 4),
-              Text(
-                'Find groups that match your interests',
-                style: TextStyle(
-                  fontSize: 13,
-                  color: SojornColors.textDisabled,
-                ),
-              ),
-              const SizedBox(height: 16),
-              _buildCategoryGrid(),
-              const SizedBox(height: 32),
-            ],
+            ),
+            const SizedBox(height: 16),
+            _buildGroupGrid(
+              _suggestedGroups.map((s) => s.group).toList(),
+              reasons: {
+                for (var s in _suggestedGroups) s.group.id: s.reason,
+              },
+            ),
+            const SizedBox(height: 32),
           ],
 
           // ── Filter pills ──
@@ -579,71 +557,6 @@ class _GroupsScreenState extends ConsumerState<GroupsScreen> {
             _buildGroupGrid(filtered),
         ],
       ),
-    );
-  }
-
-  Widget _buildCategoryGrid() {
-    return LayoutBuilder(
-      builder: (context, constraints) {
-        const spacing = 12.0;
-        const crossAxisCount = 3;
-        final cardWidth =
-            (constraints.maxWidth - spacing * (crossAxisCount - 1)) /
-                crossAxisCount;
-
-        return Wrap(
-          spacing: spacing,
-          runSpacing: spacing,
-          children: GroupCategory.values.map((cat) {
-            final count =
-                _discoverGroups.where((g) => g.category == cat).length;
-            return GestureDetector(
-              onTap: () {
-                setState(() => _categoryFilter = cat);
-                _loadDiscoverGroups();
-              },
-              child: SizedBox(
-                width: cardWidth,
-                child: Container(
-                  padding: const EdgeInsets.all(16),
-                  decoration: BoxDecoration(
-                    color: cat.color.withValues(alpha: 0.08),
-                    borderRadius:
-                        BorderRadius.circular(SojornRadii.card),
-                    border: Border.all(
-                        color: cat.color.withValues(alpha: 0.2)),
-                  ),
-                  child: Column(
-                    children: [
-                      Icon(cat.icon, size: 28, color: cat.color),
-                      const SizedBox(height: 8),
-                      Text(
-                        cat.displayName,
-                        style: TextStyle(
-                          fontSize: 13,
-                          fontWeight: FontWeight.w600,
-                          color: AppTheme.navyText,
-                        ),
-                        textAlign: TextAlign.center,
-                      ),
-                      if (count > 0) ...[
-                        const SizedBox(height: 2),
-                        Text(
-                          '$count group${count == 1 ? '' : 's'}',
-                          style: TextStyle(
-                            fontSize: 11,
-                            color: SojornColors.textDisabled,
-                          ),
-                        ),
-                      ],
-                    ],
-                  ),
-                ),
-              ),
-            );
-          }).toList(),
-        );
-      },
     );
   }
 
@@ -775,28 +688,73 @@ class _GroupsScreenState extends ConsumerState<GroupsScreen> {
       return const SkeletonGroupList(count: 5);
     }
     if (_myGroups.isEmpty) {
-      return Center(
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
+      // Show discover groups inline so the first view isn't empty
+      return RefreshIndicator(
+        onRefresh: _loadInitialData,
+        child: ListView(
+          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 16),
           children: [
-            Icon(Icons.group_add_outlined,
-                size: 48,
-                color: AppTheme.navyText.withValues(alpha: 0.15)),
-            const SizedBox(height: 12),
-            Text(
-              'No groups yet',
-              style: TextStyle(
-                color: AppTheme.navyText.withValues(alpha: 0.4),
+            // Small header
+            Center(
+              child: Column(
+                children: [
+                  Icon(Icons.group_add_outlined,
+                      size: 40,
+                      color: AppTheme.navyText.withValues(alpha: 0.15)),
+                  const SizedBox(height: 8),
+                  Text(
+                    'You haven\'t joined any groups yet',
+                    style: TextStyle(
+                      fontSize: 14,
+                      color: AppTheme.navyText.withValues(alpha: 0.5),
+                    ),
+                  ),
+                ],
               ),
             ),
-            const SizedBox(height: 16),
-            FilledButton(
-              onPressed: () {},
-              style: FilledButton.styleFrom(
-                backgroundColor: AppTheme.royalPurple,
+            const SizedBox(height: 20),
+            // Suggested groups
+            if (_suggestedGroups.isNotEmpty) ...[
+              Text(
+                'Suggested for you',
+                style: TextStyle(
+                  fontSize: 16,
+                  fontWeight: FontWeight.w700,
+                  color: AppTheme.navyText,
+                ),
               ),
-              child: const Text('Discover Groups'),
-            ),
+              const SizedBox(height: 12),
+              ..._suggestedGroups.map((s) => Padding(
+                padding: const EdgeInsets.only(bottom: 12),
+                child: GroupDiscoverCard(
+                  group: s.group,
+                  reason: s.reason,
+                  onTap: () => _navigateToGroup(s.group),
+                  onJoined: _loadInitialData,
+                ),
+              )),
+              const SizedBox(height: 8),
+            ],
+            // Discover groups
+            if (_discoverGroups.isNotEmpty) ...[
+              Text(
+                'Discover Groups',
+                style: TextStyle(
+                  fontSize: 16,
+                  fontWeight: FontWeight.w700,
+                  color: AppTheme.navyText,
+                ),
+              ),
+              const SizedBox(height: 12),
+              ..._discoverGroups.take(10).map((group) => Padding(
+                padding: const EdgeInsets.only(bottom: 12),
+                child: GroupDiscoverCard(
+                  group: group,
+                  onTap: () => _navigateToGroup(group),
+                  onJoined: _loadInitialData,
+                ),
+              )),
+            ],
           ],
         ),
       );

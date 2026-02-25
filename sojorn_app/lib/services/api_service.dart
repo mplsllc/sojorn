@@ -906,6 +906,31 @@ class ApiService {
     }
   }
 
+  /// Fetch all beacons (external + user-created) from the unified endpoint.
+  /// Replaces the 6 separate fetch calls with a single API call.
+  Future<List<Post>> fetchUnifiedBeacons({
+    required double lat,
+    required double long,
+    int radius = 16000,
+  }) async {
+    try {
+      final data = await _callGoApi(
+        '/beacons/unified',
+        method: 'GET',
+        queryParams: {
+          'lat': lat.toString(),
+          'long': long.toString(),
+          'radius': radius.toString(),
+        },
+      );
+      return (data['beacons'] as List)
+          .map((json) => Post.fromJson(json))
+          .toList();
+    } catch (e) {
+      return [];
+    }
+  }
+
   // =========================================================================
   // Beacon Ecosystem Search (beacons, board, public groups — never private)
   // =========================================================================

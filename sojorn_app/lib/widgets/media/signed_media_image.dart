@@ -176,6 +176,7 @@ class _SignedMediaImageState extends ConsumerState<SignedMediaImage> {
       height: widget.height,
       fit: widget.fit,
       alignment: widget.alignment,
+      filterQuality: FilterQuality.medium,
       frameBuilder: (context, child, frame, wasSynchronouslyLoaded) {
         if (wasSynchronouslyLoaded) return child;
         return AnimatedOpacity(

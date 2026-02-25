@@ -209,7 +209,7 @@ class _ResourceCard extends StatelessWidget {
                   avatarUrl: entry.authorAvatarUrl.isNotEmpty
                       ? entry.authorAvatarUrl
                       : null,
-                  size: 28,
+                  size: 36,
                 ),
                 const SizedBox(width: 8),
                 Expanded(
