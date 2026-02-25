@@ -108,6 +108,10 @@ type sendPulseAuthResponse struct {
 }
 
 
+type sendPulseEmailRequest struct {
+	Email sendPulseEmailData `json:"email"`
+}
+
 type sendPulseEmailData struct {
 	HTML    string              `json:"html"`
 	Text    string              `json:"text"`
@@ -285,16 +289,18 @@ func (s *EmailService) sendViaSendPulse(toEmail, toName, subject, htmlBody, text
 		fromEmail = "no-reply@sojorn.net"
 	}
 
-	reqBody := sendPulseEmailData{
-		HTML:    htmlBody,
-		Text:    textBody,
-		Subject: subject,
-		From: sendPulseIdentity{
-			Name:  "Sojorn",
-			Email: fromEmail,
-		},
-		To: []sendPulseIdentity{
-			{Name: toName, Email: toEmail},
+	reqBody := sendPulseEmailRequest{
+		Email: sendPulseEmailData{
+			HTML:    htmlBody,
+			Text:    textBody,
+			Subject: subject,
+			From: sendPulseIdentity{
+				Name:  "Sojorn",
+				Email: fromEmail,
+			},
+			To: []sendPulseIdentity{
+				{Name: toName, Email: toEmail},
+			},
 		},
 	}
 
