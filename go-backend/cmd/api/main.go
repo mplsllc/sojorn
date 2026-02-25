@@ -205,7 +205,9 @@ func main() {
 	userHandler := handlers.NewUserHandler(userRepo, postRepo, notificationService, assetService)
 	postHandler := handlers.NewPostHandler(postRepo, userRepo, feedService, assetService, notificationService, moderationService, contentFilter, linkPreviewService, localAIService, s3Client, cfg.R2VideoBucket, cfg.R2VidDomain, contentModerator)
 	chatHandler := handlers.NewChatHandler(chatRepo, notificationService, hub)
-	authHandler := handlers.NewAuthHandler(userRepo, cfg, emailService, sendPulseService)
+	mfaRepo := repository.NewMFARepository(dbPool)
+	totpService := services.NewTOTPService()
+	authHandler := handlers.NewAuthHandler(userRepo, cfg, emailService, sendPulseService, mfaRepo, totpService)
 	categoryHandler := handlers.NewCategoryHandler(categoryRepo)
 	keyHandler := handlers.NewKeyHandler(userRepo)
 	backupHandler := handlers.NewBackupHandler(repository.NewBackupRepository(dbPool))
@@ -360,6 +362,7 @@ func main() {
 			auth.GET("/verify", authHandler.VerifyEmail)
 			auth.POST("/forgot-password", authHandler.ForgotPassword)
 			auth.POST("/reset-password", authHandler.ResetPassword)
+			auth.POST("/mfa/verify", authHandler.VerifyMFA) // No auth — user is mid-login
 		}
 
 		authorized := v1.Group("")
@@ -369,6 +372,9 @@ func main() {
 			authorized.GET("/profile", userHandler.GetProfile)
 			authorized.PATCH("/profile", userHandler.UpdateProfile)
 			authorized.POST("/complete-onboarding", authHandler.CompleteOnboarding)
+			authorized.POST("/auth/mfa/setup", authHandler.SetupMFA)
+			authorized.POST("/auth/mfa/confirm", authHandler.ConfirmMFA)
+			authorized.POST("/auth/mfa/disable", authHandler.DisableMFA)
 			authorized.GET("/profile/trust-state", userHandler.GetTrustState)
 
 			settings := authorized.Group("/settings")

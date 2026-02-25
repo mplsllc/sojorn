@@ -55,6 +55,12 @@ class AuthException implements Exception {
   String toString() => message;
 }
 
+/// Thrown when login succeeds but MFA verification is required.
+class MFARequiredException implements Exception {
+  final String tempToken;
+  MFARequiredException(this.tempToken);
+}
+
 class AuthService {
   static AuthService? _instance;
   static AuthService get instance => _instance ??= AuthService._internal();
@@ -304,6 +310,13 @@ class AuthService {
       final data = jsonDecode(response.body);
       
       if (response.statusCode == 200) {
+        // MFA required — server validated password but needs TOTP code
+        if (data['mfa_required'] == true) {
+          final tempToken = data['temp_token'] as String;
+          if (kDebugMode) debugPrint('[AUTH] MFA required');
+          throw MFARequiredException(tempToken);
+        }
+
         if (kDebugMode) debugPrint('[AUTH] Login successful');
         final accessToken = data['token'] ?? data['access_token'];
         final refreshToken = data['refresh_token'];
@@ -451,5 +464,96 @@ class AuthService {
   Future<bool> isOnboardingComplete() async {
     final val = await _storage.read(key: 'go_auth_profile_onboarding');
     return val == 'true';
+  }
+
+  // ── MFA Methods ──────────────────────────────────────────────────────
+
+  /// Complete MFA verification after login returns MFARequiredException.
+  /// Returns the full login response (tokens + user + profile).
+  Future<Map<String, dynamic>> verifyMFA({
+    required String tempToken,
+    String? code,
+    String? recoveryCode,
+  }) async {
+    final uri = Uri.parse('${ApiConfig.baseUrl}/auth/mfa/verify');
+    final response = await http.post(
+      uri,
+      headers: {'Content-Type': 'application/json'},
+      body: jsonEncode({
+        'temp_token': tempToken,
+        if (code != null) 'code': code,
+        if (recoveryCode != null) 'recovery_code': recoveryCode,
+      }),
+    );
+    final data = jsonDecode(response.body);
+    if (response.statusCode != 200) {
+      throw AuthException(data['error'] ?? 'MFA verification failed');
+    }
+
+    // Process tokens exactly like normal login
+    final accessToken = data['token'] ?? data['access_token'];
+    final refreshToken = data['refresh_token'];
+    if (accessToken == null || refreshToken == null) {
+      throw AuthException('Invalid MFA response: missing tokens');
+    }
+    await _saveTokens(accessToken as String, refreshToken as String);
+
+    if (data['user'] != null) {
+      try {
+        _localUser = model.AuthUser.fromJson(data['user']);
+        await _storage.write(key: 'go_auth_user', value: jsonEncode(data['user']));
+      } catch (_) {}
+    }
+    if (data['profile'] != null) {
+      final profileJson = data['profile'];
+      await _storage.write(key: 'go_auth_profile_onboarding', value: profileJson['has_completed_onboarding'].toString());
+      _userRole = profileJson['role'] as String? ?? 'user';
+      await _storage.write(key: 'go_auth_role', value: _userRole!);
+    }
+
+    _notifyGoAuthChange();
+    return data;
+  }
+
+  /// Start MFA setup — returns secret, provisioning URI, and recovery codes.
+  Future<Map<String, dynamic>> setupMFA() async {
+    final headers = {'Authorization': 'Bearer $accessToken'};
+    final uri = Uri.parse('${ApiConfig.baseUrl}/auth/mfa/setup');
+    final response = await http.post(uri, headers: headers);
+    final data = jsonDecode(response.body);
+    if (response.statusCode != 200) {
+      throw AuthException(data['error'] ?? 'MFA setup failed');
+    }
+    return data;
+  }
+
+  /// Confirm MFA setup with the first TOTP code from the authenticator app.
+  Future<void> confirmMFA(String code) async {
+    final headers = {'Authorization': 'Bearer $accessToken'};
+    final uri = Uri.parse('${ApiConfig.baseUrl}/auth/mfa/confirm');
+    final response = await http.post(
+      uri,
+      headers: {...headers, 'Content-Type': 'application/json'},
+      body: jsonEncode({'code': code}),
+    );
+    if (response.statusCode != 200) {
+      final data = jsonDecode(response.body);
+      throw AuthException(data['error'] ?? 'MFA confirmation failed');
+    }
+  }
+
+  /// Disable MFA — requires current password and TOTP code.
+  Future<void> disableMFA({required String password, required String code}) async {
+    final headers = {'Authorization': 'Bearer $accessToken'};
+    final uri = Uri.parse('${ApiConfig.baseUrl}/auth/mfa/disable');
+    final response = await http.post(
+      uri,
+      headers: {...headers, 'Content-Type': 'application/json'},
+      body: jsonEncode({'password': password, 'code': code}),
+    );
+    if (response.statusCode != 200) {
+      final data = jsonDecode(response.body);
+      throw AuthException(data['error'] ?? 'Failed to disable MFA');
+    }
   }
 }

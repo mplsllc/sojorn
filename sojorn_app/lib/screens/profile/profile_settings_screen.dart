@@ -32,6 +32,7 @@ import 'category_settings_screen.dart';
 import '../compose/image_editor_screen.dart';
 import '../../models/sojorn_media_result.dart';
 import '../security/encryption_hub_screen.dart';
+import '../settings/mfa_setup_screen.dart';
 import '../../widgets/neighborhood/neighborhood_picker_sheet.dart';
 import '../../widgets/desktop/desktop_dialog_helper.dart';
 import '../../widgets/desktop/desktop_slide_panel.dart';
@@ -154,6 +155,18 @@ class _ProfileSettingsScreenState extends ConsumerState<ProfileSettingsScreen> {
                              openDesktopSlidePanel(context, width: 480, child: const EncryptionHubScreen());
                            } else {
                              Navigator.of(context).push(MaterialPageRoute(builder: (_) => const EncryptionHubScreen()));
+                           }
+                         },
+                       ),
+                       _buildEditTile(
+                         icon: Icons.security,
+                         title: 'Two-Factor Authentication',
+                         subtitle: 'Protect your account with TOTP',
+                         onTap: () {
+                           if (isDesktop) {
+                             openDesktopSlidePanel(context, width: 480, child: const MFASetupScreen());
+                           } else {
+                             Navigator.of(context).push(MaterialPageRoute(builder: (_) => const MFASetupScreen()));
                            }
                          },
                        ),

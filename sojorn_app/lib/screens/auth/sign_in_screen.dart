@@ -13,6 +13,8 @@ import '../../theme/app_theme.dart';
 import '../../widgets/altcha_widget.dart';
 import '../../widgets/sojorn_button.dart';
 import '../../widgets/sojorn_input.dart';
+import '../../services/auth_service.dart';
+import 'mfa_verify_screen.dart';
 import 'sign_up_screen.dart';
 import 'forgot_password_screen.dart';
 
@@ -140,6 +142,23 @@ class _SignInScreenState extends ConsumerState<SignInScreen> {
         altchaToken: _altchaToken!,
       );
       await _persistCredentials(email, password);
+    } on MFARequiredException catch (e) {
+      if (mounted) {
+        setState(() => _isLoading = false);
+        Navigator.of(context).push(
+          MaterialPageRoute(
+            builder: (_) => MFAVerifyScreen(
+              tempToken: e.tempToken,
+              onSuccess: () {
+                // MFA verified — pop back and persist credentials
+                Navigator.of(context).pop();
+                _persistCredentials(email, password);
+              },
+            ),
+          ),
+        );
+        return; // Skip the finally block's loading reset
+      }
     } catch (e) {
       if (mounted) {
         setState(() {

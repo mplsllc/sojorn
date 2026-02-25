@@ -10,6 +10,7 @@ import (
 	"encoding/base64"
 	"encoding/hex"
 	"net/http"
+	"sync"
 	"time"
 
 	"log"
@@ -31,10 +32,75 @@ type AuthHandler struct {
 	config           *config.Config
 	emailService     *services.EmailService
 	sendPulseService *services.SendPulseService
+	mfaRepo          *repository.MFARepository
+	totpService      *services.TOTPService
+	mfaTokens        *mfaTempStore
 }
 
-func NewAuthHandler(repo *repository.UserRepository, cfg *config.Config, emailService *services.EmailService, sendPulseService *services.SendPulseService) *AuthHandler {
-	return &AuthHandler{repo: repo, config: cfg, emailService: emailService, sendPulseService: sendPulseService}
+// mfaTempStore holds short-lived tokens for the MFA verification step.
+type mfaTempStore struct {
+	mu    sync.Mutex
+	store map[string]mfaTempEntry // keyed by temp_token
+}
+
+type mfaTempEntry struct {
+	userID    uuid.UUID
+	expiresAt time.Time
+}
+
+func newMFATempStore() *mfaTempStore {
+	s := &mfaTempStore{store: make(map[string]mfaTempEntry)}
+	go s.cleanup()
+	return s
+}
+
+func (s *mfaTempStore) Set(token string, userID uuid.UUID) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.store[token] = mfaTempEntry{userID: userID, expiresAt: time.Now().Add(5 * time.Minute)}
+}
+
+func (s *mfaTempStore) Get(token string) (uuid.UUID, bool) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	entry, ok := s.store[token]
+	if !ok || time.Now().After(entry.expiresAt) {
+		delete(s.store, token)
+		return uuid.Nil, false
+	}
+	return entry.userID, true
+}
+
+func (s *mfaTempStore) Delete(token string) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	delete(s.store, token)
+}
+
+func (s *mfaTempStore) cleanup() {
+	ticker := time.NewTicker(time.Minute)
+	for range ticker.C {
+		s.mu.Lock()
+		now := time.Now()
+		for k, v := range s.store {
+			if now.After(v.expiresAt) {
+				delete(s.store, k)
+			}
+		}
+		s.mu.Unlock()
+	}
+}
+
+func NewAuthHandler(repo *repository.UserRepository, cfg *config.Config, emailService *services.EmailService, sendPulseService *services.SendPulseService, mfaRepo *repository.MFARepository, totpService *services.TOTPService) *AuthHandler {
+	return &AuthHandler{
+		repo:             repo,
+		config:           cfg,
+		emailService:     emailService,
+		sendPulseService: sendPulseService,
+		mfaRepo:          mfaRepo,
+		totpService:      totpService,
+		mfaTokens:        newMFATempStore(),
+	}
 }
 
 type RegisterRequest struct {
@@ -316,9 +382,9 @@ func (h *AuthHandler) Login(c *gin.Context) {
 
 	if user.MFAEnabled {
 		tempToken, _ := generateRandomString(32)
+		h.mfaTokens.Set(tempToken, user.ID)
 		c.JSON(http.StatusOK, gin.H{
 			"mfa_required": true,
-			"user_id":      user.ID,
 			"temp_token":   tempToken,
 		})
 		return
@@ -629,4 +695,204 @@ func (h *AuthHandler) GetAltchaChallenge(c *gin.Context) {
 	}
 
 	c.JSON(http.StatusOK, challenge)
+}
+
+// ── MFA TOTP Endpoints ──────────────────────────────────────────────────
+
+// SetupMFA generates a TOTP secret + recovery codes. Does NOT enable MFA yet.
+func (h *AuthHandler) SetupMFA(c *gin.Context) {
+	userID := c.MustGet("user_id").(string)
+	uid, _ := uuid.Parse(userID)
+
+	user, err := h.repo.GetUserByID(c.Request.Context(), userID)
+	if err != nil {
+		c.JSON(http.StatusNotFound, gin.H{"error": "User not found"})
+		return
+	}
+	if user.MFAEnabled {
+		c.JSON(http.StatusConflict, gin.H{"error": "MFA is already enabled"})
+		return
+	}
+
+	secret, provisioningURI, err := h.totpService.GenerateSecret(user.Email)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to generate TOTP secret"})
+		return
+	}
+
+	recoveryCodes, err := h.totpService.GenerateRecoveryCodes()
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to generate recovery codes"})
+		return
+	}
+
+	hashedCodes, err := h.totpService.HashRecoveryCodes(recoveryCodes)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to hash recovery codes"})
+		return
+	}
+
+	// Store secret + hashed codes, but don't enable MFA yet (user must confirm with a code first)
+	if err := h.mfaRepo.SaveSecret(c.Request.Context(), uid, secret, hashedCodes); err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to store MFA secret"})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{
+		"secret":           secret,
+		"provisioning_uri": provisioningURI,
+		"recovery_codes":   recoveryCodes,
+	})
+}
+
+// ConfirmMFA verifies the first TOTP code and enables MFA on the account.
+func (h *AuthHandler) ConfirmMFA(c *gin.Context) {
+	userID := c.MustGet("user_id").(string)
+	uid, _ := uuid.Parse(userID)
+
+	var req struct {
+		Code string `json:"code" binding:"required"`
+	}
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Code is required"})
+		return
+	}
+
+	mfaSecret, err := h.mfaRepo.GetSecret(c.Request.Context(), uid)
+	if err != nil || mfaSecret == nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "MFA setup not started"})
+		return
+	}
+
+	if !h.totpService.ValidateCode(mfaSecret.Secret, req.Code) {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "Invalid verification code"})
+		return
+	}
+
+	if err := h.mfaRepo.SetMFAEnabled(c.Request.Context(), uid, true); err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to enable MFA"})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{"message": "MFA enabled successfully"})
+}
+
+// VerifyMFA validates a TOTP code (or recovery code) during login.
+func (h *AuthHandler) VerifyMFA(c *gin.Context) {
+	var req struct {
+		TempToken    string `json:"temp_token" binding:"required"`
+		Code         string `json:"code"`
+		RecoveryCode string `json:"recovery_code"`
+	}
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "temp_token is required"})
+		return
+	}
+
+	if req.Code == "" && req.RecoveryCode == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Provide either code or recovery_code"})
+		return
+	}
+
+	userID, ok := h.mfaTokens.Get(req.TempToken)
+	if !ok {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "Invalid or expired MFA session"})
+		return
+	}
+
+	mfaSecret, err := h.mfaRepo.GetSecret(c.Request.Context(), userID)
+	if err != nil || mfaSecret == nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "MFA configuration not found"})
+		return
+	}
+
+	if req.Code != "" {
+		if !h.totpService.ValidateCode(mfaSecret.Secret, req.Code) {
+			c.JSON(http.StatusUnauthorized, gin.H{"error": "Invalid verification code"})
+			return
+		}
+	} else {
+		idx := h.totpService.CheckRecoveryCode(mfaSecret.RecoveryCodes, req.RecoveryCode)
+		if idx < 0 {
+			c.JSON(http.StatusUnauthorized, gin.H{"error": "Invalid recovery code"})
+			return
+		}
+		// Remove used recovery code
+		remaining := make([]string, 0, len(mfaSecret.RecoveryCodes)-1)
+		for i, code := range mfaSecret.RecoveryCodes {
+			if i != idx {
+				remaining = append(remaining, code)
+			}
+		}
+		_ = h.mfaRepo.UpdateRecoveryCodes(c.Request.Context(), userID, remaining)
+	}
+
+	// MFA verified — consume temp token, issue real tokens
+	h.mfaTokens.Delete(req.TempToken)
+	_ = h.repo.UpdateLastLogin(c.Request.Context(), userID.String())
+
+	token, err := h.generateToken(userID)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to generate token"})
+		return
+	}
+
+	refreshToken, _ := generateRandomString(32)
+	_ = h.repo.StoreRefreshToken(c.Request.Context(), userID.String(), refreshToken, 30*24*time.Hour)
+
+	user, _ := h.repo.GetUserByID(c.Request.Context(), userID.String())
+	profile, _ := h.repo.GetProfileByID(c.Request.Context(), userID.String())
+
+	c.JSON(http.StatusOK, gin.H{
+		"token":         token,
+		"access_token":  token,
+		"refresh_token": refreshToken,
+		"user":          user,
+		"profile":       profile,
+	})
+}
+
+// DisableMFA removes TOTP from an account. Requires current password + TOTP code.
+func (h *AuthHandler) DisableMFA(c *gin.Context) {
+	userID := c.MustGet("user_id").(string)
+	uid, _ := uuid.Parse(userID)
+
+	var req struct {
+		Password string `json:"password" binding:"required"`
+		Code     string `json:"code" binding:"required"`
+	}
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Password and code are required"})
+		return
+	}
+
+	user, err := h.repo.GetUserByID(c.Request.Context(), userID)
+	if err != nil {
+		c.JSON(http.StatusNotFound, gin.H{"error": "User not found"})
+		return
+	}
+
+	if bcrypt.CompareHashAndPassword([]byte(user.PasswordHash), []byte(req.Password)) != nil {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "Invalid password"})
+		return
+	}
+
+	mfaSecret, err := h.mfaRepo.GetSecret(c.Request.Context(), uid)
+	if err != nil || mfaSecret == nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "MFA is not enabled"})
+		return
+	}
+
+	if !h.totpService.ValidateCode(mfaSecret.Secret, req.Code) {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "Invalid verification code"})
+		return
+	}
+
+	if err := h.mfaRepo.SetMFAEnabled(c.Request.Context(), uid, false); err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to disable MFA"})
+		return
+	}
+	_ = h.mfaRepo.DeleteSecret(c.Request.Context(), uid)
+
+	c.JSON(http.StatusOK, gin.H{"message": "MFA disabled successfully"})
 }
