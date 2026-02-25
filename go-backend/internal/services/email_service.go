@@ -579,9 +579,9 @@ func (s *EmailService) BuildHTMLEmailWithColor(title, header, content, buttonURL
         <tr><td style="padding: 40px 20px;">
             <table role="presentation" width="520" cellpadding="0" cellspacing="0" align="center" style="max-width: 520px; margin: 0 auto; background-color: #ffffff; border-radius: 16px; overflow: hidden;">
                 <!-- Header -->
-                <tr><td style="background-color: #4338CA; padding: 40px; text-align: center;">
+                <tr><td style="background-color: #EEF2FF; padding: 40px; text-align: center;">
                     <img src="https://mp.ls/img/sojornlogo.png" alt="Sojorn" width="80" height="80" style="width: 80px; height: 80px; border-radius: 20px; margin-bottom: 16px; display: block; margin-left: auto; margin-right: auto;">
-                    <p style="color: #ffffff; font-size: 12px; font-weight: 600; letter-spacing: 1px; text-transform: uppercase; margin: 0;">{{TITLE}}</p>
+                    <p style="color: #4338CA; font-size: 12px; font-weight: 600; letter-spacing: 1px; text-transform: uppercase; margin: 0;">{{TITLE}}</p>
                 </td></tr>
                 
                 <!-- Content -->
