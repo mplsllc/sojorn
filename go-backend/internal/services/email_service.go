@@ -11,13 +11,13 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"net/smtp"
 	"net/url"
 	"strings"
 	"sync"
 	"time"
 
 	"github.com/jackc/pgx/v5/pgxpool"
-	sender "github.com/koddr/go-email-sender"
 	"gitlab.com/patrickbritton3/sojorn/go-backend/internal/config"
 	"github.com/rs/zerolog/log"
 )
@@ -193,45 +193,51 @@ func (s *EmailService) SendPasswordResetEmail(toEmail, toName, token string) err
 }
 
 func (s *EmailService) sendEmail(toEmail, toName, subject, htmlBody, textBody string) error {
-	// Prefer SendPulse API
+	// SendPulse API (only if credentials are set)
 	if s.config.SendPulseID != "" && s.config.SendPulseSecret != "" {
 		return s.sendViaSendPulse(toEmail, toName, subject, htmlBody, textBody)
 	}
 
-	// Fallback to Sender.net API (if configured)
-	if s.config.SenderAPIToken != "" {
-		log.Warn().Msg("Using deprecated Sender.net API token, consider migrating to SendPulse")
-		// Implementation omitted/deprecated to simplify
+	// Direct SMTP (PurelyMail, Gmail, any SMTP relay)
+	if s.config.SMTPHost != "" && s.config.SMTPUser != "" {
+		return s.sendViaSMTP(toEmail, toName, subject, htmlBody, textBody)
 	}
 
-	if s.config.SMTPHost == "" || s.config.SMTPUser == "" {
-		log.Warn().Msg("SMTP not configured, skipping email send")
-		return nil
+	log.Warn().Msg("No email provider configured, skipping send")
+	return nil
+}
+
+// sendViaSMTP sends a multipart/alternative email (HTML + plain text) via SMTP with PLAIN auth.
+func (s *EmailService) sendViaSMTP(toEmail, toName, subject, htmlBody, textBody string) error {
+	fromEmail := s.config.SMTPFrom
+	if fromEmail == "" {
+		fromEmail = s.config.SMTPUser
 	}
 
-	// SMTP Fallback
-	emailSender := sender.NewEmailSender(
-		s.config.SMTPUser,
-		s.config.SMTPPass,
-		s.config.SMTPHost,
-		s.config.SMTPPort,
-	)
+	auth := smtp.PlainAuth("", s.config.SMTPUser, s.config.SMTPPass, s.config.SMTPHost)
 
-	// SMTP Fallback - Send HTML email
-	err := emailSender.SendHTMLEmail(
-		"Sojorn",          // from name
-		[]string{toEmail}, // recipients
-		nil,               // cc
-		subject,           // subject
-		htmlBody,          // html body
-		nil,               // attachments
-	)
-	if err != nil {
-		log.Error().Err(err).Msg("Failed to send email via SMTP")
+	boundary := "sojorn-mime-alt-boundary"
+	var msg strings.Builder
+	msg.WriteString("From: Sojorn <" + fromEmail + ">\r\n")
+	msg.WriteString("To: " + toName + " <" + toEmail + ">\r\n")
+	msg.WriteString("Subject: " + subject + "\r\n")
+	msg.WriteString("MIME-Version: 1.0\r\n")
+	msg.WriteString("Content-Type: multipart/alternative; boundary=\"" + boundary + "\"\r\n")
+	msg.WriteString("\r\n")
+	msg.WriteString("--" + boundary + "\r\n")
+	msg.WriteString("Content-Type: text/plain; charset=UTF-8\r\n\r\n")
+	msg.WriteString(textBody + "\r\n\r\n")
+	msg.WriteString("--" + boundary + "\r\n")
+	msg.WriteString("Content-Type: text/html; charset=UTF-8\r\n\r\n")
+	msg.WriteString(htmlBody + "\r\n\r\n")
+	msg.WriteString("--" + boundary + "--\r\n")
+
+	addr := fmt.Sprintf("%s:%d", s.config.SMTPHost, s.config.SMTPPort)
+	if err := smtp.SendMail(addr, auth, fromEmail, []string{toEmail}, []byte(msg.String())); err != nil {
+		log.Error().Err(err).Str("to", toEmail).Msg("SMTP send failed")
 		return err
 	}
-
-	log.Info().Msgf("Email sent to %s via SMTP", toEmail)
+	log.Info().Str("to", toEmail).Str("host", s.config.SMTPHost).Msg("Email sent via SMTP")
 	return nil
 }
 
