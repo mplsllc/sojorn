@@ -19,12 +19,22 @@ export default function AppealsPage() {
   const [reviewDecision, setReviewDecision] = useState('');
   const [restoreContent, setRestoreContent] = useState(false);
 
+  const [loadingMore, setLoadingMore] = useState(false);
+
   const fetchAppeals = () => {
     setLoading(true);
     api.listAppeals({ limit: 50, status: statusFilter })
       .then((data) => { setAppeals(data.appeals); setTotal(data.total); })
       .catch(() => {})
       .finally(() => setLoading(false));
+  };
+
+  const loadMore = () => {
+    setLoadingMore(true);
+    api.listAppeals({ limit: 50, status: statusFilter, offset: appeals.length })
+      .then((data) => { setAppeals((prev) => [...prev, ...(data.appeals || [])]); setTotal(data.total || 0); })
+      .catch(() => {})
+      .finally(() => setLoadingMore(false));
   };
 
   useEffect(() => { fetchAppeals(); }, [statusFilter]);
@@ -184,6 +194,14 @@ export default function AppealsPage() {
               )}
             </div>
           ))}
+        </div>
+      )}
+      {!loading && appeals.length > 0 && appeals.length < total && (
+        <div className="mt-4 flex items-center justify-center gap-3">
+          <span className="text-sm text-gray-500">Showing {appeals.length} of {total}</span>
+          <button type="button" onClick={loadMore} disabled={loadingMore} className="btn-secondary text-sm">
+            {loadingMore ? 'Loading…' : 'Load more'}
+          </button>
         </div>
       )}
     </AdminShell>

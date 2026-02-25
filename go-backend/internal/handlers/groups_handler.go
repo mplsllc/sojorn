@@ -595,11 +595,14 @@ func (h *GroupsHandler) GetGroupFeed(c *gin.Context) {
 	}
 
 	rows, err := h.db.Query(c.Request.Context(), `
-		SELECT p.id, p.user_id, p.content, p.image_url, p.video_url,
-		       p.thumbnail_url, p.created_at, p.status
+		SELECT p.id, p.author_id, p.body, COALESCE(p.image_url, ''), COALESCE(p.video_url, ''),
+		       COALESCE(p.thumbnail_url, ''), p.created_at, p.status,
+		       pr.handle, COALESCE(pr.display_name, pr.handle), COALESCE(pr.avatar_url, '')
 		FROM posts p
 		JOIN group_posts gp ON gp.post_id = p.id
-		WHERE gp.group_id = $1 AND p.status = 'active'
+		JOIN public.profiles pr ON p.author_id = pr.id
+		JOIN public.users au ON p.author_id = au.id AND au.status NOT IN ('banned', 'suspended')
+		WHERE gp.group_id = $1 AND p.status = 'active' AND p.deleted_at IS NULL
 		ORDER BY p.created_at DESC
 		LIMIT $2 OFFSET $3
 	`, groupID, limit, offset)
@@ -610,21 +613,24 @@ func (h *GroupsHandler) GetGroupFeed(c *gin.Context) {
 	defer rows.Close()
 
 	type feedPost struct {
-		ID           string    `json:"id"`
-		UserID       string    `json:"user_id"`
-		Content      string    `json:"content"`
-		ImageURL     *string   `json:"image_url"`
-		VideoURL     *string   `json:"video_url"`
-		ThumbnailURL *string   `json:"thumbnail_url"`
-		CreatedAt    time.Time `json:"created_at"`
-		Status       string    `json:"status"`
+		ID                string    `json:"id"`
+		AuthorID          string    `json:"author_id"`
+		Body              string    `json:"body"`
+		ImageURL          string    `json:"image_url"`
+		VideoURL          string    `json:"video_url"`
+		ThumbnailURL      string    `json:"thumbnail_url"`
+		CreatedAt         time.Time `json:"created_at"`
+		Status            string    `json:"status"`
+		AuthorHandle      string    `json:"author_handle"`
+		AuthorDisplayName string    `json:"author_display_name"`
+		AuthorAvatarURL   string    `json:"author_avatar_url"`
 	}
 
 	var posts []feedPost
 	for rows.Next() {
 		var p feedPost
-		if err := rows.Scan(&p.ID, &p.UserID, &p.Content, &p.ImageURL, &p.VideoURL,
-			&p.ThumbnailURL, &p.CreatedAt, &p.Status); err != nil {
+		if err := rows.Scan(&p.ID, &p.AuthorID, &p.Body, &p.ImageURL, &p.VideoURL,
+			&p.ThumbnailURL, &p.CreatedAt, &p.Status, &p.AuthorHandle, &p.AuthorDisplayName, &p.AuthorAvatarURL); err != nil {
 			continue
 		}
 		posts = append(posts, p)

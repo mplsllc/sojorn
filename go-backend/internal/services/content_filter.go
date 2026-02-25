@@ -179,6 +179,9 @@ func (cf *ContentFilter) RecordStrikeWithIP(ctx context.Context, userID uuid.UUI
 				VALUES ($1, $2, $3, NOW())
 			`, clientIP, userID, fmt.Sprintf("auto-ban: %d strikes in 30 days", count))
 		}
+		// Audit trail
+		cf.pool.Exec(ctx, `INSERT INTO user_status_history (user_id, old_status, new_status, reason, changed_by) VALUES ($1, 'active', 'banned', $2, NULL)`,
+			userID, fmt.Sprintf("auto-ban: %d strikes in 30 days", count))
 		fmt.Printf("Content filter: user %s BANNED (%d strikes), IP %s logged\n", userID, count, clientIP)
 	case count >= 5:
 		consequence = "suspend_7d"
@@ -186,6 +189,9 @@ func (cf *ContentFilter) RecordStrikeWithIP(ctx context.Context, userID uuid.UUI
 		cf.pool.Exec(ctx, `UPDATE users SET status = 'suspended', suspended_until = $2 WHERE id = $1`, userID, suspendUntil)
 		cf.pool.Exec(ctx, `UPDATE posts SET status = 'jailed' WHERE author_id = $1 AND status = 'active' AND deleted_at IS NULL`, userID)
 		cf.pool.Exec(ctx, `UPDATE comments SET status = 'jailed' WHERE author_id = $1 AND status = 'active' AND deleted_at IS NULL`, userID)
+		// Audit trail
+		cf.pool.Exec(ctx, `INSERT INTO user_status_history (user_id, old_status, new_status, reason, changed_by) VALUES ($1, 'active', 'suspended', $2, NULL)`,
+			userID, fmt.Sprintf("auto-suspend 7d: %d strikes in 30 days", count))
 		fmt.Printf("Content filter: user %s suspended 7 days (%d strikes)\n", userID, count)
 	case count >= 3:
 		consequence = "suspend_24h"
@@ -193,6 +199,9 @@ func (cf *ContentFilter) RecordStrikeWithIP(ctx context.Context, userID uuid.UUI
 		cf.pool.Exec(ctx, `UPDATE users SET status = 'suspended', suspended_until = $2 WHERE id = $1`, userID, suspendUntil)
 		cf.pool.Exec(ctx, `UPDATE posts SET status = 'jailed' WHERE author_id = $1 AND status = 'active' AND deleted_at IS NULL`, userID)
 		cf.pool.Exec(ctx, `UPDATE comments SET status = 'jailed' WHERE author_id = $1 AND status = 'active' AND deleted_at IS NULL`, userID)
+		// Audit trail
+		cf.pool.Exec(ctx, `INSERT INTO user_status_history (user_id, old_status, new_status, reason, changed_by) VALUES ($1, 'active', 'suspended', $2, NULL)`,
+			userID, fmt.Sprintf("auto-suspend 24h: %d strikes in 30 days", count))
 		fmt.Printf("Content filter: user %s suspended 24h (%d strikes)\n", userID, count)
 	default:
 		fmt.Printf("Content filter: user %s warning (%d strikes)\n", userID, count)

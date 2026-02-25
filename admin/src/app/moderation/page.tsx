@@ -44,6 +44,7 @@ export default function ModerationPage() {
   ];
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [bulkLoading, setBulkLoading] = useState(false);
+  const [loadingMore, setLoadingMore] = useState(false);
 
   const fetchQueue = () => {
     setLoading(true);
@@ -51,6 +52,14 @@ export default function ModerationPage() {
       .then((data) => { setItems(data.items); setTotal(data.total); })
       .catch(() => {})
       .finally(() => setLoading(false));
+  };
+
+  const loadMore = () => {
+    setLoadingMore(true);
+    api.getModerationQueue({ limit: 50, status: statusFilter, offset: items.length })
+      .then((data) => { setItems((prev) => [...prev, ...(data.items || [])]); setTotal(data.total || 0); })
+      .catch(() => {})
+      .finally(() => setLoadingMore(false));
   };
 
   useEffect(() => { fetchQueue(); }, [statusFilter]);
@@ -248,6 +257,14 @@ export default function ModerationPage() {
               )}
             </div>
           ))}
+        </div>
+      )}
+      {!loading && items.length > 0 && items.length < total && (
+        <div className="mt-4 flex items-center justify-center gap-3">
+          <span className="text-sm text-gray-500">Showing {items.length} of {total}</span>
+          <button type="button" onClick={loadMore} disabled={loadingMore} className="btn-secondary text-sm">
+            {loadingMore ? 'Loading…' : 'Load more'}
+          </button>
         </div>
       )}
     </AdminShell>

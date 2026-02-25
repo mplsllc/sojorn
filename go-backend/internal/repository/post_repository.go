@@ -100,6 +100,7 @@ func (r *PostRepository) GetRandomSponsoredPost(ctx context.Context, userID stri
 		FROM public.sponsored_posts sp
 		JOIN public.posts p ON sp.post_id = p.id
 		JOIN public.profiles pr ON p.author_id = pr.id
+		JOIN public.users au ON p.author_id = au.id AND au.status NOT IN ('banned', 'suspended')
 		LEFT JOIN public.post_metrics m ON p.id = m.post_id
 		WHERE p.deleted_at IS NULL AND p.status = 'active'
 		  AND (
@@ -159,6 +160,7 @@ func (r *PostRepository) GetFeed(ctx context.Context, userID string, categorySlu
 			COALESCE(t.tier, 'new_user') as author_trust_tier
 		FROM public.posts p
 		JOIN public.profiles pr ON p.author_id = pr.id
+		JOIN public.users au ON p.author_id = au.id AND au.status NOT IN ('banned', 'suspended')
 		LEFT JOIN public.post_metrics m ON p.id = m.post_id
 		LEFT JOIN public.categories c ON p.category_id = c.id
 		LEFT JOIN public.trust_state t ON p.author_id = t.user_id
@@ -302,6 +304,7 @@ func (r *PostRepository) GetPostsByAuthor(ctx context.Context, authorID string, 
 			COALESCE(t.tier, 'new_user') as author_trust_tier
 		FROM public.posts p
 		JOIN public.profiles pr ON p.author_id = pr.id
+		JOIN public.users au ON p.author_id = au.id AND au.status NOT IN ('banned', 'suspended')
 		LEFT JOIN public.post_metrics m ON p.id = m.post_id
 		LEFT JOIN public.trust_state t ON p.author_id = t.user_id
 		WHERE p.author_id = $1::uuid AND p.deleted_at IS NULL AND p.status = 'active'
@@ -413,6 +416,7 @@ func (r *PostRepository) GetPostByID(ctx context.Context, postID string, userID 
 			COALESCE(t.tier, 'new_user') as author_trust_tier
 		FROM public.posts p
 		JOIN public.profiles pr ON p.author_id = pr.id
+		JOIN public.users au ON p.author_id = au.id AND au.status NOT IN ('banned', 'suspended')
 		LEFT JOIN public.post_metrics m ON p.id = m.post_id
 		LEFT JOIN public.trust_state t ON p.author_id = t.user_id
 		WHERE p.id = $1::uuid AND p.deleted_at IS NULL
@@ -718,9 +722,10 @@ func (r *PostRepository) GetSavedPosts(ctx context.Context, userID string, limit
 		FROM public.post_saves ps
 		JOIN public.posts p ON ps.post_id = p.id
 		JOIN public.profiles pr ON p.author_id = pr.id
+		JOIN public.users au ON p.author_id = au.id AND au.status NOT IN ('banned', 'suspended')
 		LEFT JOIN public.post_metrics m ON p.id = m.post_id
 		LEFT JOIN public.trust_state t ON p.author_id = t.user_id
-		WHERE ps.user_id = $1::uuid AND p.deleted_at IS NULL
+		WHERE ps.user_id = $1::uuid AND p.deleted_at IS NULL AND p.status = 'active'
 		  AND (COALESCE(p.is_nsfw, FALSE) = FALSE OR $4 = TRUE)
 		ORDER BY ps.created_at DESC
 		LIMIT $2 OFFSET $3
@@ -777,9 +782,10 @@ func (r *PostRepository) GetLikedPosts(ctx context.Context, userID string, limit
 		FROM public.post_likes pl
 		JOIN public.posts p ON pl.post_id = p.id
 		JOIN public.profiles pr ON p.author_id = pr.id
+		JOIN public.users au ON p.author_id = au.id AND au.status NOT IN ('banned', 'suspended')
 		LEFT JOIN public.post_metrics m ON p.id = m.post_id
 		LEFT JOIN public.trust_state t ON p.author_id = t.user_id
-		WHERE pl.user_id = $1::uuid AND p.deleted_at IS NULL
+		WHERE pl.user_id = $1::uuid AND p.deleted_at IS NULL AND p.status = 'active'
 		  AND (COALESCE(p.is_nsfw, FALSE) = FALSE OR $4 = TRUE)
 		ORDER BY pl.created_at DESC
 		LIMIT $2 OFFSET $3
@@ -952,6 +958,7 @@ func (r *PostRepository) SearchPosts(ctx context.Context, query string, viewerID
 		COALESCE(t.tier, 'new_user') as author_trust_tier
 		FROM public.posts p
 		JOIN public.profiles pr ON p.author_id = pr.id
+		JOIN public.users au ON p.author_id = au.id AND au.status NOT IN ('banned', 'suspended')
 		LEFT JOIN public.post_metrics m ON p.id = m.post_id
 		LEFT JOIN public.trust_state t ON p.author_id = t.user_id
 		WHERE (
@@ -1583,6 +1590,7 @@ func (r *PostRepository) GetPopularPublicPosts(ctx context.Context, viewerID str
 		COALESCE(t.tier, 'new_user') as author_trust_tier
 		FROM public.posts p
 		JOIN public.profiles pr ON p.author_id = pr.id
+		JOIN public.users au ON p.author_id = au.id AND au.status NOT IN ('banned', 'suspended')
 		LEFT JOIN public.post_metrics m ON p.id = m.post_id
 		LEFT JOIN public.trust_state t ON p.author_id = t.user_id
 		WHERE p.deleted_at IS NULL AND p.status = 'active'

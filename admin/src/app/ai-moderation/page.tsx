@@ -123,6 +123,7 @@ export default function AIModerationPage() {
   const [systemPrompt, setSystemPrompt] = useState('');
   const [seConfig, setSEConfig] = useState<any>(defaultSEConfig());
   const [saving, setSaving] = useState(false);
+  const [isDirty, setIsDirty] = useState(false);
 
   const [testInput, setTestInput] = useState('');
   const [testing, setTesting] = useState(false);
@@ -173,6 +174,7 @@ export default function AIModerationPage() {
       setSystemPrompt('');
       setSEConfig(defaultSEConfig());
     }
+    setIsDirty(false); // switching type discards unsaved state
   }, [selectedType, configs]);
 
   const handleSave = async () => {
@@ -187,6 +189,7 @@ export default function AIModerationPage() {
         engines: [selectedEngine],
         sightengine_config: seConfig,
       });
+      setIsDirty(false);
       loadConfigs();
     } catch (e: any) {
       alert(e.message);
@@ -242,6 +245,7 @@ export default function AIModerationPage() {
         [key]: { ...prev.image_models?.[key], [field]: value },
       },
     }));
+    setIsDirty(true);
   };
 
   const updateTextModel = (key: string, field: 'enabled' | 'threshold', value: any) => {
@@ -252,6 +256,7 @@ export default function AIModerationPage() {
         [key]: { ...prev.text_models?.[key], [field]: value },
       },
     }));
+    setIsDirty(true);
   };
 
   const updateTextCategory = (key: string, value: boolean) => {
@@ -259,6 +264,7 @@ export default function AIModerationPage() {
       ...prev,
       text_categories: { ...prev.text_categories, [key]: value },
     }));
+    setIsDirty(true);
   };
 
   const toggleCategory = (cat: string) => {
@@ -330,7 +336,7 @@ export default function AIModerationPage() {
             <label className="text-sm font-semibold text-gray-700 block mb-2">Engine</label>
             <select
               value={selectedEngine}
-              onChange={(e) => setSelectedEngine(e.target.value)}
+              onChange={(e) => { setSelectedEngine(e.target.value); setIsDirty(true); }}
               className="w-full text-sm border border-gray-300 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-brand-500"
             >
               {ENGINES.map(e => (
@@ -347,7 +353,7 @@ export default function AIModerationPage() {
             <textarea
               rows={4}
               value={systemPrompt}
-              onChange={(e) => setSystemPrompt(e.target.value)}
+              onChange={(e) => { setSystemPrompt(e.target.value); setIsDirty(true); }}
               placeholder="Flag content that promotes violence, hate speech, or illegal activities..."
               className="w-full text-sm border border-gray-300 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-brand-500"
             />
@@ -362,6 +368,7 @@ export default function AIModerationPage() {
                   const selected = localModels.find(m => m.id === e.target.value);
                   setModelId(e.target.value);
                   setModelName(selected?.name || '');
+                  setIsDirty(true);
                 }}
                 className="w-full text-sm border border-gray-300 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-brand-500"
               >
@@ -389,7 +396,7 @@ export default function AIModerationPage() {
                     type="range"
                     min="0.1" max="1.0" step="0.05"
                     value={seConfig.flag_threshold ?? 0.7}
-                    onChange={(e) => setSEConfig((p: any) => ({ ...p, flag_threshold: parseFloat(e.target.value) }))}
+                    onChange={(e) => { setSEConfig((p: any) => ({ ...p, flag_threshold: parseFloat(e.target.value) })); setIsDirty(true); }}
                     className="w-full h-1.5 bg-gray-200 rounded-lg appearance-none cursor-pointer accent-red-500"
                   />
                   <p className="text-[10px] text-gray-400 mt-0.5">Content above this score is flagged for review</p>
@@ -403,7 +410,7 @@ export default function AIModerationPage() {
                     type="range"
                     min="0.1" max="1.0" step="0.05"
                     value={seConfig.nsfw_threshold ?? 0.4}
-                    onChange={(e) => setSEConfig((p: any) => ({ ...p, nsfw_threshold: parseFloat(e.target.value) }))}
+                    onChange={(e) => { setSEConfig((p: any) => ({ ...p, nsfw_threshold: parseFloat(e.target.value) })); setIsDirty(true); }}
                     className="w-full h-1.5 bg-gray-200 rounded-lg appearance-none cursor-pointer accent-amber-500"
                   />
                   <p className="text-[10px] text-gray-400 mt-0.5">Content above this score is blurred as NSFW</p>
@@ -418,18 +425,26 @@ export default function AIModerationPage() {
               <input
                 type="checkbox"
                 checked={enabled}
-                onChange={(e) => setEnabled(e.target.checked)}
+                onChange={(e) => { setEnabled(e.target.checked); setIsDirty(true); }}
                 className="w-4 h-4 text-brand-600 rounded focus:ring-2 focus:ring-brand-500"
               />
               <span className="text-sm font-medium text-gray-700">Enable {typeLabel}</span>
             </label>
-            <button
-              onClick={handleSave}
-              disabled={saving}
-              className="btn-primary text-sm disabled:opacity-40"
-            >
-              {saving ? 'Saving...' : 'Save Configuration'}
-            </button>
+            <div className="flex items-center gap-2">
+              {isDirty && (
+                <span className="text-xs font-medium text-amber-600 bg-amber-50 border border-amber-200 px-2 py-1 rounded">
+                  Unsaved changes
+                </span>
+              )}
+              <button
+                type="button"
+                onClick={handleSave}
+                disabled={saving}
+                className="btn-primary text-sm disabled:opacity-40"
+              >
+                {saving ? 'Saving...' : 'Save Configuration'}
+              </button>
+            </div>
           </div>
         </div>
 

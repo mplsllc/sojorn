@@ -142,6 +142,11 @@ export default function SafetyWorkspacePage() {
   const [reportsSelected, setReportsSelected] = useState<Set<string>>(new Set());
   const [reportsBulkLoading, setReportsBulkLoading] = useState(false);
 
+  // Load-more state
+  const [modLoadingMore, setModLoadingMore] = useState(false);
+  const [appealsLoadingMore, setAppealsLoadingMore] = useState(false);
+  const [reportsLoadingMore, setReportsLoadingMore] = useState(false);
+
   // Pending counts for badges
   const [pendingCounts, setPendingCounts] = useState({ moderation: 0, appeals: 0, reports: 0 });
 
@@ -203,6 +208,30 @@ export default function SafetyWorkspacePage() {
     fetchAppeals();
     fetchReports();
     fetchPendingCounts();
+  };
+
+  const loadMoreModeration = () => {
+    setModLoadingMore(true);
+    api.getModerationQueue({ limit: 50, status: modStatus, offset: modItems.length })
+      .then((data) => { setModItems((prev) => [...prev, ...(data.items || [])]); setModTotal(data.total || 0); })
+      .catch(() => {})
+      .finally(() => setModLoadingMore(false));
+  };
+
+  const loadMoreAppeals = () => {
+    setAppealsLoadingMore(true);
+    api.listAppeals({ limit: 50, status: appealsStatus, offset: appeals.length })
+      .then((data) => { setAppeals((prev) => [...prev, ...(data.appeals || [])]); setAppealsTotal(data.total || 0); })
+      .catch(() => {})
+      .finally(() => setAppealsLoadingMore(false));
+  };
+
+  const loadMoreReports = () => {
+    setReportsLoadingMore(true);
+    api.listReports({ limit: 50, status: reportsStatus, offset: reports.length })
+      .then((data) => { setReports((prev) => [...prev, ...(data.reports || [])]); setReportsTotal(data.total || 0); })
+      .catch(() => {})
+      .finally(() => setReportsLoadingMore(false));
   };
 
   // ── Moderation actions ──
@@ -446,6 +475,14 @@ export default function SafetyWorkspacePage() {
               ))}
             </div>
           )}
+          {!modLoading && modItems.length > 0 && modItems.length < modTotal && (
+            <div className="mt-4 flex items-center justify-center gap-3">
+              <span className="text-sm text-gray-500">Showing {modItems.length} of {modTotal}</span>
+              <button type="button" onClick={loadMoreModeration} disabled={modLoadingMore} className="btn-secondary text-sm">
+                {modLoadingMore ? 'Loading…' : 'Load more'}
+              </button>
+            </div>
+          )}
         </div>
       )}
 
@@ -578,6 +615,14 @@ export default function SafetyWorkspacePage() {
               ))}
             </div>
           )}
+          {!appealsLoading && appeals.length > 0 && appeals.length < appealsTotal && (
+            <div className="mt-4 flex items-center justify-center gap-3">
+              <span className="text-sm text-gray-500">Showing {appeals.length} of {appealsTotal}</span>
+              <button type="button" onClick={loadMoreAppeals} disabled={appealsLoadingMore} className="btn-secondary text-sm">
+                {appealsLoadingMore ? 'Loading…' : 'Load more'}
+              </button>
+            </div>
+          )}
         </div>
       )}
 
@@ -695,6 +740,14 @@ export default function SafetyWorkspacePage() {
                   ))}
                 </tbody>
               </table>
+            </div>
+          )}
+          {!reportsLoading && reports.length > 0 && reports.length < reportsTotal && (
+            <div className="mt-4 flex items-center justify-center gap-3">
+              <span className="text-sm text-gray-500">Showing {reports.length} of {reportsTotal}</span>
+              <button type="button" onClick={loadMoreReports} disabled={reportsLoadingMore} className="btn-secondary text-sm">
+                {reportsLoadingMore ? 'Loading…' : 'Load more'}
+              </button>
             </div>
           )}
         </div>
