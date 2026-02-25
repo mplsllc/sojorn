@@ -10,6 +10,7 @@ import 'package:firebase_messaging/firebase_messaging.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:go_router/go_router.dart';
 import 'package:geolocator/geolocator.dart';
+import '../../services/auth_service.dart';
 import '../../services/notification_service.dart';
 import '../../services/secure_chat_service.dart';
 import '../../theme/app_theme.dart';
