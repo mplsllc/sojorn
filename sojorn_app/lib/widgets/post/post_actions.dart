@@ -82,13 +82,7 @@ class _PostActionsState extends ConsumerState<PostActions>
     super.dispose();
   }
 
-  static const _primaryEmoji = '🔥';
-
   int get _totalReactionCount => _reactionCounts.values.fold(0, (sum, c) => sum + c);
-
-  bool get _hasPrimaryReaction => _myReactions.contains(_primaryEmoji);
-
-  int get _primaryReactionCount => _reactionCounts[_primaryEmoji] ?? 0;
 
   void _seedReactionState() {
     _reactionCounts.clear();
@@ -223,47 +217,6 @@ class _PostActionsState extends ConsumerState<PostActions>
     }
   }
 
-  Widget _buildPrimaryReactionButton() {
-    final isActive = _hasPrimaryReaction;
-    final count = _primaryReactionCount;
-    return Tooltip(
-      message: 'Like',
-      child: GestureDetector(
-        onTap: () => _toggleReaction(_primaryEmoji),
-        child: AnimatedContainer(
-          duration: const Duration(milliseconds: 150),
-          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-          decoration: BoxDecoration(
-            color: isActive
-                ? const Color(0xFFFFF0E6)
-                : AppTheme.navyBlue.withValues(alpha: 0.08),
-            borderRadius: BorderRadius.circular(10),
-            border: isActive
-                ? Border.all(color: const Color(0xFFFF6B35).withValues(alpha: 0.3))
-                : null,
-          ),
-          child: Row(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Text(_primaryEmoji, style: const TextStyle(fontSize: 16)),
-              if (count > 0) ...[
-                const SizedBox(width: 4),
-                Text(
-                  '$count',
-                  style: GoogleFonts.inter(
-                    fontSize: 13,
-                    fontWeight: FontWeight.w600,
-                    color: isActive ? const Color(0xFFFF6B35) : AppTheme.textSecondary,
-                  ),
-                ),
-              ],
-            ],
-          ),
-        ),
-      ),
-    );
-  }
-
   @override
   Widget build(BuildContext context) {
     final allowChain = widget.post.allowChain && widget.post.visibility != 'private' && widget.onChain != null;
@@ -307,12 +260,9 @@ class _PostActionsState extends ConsumerState<PostActions>
         Row(
           mainAxisAlignment: MainAxisAlignment.spaceBetween,
           children: [
-            // Left side: Primary reaction + Save + Share
+            // Left side: Save + Share
             Row(
               children: [
-                // Primary reaction button (fire emoji)
-                _buildPrimaryReactionButton(),
-                const SizedBox(width: 8),
                 ScaleTransition(
                   scale: _saveScale,
                   child: IconButton(
