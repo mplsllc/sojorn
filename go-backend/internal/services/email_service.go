@@ -305,6 +305,7 @@ func (s *EmailService) sendViaSendPulse(toEmail, toName, subject, htmlBody, text
 	}
 
 	jsonData, _ := json.Marshal(reqBody)
+	log.Debug().Int("html_len", len(htmlBody)).Int("text_len", len(textBody)).Str("payload", string(jsonData)).Msg("SendPulse outgoing payload")
 	req, err := http.NewRequest("POST", url, bytes.NewBuffer(jsonData))
 	if err != nil {
 		return err
@@ -336,7 +337,7 @@ func (s *EmailService) sendViaSendPulse(toEmail, toName, subject, htmlBody, text
 		return fmt.Errorf("sendpulse error: %s", string(bodyBytes))
 	}
 
-	log.Info().Msgf("Email sent to %s via SendPulse", toEmail)
+	log.Info().Str("response", string(bodyBytes)).Msgf("Email sent to %s via SendPulse", toEmail)
 	return nil
 }
 
