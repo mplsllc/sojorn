@@ -340,11 +340,14 @@ func (h *PostHandler) CreateBeacon(c *gin.Context) {
 		severity = req.Severity
 	}
 
-	var expiresAt *time.Time
-	if req.TTLHours != nil && *req.TTLHours > 0 {
-		t := time.Now().Add(time.Duration(*req.TTLHours) * time.Hour)
-		expiresAt = &t
+	// Default TTL: 4 hours. Client may request shorter via ttl_hours.
+	// Beacons must always expire — no beacon lives forever.
+	defaultTTL := 4 * time.Hour
+	if req.TTLHours != nil && *req.TTLHours > 0 && time.Duration(*req.TTLHours)*time.Hour < defaultTTL {
+		defaultTTL = time.Duration(*req.TTLHours) * time.Hour
 	}
+	t := time.Now().Add(defaultTTL)
+	expiresAt := &t
 
 	beaconType := req.BeaconType
 	// Fuzz coordinates to ~1.1 km precision — no exact location stored for anonymous beacons.

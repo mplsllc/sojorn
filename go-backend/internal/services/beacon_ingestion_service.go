@@ -109,12 +109,22 @@ func (s *BeaconIngestionService) runCycle() {
 
 	start := time.Now()
 
-	// Expire stale alerts first
+	// Expire stale external alerts (beacon_alerts table)
 	expired, err := s.repo.ExpireStale(ctx)
 	if err != nil {
 		log.Error().Err(err).Msg("beacon ingestion: expire stale failed")
 	} else if expired > 0 {
 		log.Info().Int64("count", expired).Msg("beacon ingestion: expired stale alerts")
+	}
+
+	// Expire old user beacons in the posts table.
+	// Any beacon older than 4 hours with no explicit expires_at is considered stale.
+	// This catches beacons created before the default-TTL fix and any client-side omissions.
+	expiredPosts, err := s.repo.ExpireStaleUserBeacons(ctx)
+	if err != nil {
+		log.Error().Err(err).Msg("beacon ingestion: expire stale user beacons failed")
+	} else if expiredPosts > 0 {
+		log.Info().Int64("count", expiredPosts).Msg("beacon ingestion: expired stale user beacons")
 	}
 
 	// Load feed configs to check which feeds are enabled
@@ -283,7 +293,11 @@ func (s *BeaconIngestionService) ingestMN511Alerts(ctx context.Context) (int, er
 		activeIDs = append(activeIDs, f.ID)
 	}
 
-	count, _ := s.repo.BulkUpsert(ctx, alerts)
+	count, upsertErr := s.repo.BulkUpsert(ctx, alerts)
+	if upsertErr != nil {
+		log.Error().Err(upsertErr).Msg("beacon ingestion: mn511 alerts upsert failed — skipping orphan cleanup")
+		return count, upsertErr
+	}
 	removed, _ := s.repo.CleanOrphaned(ctx, "mn511", activeIDs)
 	log.Info().Int("upserted", count).Int64("removed", removed).Int("upstream", len(resp.Features)).Msg("beacon ingestion: mn511 alerts")
 	return count, nil
@@ -386,7 +400,11 @@ func (s *BeaconIngestionService) ingestMN511Cameras(ctx context.Context) (int, e
 		activeIDs = append(activeIDs, cam.ID)
 	}
 
-	count, _ := s.repo.BulkUpsert(ctx, alerts)
+	count, upsertErr := s.repo.BulkUpsert(ctx, alerts)
+	if upsertErr != nil {
+		log.Error().Err(upsertErr).Msg("beacon ingestion: mn511 cameras upsert failed — skipping orphan cleanup")
+		return count, upsertErr
+	}
 	removed, _ := s.repo.CleanOrphaned(ctx, "mn511_camera", activeIDs)
 	log.Info().Int("upserted", count).Int64("removed", removed).Msg("beacon ingestion: mn511 cameras")
 	return count, nil
@@ -489,7 +507,11 @@ func (s *BeaconIngestionService) ingestMN511Signs(ctx context.Context) (int, err
 		activeIDs = append(activeIDs, f.ID)
 	}
 
-	count, _ := s.repo.BulkUpsert(ctx, alerts)
+	count, upsertErr := s.repo.BulkUpsert(ctx, alerts)
+	if upsertErr != nil {
+		log.Error().Err(upsertErr).Msg("beacon ingestion: mn511 signs upsert failed — skipping orphan cleanup")
+		return count, upsertErr
+	}
 	removed, _ := s.repo.CleanOrphaned(ctx, "mn511_sign", activeIDs)
 	log.Info().Int("upserted", count).Int64("removed", removed).Msg("beacon ingestion: mn511 signs")
 	return count, nil
@@ -570,7 +592,11 @@ func (s *BeaconIngestionService) ingestMN511Weather(ctx context.Context) (int, e
 		activeIDs = append(activeIDs, f.ID)
 	}
 
-	count, _ := s.repo.BulkUpsert(ctx, alerts)
+	count, upsertErr := s.repo.BulkUpsert(ctx, alerts)
+	if upsertErr != nil {
+		log.Error().Err(upsertErr).Msg("beacon ingestion: mn511 weather upsert failed — skipping orphan cleanup")
+		return count, upsertErr
+	}
 	removed, _ := s.repo.CleanOrphaned(ctx, "mn511_weather", activeIDs)
 	log.Info().Int("upserted", count).Int64("removed", removed).Msg("beacon ingestion: mn511 weather")
 	return count, nil
@@ -664,7 +690,11 @@ func (s *BeaconIngestionService) ingestIced(ctx context.Context) (int, error) {
 		activeIDs = append(activeIDs, id)
 	}
 
-	count, _ := s.repo.BulkUpsert(ctx, alerts)
+	count, upsertErr := s.repo.BulkUpsert(ctx, alerts)
+	if upsertErr != nil {
+		log.Error().Err(upsertErr).Msg("beacon ingestion: iced upsert failed — skipping orphan cleanup")
+		return count, upsertErr
+	}
 	removed, _ := s.repo.CleanOrphaned(ctx, "iced", activeIDs)
 	log.Info().Int("upserted", count).Int64("removed", removed).Msg("beacon ingestion: iced")
 	return count, nil

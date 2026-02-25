@@ -133,15 +133,11 @@ func (r *BeaconAlertRepository) ExpireStale(ctx context.Context) (int64, error) 
 // Official sources are the authority — if the API no longer returns an alert, it's gone.
 func (r *BeaconAlertRepository) CleanOrphaned(ctx context.Context, source string, activeIDs []string) (int64, error) {
 	if len(activeIDs) == 0 {
-		// Upstream returned nothing — delete all active alerts from this source
-		tag, err := r.pool.Exec(ctx, `
-			DELETE FROM beacon_alerts
-			WHERE source = $1
-		`, source)
-		if err != nil {
-			return 0, err
-		}
-		return tag.RowsAffected(), nil
+		// Empty list means the upstream returned nothing. This is almost certainly an
+		// API failure or parse error, not a legitimate "zero active alerts" state.
+		// Deleting everything would be catastrophic — skip safely.
+		log.Warn().Str("source", source).Msg("beacon_alerts: CleanOrphaned skipped — upstream returned 0 IDs (possible API failure)")
+		return 0, nil
 	}
 
 	tag, err := r.pool.Exec(ctx, `
@@ -379,6 +375,26 @@ func (r *BeaconAlertRepository) GetNearbyAlerts(ctx context.Context, lat, lng fl
 		results = []map[string]any{}
 	}
 	return results, nil
+}
+
+// ExpireStaleUserBeacons marks user-created beacon posts as expired when:
+//   - They are older than 4 hours and have no explicit expires_at (legacy/no-TTL beacons), OR
+//   - They have an expires_at that has passed.
+func (r *BeaconAlertRepository) ExpireStaleUserBeacons(ctx context.Context) (int64, error) {
+	tag, err := r.pool.Exec(ctx, `
+		UPDATE public.posts
+		SET status = 'expired', incident_status = 'resolved'
+		WHERE is_beacon = true
+		  AND status = 'active'
+		  AND (
+		        (expires_at IS NULL     AND created_at < NOW() - INTERVAL '4 hours')
+		     OR (expires_at IS NOT NULL AND expires_at < NOW())
+		      )
+	`)
+	if err != nil {
+		return 0, err
+	}
+	return tag.RowsAffected(), nil
 }
 
 // beaconAlertStatusColor returns a color string based on confidence score.
