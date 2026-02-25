@@ -367,11 +367,17 @@ func (s *OfficialAccountsService) DiscoverArticles(ctx context.Context, configID
 			continue
 		}
 
-		// Fetch articles: SearXNG for site-based sources, RSS for direct feed URLs
+		// Fetch articles: SearXNG for site-based sources, RSS for direct feed URLs.
+		// Falls back to Google News RSS when SearXNG is unavailable.
 		var items []RSSItem
 		var fetchErr error
 		if src.UseSearXNG() {
 			items, fetchErr = s.FetchSearXNGNews(ctx, src.Site)
+			if fetchErr != nil {
+				log.Warn().Err(fetchErr).Str("source", src.Name).Msg("SearXNG failed, falling back to Google News RSS")
+				googleRSS := fmt.Sprintf("https://news.google.com/rss/search?q=site:%s&hl=en-US&gl=US&ceid=US:en", src.Site)
+				items, fetchErr = s.FetchRSS(ctx, googleRSS)
+			}
 		} else if rssURL := src.EffectiveRSSURL(); rssURL != "" {
 			items, fetchErr = s.FetchRSS(ctx, rssURL)
 		} else {

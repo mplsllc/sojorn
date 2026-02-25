@@ -128,6 +128,7 @@ class _GroupEventsTabState extends State<GroupEventsTab> {
                   isAdmin: _canCreate,
                   onRsvp: (status) => _rsvp(event, status),
                   onDeleted: _loadEvents,
+                  onApproved: _loadEvents,
                 );
               },
             ),
@@ -141,6 +142,7 @@ class _EventCard extends StatelessWidget {
   final bool isAdmin;
   final ValueChanged<RSVPStatus> onRsvp;
   final VoidCallback onDeleted;
+  final VoidCallback? onApproved;
 
   const _EventCard({
     required this.event,
@@ -148,7 +150,44 @@ class _EventCard extends StatelessWidget {
     required this.isAdmin,
     required this.onRsvp,
     required this.onDeleted,
+    this.onApproved,
   });
+
+  Future<void> _approve(BuildContext context) async {
+    try {
+      await ApiService.instance.approveEvent(groupId, event.id);
+      onApproved?.call();
+      if (context.mounted) context.showSuccess('Event approved');
+    } catch (_) {
+      if (context.mounted) context.showError('Failed to approve event');
+    }
+  }
+
+  Future<void> _reject(BuildContext context) async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (_) => AlertDialog(
+        title: const Text('Reject Event'),
+        content: Text('Reject "${event.title}"? The creator will no longer see it.'),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(context, false), child: const Text('Cancel')),
+          FilledButton(
+            onPressed: () => Navigator.pop(context, true),
+            style: FilledButton.styleFrom(backgroundColor: Colors.red),
+            child: const Text('Reject'),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true) return;
+    try {
+      await ApiService.instance.rejectEvent(groupId, event.id);
+      onApproved?.call();
+      if (context.mounted) context.showSuccess('Event rejected');
+    } catch (_) {
+      if (context.mounted) context.showError('Failed to reject event');
+    }
+  }
 
   Future<void> _delete(BuildContext context) async {
     final confirmed = await showDialog<bool>(
@@ -244,6 +283,38 @@ class _EventCard extends StatelessWidget {
                             color: SojornColors.basicRoyalPurple,
                           )),
                     ),
+                  if (event.isExternal) ...[
+                    const SizedBox(width: 4),
+                    Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                      decoration: BoxDecoration(
+                        color: Colors.teal.withValues(alpha: 0.1),
+                        borderRadius: BorderRadius.circular(SojornRadii.sm),
+                      ),
+                      child: Text(
+                        'via ${event.source[0].toUpperCase()}${event.source.substring(1)}',
+                        style: TextStyle(
+                          fontSize: 10,
+                          fontWeight: FontWeight.w600,
+                          color: Colors.teal.shade700,
+                        ),
+                      ),
+                    ),
+                  ],
+                  if (event.status == 'pending')
+                    Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                      decoration: BoxDecoration(
+                        color: Colors.orange.withValues(alpha: 0.15),
+                        borderRadius: BorderRadius.circular(SojornRadii.sm),
+                      ),
+                      child: Text('Pending',
+                          style: TextStyle(
+                            fontSize: 11,
+                            fontWeight: FontWeight.w600,
+                            color: Colors.orange.shade700,
+                          )),
+                    ),
                   if (isAdmin) ...[
                     const SizedBox(width: 4),
                     PopupMenuButton<String>(
@@ -253,9 +324,29 @@ class _EventCard extends StatelessWidget {
                       onSelected: (v) {
                         if (v == 'edit') _showEdit(context);
                         if (v == 'delete') _delete(context);
+                        if (v == 'approve') _approve(context);
+                        if (v == 'reject') _reject(context);
                       },
-                      itemBuilder: (_) => const [
-                        PopupMenuItem(
+                      itemBuilder: (_) => [
+                        if (event.status == 'pending') ...[
+                          const PopupMenuItem(
+                            value: 'approve',
+                            child: Row(children: [
+                              Icon(Icons.check_circle_outline, size: 16, color: Color(0xFF4CAF50)),
+                              SizedBox(width: 8),
+                              Text('Approve', style: TextStyle(color: Color(0xFF4CAF50))),
+                            ]),
+                          ),
+                          const PopupMenuItem(
+                            value: 'reject',
+                            child: Row(children: [
+                              Icon(Icons.cancel_outlined, size: 16, color: Colors.red),
+                              SizedBox(width: 8),
+                              Text('Reject', style: TextStyle(color: Colors.red)),
+                            ]),
+                          ),
+                        ],
+                        const PopupMenuItem(
                           value: 'edit',
                           child: Row(children: [
                             Icon(Icons.edit_outlined, size: 16),
@@ -263,7 +354,7 @@ class _EventCard extends StatelessWidget {
                             Text('Edit'),
                           ]),
                         ),
-                        PopupMenuItem(
+                        const PopupMenuItem(
                           value: 'delete',
                           child: Row(children: [
                             Icon(Icons.delete_outline, size: 16, color: Colors.red),
@@ -440,7 +531,7 @@ class _CreateEventSheetState extends State<_CreateEventSheet> {
     if (_titleCtrl.text.trim().isEmpty) return;
     setState(() => _submitting = true);
     try {
-      await ApiService.instance.createGroupEvent(widget.groupId, {
+      final result = await ApiService.instance.createGroupEvent(widget.groupId, {
         'title': _titleCtrl.text.trim(),
         'description': _descCtrl.text.trim(),
         'location_name': _locationCtrl.text.trim().isEmpty ? null : _locationCtrl.text.trim(),
@@ -450,7 +541,12 @@ class _CreateEventSheetState extends State<_CreateEventSheet> {
       });
       if (mounted) {
         Navigator.pop(context);
-        context.showSuccess('Event created');
+        final isPending = result['status'] == 'pending';
+        if (isPending) {
+          context.showInfo('Event submitted for admin approval');
+        } else {
+          context.showSuccess('Event created');
+        }
         widget.onCreated();
       }
     } catch (e) {

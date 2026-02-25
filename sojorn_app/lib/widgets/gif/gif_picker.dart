@@ -2,6 +2,7 @@
 // Licensed under the GNU Affero General Public License v3.0 (AGPL-3.0)
 // See LICENSE file in the project root for full license text.
 
+import 'dart:async';
 import 'dart:convert';
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
@@ -43,7 +44,7 @@ class _GifPickerSheet extends StatefulWidget {
 class _GifPickerSheetState extends State<_GifPickerSheet>
     with SingleTickerProviderStateMixin {
   late final TabController _tabs;
-  final _memesSearch = TextEditingController();
+  final _klipySearch = TextEditingController();
   final _retroSearch = TextEditingController();
 
   @override
@@ -55,7 +56,7 @@ class _GifPickerSheetState extends State<_GifPickerSheet>
   @override
   void dispose() {
     _tabs.dispose();
-    _memesSearch.dispose();
+    _klipySearch.dispose();
     _retroSearch.dispose();
     super.dispose();
   }
@@ -83,26 +84,7 @@ class _GifPickerSheetState extends State<_GifPickerSheet>
                 borderRadius: BorderRadius.circular(2),
               ),
             ),
-            const SizedBox(height: 12),
-            // Header
-            Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 16),
-              child: Row(
-                children: [
-                  Text('GIFs',
-                      style: TextStyle(
-                          color: AppTheme.navyBlue,
-                          fontSize: 17,
-                          fontWeight: FontWeight.w700)),
-                  const Spacer(),
-                  IconButton(
-                    icon: Icon(Icons.close,
-                        color: AppTheme.textSecondary, size: 20),
-                    onPressed: () => Navigator.of(context).pop(),
-                  ),
-                ],
-              ),
-            ),
+            const SizedBox(height: 8),
             // Tabs
             Container(
               margin: const EdgeInsets.symmetric(horizontal: 16),
@@ -122,7 +104,7 @@ class _GifPickerSheetState extends State<_GifPickerSheet>
                     fontSize: 12, fontWeight: FontWeight.w600),
                 indicatorSize: TabBarIndicatorSize.tab,
                 tabs: const [
-                  Tab(text: 'MEMES'),
+                  Tab(text: 'KLIPY'),
                   Tab(text: 'RETRO'),
                 ],
               ),
@@ -132,8 +114,8 @@ class _GifPickerSheetState extends State<_GifPickerSheet>
               child: TabBarView(
                 controller: _tabs,
                 children: [
-                  _MemeTab(
-                    searchCtrl: _memesSearch,
+                  _KlipyTab(
+                    searchCtrl: _klipySearch,
                     onSelected: (url) {
                       Navigator.of(context).pop();
                       widget.onSelected(url);
@@ -157,26 +139,31 @@ class _GifPickerSheetState extends State<_GifPickerSheet>
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Memes tab — Reddit meme_api (r/gifs, r/reactiongifs, r/HighQualityGifs)
+// KLIPY tab — modern GIFs via KLIPY API
 // ─────────────────────────────────────────────────────────────────────────────
 
-class _MemeTab extends StatefulWidget {
+class _KlipyTab extends StatefulWidget {
   final TextEditingController searchCtrl;
   final void Function(String url) onSelected;
-  const _MemeTab({required this.searchCtrl, required this.onSelected});
+  const _KlipyTab({required this.searchCtrl, required this.onSelected});
 
   @override
-  State<_MemeTab> createState() => _MemeTabState();
+  State<_KlipyTab> createState() => _KlipyTabState();
 }
 
-class _MemeTabState extends State<_MemeTab>
+class _KlipyTabState extends State<_KlipyTab>
     with AutomaticKeepAliveClientMixin {
   List<_GifItem> _gifs = [];
+  List<_KlipyCategory> _categories = [];
   bool _loading = true;
+  bool _loadingMore = false;
   bool _hasError = false;
+  bool _hasNext = false;
+  int _page = 1;
   String _loadedQuery = '';
-
-  static const _defaultSubreddits = ['gifs', 'reactiongifs', 'HighQualityGifs'];
+  bool _showCategories = true; // show categories by default
+  final _scrollCtrl = ScrollController();
+  Timer? _debounce;
 
   @override
   bool get wantKeepAlive => true;
@@ -184,123 +171,243 @@ class _MemeTabState extends State<_MemeTab>
   @override
   void initState() {
     super.initState();
-    _fetch('');
+    _fetchCategories();
+    _fetch('', page: 1);
     widget.searchCtrl.addListener(_onSearchChanged);
+    _scrollCtrl.addListener(_onScroll);
   }
 
   @override
   void dispose() {
+    _debounce?.cancel();
     widget.searchCtrl.removeListener(_onSearchChanged);
+    _scrollCtrl.dispose();
     super.dispose();
   }
 
+  Future<void> _fetchCategories() async {
+    final key = ApiConfig.klipyApiKey;
+    if (key.isEmpty) return;
+    try {
+      final uri = Uri.parse(
+          'https://api.klipy.com/api/v1/$key/gifs/categories?per_page=50');
+      final resp = await http.get(uri).timeout(const Duration(seconds: 8));
+      if (resp.statusCode != 200) return;
+      final json = jsonDecode(resp.body) as Map<String, dynamic>;
+      final cats = (json['data']?['categories'] as List?) ?? [];
+      if (mounted) {
+        setState(() {
+          _categories = cats.map((c) => _KlipyCategory(
+            name: c['category'] as String? ?? '',
+            query: c['query'] as String? ?? '',
+            previewUrl: c['preview_url'] as String? ?? '',
+          )).where((c) => c.name.isNotEmpty).toList();
+        });
+      }
+    } catch (_) {}
+  }
+
+  void _selectCategory(String query) {
+    widget.searchCtrl.text = query;
+    setState(() => _showCategories = false);
+    _fetch(query, page: 1);
+  }
+
   void _onSearchChanged() {
-    final q = widget.searchCtrl.text.trim();
-    if (q != _loadedQuery) {
-      _fetch(q);
+    _debounce?.cancel();
+    _debounce = Timer(const Duration(milliseconds: 400), () {
+      final q = widget.searchCtrl.text.trim();
+      if (q.isEmpty && _loadedQuery.isNotEmpty) {
+        // Cleared search — show categories again
+        setState(() => _showCategories = true);
+        _fetch('', page: 1);
+        return;
+      }
+      if (q != _loadedQuery) {
+        setState(() => _showCategories = false);
+        _fetch(q, page: 1);
+      }
+    });
+  }
+
+  void _onScroll() {
+    if (_loadingMore || !_hasNext) return;
+    if (_scrollCtrl.position.pixels >=
+        _scrollCtrl.position.maxScrollExtent - 200) {
+      _fetch(_loadedQuery, page: _page + 1, append: true);
     }
   }
 
-  Future<void> _fetch(String query) async {
+  Future<void> _fetch(String query, {required int page, bool append = false}) async {
     if (!mounted) return;
-    setState(() { _loading = true; _hasError = false; });
+    final key = ApiConfig.klipyApiKey;
+    debugPrint('[GIF] KLIPY key length=${key.length}, empty=${key.isEmpty}');
+    if (key.isEmpty) {
+      debugPrint('[GIF] KLIPY API key not set — check --dart-define=KLIPY_API_KEY');
+      if (mounted) setState(() { _loading = false; _hasError = true; });
+      return;
+    }
+
+    if (!append) {
+      setState(() { _loading = true; _hasError = false; });
+    } else {
+      setState(() { _loadingMore = true; });
+    }
     _loadedQuery = query;
 
     try {
-      final results = <_GifItem>[];
+      final base = 'https://api.klipy.com/api/v1/$key/gifs';
+      final Uri uri;
       if (query.isEmpty) {
-        // Load from three gif-centric subreddits in parallel
-        final futures = _defaultSubreddits.map(_fetchSubreddit);
-        final lists = await Future.wait(futures);
-        for (final list in lists) {
-          results.addAll(list);
-        }
-        results.shuffle();
+        uri = Uri.parse('$base/trending?per_page=24&page=$page&rating=pg');
       } else {
-        // Keyword search across gif-centric subreddits (not treating query as subreddit)
-        results.addAll(await _searchGifSubreddits(query));
+        uri = Uri.parse(
+            '$base/search?q=${Uri.encodeComponent(query)}&per_page=24&page=$page&rating=pg');
+      }
+
+      debugPrint('[GIF] KLIPY → $uri');
+      final resp = await http.get(uri).timeout(const Duration(seconds: 10));
+      debugPrint('[GIF] KLIPY ← ${resp.statusCode} (${resp.body.length} bytes)');
+      if (resp.statusCode != 200) throw Exception('HTTP ${resp.statusCode}');
+
+      final json = jsonDecode(resp.body) as Map<String, dynamic>;
+      final envelope = json['data'] as Map<String, dynamic>? ?? {};
+      final items = (envelope['data'] as List?) ?? [];
+      debugPrint('[GIF] KLIPY parsed ${items.length} items');
+
+      final parsed = <_GifItem>[];
+      for (final item in items) {
+        if (item is! Map<String, dynamic>) continue;
+        // KLIPY uses file.{hd,md,sm}.{gif,webp}.url
+        final file = item['file'] as Map<String, dynamic>? ?? {};
+        final hd = file['hd'] as Map<String, dynamic>?;
+        final sm = file['sm'] as Map<String, dynamic>?;
+        final md = file['md'] as Map<String, dynamic>?;
+
+        final fullUrl = hd?['gif']?['url'] as String? ??
+            md?['gif']?['url'] as String? ?? '';
+        final thumbUrl = sm?['gif']?['url'] as String? ??
+            sm?['webp']?['url'] as String? ??
+            md?['webp']?['url'] as String? ??
+            fullUrl;
+
+        if (fullUrl.isEmpty) continue;
+        parsed.add(_GifItem(
+          url: fullUrl,
+          thumbUrl: thumbUrl,
+          title: item['title'] as String? ?? '',
+          slug: item['slug'] as String?,
+        ));
       }
 
       if (mounted) {
         setState(() {
-          _gifs = results.take(60).toList();
+          if (append) {
+            _gifs.addAll(parsed);
+          } else {
+            _gifs = parsed;
+          }
+          _page = page;
+          _hasNext = envelope['has_next'] == true;
           _loading = false;
+          _loadingMore = false;
         });
       }
-    } catch (_) {
-      if (mounted) setState(() { _loading = false; _hasError = true; });
+    } catch (e) {
+      debugPrint('[GIF] KLIPY error: $e');
+      if (mounted) {
+        setState(() {
+          _loading = false;
+          _loadingMore = false;
+          if (!append) _hasError = true;
+        });
+      }
     }
   }
 
-  /// Searches Reddit for GIFs matching [query] within gif-centric subreddits.
-  ///
-  /// Uses Reddit's multireddit search with `restrict_sr=true` so the keyword
-  /// never becomes a subreddit name. A realistic browser User-Agent is required
-  /// — Reddit 429s bare UA strings and returns an HTML redirect, not JSON.
-  Future<List<_GifItem>> _searchGifSubreddits(String query) async {
-    final subreddit = _defaultSubreddits.join('+');
-    final uri = Uri.parse(
-        'https://www.reddit.com/r/$subreddit/search.json'
-        '?q=${Uri.encodeComponent(query)}'
-        '&sort=relevance&restrict_sr=true&limit=25&type=link&t=year');
-    final resp = await http.get(uri, headers: {
-      // Reddit blocks bare User-Agents with 429 / HTML redirect.
-      'User-Agent': 'Mozilla/5.0 (compatible; Sojorn/1.0; +https://sojorn.net)',
-      'Accept': 'application/json',
-    }).timeout(const Duration(seconds: 10));
-    if (resp.statusCode != 200) return [];
-    // Guard: Reddit sometimes returns HTML (rate-limit / login redirect).
-    if (!resp.body.trimLeft().startsWith('{')) return [];
-    final data = jsonDecode(resp.body) as Map<String, dynamic>;
-    final children =
-        ((data['data'] as Map<String, dynamic>)['children'] as List?) ?? [];
-    return children
-        .cast<Map<String, dynamic>>()
-        .map((c) => c['data'] as Map<String, dynamic>)
-        .where((post) {
-          final url = post['url'] as String? ?? '';
-          return !url.startsWith('https://v.redd.it/') &&
-              !url.endsWith('.mp4') &&
-              (url.endsWith('.gif') ||
-                  url.startsWith('https://i.redd.it/') ||
-                  url.startsWith('https://preview.redd.it/') ||
-                  url.startsWith('https://i.imgur.com/') ||
-                  url.startsWith('https://media.giphy.com/')) &&
-              post['over_18'] != true;
-        })
-        .map((post) => _GifItem(
-              url: post['url'] as String,
-              title: post['title'] as String? ?? '',
-            ))
-        .toList();
+  void _onGifSelected(String url, String? slug) {
+    widget.onSelected(url);
+    // Fire-and-forget share trigger for KLIPY analytics
+    if (slug != null && slug.isNotEmpty) {
+      final key = ApiConfig.klipyApiKey;
+      if (key.isNotEmpty) {
+        http.post(
+          Uri.parse('https://api.klipy.com/api/v1/$key/gifs/share-trigger'),
+          headers: {'Content-Type': 'application/json'},
+          body: jsonEncode({'slug': slug}),
+        ).catchError((_) => http.Response('', 200));
+      }
+    }
   }
 
-  Future<List<_GifItem>> _fetchSubreddit(String subreddit) async {
-    final uri = Uri.parse(
-        'https://meme-api.com/gimme/$subreddit/20');
-    final resp = await http.get(uri).timeout(const Duration(seconds: 8));
-    if (resp.statusCode != 200) return [];
-    final data = jsonDecode(resp.body) as Map<String, dynamic>;
-    final memes = (data['memes'] as List?) ?? [];
-    return memes
-        .cast<Map<String, dynamic>>()
-        .where((m) {
-          final url = m['url'] as String? ?? '';
-          // Accept GIF-capable image URLs; reject video-only hosts and .mp4
-          final isImage = !url.startsWith('https://v.redd.it/') &&
-              !url.endsWith('.mp4') &&
-              (url.endsWith('.gif') ||
-                  url.startsWith('https://i.redd.it/') ||
-                  url.startsWith('https://preview.redd.it/') ||
-                  url.startsWith('https://i.imgur.com/') ||
-                  url.startsWith('https://media.giphy.com/'));
-          return isImage && m['nsfw'] != true;
-        })
-        .map((m) => _GifItem(
-              url: m['url'] as String,
-              title: m['title'] as String? ?? '',
-            ))
-        .toList();
+  Widget _buildCategoryGrid() {
+    return GridView.builder(
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+      gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+        crossAxisCount: 3,
+        crossAxisSpacing: 6,
+        mainAxisSpacing: 6,
+        childAspectRatio: 1.3,
+      ),
+      itemCount: _categories.length,
+      itemBuilder: (_, i) {
+        final cat = _categories[i];
+        return GestureDetector(
+          onTap: () => _selectCategory(cat.query),
+          child: ClipRRect(
+            borderRadius: BorderRadius.circular(8),
+            child: Stack(
+              fit: StackFit.expand,
+              children: [
+                CachedNetworkImage(
+                  imageUrl: cat.previewUrl,
+                  fit: BoxFit.cover,
+                  placeholder: (_, __) => Container(
+                    color: AppTheme.navyBlue.withValues(alpha: 0.08),
+                  ),
+                  errorWidget: (_, __, ___) => Container(
+                    color: AppTheme.navyBlue.withValues(alpha: 0.08),
+                    child: Icon(Icons.gif_outlined,
+                        color: AppTheme.textSecondary, size: 24),
+                  ),
+                ),
+                // Gradient overlay for text readability
+                Positioned.fill(
+                  child: DecoratedBox(
+                    decoration: BoxDecoration(
+                      gradient: LinearGradient(
+                        begin: Alignment.topCenter,
+                        end: Alignment.bottomCenter,
+                        colors: [
+                          Colors.transparent,
+                          Colors.black.withValues(alpha: 0.6),
+                        ],
+                        stops: const [0.4, 1.0],
+                      ),
+                    ),
+                  ),
+                ),
+                Positioned(
+                  left: 6,
+                  right: 6,
+                  bottom: 6,
+                  child: Text(
+                    cat.name,
+                    style: const TextStyle(
+                      color: Colors.white,
+                      fontSize: 11,
+                      fontWeight: FontWeight.w600,
+                    ),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        );
+      },
+    );
   }
 
   @override
@@ -310,18 +417,29 @@ class _MemeTabState extends State<_MemeTab>
       children: [
         _SearchBar(
           ctrl: widget.searchCtrl,
-          hint: 'Search reactions (e.g. happy, facepalm)…',
+          hint: 'Search KLIPY',
         ),
-        Expanded(child: _GifGrid(
-          gifs: _gifs,
-          loading: _loading,
-          hasError: _hasError,
-          emptyMessage: _loadedQuery.isEmpty
-              ? 'No GIFs found'
-              : 'No GIFs found for "${widget.searchCtrl.text.trim()}"',
-          onSelected: widget.onSelected,
-          onRetry: () => _fetch(_loadedQuery),
-        )),
+        Expanded(
+          child: _showCategories && _categories.isNotEmpty
+              ? _buildCategoryGrid()
+              : _GifGrid(
+                  gifs: _gifs,
+                  loading: _loading,
+                  hasError: _hasError,
+                  emptyMessage: _loadedQuery.isEmpty
+                      ? 'No GIFs found'
+                      : 'No GIFs found for "${widget.searchCtrl.text.trim()}"',
+                  onSelected: (item) => _onGifSelected(item.url, item.slug),
+                  onRetry: () => _fetch(_loadedQuery, page: 1),
+                  scrollController: _scrollCtrl,
+                  loadingMore: _loadingMore,
+                ),
+        ),
+        Padding(
+          padding: const EdgeInsets.only(bottom: 4),
+          child: Text('Powered by KLIPY',
+              style: TextStyle(fontSize: 10, color: AppTheme.textSecondary)),
+        ),
       ],
     );
   }
@@ -346,19 +464,9 @@ class _RetroTabState extends State<_RetroTab>
   bool _loading = true;
   bool _hasError = false;
   String _loadedQuery = '';
+  Timer? _debounce;
 
   static const _defaultQuery = 'space';
-
-  // GifCities (Internet Archive) serves GIFs from two URL formats:
-  //   1. blob.gifcities.org — their primary CDN
-  //   2. web.archive.org/web/... — Wayback Machine GeoCity originals
-  // Split into two RegExp objects to avoid raw-string single-quote termination.
-  static final _blobGifRegex = RegExp(
-      r'https://blob\.gifcities\.org/gifcities/[A-Za-z0-9_.\-/%]+\.gif',
-      caseSensitive: false);
-  static final _archiveGifRegex = RegExp(
-      r'https://web\.archive\.org/web/\d+/[^\s"<>]+\.gif',
-      caseSensitive: false);
 
   @override
   bool get wantKeepAlive => true;
@@ -372,16 +480,20 @@ class _RetroTabState extends State<_RetroTab>
 
   @override
   void dispose() {
+    _debounce?.cancel();
     widget.searchCtrl.removeListener(_onSearchChanged);
     super.dispose();
   }
 
   void _onSearchChanged() {
-    final q = widget.searchCtrl.text.trim();
-    final effective = q.isEmpty ? _defaultQuery : q;
-    if (effective != _loadedQuery) {
-      _fetch(effective);
-    }
+    _debounce?.cancel();
+    _debounce = Timer(const Duration(milliseconds: 400), () {
+      final q = widget.searchCtrl.text.trim();
+      final effective = q.isEmpty ? _defaultQuery : q;
+      if (effective != _loadedQuery) {
+        _fetch(effective);
+      }
+    });
   }
 
   Future<void> _fetch(String query) async {
@@ -390,84 +502,43 @@ class _RetroTabState extends State<_RetroTab>
     _loadedQuery = query;
 
     try {
-      final gifs = await _fetchGifCities(query);
-      if (mounted) setState(() { _gifs = gifs; _loading = false; });
-    } catch (_) {
+      final uri = Uri.parse(
+          'https://gifcities.archive.org/api/v1/gifsearch?q=${Uri.encodeComponent(query)}');
+      debugPrint('[GIF] Retro → $uri');
+      final resp = await http.get(uri).timeout(const Duration(seconds: 10));
+      debugPrint('[GIF] Retro ← ${resp.statusCode} (${resp.body.length} bytes)');
+      if (resp.statusCode != 200) throw Exception('HTTP ${resp.statusCode}');
+
+      final decoded = jsonDecode(resp.body);
+      final items = decoded is List ? decoded : <dynamic>[];
+      debugPrint('[GIF] Retro parsed ${items.length} items');
+
+      final gifs = <_GifItem>[];
+      for (final item in items) {
+        if (item is! Map<String, dynamic>) continue;
+        final gifPath = item['gif'] as String? ?? '';
+        if (gifPath.isEmpty) continue;
+
+        // Filter out junk: spacers, bullets, thin bars
+        final w = (item['width'] as num?)?.toInt() ?? 0;
+        final h = (item['height'] as num?)?.toInt() ?? 0;
+        if (w < 30 || h < 30) continue; // too small (spacers, bullets)
+        if (w > 10 * h || h > 10 * w) continue; // extreme aspect ratio (bars)
+
+        // Insert 'if_' after timestamp to get raw image (skip Wayback toolbar)
+        final slash = gifPath.indexOf('/');
+        final rawPath = slash > 0
+            ? '${gifPath.substring(0, slash)}if_${gifPath.substring(slash)}'
+            : gifPath;
+        final fullUrl = 'https://web.archive.org/web/$rawPath';
+        gifs.add(_GifItem(url: fullUrl, thumbUrl: fullUrl, title: ''));
+      }
+
+      if (mounted) setState(() { _gifs = gifs.take(60).toList(); _loading = false; });
+    } catch (e) {
+      debugPrint('[GIF] Retro error: $e');
       if (mounted) setState(() { _loading = false; _hasError = true; });
     }
-  }
-
-  /// Fetches retro GIFs from GifCities. Tries the JSON API first, falls back
-  /// to HTML scraping with the blob URL regex.
-  Future<List<_GifItem>> _fetchGifCities(String query) async {
-    // ── 1. JSON API ──────────────────────────────────────────────────────────
-    try {
-      final jsonUri = Uri.parse(
-          'https://gifcities.org/api/gifs?q=${Uri.encodeComponent(query)}&limit=60');
-      final jsonResp = await http
-          .get(jsonUri, headers: {
-            'Accept': 'application/json',
-            'User-Agent': 'SojornApp/1.0',
-          })
-          .timeout(const Duration(seconds: 8));
-
-      if (jsonResp.statusCode == 200) {
-        final decoded = jsonDecode(jsonResp.body);
-        List? items;
-        if (decoded is List) {
-          items = decoded;
-        } else if (decoded is Map) {
-          items = decoded['items'] as List? ??
-              decoded['results'] as List? ??
-              decoded['data'] as List? ??
-              decoded['gifs'] as List?;
-        }
-        if (items != null && items.isNotEmpty) {
-          final unique = <String>{};
-          final result = <_GifItem>[];
-          for (final item in items) {
-            if (item is! Map) continue;
-            final url = item['url'] as String? ??
-                item['image_url'] as String? ??
-                item['src'] as String? ?? '';
-            if (url.isNotEmpty && unique.add(url)) {
-              result.add(_GifItem(url: url, title: ''));
-            }
-          }
-          if (result.isNotEmpty) return result;
-        }
-      }
-    } catch (_) {}
-
-    // ── 2. HTML scraping fallback ─────────────────────────────────────────
-    for (final pageUrl in [
-      'https://gifcities.org/?q=${Uri.encodeComponent(query)}',
-      'https://gifcities.org/search?q=${Uri.encodeComponent(query)}&page_size=60&offset=0',
-    ]) {
-      try {
-        final resp = await http
-            .get(Uri.parse(pageUrl), headers: {
-              'Accept': 'text/html,*/*',
-              'User-Agent': 'Mozilla/5.0 (compatible; SojornApp/1.0)',
-            })
-            .timeout(const Duration(seconds: 10));
-        final allMatches = [
-          ..._blobGifRegex.allMatches(resp.body),
-          ..._archiveGifRegex.allMatches(resp.body),
-        ];
-        if (allMatches.isNotEmpty) {
-          final unique = <String>{};
-          final result = <_GifItem>[];
-          for (final m in allMatches) {
-            final url = m.group(0)!;
-            if (unique.add(url)) result.add(_GifItem(url: url, title: ''));
-          }
-          if (result.isNotEmpty) return result;
-        }
-      } catch (_) {}
-    }
-
-    return [];
   }
 
   @override
@@ -477,15 +548,17 @@ class _RetroTabState extends State<_RetroTab>
       children: [
         _SearchBar(
           ctrl: widget.searchCtrl,
-          hint: 'Search retro GIFs (e.g. dancing, stars)…',
+          hint: 'Search retro gifs from the Internet Archive',
         ),
         Expanded(child: _GifGrid(
           gifs: _gifs,
           loading: _loading,
           hasError: _hasError,
           emptyMessage: 'No retro GIFs found for "${widget.searchCtrl.text.trim().isEmpty ? _defaultQuery : widget.searchCtrl.text.trim()}"',
-          onSelected: widget.onSelected,
+          onSelected: (item) => widget.onSelected(item.url),
           onRetry: () => _fetch(_loadedQuery),
+          crossAxisCount: 3,
+          childAspectRatio: 1.0,
         )),
       ],
     );
@@ -538,10 +611,28 @@ class _SearchBar extends StatelessWidget {
   }
 }
 
+class _KlipyCategory {
+  final String name;
+  final String query;
+  final String previewUrl;
+  const _KlipyCategory({
+    required this.name,
+    required this.query,
+    required this.previewUrl,
+  });
+}
+
 class _GifItem {
   final String url;
+  final String thumbUrl;
   final String title;
-  const _GifItem({required this.url, required this.title});
+  final String? slug;
+  const _GifItem({
+    required this.url,
+    required this.thumbUrl,
+    required this.title,
+    this.slug,
+  });
 }
 
 class _GifGrid extends StatelessWidget {
@@ -549,8 +640,12 @@ class _GifGrid extends StatelessWidget {
   final bool loading;
   final bool hasError;
   final String emptyMessage;
-  final void Function(String url) onSelected;
+  final void Function(_GifItem item) onSelected;
   final VoidCallback onRetry;
+  final ScrollController? scrollController;
+  final bool loadingMore;
+  final int crossAxisCount;
+  final double childAspectRatio;
 
   const _GifGrid({
     required this.gifs,
@@ -559,6 +654,10 @@ class _GifGrid extends StatelessWidget {
     required this.emptyMessage,
     required this.onSelected,
     required this.onRetry,
+    this.scrollController,
+    this.loadingMore = false,
+    this.crossAxisCount = 2,
+    this.childAspectRatio = 1.4,
   });
 
   @override
@@ -588,22 +687,35 @@ class _GifGrid extends StatelessWidget {
             textAlign: TextAlign.center),
       );
     }
+    final itemCount = gifs.length + (loadingMore ? 1 : 0);
     return GridView.builder(
+      controller: scrollController,
       padding: const EdgeInsets.all(8),
-      gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-        crossAxisCount: 2,
+      gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
+        crossAxisCount: crossAxisCount,
         crossAxisSpacing: 6,
         mainAxisSpacing: 6,
-        childAspectRatio: 1.4,
+        childAspectRatio: childAspectRatio,
       ),
-      itemCount: gifs.length,
+      itemCount: itemCount,
       itemBuilder: (_, i) {
+        if (i >= gifs.length) {
+          return const Center(
+            child: Padding(
+              padding: EdgeInsets.all(16),
+              child: SizedBox(
+                width: 24, height: 24,
+                child: CircularProgressIndicator(strokeWidth: 2),
+              ),
+            ),
+          );
+        }
         final gif = gifs[i];
-        final displayUrl = ApiConfig.needsProxy(gif.url)
-            ? ApiConfig.proxyImageUrl(gif.url)
-            : gif.url;
+        final displayUrl = ApiConfig.needsProxy(gif.thumbUrl)
+            ? ApiConfig.proxyImageUrl(gif.thumbUrl)
+            : gif.thumbUrl;
         return GestureDetector(
-          onTap: () => onSelected(gif.url), // store original URL, proxy at display
+          onTap: () => onSelected(gif),
           child: ClipRRect(
             borderRadius: BorderRadius.circular(8),
             child: CachedNetworkImage(

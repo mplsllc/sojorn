@@ -86,11 +86,17 @@ void main() {
       };
 
       if (kIsWeb) {
-        await Firebase.initializeApp(options: FirebaseWebConfig.options);
+        if (FirebaseWebConfig.isConfigured) {
+          await Firebase.initializeApp(options: FirebaseWebConfig.options);
+        } else {
+          debugPrint('[Firebase] Web config missing API key/App ID — Firebase disabled (push notifications won\'t work)');
+        }
       } else {
         await Firebase.initializeApp();
       }
-      FirebaseMessaging.onBackgroundMessage(_firebaseMessagingBackgroundHandler);
+      if (!kIsWeb || FirebaseWebConfig.isConfigured) {
+        FirebaseMessaging.onBackgroundMessage(_firebaseMessagingBackgroundHandler);
+      }
 
       // NotoColorEmoji removed — OS provides emoji glyphs natively.
       // Loading it via GoogleFonts added ~10MB download on first load.

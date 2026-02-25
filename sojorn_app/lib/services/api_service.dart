@@ -58,7 +58,6 @@ class ApiService {
           .replace(queryParameters: queryParams);
       var headers = await _authHeaders();
       headers['Content-Type'] = 'application/json';
-      headers['Cache-Control'] = 'no-cache';
 
       // Add request signature for critical operations
       if (requireSignature && body != null) {
@@ -1814,6 +1813,14 @@ class ApiService {
 
   Future<void> removeRsvp(String groupId, String eventId) async {
     await _callGoApi('/groups/$groupId/events/$eventId/rsvp', method: 'DELETE');
+  }
+
+  Future<void> approveEvent(String groupId, String eventId) async {
+    await _callGoApi('/groups/$groupId/events/$eventId/approve');
+  }
+
+  Future<void> rejectEvent(String groupId, String eventId) async {
+    await _callGoApi('/groups/$groupId/events/$eventId/reject');
   }
 
   Future<List<Map<String, dynamic>>> fetchUpcomingEvents({int limit = 20}) async {

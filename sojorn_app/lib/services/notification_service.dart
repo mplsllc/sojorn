@@ -198,6 +198,12 @@ class NotificationService {
     if (_initialized) return;
     _initialized = true;
 
+    // Skip FCM entirely on web when Firebase isn't configured (no API key)
+    if (kIsWeb && !FirebaseWebConfig.isConfigured) {
+      debugPrint('[FCM] Skipped — Firebase not configured for web (missing API key)');
+      return;
+    }
+
     try {
       debugPrint('[FCM] Initializing for platform: ${_resolveDeviceType()}');
       

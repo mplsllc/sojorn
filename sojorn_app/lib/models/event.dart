@@ -38,6 +38,8 @@ class GroupEvent extends Equatable {
   final int? maxAttendees;
   final int attendeeCount;
   final RSVPStatus? myRsvp;
+  final String status; // approved, pending, rejected
+  final String source; // user, eventbrite, ticketmaster
   final DateTime createdAt;
   final DateTime updatedAt;
 
@@ -58,9 +60,13 @@ class GroupEvent extends Equatable {
     this.maxAttendees,
     required this.attendeeCount,
     this.myRsvp,
+    this.status = 'approved',
+    this.source = 'user',
     required this.createdAt,
     required this.updatedAt,
   });
+
+  bool get isExternal => source != 'user';
 
   factory GroupEvent.fromJson(Map<String, dynamic> json) {
     return GroupEvent(
@@ -82,6 +88,8 @@ class GroupEvent extends Equatable {
       maxAttendees: json['max_attendees'] as int?,
       attendeeCount: json['attendee_count'] as int? ?? 0,
       myRsvp: RSVPStatus.fromString(json['my_rsvp'] as String?),
+      status: json['status'] as String? ?? 'approved',
+      source: json['source'] as String? ?? 'user',
       createdAt: DateTime.parse(json['created_at'] as String),
       updatedAt: DateTime.parse(json['updated_at'] as String),
     );
@@ -103,6 +111,7 @@ class GroupEvent extends Equatable {
   GroupEvent copyWith({
     RSVPStatus? myRsvp,
     int? attendeeCount,
+    String? status,
   }) {
     return GroupEvent(
       id: id,
@@ -121,11 +130,13 @@ class GroupEvent extends Equatable {
       maxAttendees: maxAttendees,
       attendeeCount: attendeeCount ?? this.attendeeCount,
       myRsvp: myRsvp ?? this.myRsvp,
+      status: status ?? this.status,
+      source: source,
       createdAt: createdAt,
       updatedAt: updatedAt,
     );
   }
 
   @override
-  List<Object?> get props => [id, groupId, title, startsAt, myRsvp, attendeeCount];
+  List<Object?> get props => [id, groupId, title, startsAt, myRsvp, attendeeCount, status];
 }

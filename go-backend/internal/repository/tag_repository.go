@@ -295,6 +295,36 @@ func (r *TagRepository) GetTrendingHashtags(ctx context.Context, limit int) ([]m
 		hashtags = append(hashtags, h)
 	}
 
+	// Backfill with featured or most-used hashtags if not enough trending results
+	if len(hashtags) < limit {
+		existingIDs := make([]string, len(hashtags))
+		for i, h := range hashtags {
+			existingIDs[i] = h.ID.String()
+		}
+		remaining := limit - len(hashtags)
+		backfillRows, err := r.pool.Query(ctx, `
+			SELECT id, name, display_name, use_count, trending_score, is_trending, is_featured, category, created_at, 0 as recent_count
+			FROM hashtags
+			WHERE ($1::uuid[] IS NULL OR id != ALL($1::uuid[]))
+			ORDER BY is_featured DESC, use_count DESC
+			LIMIT $2
+		`, existingIDs, remaining)
+		if err == nil {
+			defer backfillRows.Close()
+			for backfillRows.Next() {
+				var h models.Hashtag
+				var recentCount int
+				if err := backfillRows.Scan(
+					&h.ID, &h.Name, &h.DisplayName, &h.UseCount,
+					&h.TrendingScore, &h.IsTrending, &h.IsFeatured, &h.Category, &h.CreatedAt, &recentCount,
+				); err == nil {
+					h.RecentCount = recentCount
+					hashtags = append(hashtags, h)
+				}
+			}
+		}
+	}
+
 	return hashtags, nil
 }
 

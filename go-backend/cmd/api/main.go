@@ -124,6 +124,19 @@ func main() {
 	notifRepo := repository.NewNotificationRepository(dbPool)
 	tagRepo := repository.NewTagRepository(dbPool)
 
+	// Refresh trending hashtag scores periodically (every 15 min) so Discover page has data
+	go func() {
+		if err := tagRepo.RefreshTrendingScores(context.Background()); err != nil {
+			log.Warn().Err(err).Msg("Initial trending score refresh failed")
+		}
+		ticker := time.NewTicker(15 * time.Minute)
+		for range ticker.C {
+			if err := tagRepo.RefreshTrendingScores(context.Background()); err != nil {
+				log.Warn().Err(err).Msg("Trending score refresh failed")
+			}
+		}
+	}()
+
 	assetService := services.NewAssetService(cfg.R2SigningSecret, cfg.R2PublicBaseURL, cfg.R2ImgDomain, cfg.R2VidDomain)
 	feedService := services.NewFeedService(postRepo, assetService)
 
@@ -260,6 +273,26 @@ func main() {
 	// Harmony Score calculator — daily trust recalculation (Discourse-inspired, clean-room)
 	harmonyCalc := services.NewHarmonyCalculator(dbPool)
 	harmonyCalc.ScheduleDailyRecalculation(bgCtx)
+
+	// Event ingestion — fetch from Eventbrite & Ticketmaster every 2 hours
+	if cfg.EventbriteAPIKey != "" || cfg.TicketmasterAPIKey != "" {
+		eventIngestion := services.NewEventIngestionService(dbPool, cfg.EventbriteAPIKey, cfg.TicketmasterAPIKey)
+		go func() {
+			// Initial sync after 30s delay (let other services start first)
+			time.Sleep(30 * time.Second)
+			if err := eventIngestion.SyncAll(context.Background()); err != nil {
+				log.Warn().Err(err).Msg("Initial event ingestion sync failed")
+			}
+			ticker := time.NewTicker(2 * time.Hour)
+			defer ticker.Stop()
+			for range ticker.C {
+				if err := eventIngestion.SyncAll(context.Background()); err != nil {
+					log.Warn().Err(err).Msg("Event ingestion sync failed")
+				}
+			}
+		}()
+		log.Info().Msg("Event ingestion service started (Eventbrite + Ticketmaster)")
+	}
 
 	r.GET("/ws", wsHandler.ServeWS)
 

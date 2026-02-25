@@ -111,10 +111,14 @@ class PostBody extends StatelessWidget {
           return Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              ConstrainedBox(
-                constraints: BoxConstraints(maxHeight: maxHeight),
+              SizedBox(
+                height: maxHeight,
                 child: ClipRect(
-                  child: content,
+                  child: OverflowBox(
+                    alignment: Alignment.topLeft,
+                    maxHeight: double.infinity,
+                    child: content,
+                  ),
                 ),
               ),
               _ExpandIndicator(maxLines: maxLines, text: text),

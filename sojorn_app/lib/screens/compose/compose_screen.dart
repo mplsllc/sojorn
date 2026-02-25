@@ -1307,6 +1307,34 @@ class ComposeBottomBar extends StatelessWidget {
                   ],
                 ),
               ),
+            if (isNsfw)
+              Padding(
+                padding: const EdgeInsets.fromLTRB(12, 8, 12, 0),
+                child: Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+                  decoration: BoxDecoration(
+                    color: AppTheme.nsfwWarningBg,
+                    borderRadius: BorderRadius.circular(8),
+                    border: Border.all(color: AppTheme.nsfwWarningBorder),
+                  ),
+                  child: Row(
+                    children: [
+                      Icon(Icons.info_outline, size: 16, color: AppTheme.nsfwWarningIcon),
+                      const SizedBox(width: 8),
+                      Expanded(
+                        child: Text(
+                          'Use this for content you feel may be sensitive. See our Terms of Service for details.',
+                          style: TextStyle(
+                            fontSize: 11,
+                            color: AppTheme.nsfwWarningIcon,
+                            height: 1.3,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
             Padding(
               padding: const EdgeInsets.symmetric(
                 horizontal: AppTheme.spacingMd,

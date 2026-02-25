@@ -43,6 +43,9 @@ class _SecureChatFullScreenState extends State<SecureChatFullScreen>
   String _searchQuery = '';
   bool _filterUnread = false;
 
+  // Desktop split-pane state
+  SecureConversation? _selectedConversation;
+
   @override
   void initState() {
     super.initState();
@@ -157,6 +160,12 @@ class _SecureChatFullScreenState extends State<SecureChatFullScreen>
   }
 
   void _openConversation(SecureConversation conversation) {
+    // On desktop, show in the right pane instead of pushing a route
+    final width = MediaQuery.of(context).size.width;
+    if (width >= SojornBreakpoints.desktop) {
+      setState(() => _selectedConversation = conversation);
+      return;
+    }
     Navigator.push(
       context,
       MaterialPageRoute(
@@ -279,12 +288,68 @@ class _SecureChatFullScreenState extends State<SecureChatFullScreen>
           ],
         ),
       ],
-      body: _buildBody(),
+      body: LayoutBuilder(
+        builder: (context, constraints) {
+          final isDesktop = constraints.maxWidth >= SojornBreakpoints.desktop;
+          if (!isDesktop) return _buildBody();
+
+          // Desktop: split-pane — conversation list left, active chat right
+          return Row(
+            children: [
+              // Left pane: conversation list
+              SizedBox(
+                width: SojornBreakpoints.sidebarWidth,
+                child: _buildBody(),
+              ),
+              VerticalDivider(width: 1, color: AppTheme.border),
+              // Right pane: active chat or placeholder
+              Expanded(
+                child: _selectedConversation != null
+                    ? SecureChatScreen(
+                        key: ValueKey(_selectedConversation!.id),
+                        conversation: _selectedConversation!,
+                        embeddedMode: true,
+                      )
+                    : _buildChatPlaceholder(),
+              ),
+            ],
+          );
+        },
+      ),
       floatingActionButton: FloatingActionButton(
         onPressed: _showNewConversationSheet,
         backgroundColor: AppTheme.brightNavy,
         tooltip: 'New conversation',
         child: const Icon(Icons.edit_outlined, color: Colors.white),
+      ),
+    );
+  }
+
+  Widget _buildChatPlaceholder() {
+    return Center(
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(Icons.chat_bubble_outline, size: 64,
+            color: AppTheme.brightNavy.withValues(alpha: 0.15)),
+          const SizedBox(height: 16),
+          Text(
+            'Select a conversation',
+            style: GoogleFonts.literata(
+              fontSize: 18,
+              fontWeight: FontWeight.w600,
+              color: AppTheme.navyBlue.withValues(alpha: 0.5),
+            ),
+          ),
+          const SizedBox(height: 8),
+          Text(
+            'Choose from your messages on the left',
+            style: GoogleFonts.inter(
+              fontSize: 14,
+              color: AppTheme.textDisabled,
+            ),
+          ),
+        ],
       ),
     );
   }
@@ -439,6 +504,7 @@ class _SecureChatFullScreenState extends State<SecureChatFullScreen>
                             conversation: conv,
                             onTap: () => _openConversation(conv),
                             onDelete: () => _confirmDeleteConversation(conv),
+                            isSelected: _selectedConversation?.id == conv.id,
                           );
                         },
                       ),
@@ -539,10 +605,12 @@ class _ConversationTile extends StatefulWidget {
   final SecureConversation conversation;
   final VoidCallback onTap;
   final VoidCallback onDelete;
+  final bool isSelected;
   const _ConversationTile({
     required this.conversation,
     required this.onTap,
     required this.onDelete,
+    this.isSelected = false,
   });
 
   @override
@@ -581,9 +649,15 @@ class _ConversationTileState extends State<_ConversationTile> {
         child: Container(
           margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
           decoration: BoxDecoration(
-            color: AppTheme.cardSurface,
+            color: widget.isSelected
+                ? AppTheme.brightNavy.withValues(alpha: 0.08)
+                : AppTheme.cardSurface,
             borderRadius: BorderRadius.circular(12),
-            border: Border.all(color: AppTheme.navyBlue.withValues(alpha: 0.1)),
+            border: Border.all(
+              color: widget.isSelected
+                  ? AppTheme.brightNavy.withValues(alpha: 0.3)
+                  : AppTheme.navyBlue.withValues(alpha: 0.1),
+            ),
           ),
           child: Material(
             color: SojornColors.transparent,

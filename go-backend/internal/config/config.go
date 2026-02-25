@@ -48,6 +48,8 @@ type Config struct {
 	FunkwhaleBase           string // deprecated — Freesound replaces Funkwhale
 	FreesoundAPIKey         string // Freesound.org API key for royalty-free audio
 	IcedAPIBase             string // IcedCoffee public-safety API base URL
+	EventbriteAPIKey        string // Eventbrite API key for event ingestion
+	TicketmasterAPIKey      string // Ticketmaster Discovery API key for event ingestion
 }
 
 func LoadConfig() *Config {
@@ -98,6 +100,8 @@ func LoadConfig() *Config {
 		FunkwhaleBase:           getEnv("FUNKWHALE_BASE", ""),
 		FreesoundAPIKey:         getEnv("FREESOUND_API_KEY", ""),
 		IcedAPIBase:             getEnv("ICED_API_BASE", "http://127.0.0.1:8089"),
+		EventbriteAPIKey:        getEnv("EVENTBRITE_API_KEY", ""),
+		TicketmasterAPIKey:      getEnv("TICKETMASTER_API_KEY", ""),
 	}
 }
 

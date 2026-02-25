@@ -33,7 +33,11 @@ class ApiConfig {
     return raw;
   }
 
-  /// Wraps external GIF/image URLs (Reddit, GifCities) through the server proxy
+  /// KLIPY GIF API key (compile-time via --dart-define=KLIPY_API_KEY=xxx).
+  static String get klipyApiKey =>
+      const String.fromEnvironment('KLIPY_API_KEY');
+
+  /// Wraps external GIF/image URLs through the server proxy
   /// so the client's IP is never sent to third-party origins.
   static String proxyImageUrl(String url) {
     return '$baseUrl/image-proxy?url=${Uri.encodeComponent(url)}';
@@ -41,10 +45,7 @@ class ApiConfig {
 
   /// Returns true if [url] is an external GIF that should be proxied.
   static bool needsProxy(String url) {
-    return url.startsWith('https://i.redd.it/') ||
-        url.startsWith('https://preview.redd.it/') ||
-        url.startsWith('https://external-preview.redd.it/') ||
-        url.startsWith('https://blob.gifcities.org/gifcities/') ||
+    return url.startsWith('https://web.archive.org/web/') ||
         url.startsWith('https://i.imgur.com/') ||
         url.startsWith('https://media.giphy.com/');
   }

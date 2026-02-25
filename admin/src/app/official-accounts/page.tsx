@@ -705,7 +705,10 @@ function ArticlesPanel({ configId }: { configId: string }) {
         setArticles(data.articles || []);
         if (data.stats) setStats(data.stats);
       }
-    } catch { setArticles([]); }
+    } catch (e: any) {
+      setArticles([]);
+      setPostResult({ ok: false, msg: `Fetch failed: ${e.message}` });
+    }
     setLoading(false);
   };
 

@@ -23,6 +23,11 @@ class FirebaseWebConfig {
     // which violates our privacy policy.
   );
 
+  /// Whether Firebase is properly configured for web (API key + App ID provided via --dart-define).
+  /// When false, FCM should be skipped gracefully — push notifications won't work but the app runs fine.
+  static bool get isConfigured =>
+      options.apiKey.isNotEmpty && options.appId.isNotEmpty;
+
   // VAPID key for web push notifications (public key — safe to commit).
   // From Firebase Console > Cloud Messaging > Web Push certificates
   static const String _vapidKey = 'BKD_nCyWx5aIrsHQ_bXj4nKK0_N1dURrJU0t9t2FxjzlExaOC7dpvnPKsbGZ228yP7EEAU60dGq1UER8sjwQ4Ls';

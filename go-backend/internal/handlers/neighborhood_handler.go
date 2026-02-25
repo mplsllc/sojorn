@@ -653,16 +653,20 @@ func (h *NeighborhoodHandler) GetMyNeighborhood(c *gin.Context) {
 		var groupName string
 		var memberCount int
 		var bannerUrl *string
-		h.pool.QueryRow(ctx, `SELECT name, member_count, banner_url FROM groups WHERE id = $1`, *groupID).Scan(&groupName, &memberCount, &bannerUrl)
+		var groupDescription *string
+		h.pool.QueryRow(ctx, `SELECT name, member_count, banner_url, description FROM groups WHERE id = $1`, *groupID).Scan(&groupName, &memberCount, &bannerUrl, &groupDescription)
 		result["group_id"] = groupID
 		result["group_name"] = groupName
 		result["member_count"] = memberCount
 
-		// Also nest group_id and banner_url inside neighborhood for Flutter convenience
+		// Also nest group_id, banner_url, and description inside neighborhood for Flutter convenience
 		if neigh, ok := result["neighborhood"].(gin.H); ok {
 			neigh["group_id"] = groupID
 			if bannerUrl != nil {
 				neigh["banner_url"] = *bannerUrl
+			}
+			if groupDescription != nil {
+				neigh["description"] = *groupDescription
 			}
 		}
 
