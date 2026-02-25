@@ -1307,58 +1307,64 @@ class BeaconScreenState extends ConsumerState<BeaconScreen> with TickerProviderS
     );
   }
 
-  // ─── Floating map overlay bar (weather + action buttons) ─────────────
+  // ─── Floating map overlay bar (weather + action buttons + layer chips) ──
   Widget _buildMapOverlayBar() {
     return Positioned(
       top: 8, left: 8, right: 8,
-      child: Row(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          // Weather chip — frosted glass, matches pill visual language
-          if (_weather != null)
-            ClipRRect(
-              borderRadius: BorderRadius.circular(22),
-              child: BackdropFilter(
-                filter: ImageFilter.blur(sigmaX: 18, sigmaY: 18),
-                child: Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
-                  decoration: BoxDecoration(
-                    color: SojornColors.basicWhite.withValues(alpha: 0.28),
-                    borderRadius: BorderRadius.circular(22),
-                    border: Border.all(
-                      color: SojornColors.basicWhite.withValues(alpha: 0.55),
-                      width: 1.0,
+          // Row 1: weather + action buttons
+          Row(
+            children: [
+              // Weather chip — frosted glass
+              if (_weather != null)
+                ClipRRect(
+                  borderRadius: BorderRadius.circular(22),
+                  child: BackdropFilter(
+                    filter: ImageFilter.blur(sigmaX: 18, sigmaY: 18),
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+                      decoration: BoxDecoration(
+                        color: SojornColors.basicWhite.withValues(alpha: 0.28),
+                        borderRadius: BorderRadius.circular(22),
+                        border: Border.all(
+                          color: SojornColors.basicWhite.withValues(alpha: 0.55),
+                          width: 1.0,
+                        ),
+                        boxShadow: [
+                          BoxShadow(color: SojornColors.basicBlack.withValues(alpha: 0.10), blurRadius: 10),
+                        ],
+                      ),
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Icon(_weatherIcon(_weather!.weatherCode), size: 17,
+                            color: AppTheme.navyBlue.withValues(alpha: 0.85)),
+                          const SizedBox(width: 6),
+                          Text('${_weather!.temperature.round()}°F',
+                            style: TextStyle(
+                              color: AppTheme.navyBlue,
+                              fontSize: 15,
+                              fontWeight: FontWeight.w800,
+                            )),
+                        ],
+                      ),
                     ),
-                    boxShadow: [
-                      BoxShadow(color: SojornColors.basicBlack.withValues(alpha: 0.10), blurRadius: 10),
-                    ],
-                  ),
-                  child: Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      Icon(_weatherIcon(_weather!.weatherCode), size: 17,
-                        color: AppTheme.navyBlue.withValues(alpha: 0.85)),
-                      const SizedBox(width: 6),
-                      Text('${_weather!.temperature.round()}°F',
-                        style: TextStyle(
-                          color: AppTheme.navyBlue,
-                          fontSize: 15,
-                          fontWeight: FontWeight.w800,
-                        )),
-                    ],
                   ),
                 ),
-              ),
-            ),
-          const Spacer(),
-          // Filter button — badge shows how many types are hidden
+              const Spacer(),
+              // My location button
+              _mapIconButton(Icons.my_location,
+                onTap: _isLoadingLocation ? null : () => _getCurrentLocation(forceCenter: true)),
+              const SizedBox(width: 8),
+              // Refresh button — bypasses distance/age cache
+              _mapIconButton(Icons.refresh, onTap: () => _loadBeacons(force: true)),
+            ],
+          ),
+          const SizedBox(height: 8),
+          // Row 2: layer filter chips — full width so they never overflow
           _buildMapLayerChips(),
-          const SizedBox(width: 8),
-          // My location button
-          _mapIconButton(Icons.my_location,
-            onTap: _isLoadingLocation ? null : () => _getCurrentLocation(forceCenter: true)),
-          const SizedBox(width: 8),
-          // Refresh button — bypasses distance/age cache
-          _mapIconButton(Icons.refresh, onTap: () => _loadBeacons(force: true)),
         ],
       ),
     );
