@@ -845,6 +845,66 @@ class ApiClient {
   async deleteEvent(id: string) {
     return this.request<any>(`/api/v1/admin/events/${id}`, { method: 'DELETE' });
   }
+
+  // ── Beacon Alerts ──────────────────────────────────────────────────────
+
+  async listBeaconAlerts(params: {
+    limit?: number; offset?: number; search?: string;
+    source?: string; status?: string; beacon_type?: string; severity?: string;
+  } = {}) {
+    const qs = new URLSearchParams();
+    if (params.limit) qs.set('limit', String(params.limit));
+    if (params.offset) qs.set('offset', String(params.offset));
+    if (params.search) qs.set('search', params.search);
+    if (params.source) qs.set('source', params.source);
+    if (params.status) qs.set('status', params.status);
+    if (params.beacon_type) qs.set('beacon_type', params.beacon_type);
+    if (params.severity) qs.set('severity', params.severity);
+    return this.request<any>(`/api/v1/admin/beacon-alerts?${qs}`);
+  }
+
+  async getBeaconAlertStats() {
+    return this.request<any>('/api/v1/admin/beacon-alerts/stats');
+  }
+
+  async bulkUpdateBeaconAlerts(ids: string[], action: 'expire' | 'delete' | 'reactivate') {
+    return this.request<any>('/api/v1/admin/beacon-alerts/bulk', {
+      method: 'POST',
+      body: JSON.stringify({ ids, action }),
+    });
+  }
+
+  async expireBeaconsBySource(source: string) {
+    return this.request<any>('/api/v1/admin/beacon-alerts/expire-source', {
+      method: 'POST',
+      body: JSON.stringify({ source }),
+    });
+  }
+
+  async purgeBeaconsBySource(source: string) {
+    return this.request<any>('/api/v1/admin/beacon-alerts/purge-source', {
+      method: 'POST',
+      body: JSON.stringify({ source }),
+    });
+  }
+
+  async getBeaconFeedStatus() {
+    return this.request<any>('/api/v1/admin/beacon-alerts/feeds');
+  }
+
+  async toggleBeaconFeed(source: string, enabled: boolean) {
+    return this.request<any>('/api/v1/admin/beacon-alerts/feeds', {
+      method: 'PATCH',
+      body: JSON.stringify({ source, enabled }),
+    });
+  }
+
+  async triggerBeaconSync(source?: string) {
+    return this.request<any>('/api/v1/admin/beacon-alerts/feeds/sync', {
+      method: 'POST',
+      body: JSON.stringify({ source: source || '' }),
+    });
+  }
 }
 
 export const api = new ApiClient();

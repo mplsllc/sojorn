@@ -6,6 +6,8 @@ package repository
 
 import (
 	"context"
+	"fmt"
+	"strings"
 	"time"
 
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -373,4 +375,291 @@ func (r *BeaconAlertRepository) GetNearbyAlerts(ctx context.Context, lat, lng fl
 		results = []map[string]any{}
 	}
 	return results, nil
+}
+
+// ─── Admin methods ──────────────────────────────────────────────────────────
+
+// BeaconAlertFilter holds query parameters for listing alerts.
+type BeaconAlertFilter struct {
+	Search     string
+	Source     string
+	Status     string
+	BeaconType string
+	Severity   string
+	Limit      int
+	Offset     int
+}
+
+// BeaconAlertListResult is a paginated response for admin listing.
+type BeaconAlertListResult struct {
+	Items  []BeaconAlert `json:"items"`
+	Total  int           `json:"total"`
+	Limit  int           `json:"limit"`
+	Offset int           `json:"offset"`
+}
+
+// BeaconAlertStats holds aggregate counts for the admin dashboard.
+type BeaconAlertStats struct {
+	TotalCount  int            `json:"total_count"`
+	ActiveCount int            `json:"active_count"`
+	ExpiredCount int           `json:"expired_count"`
+	BySource    map[string]int `json:"by_source"`
+	ByType      map[string]int `json:"by_type"`
+	BySeverity  map[string]int `json:"by_severity"`
+}
+
+// FeedConfig represents a row in beacon_feed_config.
+type FeedConfig struct {
+	Source     string     `json:"source"`
+	Enabled   bool       `json:"enabled"`
+	LastSyncAt *time.Time `json:"last_sync_at"`
+	LastError  *string    `json:"last_error"`
+	AlertCount int        `json:"alert_count"`
+	UpdatedAt  time.Time  `json:"updated_at"`
+}
+
+// ListAlerts returns a paginated, filtered list of beacon alerts for admin.
+func (r *BeaconAlertRepository) ListAlerts(ctx context.Context, f BeaconAlertFilter) (*BeaconAlertListResult, error) {
+	if f.Limit <= 0 || f.Limit > 200 {
+		f.Limit = 50
+	}
+	if f.Offset < 0 {
+		f.Offset = 0
+	}
+
+	where := []string{"1=1"}
+	args := []any{}
+	argIdx := 1
+
+	if f.Search != "" {
+		where = append(where, fmt.Sprintf("(title ILIKE '%%' || $%d || '%%' OR body ILIKE '%%' || $%d || '%%')", argIdx, argIdx))
+		args = append(args, f.Search)
+		argIdx++
+	}
+	if f.Source != "" {
+		where = append(where, fmt.Sprintf("source = $%d", argIdx))
+		args = append(args, f.Source)
+		argIdx++
+	}
+	if f.Status != "" {
+		where = append(where, fmt.Sprintf("status = $%d", argIdx))
+		args = append(args, f.Status)
+		argIdx++
+	}
+	if f.BeaconType != "" {
+		where = append(where, fmt.Sprintf("beacon_type = $%d", argIdx))
+		args = append(args, f.BeaconType)
+		argIdx++
+	}
+	if f.Severity != "" {
+		where = append(where, fmt.Sprintf("severity = $%d", argIdx))
+		args = append(args, f.Severity)
+		argIdx++
+	}
+
+	whereClause := strings.Join(where, " AND ")
+
+	// Count
+	countQuery := fmt.Sprintf("SELECT COUNT(*) FROM beacon_alerts WHERE %s", whereClause)
+	var total int
+	if err := r.pool.QueryRow(ctx, countQuery, args...).Scan(&total); err != nil {
+		return nil, err
+	}
+
+	// Items
+	dataQuery := fmt.Sprintf(`
+		SELECT id, external_id, source, beacon_type, severity, title, body,
+			lat, lng, radius, image_url, video_url,
+			is_official, official_source, author_id, author_handle, author_display,
+			status, incident_status, confidence, vouch_count, report_count,
+			tags, expires_at, created_at, updated_at
+		FROM beacon_alerts
+		WHERE %s
+		ORDER BY created_at DESC
+		LIMIT $%d OFFSET $%d
+	`, whereClause, argIdx, argIdx+1)
+	args = append(args, f.Limit, f.Offset)
+
+	rows, err := r.pool.Query(ctx, dataQuery, args...)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var items []BeaconAlert
+	for rows.Next() {
+		var a BeaconAlert
+		if err := rows.Scan(
+			&a.ID, &a.ExternalID, &a.Source, &a.BeaconType, &a.Severity, &a.Title, &a.Body,
+			&a.Lat, &a.Lng, &a.Radius, &a.ImageURL, &a.VideoURL,
+			&a.IsOfficial, &a.OfficialSource, &a.AuthorID, &a.AuthorHandle, &a.AuthorDisplay,
+			&a.Status, &a.IncidentStatus, &a.Confidence, &a.VouchCount, &a.ReportCount,
+			&a.Tags, &a.ExpiresAt, &a.CreatedAt, &a.UpdatedAt,
+		); err != nil {
+			log.Error().Err(err).Msg("beacon_alerts: admin list scan failed")
+			continue
+		}
+		items = append(items, a)
+	}
+	if items == nil {
+		items = []BeaconAlert{}
+	}
+
+	return &BeaconAlertListResult{
+		Items:  items,
+		Total:  total,
+		Limit:  f.Limit,
+		Offset: f.Offset,
+	}, nil
+}
+
+// GetAlertStats returns aggregate counts for the admin dashboard.
+func (r *BeaconAlertRepository) GetAlertStats(ctx context.Context) (*BeaconAlertStats, error) {
+	stats := &BeaconAlertStats{
+		BySource:   make(map[string]int),
+		ByType:     make(map[string]int),
+		BySeverity: make(map[string]int),
+	}
+
+	// Status counts
+	rows, err := r.pool.Query(ctx, `SELECT status, COUNT(*) FROM beacon_alerts GROUP BY status`)
+	if err != nil {
+		return nil, err
+	}
+	for rows.Next() {
+		var s string
+		var c int
+		if err := rows.Scan(&s, &c); err != nil {
+			continue
+		}
+		stats.TotalCount += c
+		switch s {
+		case "active":
+			stats.ActiveCount = c
+		case "expired":
+			stats.ExpiredCount = c
+		}
+	}
+	rows.Close()
+
+	// Source counts
+	rows, err = r.pool.Query(ctx, `SELECT source, COUNT(*) FROM beacon_alerts GROUP BY source`)
+	if err != nil {
+		return nil, err
+	}
+	for rows.Next() {
+		var s string
+		var c int
+		if err := rows.Scan(&s, &c); err != nil {
+			continue
+		}
+		stats.BySource[s] = c
+	}
+	rows.Close()
+
+	// Type counts
+	rows, err = r.pool.Query(ctx, `SELECT beacon_type, COUNT(*) FROM beacon_alerts GROUP BY beacon_type`)
+	if err != nil {
+		return nil, err
+	}
+	for rows.Next() {
+		var s string
+		var c int
+		if err := rows.Scan(&s, &c); err != nil {
+			continue
+		}
+		stats.ByType[s] = c
+	}
+	rows.Close()
+
+	// Severity counts
+	rows, err = r.pool.Query(ctx, `SELECT severity, COUNT(*) FROM beacon_alerts GROUP BY severity`)
+	if err != nil {
+		return nil, err
+	}
+	for rows.Next() {
+		var s string
+		var c int
+		if err := rows.Scan(&s, &c); err != nil {
+			continue
+		}
+		stats.BySeverity[s] = c
+	}
+	rows.Close()
+
+	return stats, nil
+}
+
+// BulkUpdateStatus changes the status of multiple alerts by ID.
+func (r *BeaconAlertRepository) BulkUpdateStatus(ctx context.Context, ids []string, newStatus string) (int64, error) {
+	tag, err := r.pool.Exec(ctx, `UPDATE beacon_alerts SET status = $1 WHERE id = ANY($2::uuid[])`, newStatus, ids)
+	if err != nil {
+		return 0, err
+	}
+	return tag.RowsAffected(), nil
+}
+
+// BulkDeleteAlerts hard-deletes alerts by ID.
+func (r *BeaconAlertRepository) BulkDeleteAlerts(ctx context.Context, ids []string) (int64, error) {
+	tag, err := r.pool.Exec(ctx, `DELETE FROM beacon_alerts WHERE id = ANY($1::uuid[])`, ids)
+	if err != nil {
+		return 0, err
+	}
+	return tag.RowsAffected(), nil
+}
+
+// ExpireBySource marks all active alerts from a source as expired.
+func (r *BeaconAlertRepository) ExpireBySource(ctx context.Context, source string) (int64, error) {
+	tag, err := r.pool.Exec(ctx, `UPDATE beacon_alerts SET status = 'expired' WHERE source = $1 AND status = 'active'`, source)
+	if err != nil {
+		return 0, err
+	}
+	return tag.RowsAffected(), nil
+}
+
+// PurgeBySource hard-deletes all alerts from a source.
+func (r *BeaconAlertRepository) PurgeBySource(ctx context.Context, source string) (int64, error) {
+	tag, err := r.pool.Exec(ctx, `DELETE FROM beacon_alerts WHERE source = $1`, source)
+	if err != nil {
+		return 0, err
+	}
+	return tag.RowsAffected(), nil
+}
+
+// GetFeedConfigs returns all feed configurations.
+func (r *BeaconAlertRepository) GetFeedConfigs(ctx context.Context) ([]FeedConfig, error) {
+	rows, err := r.pool.Query(ctx, `SELECT source, enabled, last_sync_at, last_error, alert_count, updated_at FROM beacon_feed_config ORDER BY source`)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var configs []FeedConfig
+	for rows.Next() {
+		var c FeedConfig
+		if err := rows.Scan(&c.Source, &c.Enabled, &c.LastSyncAt, &c.LastError, &c.AlertCount, &c.UpdatedAt); err != nil {
+			continue
+		}
+		configs = append(configs, c)
+	}
+	if configs == nil {
+		configs = []FeedConfig{}
+	}
+	return configs, nil
+}
+
+// SetFeedEnabled enables or disables a feed source.
+func (r *BeaconAlertRepository) SetFeedEnabled(ctx context.Context, source string, enabled bool) error {
+	_, err := r.pool.Exec(ctx, `UPDATE beacon_feed_config SET enabled = $2, updated_at = NOW() WHERE source = $1`, source, enabled)
+	return err
+}
+
+// UpdateFeedSyncStatus updates the sync metadata for a feed source.
+func (r *BeaconAlertRepository) UpdateFeedSyncStatus(ctx context.Context, source string, lastError *string, alertCount int) error {
+	_, err := r.pool.Exec(ctx, `
+		UPDATE beacon_feed_config
+		SET last_sync_at = NOW(), last_error = $2, alert_count = $3, updated_at = NOW()
+		WHERE source = $1
+	`, source, lastError, alertCount)
+	return err
 }

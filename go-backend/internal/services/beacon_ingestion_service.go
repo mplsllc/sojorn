@@ -28,6 +28,7 @@ type BeaconIngestionService struct {
 	interval    time.Duration
 	stopCh      chan struct{}
 	wg          sync.WaitGroup
+	manualSyncCh chan string // admin-triggered sync: "" = all, or specific source name
 }
 
 func NewBeaconIngestionService(
@@ -36,13 +37,29 @@ func NewBeaconIngestionService(
 	icedBase string,
 ) *BeaconIngestionService {
 	return &BeaconIngestionService{
-		repo:      repo,
-		mn511Base: mn511Base,
-		icedBase:  icedBase,
-		client:    &http.Client{Timeout: 15 * time.Second},
-		interval:  2 * time.Minute,
-		stopCh:    make(chan struct{}),
+		repo:         repo,
+		mn511Base:    mn511Base,
+		icedBase:     icedBase,
+		client:       &http.Client{Timeout: 15 * time.Second},
+		interval:     2 * time.Minute,
+		stopCh:       make(chan struct{}),
+		manualSyncCh: make(chan string, 1),
 	}
+}
+
+// TriggerSync triggers a manual sync from the admin panel.
+// Pass "" to sync all sources, or a specific source name.
+func (s *BeaconIngestionService) TriggerSync(source string) {
+	select {
+	case s.manualSyncCh <- source:
+	default:
+		// Already a sync pending
+	}
+}
+
+// GetFeedStatuses returns the current feed configurations from the database.
+func (s *BeaconIngestionService) GetFeedStatuses(ctx context.Context) ([]repository.FeedConfig, error) {
+	return s.repo.GetFeedConfigs(ctx)
 }
 
 // Start begins the periodic ingestion loop in a background goroutine.
@@ -62,6 +79,16 @@ func (s *BeaconIngestionService) Start() {
 			select {
 			case <-ticker.C:
 				s.runCycle()
+			case source := <-s.manualSyncCh:
+				if source == "" {
+					log.Info().Msg("beacon ingestion: manual sync (all sources)")
+					s.runCycle()
+				} else {
+					log.Info().Str("source", source).Msg("beacon ingestion: manual sync (single source)")
+					ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+					s.runSingleSource(ctx, source)
+					cancel()
+				}
 			case <-s.stopCh:
 				log.Info().Msg("beacon ingestion: stopped")
 				return
@@ -90,35 +117,86 @@ func (s *BeaconIngestionService) runCycle() {
 		log.Info().Int64("count", expired).Msg("beacon ingestion: expired stale alerts")
 	}
 
-	// Fetch from all sources in parallel
-	var wg sync.WaitGroup
-	wg.Add(4)
+	// Load feed configs to check which feeds are enabled
+	enabledMap := s.loadFeedEnabledMap(ctx)
 
-	go func() {
-		defer wg.Done()
-		s.ingestMN511Alerts(ctx)
-	}()
-	go func() {
-		defer wg.Done()
-		s.ingestMN511Cameras(ctx)
-	}()
-	go func() {
-		defer wg.Done()
-		s.ingestMN511Signs(ctx)
-	}()
-	// Weather stations + IcedCoffee
-	go func() {
-		defer wg.Done()
-		s.ingestMN511Weather(ctx)
-	}()
+	// Fetch from all enabled sources in parallel
+	var wg sync.WaitGroup
+
+	type sourceFunc struct {
+		name string
+		fn   func(context.Context) (int, error)
+	}
+	sources := []sourceFunc{
+		{"mn511", s.ingestMN511Alerts},
+		{"mn511_camera", s.ingestMN511Cameras},
+		{"mn511_sign", s.ingestMN511Signs},
+		{"mn511_weather", s.ingestMN511Weather},
+		{"iced", s.ingestIced},
+	}
+
+	for _, src := range sources {
+		if !enabledMap[src.name] {
+			continue
+		}
+		wg.Add(1)
+		go func(name string, fn func(context.Context) (int, error)) {
+			defer wg.Done()
+			count, err := fn(ctx)
+			var errStr *string
+			if err != nil {
+				s := err.Error()
+				errStr = &s
+			}
+			_ = s.repo.UpdateFeedSyncStatus(ctx, name, errStr, count)
+		}(src.name, src.fn)
+	}
 
 	wg.Wait()
-
-	// IcedCoffee (runs after wg for simplicity, could be parallel)
-	s.ingestIced(ctx)
-
 	log.Debug().Dur("duration", time.Since(start)).Msg("beacon ingestion: cycle complete")
 }
+
+// runSingleSource runs ingestion for a single source by name.
+func (s *BeaconIngestionService) runSingleSource(ctx context.Context, source string) {
+	var fn func(context.Context) (int, error)
+	switch source {
+	case "mn511":
+		fn = s.ingestMN511Alerts
+	case "mn511_camera":
+		fn = s.ingestMN511Cameras
+	case "mn511_sign":
+		fn = s.ingestMN511Signs
+	case "mn511_weather":
+		fn = s.ingestMN511Weather
+	case "iced":
+		fn = s.ingestIced
+	default:
+		log.Warn().Str("source", source).Msg("beacon ingestion: unknown source for manual sync")
+		return
+	}
+	count, err := fn(ctx)
+	var errStr *string
+	if err != nil {
+		s := err.Error()
+		errStr = &s
+	}
+	_ = s.repo.UpdateFeedSyncStatus(ctx, source, errStr, count)
+}
+
+// loadFeedEnabledMap returns a map of source -> enabled. Defaults to true if DB is unreachable.
+func (s *BeaconIngestionService) loadFeedEnabledMap(ctx context.Context) map[string]bool {
+	configs, err := s.repo.GetFeedConfigs(ctx)
+	if err != nil {
+		log.Warn().Err(err).Msg("beacon ingestion: failed to load feed configs, running all")
+		return map[string]bool{"mn511": true, "mn511_camera": true, "mn511_sign": true, "mn511_weather": true, "iced": true}
+	}
+	m := make(map[string]bool, len(configs))
+	for _, c := range configs {
+		m[c.Source] = c.Enabled
+	}
+	return m
+}
+
 
 // ── MN511 Alerts (incidents/crashes) ─────────────────────────────────────
 
@@ -143,19 +221,19 @@ type mn511IngestionResponse struct {
 	Features []mn511IngestionFeature `json:"features"`
 }
 
-func (s *BeaconIngestionService) ingestMN511Alerts(ctx context.Context) {
+func (s *BeaconIngestionService) ingestMN511Alerts(ctx context.Context) (int, error) {
 	// Fetch a wide bounding box covering Minnesota
 	apiURL := fmt.Sprintf("%s/api/alerts?bbox=-97.5,43.0,-89.0,49.5&status=active", s.mn511Base)
 	body, err := s.fetchJSON(apiURL)
 	if err != nil {
 		log.Error().Err(err).Msg("beacon ingestion: mn511 alerts fetch failed")
-		return
+		return 0, err
 	}
 
 	var resp mn511IngestionResponse
 	if err := json.Unmarshal(body, &resp); err != nil {
 		log.Error().Err(err).Msg("beacon ingestion: mn511 alerts parse failed")
-		return
+		return 0, err
 	}
 
 	alerts := make([]*repository.BeaconAlert, 0, len(resp.Features))
@@ -212,6 +290,7 @@ func (s *BeaconIngestionService) ingestMN511Alerts(ctx context.Context) {
 	count, _ := s.repo.BulkUpsert(ctx, alerts)
 	orphaned, _ := s.repo.CleanOrphaned(ctx, "mn511", activeIDs)
 	log.Info().Int("upserted", count).Int64("orphaned", orphaned).Int("upstream", len(resp.Features)).Msg("beacon ingestion: mn511 alerts")
+	return count, nil
 }
 
 // ── MN511 Cameras ────────────────────────────────────────────────────────
@@ -236,18 +315,18 @@ type mn511CamIngestionResp struct {
 	Cameras []mn511CamIngestion `json:"cameras"`
 }
 
-func (s *BeaconIngestionService) ingestMN511Cameras(ctx context.Context) {
+func (s *BeaconIngestionService) ingestMN511Cameras(ctx context.Context) (int, error) {
 	apiURL := fmt.Sprintf("%s/api/camera-views?bbox=-97.5,43.0,-89.0,49.5&limit=500", s.mn511Base)
 	body, err := s.fetchJSON(apiURL)
 	if err != nil {
 		log.Error().Err(err).Msg("beacon ingestion: mn511 cameras fetch failed")
-		return
+		return 0, err
 	}
 
 	var resp mn511CamIngestionResp
 	if err := json.Unmarshal(body, &resp); err != nil {
 		log.Error().Err(err).Msg("beacon ingestion: mn511 cameras parse failed")
-		return
+		return 0, err
 	}
 
 	alerts := make([]*repository.BeaconAlert, 0, len(resp.Cameras))
@@ -314,6 +393,7 @@ func (s *BeaconIngestionService) ingestMN511Cameras(ctx context.Context) {
 	count, _ := s.repo.BulkUpsert(ctx, alerts)
 	orphaned, _ := s.repo.CleanOrphaned(ctx, "mn511_camera", activeIDs)
 	log.Info().Int("upserted", count).Int64("orphaned", orphaned).Msg("beacon ingestion: mn511 cameras")
+	return count, nil
 }
 
 // ── MN511 Signs ──────────────────────────────────────────────────────────
@@ -340,18 +420,18 @@ type mn511GeoIngestionFC struct {
 	Features []mn511GeoIngestionFeature `json:"features"`
 }
 
-func (s *BeaconIngestionService) ingestMN511Signs(ctx context.Context) {
+func (s *BeaconIngestionService) ingestMN511Signs(ctx context.Context) (int, error) {
 	apiURL := fmt.Sprintf("%s/api/signs?bbox=-97.5,43.0,-89.0,49.5", s.mn511Base)
 	body, err := s.fetchJSON(apiURL)
 	if err != nil {
 		log.Error().Err(err).Msg("beacon ingestion: mn511 signs fetch failed")
-		return
+		return 0, err
 	}
 
 	var fc mn511GeoIngestionFC
 	if err := json.Unmarshal(body, &fc); err != nil {
 		log.Error().Err(err).Msg("beacon ingestion: mn511 signs parse failed")
-		return
+		return 0, err
 	}
 
 	alerts := make([]*repository.BeaconAlert, 0)
@@ -416,6 +496,7 @@ func (s *BeaconIngestionService) ingestMN511Signs(ctx context.Context) {
 	count, _ := s.repo.BulkUpsert(ctx, alerts)
 	orphaned, _ := s.repo.CleanOrphaned(ctx, "mn511_sign", activeIDs)
 	log.Info().Int("upserted", count).Int64("orphaned", orphaned).Msg("beacon ingestion: mn511 signs")
+	return count, nil
 }
 
 // ── MN511 Weather Stations ───────────────────────────────────────────────
@@ -433,18 +514,18 @@ type mn511WeatherIngestionField struct {
 	InAlertState bool   `json:"inAlertState"`
 }
 
-func (s *BeaconIngestionService) ingestMN511Weather(ctx context.Context) {
+func (s *BeaconIngestionService) ingestMN511Weather(ctx context.Context) (int, error) {
 	apiURL := fmt.Sprintf("%s/api/weather-stations?bbox=-97.5,43.0,-89.0,49.5", s.mn511Base)
 	body, err := s.fetchJSON(apiURL)
 	if err != nil {
 		log.Error().Err(err).Msg("beacon ingestion: mn511 weather fetch failed")
-		return
+		return 0, err
 	}
 
 	var fc mn511GeoIngestionFC
 	if err := json.Unmarshal(body, &fc); err != nil {
 		log.Error().Err(err).Msg("beacon ingestion: mn511 weather parse failed")
-		return
+		return 0, err
 	}
 
 	alerts := make([]*repository.BeaconAlert, 0)
@@ -496,18 +577,19 @@ func (s *BeaconIngestionService) ingestMN511Weather(ctx context.Context) {
 	count, _ := s.repo.BulkUpsert(ctx, alerts)
 	orphaned, _ := s.repo.CleanOrphaned(ctx, "mn511_weather", activeIDs)
 	log.Info().Int("upserted", count).Int64("orphaned", orphaned).Msg("beacon ingestion: mn511 weather")
+	return count, nil
 }
 
 // ── IcedCoffee ───────────────────────────────────────────────────────────
 
-func (s *BeaconIngestionService) ingestIced(ctx context.Context) {
+func (s *BeaconIngestionService) ingestIced(ctx context.Context) (int, error) {
 	// IcedCoffee returns Sojorn-compatible beacon JSON.
 	// We use Minneapolis center as the reference point with a wide radius.
 	apiURL := fmt.Sprintf("%s/api/v1/beacons?lat=44.9778&long=-93.2650&radius=80000", s.icedBase)
 	body, err := s.fetchJSON(apiURL)
 	if err != nil {
 		log.Error().Err(err).Msg("beacon ingestion: iced fetch failed")
-		return
+		return 0, err
 	}
 
 	var resp struct {
@@ -515,7 +597,7 @@ func (s *BeaconIngestionService) ingestIced(ctx context.Context) {
 	}
 	if err := json.Unmarshal(body, &resp); err != nil {
 		log.Error().Err(err).Msg("beacon ingestion: iced parse failed")
-		return
+		return 0, err
 	}
 
 	alerts := make([]*repository.BeaconAlert, 0, len(resp.Beacons))
@@ -593,6 +675,7 @@ func (s *BeaconIngestionService) ingestIced(ctx context.Context) {
 	count, _ := s.repo.BulkUpsert(ctx, alerts)
 	orphaned, _ := s.repo.CleanOrphaned(ctx, "iced", activeIDs)
 	log.Info().Int("upserted", count).Int64("orphaned", orphaned).Msg("beacon ingestion: iced")
+	return count, nil
 }
 
 // ── Helpers ──────────────────────────────────────────────────────────────

@@ -37,6 +37,8 @@ type AdminHandler struct {
 	officialAccountsService *services.OfficialAccountsService
 	linkPreviewService      *services.LinkPreviewService
 	localAIService          *services.LocalAIService
+	beaconAlertRepo         *repository.BeaconAlertRepository
+	beaconIngestion         *services.BeaconIngestionService
 	jwtSecret               string
 	s3Client                *s3.Client
 	mediaBucket             string
@@ -45,7 +47,7 @@ type AdminHandler struct {
 	vidDomain               string
 }
 
-func NewAdminHandler(pool *pgxpool.Pool, moderationService *services.ModerationService, appealService *services.AppealService, emailService *services.EmailService, sightEngineService *services.SightEngineService, officialAccountsService *services.OfficialAccountsService, linkPreviewService *services.LinkPreviewService, localAIService *services.LocalAIService, jwtSecret string, s3Client *s3.Client, mediaBucket string, videoBucket string, imgDomain string, vidDomain string) *AdminHandler {
+func NewAdminHandler(pool *pgxpool.Pool, moderationService *services.ModerationService, appealService *services.AppealService, emailService *services.EmailService, sightEngineService *services.SightEngineService, officialAccountsService *services.OfficialAccountsService, linkPreviewService *services.LinkPreviewService, localAIService *services.LocalAIService, beaconAlertRepo *repository.BeaconAlertRepository, beaconIngestion *services.BeaconIngestionService, jwtSecret string, s3Client *s3.Client, mediaBucket string, videoBucket string, imgDomain string, vidDomain string) *AdminHandler {
 	return &AdminHandler{
 		pool:                    pool,
 		moderationService:       moderationService,
@@ -55,6 +57,8 @@ func NewAdminHandler(pool *pgxpool.Pool, moderationService *services.ModerationS
 		officialAccountsService: officialAccountsService,
 		linkPreviewService:      linkPreviewService,
 		localAIService:          localAIService,
+		beaconAlertRepo:         beaconAlertRepo,
+		beaconIngestion:         beaconIngestion,
 		jwtSecret:               jwtSecret,
 		s3Client:                s3Client,
 		mediaBucket:             mediaBucket,
@@ -5569,4 +5573,148 @@ func (h *AdminHandler) HardDeleteUser(c *gin.Context) {
 		Msg("Admin hard-deleted user")
 
 	c.JSON(http.StatusOK, gin.H{"message": "User permanently deleted"})
+}
+
+// ──────────────────────────────────────────────
+// Beacon Alerts Admin
+// ──────────────────────────────────────────────
+
+func (h *AdminHandler) ListBeaconAlerts(c *gin.Context) {
+	limit, _ := strconv.Atoi(c.DefaultQuery("limit", "50"))
+	offset, _ := strconv.Atoi(c.DefaultQuery("offset", "0"))
+
+	filter := repository.BeaconAlertFilter{
+		Search:     c.Query("search"),
+		Source:     c.Query("source"),
+		Status:     c.Query("status"),
+		BeaconType: c.Query("beacon_type"),
+		Severity:   c.Query("severity"),
+		Limit:      limit,
+		Offset:     offset,
+	}
+
+	result, err := h.beaconAlertRepo.ListAlerts(c.Request.Context(), filter)
+	if err != nil {
+		log.Error().Err(err).Msg("admin: list beacon alerts failed")
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to list beacon alerts"})
+		return
+	}
+
+	c.JSON(http.StatusOK, result)
+}
+
+func (h *AdminHandler) GetBeaconAlertStats(c *gin.Context) {
+	stats, err := h.beaconAlertRepo.GetAlertStats(c.Request.Context())
+	if err != nil {
+		log.Error().Err(err).Msg("admin: beacon alert stats failed")
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to get stats"})
+		return
+	}
+	c.JSON(http.StatusOK, stats)
+}
+
+func (h *AdminHandler) BulkUpdateBeaconAlerts(c *gin.Context) {
+	var req struct {
+		IDs    []string `json:"ids"`
+		Action string   `json:"action"`
+	}
+	if err := c.ShouldBindJSON(&req); err != nil || len(req.IDs) == 0 {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "ids and action required"})
+		return
+	}
+
+	var affected int64
+	var err error
+	switch req.Action {
+	case "expire":
+		affected, err = h.beaconAlertRepo.BulkUpdateStatus(c.Request.Context(), req.IDs, "expired")
+	case "reactivate":
+		affected, err = h.beaconAlertRepo.BulkUpdateStatus(c.Request.Context(), req.IDs, "active")
+	case "delete":
+		affected, err = h.beaconAlertRepo.BulkDeleteAlerts(c.Request.Context(), req.IDs)
+	default:
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid action, must be expire|reactivate|delete"})
+		return
+	}
+
+	if err != nil {
+		log.Error().Err(err).Str("action", req.Action).Msg("admin: bulk beacon update failed")
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Bulk update failed"})
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"affected": affected})
+}
+
+func (h *AdminHandler) ExpireBeaconsBySource(c *gin.Context) {
+	var req struct {
+		Source string `json:"source"`
+	}
+	if err := c.ShouldBindJSON(&req); err != nil || req.Source == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "source required"})
+		return
+	}
+
+	affected, err := h.beaconAlertRepo.ExpireBySource(c.Request.Context(), req.Source)
+	if err != nil {
+		log.Error().Err(err).Str("source", req.Source).Msg("admin: expire by source failed")
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to expire alerts"})
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"affected": affected})
+}
+
+func (h *AdminHandler) PurgeBeaconsBySource(c *gin.Context) {
+	var req struct {
+		Source string `json:"source"`
+	}
+	if err := c.ShouldBindJSON(&req); err != nil || req.Source == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "source required"})
+		return
+	}
+
+	affected, err := h.beaconAlertRepo.PurgeBySource(c.Request.Context(), req.Source)
+	if err != nil {
+		log.Error().Err(err).Str("source", req.Source).Msg("admin: purge by source failed")
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to purge alerts"})
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"affected": affected})
+}
+
+func (h *AdminHandler) GetBeaconFeedStatus(c *gin.Context) {
+	feeds, err := h.beaconIngestion.GetFeedStatuses(c.Request.Context())
+	if err != nil {
+		log.Error().Err(err).Msg("admin: get beacon feed status failed")
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to get feed status"})
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"feeds": feeds})
+}
+
+func (h *AdminHandler) ToggleBeaconFeed(c *gin.Context) {
+	var req struct {
+		Source  string `json:"source"`
+		Enabled bool   `json:"enabled"`
+	}
+	if err := c.ShouldBindJSON(&req); err != nil || req.Source == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "source required"})
+		return
+	}
+
+	if err := h.beaconAlertRepo.SetFeedEnabled(c.Request.Context(), req.Source, req.Enabled); err != nil {
+		log.Error().Err(err).Str("source", req.Source).Bool("enabled", req.Enabled).Msg("admin: toggle beacon feed failed")
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to toggle feed"})
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"source": req.Source, "enabled": req.Enabled})
+}
+
+func (h *AdminHandler) TriggerBeaconSync(c *gin.Context) {
+	var req struct {
+		Source string `json:"source"`
+	}
+	_ = c.ShouldBindJSON(&req)
+
+	h.beaconIngestion.TriggerSync(req.Source)
+	c.JSON(http.StatusOK, gin.H{"status": "triggered", "source": req.Source})
 }

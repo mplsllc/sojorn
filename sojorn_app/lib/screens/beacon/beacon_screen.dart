@@ -1321,10 +1321,13 @@ class BeaconScreenState extends ConsumerState<BeaconScreen> with TickerProviderS
     );
   }
 
+  final GlobalKey _filterButtonKey = GlobalKey();
+
   Widget _mapFilterButton() {
     final hiddenCount = _hiddenTypes.length;
     return GestureDetector(
-      onTap: _showBeaconFilterSheet,
+      key: _filterButtonKey,
+      onTap: _showFilterDropdown,
       child: ClipRRect(
         borderRadius: BorderRadius.circular(18),
         child: BackdropFilter(
@@ -1393,224 +1396,68 @@ class BeaconScreenState extends ConsumerState<BeaconScreen> with TickerProviderS
     );
   }
 
-  // ─── Beacon type filter sheet ─────────────────────────────────────────
-  void _showBeaconFilterSheet() {
-    // Define broad filter categories grouping related BeaconTypes
-    final categories = <({String label, IconData icon, Color color, List<BeaconType> types})>[
-      (
-        label: 'Safety',
-        icon: Icons.shield,
-        color: const Color(0xFFF44336),
-        types: [
-          BeaconType.safety,
-          BeaconType.suspiciousActivity,
-          BeaconType.officialPresence,
-          BeaconType.checkpoint,
-          BeaconType.taskForce,
-        ],
-      ),
-      (
-        label: 'Hazards',
-        icon: Icons.warning_rounded,
-        color: const Color(0xFFFF5722),
-        types: [
-          BeaconType.hazard,
-          BeaconType.fire,
-          BeaconType.utilityAlert,
-        ],
-      ),
-      (
-        label: 'Traffic',
-        icon: Icons.traffic,
-        color: const Color(0xFFFFAB00),
-        types: [
-          BeaconType.camera,
-          BeaconType.sign,
-          BeaconType.weatherStation,
-        ],
-      ),
-      (
-        label: 'Community',
-        icon: Icons.people,
-        color: const Color(0xFF607D8B),
-        types: [
-          BeaconType.packageTheft,
-          BeaconType.noiseReport,
-          BeaconType.development,
-        ],
-      ),
-    ];
+  // ─── Filter categories ──────────────────────────────────────────────────
+  static const _filterCategories = <({String label, IconData icon, Color color, List<BeaconType> types})>[
+    (
+      label: 'Safety',
+      icon: Icons.shield,
+      color: Color(0xFFF44336),
+      types: [BeaconType.safety, BeaconType.suspiciousActivity, BeaconType.officialPresence, BeaconType.checkpoint, BeaconType.taskForce],
+    ),
+    (
+      label: 'Hazards',
+      icon: Icons.warning_rounded,
+      color: Color(0xFFFF5722),
+      types: [BeaconType.hazard, BeaconType.fire, BeaconType.utilityAlert],
+    ),
+    (
+      label: 'Traffic',
+      icon: Icons.traffic,
+      color: Color(0xFFFFAB00),
+      types: [BeaconType.camera, BeaconType.sign, BeaconType.weatherStation],
+    ),
+    (
+      label: 'Community',
+      icon: Icons.people,
+      color: Color(0xFF607D8B),
+      types: [BeaconType.packageTheft, BeaconType.noiseReport, BeaconType.development],
+    ),
+  ];
 
-    showModalBottomSheet(
-      context: context,
-      backgroundColor: Colors.transparent,
-      isScrollControlled: true,
-      builder: (_) => StatefulBuilder(
-        builder: (ctx, setSheetState) {
-          return Container(
-            decoration: const BoxDecoration(
-              color: Colors.white,
-              borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
-            ),
-            padding: const EdgeInsets.fromLTRB(20, 12, 20, 32),
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                // Handle
-                Center(
-                  child: Container(
-                    width: 36, height: 4,
-                    decoration: BoxDecoration(
-                      color: Colors.grey.shade300,
-                      borderRadius: BorderRadius.circular(2),
-                    ),
-                  ),
-                ),
-                const SizedBox(height: 16),
-                Row(
-                  children: [
-                    const Text('Filter Map Alerts',
-                      style: TextStyle(fontSize: 17, fontWeight: FontWeight.w700)),
-                    const Spacer(),
-                    if (_hiddenTypes.isNotEmpty)
-                      TextButton(
-                        onPressed: () {
-                          setState(() => _hiddenTypes = {});
-                          setSheetState(() {});
-                        },
-                        child: const Text('Show All'),
-                      ),
-                  ],
-                ),
-                const SizedBox(height: 4),
-                const Text(
-                  'Tap a category to hide those alerts from the map.',
-                  style: TextStyle(fontSize: 13, color: Colors.grey),
-                ),
-                const SizedBox(height: 16),
-                // Category toggles
-                ...categories.map((cat) {
-                  final allHidden = cat.types.every((t) => _hiddenTypes.contains(t));
-                  final someHidden = !allHidden && cat.types.any((t) => _hiddenTypes.contains(t));
-                  return Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      // Category header row
-                      InkWell(
-                        borderRadius: BorderRadius.circular(10),
-                        onTap: () {
-                          setState(() {
-                            if (allHidden) {
-                              _hiddenTypes.removeAll(cat.types);
-                            } else {
-                              _hiddenTypes.addAll(cat.types);
-                            }
-                          });
-                          setSheetState(() {});
-                        },
-                        child: Padding(
-                          padding: const EdgeInsets.symmetric(vertical: 6),
-                          child: Row(
-                            children: [
-                              Container(
-                                width: 32, height: 32,
-                                decoration: BoxDecoration(
-                                  color: allHidden
-                                      ? Colors.grey.shade200
-                                      : cat.color.withValues(alpha: 0.15),
-                                  borderRadius: BorderRadius.circular(8),
-                                ),
-                                child: Icon(cat.icon, size: 16,
-                                  color: allHidden ? Colors.grey : cat.color),
-                              ),
-                              const SizedBox(width: 12),
-                              Text(cat.label,
-                                style: TextStyle(
-                                  fontSize: 15,
-                                  fontWeight: FontWeight.w600,
-                                  color: allHidden ? Colors.grey : Colors.black87,
-                                )),
-                              if (someHidden)
-                                Padding(
-                                  padding: const EdgeInsets.only(left: 6),
-                                  child: Text('(partial)',
-                                    style: TextStyle(fontSize: 12, color: Colors.grey.shade500)),
-                                ),
-                              const Spacer(),
-                              Icon(
-                                allHidden ? Icons.visibility_off : Icons.visibility,
-                                size: 18,
-                                color: allHidden ? Colors.grey : cat.color,
-                              ),
-                            ],
-                          ),
-                        ),
-                      ),
-                      // Individual type chips
-                      Padding(
-                        padding: const EdgeInsets.only(left: 44, bottom: 8),
-                        child: Wrap(
-                          spacing: 6,
-                          runSpacing: 4,
-                          children: cat.types.map((type) {
-                            final hidden = _hiddenTypes.contains(type);
-                            return GestureDetector(
-                              onTap: () {
-                                setState(() {
-                                  if (hidden) {
-                                    _hiddenTypes.remove(type);
-                                  } else {
-                                    _hiddenTypes.add(type);
-                                  }
-                                });
-                                setSheetState(() {});
-                              },
-                              child: AnimatedContainer(
-                                duration: const Duration(milliseconds: 150),
-                                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
-                                decoration: BoxDecoration(
-                                  color: hidden
-                                      ? Colors.grey.shade100
-                                      : type.color.withValues(alpha: 0.12),
-                                  borderRadius: BorderRadius.circular(20),
-                                  border: Border.all(
-                                    color: hidden
-                                        ? Colors.grey.shade300
-                                        : type.color.withValues(alpha: 0.4),
-                                  ),
-                                ),
-                                child: Row(
-                                  mainAxisSize: MainAxisSize.min,
-                                  children: [
-                                    Icon(type.icon, size: 12,
-                                      color: hidden ? Colors.grey.shade400 : type.color),
-                                    const SizedBox(width: 4),
-                                    Text(type.displayName,
-                                      style: TextStyle(
-                                        fontSize: 12,
-                                        fontWeight: FontWeight.w500,
-                                        color: hidden
-                                            ? Colors.grey.shade400
-                                            : type.color.withValues(alpha: 0.9),
-                                        decoration: hidden ? TextDecoration.lineThrough : null,
-                                      )),
-                                  ],
-                                ),
-                              ),
-                            );
-                          }).toList(),
-                        ),
-                      ),
-                    ],
-                  );
-                }),
-              ],
-            ),
-          );
+  // ─── Compact filter dropdown ────────────────────────────────────────────
+  void _showFilterDropdown() {
+    final renderBox = _filterButtonKey.currentContext?.findRenderObject() as RenderBox?;
+    if (renderBox == null) return;
+    final buttonPos = renderBox.localToGlobal(Offset.zero);
+    final buttonSize = renderBox.size;
+
+    late OverlayEntry overlay;
+    overlay = OverlayEntry(
+      builder: (_) => _FilterDropdownOverlay(
+        anchorRect: Rect.fromLTWH(buttonPos.dx, buttonPos.dy, buttonSize.width, buttonSize.height),
+        hiddenTypes: Set.of(_hiddenTypes),
+        categories: _filterCategories,
+        onToggleCategory: (cat) {
+          final allHidden = cat.types.every((t) => _hiddenTypes.contains(t));
+          setState(() {
+            if (allHidden) {
+              _hiddenTypes.removeAll(cat.types);
+            } else {
+              _hiddenTypes.addAll(cat.types);
+            }
+          });
+          // Rebuild overlay with new state
+          overlay.remove();
+          _showFilterDropdown();
         },
+        onShowAll: () {
+          setState(() => _hiddenTypes = {});
+          overlay.remove();
+        },
+        onDismiss: () => overlay.remove(),
       ),
     );
+    Overlay.of(context).insert(overlay);
   }
 
   // ─── Floating status pill — glanceable summary between overlay bar and sheet ──
@@ -4305,6 +4152,124 @@ class _VoteChip extends StatelessWidget {
           ],
         ),
       ),
+    );
+  }
+}
+
+// ─── Compact filter dropdown overlay ──────────────────────────────────────
+class _FilterDropdownOverlay extends StatelessWidget {
+  final Rect anchorRect;
+  final Set<BeaconType> hiddenTypes;
+  final List<({String label, IconData icon, Color color, List<BeaconType> types})> categories;
+  final void Function(({String label, IconData icon, Color color, List<BeaconType> types})) onToggleCategory;
+  final VoidCallback onShowAll;
+  final VoidCallback onDismiss;
+
+  const _FilterDropdownOverlay({
+    required this.anchorRect,
+    required this.hiddenTypes,
+    required this.categories,
+    required this.onToggleCategory,
+    required this.onShowAll,
+    required this.onDismiss,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final screenWidth = MediaQuery.of(context).size.width;
+    const dropdownWidth = 180.0;
+    // Position dropdown below the button, right-aligned to button
+    double left = anchorRect.right - dropdownWidth;
+    if (left < 8) left = 8;
+    if (left + dropdownWidth > screenWidth - 8) left = screenWidth - dropdownWidth - 8;
+    final top = anchorRect.bottom + 6;
+
+    return Stack(
+      children: [
+        // Dismiss scrim
+        GestureDetector(
+          onTap: onDismiss,
+          behavior: HitTestBehavior.opaque,
+          child: const SizedBox.expand(),
+        ),
+        Positioned(
+          left: left,
+          top: top,
+          child: Material(
+            color: Colors.transparent,
+            child: Container(
+              width: dropdownWidth,
+              decoration: BoxDecoration(
+                color: Colors.white,
+                borderRadius: BorderRadius.circular(12),
+                boxShadow: [
+                  BoxShadow(color: Colors.black.withValues(alpha: 0.12), blurRadius: 16, offset: const Offset(0, 4)),
+                  BoxShadow(color: Colors.black.withValues(alpha: 0.06), blurRadius: 4),
+                ],
+              ),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  ...categories.map((cat) {
+                    final allHidden = cat.types.every((t) => hiddenTypes.contains(t));
+                    return InkWell(
+                      borderRadius: categories.first == cat
+                          ? const BorderRadius.vertical(top: Radius.circular(12))
+                          : BorderRadius.zero,
+                      onTap: () => onToggleCategory(cat),
+                      child: Padding(
+                        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                        child: Row(
+                          children: [
+                            Icon(cat.icon, size: 16,
+                              color: allHidden ? Colors.grey.shade400 : cat.color),
+                            const SizedBox(width: 10),
+                            Expanded(
+                              child: Text(cat.label,
+                                style: TextStyle(
+                                  fontSize: 14,
+                                  fontWeight: FontWeight.w500,
+                                  color: allHidden ? Colors.grey.shade400 : Colors.black87,
+                                )),
+                            ),
+                            Icon(
+                              allHidden ? Icons.visibility_off : Icons.visibility,
+                              size: 16,
+                              color: allHidden ? Colors.grey.shade400 : cat.color.withValues(alpha: 0.7),
+                            ),
+                          ],
+                        ),
+                      ),
+                    );
+                  }),
+                  if (hiddenTypes.isNotEmpty) ...[
+                    Divider(height: 1, color: Colors.grey.shade200),
+                    InkWell(
+                      borderRadius: const BorderRadius.vertical(bottom: Radius.circular(12)),
+                      onTap: onShowAll,
+                      child: Padding(
+                        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                        child: Row(
+                          children: [
+                            Icon(Icons.visibility, size: 16, color: AppTheme.navyBlue),
+                            const SizedBox(width: 10),
+                            Text('Show All',
+                              style: TextStyle(
+                                fontSize: 14,
+                                fontWeight: FontWeight.w600,
+                                color: AppTheme.navyBlue,
+                              )),
+                          ],
+                        ),
+                      ),
+                    ),
+                  ],
+                ],
+              ),
+            ),
+          ),
+        ),
+      ],
     );
   }
 }

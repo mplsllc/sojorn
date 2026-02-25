@@ -228,7 +228,7 @@ func main() {
 	beaconIngestion.Start()
 	defer beaconIngestion.Stop()
 
-	adminHandler := handlers.NewAdminHandler(dbPool, moderationService, appealService, emailService, sightEngineService, officialAccountsService, linkPreviewService, localAIService, cfg.JWTSecret, s3Client, cfg.R2MediaBucket, cfg.R2VideoBucket, cfg.R2ImgDomain, cfg.R2VidDomain)
+	adminHandler := handlers.NewAdminHandler(dbPool, moderationService, appealService, emailService, sightEngineService, officialAccountsService, linkPreviewService, localAIService, beaconAlertRepo, beaconIngestion, cfg.JWTSecret, s3Client, cfg.R2MediaBucket, cfg.R2VideoBucket, cfg.R2ImgDomain, cfg.R2VidDomain)
 
 	accountHandler := handlers.NewAccountHandler(userRepo, emailService, cfg)
 
@@ -884,6 +884,16 @@ func main() {
 
 		// Feed impression reset
 		admin.DELETE("/users/:id/feed-impressions", adminHandler.AdminResetFeedImpressions)
+
+		// Beacon Alerts Admin
+		admin.GET("/beacon-alerts", adminHandler.ListBeaconAlerts)
+		admin.GET("/beacon-alerts/stats", adminHandler.GetBeaconAlertStats)
+		admin.POST("/beacon-alerts/bulk", adminHandler.BulkUpdateBeaconAlerts)
+		admin.POST("/beacon-alerts/expire-source", adminHandler.ExpireBeaconsBySource)
+		admin.POST("/beacon-alerts/purge-source", adminHandler.PurgeBeaconsBySource)
+		admin.GET("/beacon-alerts/feeds", adminHandler.GetBeaconFeedStatus)
+		admin.PATCH("/beacon-alerts/feeds", adminHandler.ToggleBeaconFeed)
+		admin.POST("/beacon-alerts/feeds/sync", adminHandler.TriggerBeaconSync)
 	}
 
 	// Public claim request endpoint (no auth)
