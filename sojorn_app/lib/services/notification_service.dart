@@ -171,7 +171,7 @@ class NotificationService {
 
   static final NotificationService instance = NotificationService._internal();
 
-  final FirebaseMessaging _messaging = FirebaseMessaging.instance;
+  late final FirebaseMessaging _messaging = FirebaseMessaging.instance;
 
   bool _initialized = false;
   String? _currentToken;

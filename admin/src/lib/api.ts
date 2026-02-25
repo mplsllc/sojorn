@@ -91,6 +91,10 @@ class ApiClient {
     return this.request<any>(`/api/v1/admin/users/${id}`);
   }
 
+  async hardDeleteUser(id: string) {
+    return this.request<any>(`/api/v1/admin/users/${id}`, { method: 'DELETE' });
+  }
+
   async updateUserStatus(id: string, status: string, reason: string) {
     return this.request<any>(`/api/v1/admin/users/${id}/status`, {
       method: 'PATCH',

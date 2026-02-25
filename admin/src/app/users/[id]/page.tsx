@@ -9,7 +9,7 @@ import { api } from '@/lib/api';
 import { statusColor, formatDateTime } from '@/lib/utils';
 import { useEffect, useState } from 'react';
 import { useParams, useRouter } from 'next/navigation';
-import { ArrowLeft, Shield, Ban, CheckCircle, XCircle, Star, RotateCcw, Pencil, UserPlus, UserMinus, Users, Save, X, RefreshCcw, Mail } from 'lucide-react';
+import { ArrowLeft, Shield, Ban, CheckCircle, XCircle, Star, RotateCcw, Pencil, UserPlus, UserMinus, Users, Save, X, RefreshCcw, Mail, Trash2 } from 'lucide-react';
 import Link from 'next/link';
 
 export default function UserDetailPage() {
@@ -21,6 +21,8 @@ export default function UserDetailPage() {
   const [showModal, setShowModal] = useState<string | null>(null);
   const [reason, setReason] = useState('');
   const [customReason, setCustomReason] = useState(false);
+  const [showDeleteModal, setShowDeleteModal] = useState(false);
+  const [deleteConfirm, setDeleteConfirm] = useState('');
 
   const reasonPresets: Record<string, string[]> = {
     banned: [
@@ -114,6 +116,17 @@ export default function UserDetailPage() {
       alert(`Reset failed: ${e.message}`);
     }
     setActionLoading(false);
+  };
+
+  const handleHardDelete = async () => {
+    setActionLoading(true);
+    try {
+      await api.hardDeleteUser(params.id as string);
+      router.push('/users');
+    } catch (e: any) {
+      alert(`Delete failed: ${e.message}`);
+      setActionLoading(false);
+    }
   };
 
   return (
@@ -276,6 +289,21 @@ export default function UserDetailPage() {
                     View User&apos;s Posts →
                   </Link>
                 </div>
+
+                {/* Hard Delete */}
+                <div className="pt-3 border-t border-warm-300">
+                  <p className="text-xs font-medium text-gray-500 mb-2">Danger Zone</p>
+                  <button
+                    onClick={() => setShowDeleteModal(true)}
+                    className="btn-danger text-xs py-1.5 flex items-center gap-1"
+                    disabled={actionLoading || user.role === 'admin'}
+                  >
+                    <Trash2 className="w-3.5 h-3.5" /> Delete User Permanently
+                  </button>
+                  {user.role === 'admin' && (
+                    <p className="text-xs text-gray-400 mt-1">Admin accounts cannot be deleted.</p>
+                  )}
+                </div>
               </div>
             </div>
           </div>
@@ -347,6 +375,36 @@ export default function UserDetailPage() {
                 disabled={actionLoading || !reason.trim()}
               >
                 {actionLoading ? 'Processing...' : 'Confirm'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Hard Delete Confirmation Modal */}
+      {showDeleteModal && (
+        <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50" onClick={() => { setShowDeleteModal(false); setDeleteConfirm(''); }}>
+          <div className="card p-6 w-full max-w-md mx-4" onClick={(e) => e.stopPropagation()}>
+            <h3 className="text-lg font-semibold text-red-600 mb-1">Delete User Permanently</h3>
+            <p className="text-sm text-gray-500 mb-4">
+              This will permanently delete <strong>@{user.handle}</strong> and all their data. This cannot be undone.
+            </p>
+            <p className="text-sm text-gray-700 mb-2">Type <strong>{user.handle}</strong> to confirm:</p>
+            <input
+              className="input mb-4"
+              placeholder={user.handle}
+              value={deleteConfirm}
+              onChange={(e) => setDeleteConfirm(e.target.value)}
+              autoFocus
+            />
+            <div className="flex gap-2 justify-end">
+              <button onClick={() => { setShowDeleteModal(false); setDeleteConfirm(''); }} className="btn-secondary text-sm">Cancel</button>
+              <button
+                onClick={handleHardDelete}
+                className="btn-danger text-sm"
+                disabled={actionLoading || deleteConfirm !== user.handle}
+              >
+                {actionLoading ? 'Deleting...' : 'Delete Forever'}
               </button>
             </div>
           </div>

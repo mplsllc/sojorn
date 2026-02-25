@@ -714,6 +714,7 @@ func main() {
 		admin.PATCH("/users/:id/email", adminHandler.AdminUpdateUserEmail)
 		admin.POST("/users/:id/follows", adminHandler.AdminManageFollow)
 		admin.GET("/users/:id/follows", adminHandler.AdminListFollows)
+		admin.DELETE("/users/:id", adminHandler.HardDeleteUser)
 
 		// Post Management
 		admin.GET("/posts", adminHandler.ListPosts)

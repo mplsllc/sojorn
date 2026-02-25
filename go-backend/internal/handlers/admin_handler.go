@@ -23,6 +23,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/rs/zerolog/log"
+	"gitlab.com/patrickbritton3/sojorn/go-backend/internal/repository"
 	"gitlab.com/patrickbritton3/sojorn/go-backend/internal/services"
 	"golang.org/x/crypto/bcrypt"
 )
@@ -5528,4 +5529,44 @@ func (h *AdminHandler) WarnUser(c *gin.Context) {
 		"strike_count": strikeCount,
 		"message":      "Warning sent successfully",
 	})
+}
+
+// HardDeleteUser permanently deletes a user and all their data.
+// Intended for username cleanup — no audit log entry.
+func (h *AdminHandler) HardDeleteUser(c *gin.Context) {
+	ctx := c.Request.Context()
+	adminID, _ := c.Get("user_id")
+	targetUserID := c.Param("id")
+
+	// Prevent self-deletion
+	if adminID.(string) == targetUserID {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Cannot delete yourself"})
+		return
+	}
+
+	// Prevent deleting other admins
+	var targetRole string
+	err := h.pool.QueryRow(ctx, `SELECT role FROM profiles WHERE id = $1`, targetUserID).Scan(&targetRole)
+	if err != nil {
+		c.JSON(http.StatusNotFound, gin.H{"error": "User not found"})
+		return
+	}
+	if targetRole == "admin" {
+		c.JSON(http.StatusForbidden, gin.H{"error": "Cannot delete admin accounts"})
+		return
+	}
+
+	userRepo := repository.NewUserRepository(h.pool)
+	if err := userRepo.CascadePurgeUser(ctx, targetUserID); err != nil {
+		log.Error().Err(err).Str("target_user_id", targetUserID).Msg("Admin hard-delete failed")
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to delete user: " + err.Error()})
+		return
+	}
+
+	log.Info().
+		Str("admin_id", adminID.(string)).
+		Str("deleted_user_id", targetUserID).
+		Msg("Admin hard-deleted user")
+
+	c.JSON(http.StatusOK, gin.H{"message": "User permanently deleted"})
 }
