@@ -14,6 +14,7 @@ import '../../theme/app_theme.dart';
 import '../../theme/tokens.dart';
 import '../../widgets/media/sojorn_avatar.dart';
 import '../../widgets/group_discover_card.dart';
+import '../../widgets/skeleton_loader.dart';
 import '../../widgets/group_creation_modal.dart';
 import '../../widgets/desktop/desktop_dialog_helper.dart';
 import '../clusters/group_screen.dart';
@@ -147,10 +148,6 @@ class _GroupsScreenState extends ConsumerState<GroupsScreen> {
     final width = MediaQuery.of(context).size.width;
     final isDesktop = SojornBreakpoints.isDesktop(width);
 
-    if (_isLoading) {
-      return const Center(child: CircularProgressIndicator());
-    }
-
     if (isDesktop) return _buildDesktopLayout();
     return _buildMobileLayout();
   }
@@ -283,7 +280,9 @@ class _GroupsScreenState extends ConsumerState<GroupsScreen> {
             ),
           ),
         ),
-        if (_myGroups.isEmpty)
+        if (_isLoading)
+          ...List.generate(3, (_) => _buildSkeletonGroupRow())
+        else if (_myGroups.isEmpty)
           Padding(
             padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 20),
             child: Column(
@@ -352,6 +351,49 @@ class _GroupsScreenState extends ConsumerState<GroupsScreen> {
                   size: 14, color: SojornColors.textDisabled),
           ],
         ),
+      ),
+    );
+  }
+
+  Widget _buildSkeletonGroupRow() {
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+      child: Row(
+        children: [
+          Container(
+            width: 40,
+            height: 40,
+            decoration: BoxDecoration(
+              color: AppTheme.navyBlue.withValues(alpha: 0.06),
+              borderRadius: BorderRadius.circular(SojornRadii.card),
+            ),
+          ),
+          const SizedBox(width: 10),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Container(
+                  height: 14,
+                  width: 120,
+                  decoration: BoxDecoration(
+                    color: AppTheme.navyBlue.withValues(alpha: 0.06),
+                    borderRadius: BorderRadius.circular(4),
+                  ),
+                ),
+                const SizedBox(height: 6),
+                Container(
+                  height: 11,
+                  width: 80,
+                  decoration: BoxDecoration(
+                    color: AppTheme.navyBlue.withValues(alpha: 0.04),
+                    borderRadius: BorderRadius.circular(4),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
       ),
     );
   }
@@ -430,6 +472,10 @@ class _GroupsScreenState extends ConsumerState<GroupsScreen> {
   // ── Main Content ─────────────────────────────────────────────────────────
 
   Widget _buildMainContent() {
+    if (_isLoading) {
+      return const SkeletonGroupList(count: 8);
+    }
+
     final filtered = _filteredDiscoverGroups;
 
     return SingleChildScrollView(
@@ -725,6 +771,9 @@ class _GroupsScreenState extends ConsumerState<GroupsScreen> {
   }
 
   Widget _buildMobileMyGroups() {
+    if (_isLoading) {
+      return const SkeletonGroupList(count: 5);
+    }
     if (_myGroups.isEmpty) {
       return Center(
         child: Column(

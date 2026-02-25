@@ -69,6 +69,7 @@ class AuthService {
   String? _accessToken;
   String? _temporaryToken;
   model.AuthUser? _localUser;
+  String? _userRole;
   bool _initialized = false;
   /// Single-flight guard: only one refresh at a time.
   Completer<bool>? _refreshCompleter;
@@ -87,6 +88,7 @@ class AuthService {
     final refreshToken = await _storage.read(key: 'refresh_token');
 
     _temporaryToken = await _storage.read(key: 'go_auth_token');
+    _userRole = await _storage.read(key: 'go_auth_role');
     final userJson = await _storage.read(key: 'go_auth_user');
 
     if (userJson != null) {
@@ -268,6 +270,8 @@ class AuthService {
 
   bool get isAuthenticated => accessToken != null;
 
+  bool get isAdmin => _userRole == 'admin' || _userRole == 'moderator';
+
   Stream<AuthState> get authStateChanges => _authEventController.stream;
 
   @Deprecated('Use registerWithGoBackend')
@@ -325,6 +329,8 @@ class AuthService {
         if (data['profile'] != null) {
           final profileJson = data['profile'];
           await _storage.write(key: 'go_auth_profile_onboarding', value: profileJson['has_completed_onboarding'].toString());
+          _userRole = profileJson['role'] as String? ?? 'user';
+          await _storage.write(key: 'go_auth_role', value: _userRole!);
         }
 
         // Store reactivation flag for welcome-back flow
@@ -404,10 +410,12 @@ class AuthService {
     _temporaryToken = null;
     _accessToken = null;
     _localUser = null;
+    _userRole = null;
     await _storage.delete(key: 'access_token');
     await _storage.delete(key: 'refresh_token');
     await _storage.delete(key: 'go_auth_token');
     await _storage.delete(key: 'go_auth_user');
+    await _storage.delete(key: 'go_auth_role');
     _authEventController.add(const AuthState(AuthChangeEvent.signedOut, null));
     if (kDebugMode) debugPrint('[AUTH] Sign out complete');
   }

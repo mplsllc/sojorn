@@ -12,10 +12,8 @@ import '../../providers/feed_refresh_provider.dart';
 import '../../theme/tokens.dart';
 import '../sojorn_snackbar.dart';
 
-/// Post menu with kebab menu for owner actions (edit/delete).
-///
-/// Shows "Edit" only within 2 minutes of creation.
-/// Shows "Delete" for owners.
+/// Post menu with kebab menu for owner actions (edit/delete)
+/// and admin moderation actions (warn & remove).
 class PostMenu extends ConsumerStatefulWidget {
   final Post post;
   final VoidCallback? onPostDeleted;
@@ -49,6 +47,8 @@ class _PostMenuState extends ConsumerState<PostMenu> {
     final currentUserId = AuthService.instance.currentUser?.id;
     return currentUserId == widget.post.authorId;
   }
+
+  bool get _isAdmin => AuthService.instance.isAdmin;
 
   bool get _isPinned => widget.post.pinnedAt != null;
 
@@ -280,9 +280,146 @@ class _PostMenuState extends ConsumerState<PostMenu> {
     }
   }
 
+  // ── Admin Moderation Actions ──────────────────────────────────────────
+
+  Future<void> _handleAdminWarn() async {
+    final controller = TextEditingController();
+    final formKey = GlobalKey<FormState>();
+
+    final message = await showDialog<String>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Send Warning'),
+        content: Form(
+          key: formKey,
+          child: TextFormField(
+            controller: controller,
+            maxLength: 500,
+            maxLines: 3,
+            autofocus: true,
+            validator: (value) {
+              if (value == null || value.trim().isEmpty) {
+                return 'Please enter a reason';
+              }
+              return null;
+            },
+            decoration: const InputDecoration(
+              hintText: 'Reason for warning...',
+              border: OutlineInputBorder(),
+            ),
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(),
+            child: const Text('Cancel'),
+          ),
+          ElevatedButton(
+            style: ElevatedButton.styleFrom(
+              backgroundColor: SojornColors.destructive,
+            ),
+            onPressed: () {
+              if (formKey.currentState?.validate() == true) {
+                Navigator.of(context).pop(controller.text.trim());
+              }
+            },
+            child: const Text('Warn & Remove',
+                style: TextStyle(color: SojornColors.basicWhite)),
+          ),
+        ],
+      ),
+    );
+
+    if (message == null || message.isEmpty) return;
+
+    setState(() => _isLoading = true);
+    try {
+      await ref.read(apiServiceProvider).adminWarnUser(
+            postId: widget.post.id,
+            userId: widget.post.authorId,
+            message: message,
+            contentType: 'post',
+          );
+
+      if (mounted) {
+        sojornSnackbar.showSuccess(
+          context: context,
+          message: 'Warning sent, post removed',
+        );
+        ref.read(feedRefreshProvider.notifier).increment();
+        widget.onPostDeleted?.call();
+      }
+    } catch (e) {
+      if (mounted) {
+        sojornSnackbar.showError(
+          context: context,
+          message: e.toString().replaceAll('Exception: ', ''),
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _isLoading = false);
+    }
+  }
+
+  Future<void> _handleAdminRemove() async {
+    final confirm = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Remove Post'),
+        content: const Text(
+            'Remove this post without sending a warning to the user?'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(false),
+            child: const Text('Cancel'),
+          ),
+          ElevatedButton(
+            style: ElevatedButton.styleFrom(
+              backgroundColor: SojornColors.destructive,
+            ),
+            onPressed: () => Navigator.of(context).pop(true),
+            child: const Text('Remove',
+                style: TextStyle(color: SojornColors.basicWhite)),
+          ),
+        ],
+      ),
+    );
+
+    if (confirm != true) return;
+
+    setState(() => _isLoading = true);
+    try {
+      await ref.read(apiServiceProvider).adminWarnUser(
+            postId: widget.post.id,
+            userId: widget.post.authorId,
+            message: 'Post removed by moderator',
+            contentType: 'post',
+          );
+
+      if (mounted) {
+        sojornSnackbar.showSuccess(
+          context: context,
+          message: 'Post removed',
+        );
+        ref.read(feedRefreshProvider.notifier).increment();
+        widget.onPostDeleted?.call();
+      }
+    } catch (e) {
+      if (mounted) {
+        sojornSnackbar.showError(
+          context: context,
+          message: e.toString().replaceAll('Exception: ', ''),
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _isLoading = false);
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
-    if (!_isOwner) {
+    // Show menu for owners or admins
+    if (!_isOwner && !_isAdmin) {
       return const SizedBox.shrink();
     }
 
@@ -291,60 +428,86 @@ class _PostMenuState extends ConsumerState<PostMenu> {
         switch (value) {
           case 'edit':
             _handleEdit();
-            break;
           case 'privacy':
             _handlePrivacy();
-            break;
           case 'pin':
             _handlePinToggle();
-            break;
           case 'delete':
             _handleDelete();
-            break;
+          case 'admin_warn':
+            _handleAdminWarn();
+          case 'admin_remove':
+            _handleAdminRemove();
         }
       },
       itemBuilder: (context) => [
-        if (_canEdit)
+        // Owner actions
+        if (_isOwner) ...[
+          if (_canEdit)
+            const PopupMenuItem(
+              value: 'edit',
+              child: Row(
+                children: [
+                  Icon(Icons.edit, size: 20),
+                  SizedBox(width: 8),
+                  Text('Edit'),
+                ],
+              ),
+            ),
           const PopupMenuItem(
-            value: 'edit',
+            value: 'privacy',
             child: Row(
               children: [
-                Icon(Icons.edit, size: 20),
+                Icon(Icons.lock_outline, size: 20),
                 SizedBox(width: 8),
-                Text('Edit'),
+                Text('Edit privacy'),
               ],
             ),
           ),
-        const PopupMenuItem(
-          value: 'privacy',
-          child: Row(
-            children: [
-              Icon(Icons.lock_outline, size: 20),
-              SizedBox(width: 8),
-              Text('Edit privacy'),
-            ],
+          PopupMenuItem(
+            value: 'pin',
+            child: Row(
+              children: [
+                Icon(_isPinned ? Icons.push_pin : Icons.push_pin_outlined, size: 20),
+                const SizedBox(width: 8),
+                Text(_isPinned ? 'Unpin from profile' : 'Pin to profile'),
+              ],
+            ),
           ),
-        ),
-        PopupMenuItem(
-          value: 'pin',
-          child: Row(
-            children: [
-              Icon(_isPinned ? Icons.push_pin : Icons.push_pin_outlined, size: 20),
-              const SizedBox(width: 8),
-              Text(_isPinned ? 'Unpin from profile' : 'Pin to profile'),
-            ],
+          const PopupMenuItem(
+            value: 'delete',
+            child: Row(
+              children: [
+                Icon(Icons.delete_outline, size: 20, color: SojornColors.destructive),
+                SizedBox(width: 8),
+                Text('Delete', style: TextStyle(color: SojornColors.destructive)),
+              ],
+            ),
           ),
-        ),
-        const PopupMenuItem(
-          value: 'delete',
-          child: Row(
-            children: [
-              Icon(Icons.delete_outline, size: 20, color: SojornColors.destructive),
-              SizedBox(width: 8),
-              Text('Delete', style: TextStyle(color: SojornColors.destructive)),
-            ],
+        ],
+        // Admin actions (for non-owned posts)
+        if (_isAdmin && !_isOwner) ...[
+          const PopupMenuItem(
+            value: 'admin_warn',
+            child: Row(
+              children: [
+                Icon(Icons.warning_amber_outlined, size: 20, color: Colors.orange),
+                SizedBox(width: 8),
+                Text('Warn & Remove', style: TextStyle(color: Colors.orange)),
+              ],
+            ),
           ),
-        ),
+          const PopupMenuItem(
+            value: 'admin_remove',
+            child: Row(
+              children: [
+                Icon(Icons.delete_sweep_outlined, size: 20, color: SojornColors.destructive),
+                SizedBox(width: 8),
+                Text('Remove', style: TextStyle(color: SojornColors.destructive)),
+              ],
+            ),
+          ),
+        ],
       ],
       icon: const Icon(Icons.more_vert),
     );

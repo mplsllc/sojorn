@@ -709,6 +709,7 @@ func main() {
 		admin.PATCH("/users/:id/role", adminHandler.UpdateUserRole)
 		admin.PATCH("/users/:id/verification", adminHandler.UpdateUserVerification)
 		admin.POST("/users/:id/reset-strikes", adminHandler.ResetUserStrikes)
+		admin.POST("/warn", adminHandler.WarnUser)
 		admin.PATCH("/users/:id/profile", adminHandler.AdminUpdateProfile)
 		admin.PATCH("/users/:id/email", adminHandler.AdminUpdateUserEmail)
 		admin.POST("/users/:id/follows", adminHandler.AdminManageFollow)

@@ -630,7 +630,7 @@ class _HomeShellState extends ConsumerState<HomeShell> with WidgetsBindingObserv
             if (_desktopProfile != null)
               PopupMenuButton<String>(
                 offset: const Offset(0, 44),
-                onSelected: (value) {
+                onSelected: (value) async {
                   switch (value) {
                     case 'profile':
                       widget.navigationShell.goBranch(3);
@@ -641,7 +641,7 @@ class _HomeShellState extends ConsumerState<HomeShell> with WidgetsBindingObserv
                         builder: (_) => const PrivacySettingsScreen(),
                       ));
                     case 'signout':
-                      context.push('/logout');
+                      await AuthService.instance.signOut();
                   }
                 },
                 itemBuilder: (_) => [

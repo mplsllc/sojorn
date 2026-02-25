@@ -5407,3 +5407,125 @@ func (h *AdminHandler) OllamaPullModel(c *gin.Context) {
 
 	c.JSON(http.StatusOK, gin.H{"message": fmt.Sprintf("Model %s pulled successfully", req.Name)})
 }
+
+// WarnUser POST /admin/warn — warn a user, optionally remove their content, log to audit.
+func (h *AdminHandler) WarnUser(c *gin.Context) {
+	ctx := c.Request.Context()
+	adminID, _ := c.Get("user_id")
+	adminUUID, _ := uuid.Parse(adminID.(string))
+
+	var req struct {
+		PostID      string `json:"post_id"`
+		UserID      string `json:"user_id"`
+		Message     string `json:"message" binding:"required"`
+		ContentType string `json:"content_type"` // post, quip, board_entry
+	}
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "message is required"})
+		return
+	}
+
+	if req.ContentType == "" {
+		req.ContentType = "post"
+	}
+
+	// Parse optional target user
+	var targetUUID uuid.UUID
+	hasTarget := req.UserID != ""
+	if hasTarget {
+		parsed, err := uuid.Parse(req.UserID)
+		if err != nil {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "invalid user_id"})
+			return
+		}
+		targetUUID = parsed
+	}
+
+	// 1. If post_id provided, remove the content
+	if req.PostID != "" {
+		postUUID, err := uuid.Parse(req.PostID)
+		if err == nil {
+			h.pool.Exec(ctx, `UPDATE posts SET status = 'removed', deleted_at = NOW() WHERE id = $1`, postUUID)
+		}
+	}
+
+	var strikeCount int
+
+	if hasTarget {
+		// 2. Record a content strike
+		h.pool.Exec(ctx, `
+			INSERT INTO content_strikes (user_id, category, content_snippet, created_at)
+			VALUES ($1, 'admin_warning', $2, NOW())
+		`, targetUUID, req.Message)
+
+		// 3. Count recent strikes
+		h.pool.QueryRow(ctx, `
+			SELECT COUNT(*) FROM content_strikes
+			WHERE user_id = $1 AND created_at > NOW() - INTERVAL '30 days'
+		`, targetUUID).Scan(&strikeCount)
+
+		// 4. Send in-app notification
+		metadata, _ := json.Marshal(map[string]string{
+			"message":      req.Message,
+			"content_type": req.ContentType,
+		})
+		h.pool.Exec(ctx, `
+			INSERT INTO notifications (user_id, type, actor_id, is_read, metadata, priority)
+			VALUES ($1, 'admin_warning', $2, false, $3, 'urgent')
+		`, targetUUID, adminUUID, metadata)
+
+		// 5. Send email notification
+		var authorEmail, displayName string
+		h.pool.QueryRow(ctx, `
+			SELECT u.email, COALESCE(pr.display_name, '')
+			FROM users u LEFT JOIN profiles pr ON pr.id = u.id
+			WHERE u.id = $1
+		`, targetUUID).Scan(&authorEmail, &displayName)
+
+		if h.emailService != nil && authorEmail != "" {
+			go func() {
+				if err := h.emailService.SendContentRemovalEmail(authorEmail, displayName, req.ContentType, req.Message, strikeCount); err != nil {
+					log.Error().Err(err).Str("user", req.UserID).Msg("Failed to send warning email")
+				}
+			}()
+		}
+	}
+
+	// 6. Log to audit
+	targetType := "user"
+	targetID := req.UserID
+	if !hasTarget {
+		targetType = "content"
+		targetID = req.PostID
+	}
+	details, _ := json.Marshal(map[string]any{
+		"message":      req.Message,
+		"post_id":      req.PostID,
+		"content_type": req.ContentType,
+		"strike_count": strikeCount,
+	})
+	if targetID != "" {
+		h.pool.Exec(ctx, `
+			INSERT INTO audit_log (actor_id, action, target_type, target_id, details)
+			VALUES ($1, 'admin_warn', $2, $3::uuid, $4)
+		`, adminUUID, targetType, targetID, details)
+	} else {
+		h.pool.Exec(ctx, `
+			INSERT INTO audit_log (actor_id, action, target_type, details)
+			VALUES ($1, 'admin_warn', $2, $3)
+		`, adminUUID, targetType, details)
+	}
+
+	log.Info().
+		Str("admin", adminID.(string)).
+		Str("target", targetID).
+		Str("content_type", req.ContentType).
+		Int("strike_count", strikeCount).
+		Msg("[Admin] Warning issued")
+
+	c.JSON(http.StatusOK, gin.H{
+		"success":      true,
+		"strike_count": strikeCount,
+		"message":      "Warning sent successfully",
+	})
+}

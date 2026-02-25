@@ -1867,4 +1867,22 @@ class ApiService {
     return await _callGoApi('/profiles/$userId/layout', method: 'GET');
   }
 
+  // =========================================================================
+  // Admin Moderation
+  // =========================================================================
+
+  Future<Map<String, dynamic>> adminWarnUser({
+    String? postId,
+    required String userId,
+    required String message,
+    String contentType = 'post',
+  }) async {
+    return await _callGoApi('/admin/warn', method: 'POST', body: {
+      if (postId != null) 'post_id': postId,
+      'user_id': userId,
+      'message': message,
+      'content_type': contentType,
+    });
+  }
+
 }

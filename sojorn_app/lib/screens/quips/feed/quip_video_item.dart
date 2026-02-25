@@ -11,6 +11,8 @@ import 'package:go_router/go_router.dart';
 import 'package:video_player/video_player.dart';
 import '../../../models/quip_text_overlay.dart';
 import '../../../widgets/media/signed_media_image.dart';
+import '../../../services/api_service.dart';
+import '../../../services/auth_service.dart';
 import '../../../theme/tokens.dart';
 
 import 'quips_feed_screen.dart';
@@ -166,14 +168,46 @@ class _QuipVideoItemState extends State<QuipVideoItem>
   }
 
   void _showMoreSheet() {
+    final isAdmin = AuthService.instance.isAdmin;
     showModalBottomSheet(
       context: context,
       backgroundColor: Colors.transparent,
       builder: (_) => _MoreOptionsSheet(
         quipId: widget.quip.id,
         onNotInterested: widget.onNotInterested,
+        isAdmin: isAdmin,
+        onAdminRemove: isAdmin ? () => _handleAdminRemoveQuip() : null,
       ),
     );
+  }
+
+  Future<void> _handleAdminRemoveQuip() async {
+    try {
+      await ApiService.instance.adminWarnUser(
+        postId: widget.quip.id,
+        userId: '', // quips are anonymous — no user to warn
+        message: 'Quip removed by moderator',
+        contentType: 'quip',
+      );
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Quip removed'),
+            behavior: SnackBarBehavior.floating,
+          ),
+        );
+        widget.onNotInterested();
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Failed to remove: $e'),
+            behavior: SnackBarBehavior.floating,
+          ),
+        );
+      }
+    }
   }
 
   // Audio label is cached in _audioLabel — do not call jsonDecode here
@@ -802,10 +836,14 @@ class _QuipVideoItemState extends State<QuipVideoItem>
 class _MoreOptionsSheet extends StatelessWidget {
   final String quipId;
   final VoidCallback onNotInterested;
+  final bool isAdmin;
+  final VoidCallback? onAdminRemove;
 
   const _MoreOptionsSheet({
     required this.quipId,
     required this.onNotInterested,
+    this.isAdmin = false,
+    this.onAdminRemove,
   });
 
   @override
@@ -854,6 +892,17 @@ class _MoreOptionsSheet extends StatelessWidget {
               );
             },
           ),
+          if (isAdmin && onAdminRemove != null)
+            _buildOption(
+              context,
+              icon: Icons.delete_sweep_outlined,
+              label: 'Remove (Admin)',
+              color: const Color(0xFFFF5252),
+              onTap: () {
+                Navigator.pop(context);
+                onAdminRemove!();
+              },
+            ),
         ],
       ),
     );

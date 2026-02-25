@@ -35,6 +35,9 @@ class Profile {
   /// Mastodon-style key-value metadata fields (max 8).
   /// Each entry: {"key": "Pronouns", "value": "they/them", "verified": false}
   final List<ProfileMetadataField> metadataFields;
+  final String role;
+
+  bool get isAdmin => role == 'admin' || role == 'moderator';
 
   Profile({
     required this.id,
@@ -61,6 +64,7 @@ class Profile {
     this.statusText,
     this.statusUpdatedAt,
     this.metadataFields = const [],
+    this.role = 'user',
   });
 
   factory Profile.fromJson(Map<String, dynamic> json) {
@@ -119,6 +123,7 @@ class Profile {
       metadataFields: (json['metadata_fields'] as List?)
           ?.map((e) => ProfileMetadataField.fromJson(e as Map<String, dynamic>))
           .toList() ?? const [],
+      role: json['role'] as String? ?? 'user',
     );
   }
 
@@ -147,6 +152,7 @@ class Profile {
       'birth_year': birthYear,
       if (statusText != null) 'status_text': statusText,
       if (statusUpdatedAt != null) 'status_updated_at': statusUpdatedAt!.toIso8601String(),
+      'role': role,
     };
   }
 
@@ -175,6 +181,7 @@ class Profile {
     String? statusText,
     DateTime? statusUpdatedAt,
     List<ProfileMetadataField>? metadataFields,
+    String? role,
   }) {
     return Profile(
       id: id ?? this.id,
@@ -201,6 +208,7 @@ class Profile {
       statusText: statusText ?? this.statusText,
       statusUpdatedAt: statusUpdatedAt ?? this.statusUpdatedAt,
       metadataFields: metadataFields ?? this.metadataFields,
+      role: role ?? this.role,
     );
   }
 }

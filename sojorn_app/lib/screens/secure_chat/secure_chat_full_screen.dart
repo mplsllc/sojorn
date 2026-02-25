@@ -317,6 +317,7 @@ class _SecureChatFullScreenState extends State<SecureChatFullScreen>
         },
       ),
       floatingActionButton: FloatingActionButton(
+        heroTag: 'secure_chat_new_conversation',
         onPressed: _showNewConversationSheet,
         backgroundColor: AppTheme.brightNavy,
         tooltip: 'New conversation',
