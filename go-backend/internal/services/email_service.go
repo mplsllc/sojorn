@@ -304,9 +304,15 @@ func (s *EmailService) sendViaSendPulse(toEmail, toName, subject, htmlBody, text
 		},
 	}
 
-	jsonData, _ := json.Marshal(reqBody)
-	log.Debug().Int("html_len", len(htmlBody)).Int("text_len", len(textBody)).Str("payload", string(jsonData)).Msg("SendPulse outgoing payload")
-	req, err := http.NewRequest("POST", url, bytes.NewBuffer(jsonData))
+	// Use a buffer with SetEscapeHTML(false) so that HTML angle brackets
+	// are sent as literal < > characters, not \u003c \u003e unicode escapes.
+	// Go's default json.Marshal escapes HTML which breaks email rendering.
+	var buf bytes.Buffer
+	enc := json.NewEncoder(&buf)
+	enc.SetEscapeHTML(false)
+	enc.Encode(reqBody)
+	log.Debug().Int("html_len", len(htmlBody)).Int("text_len", len(textBody)).Msg("SendPulse outgoing email")
+	req, err := http.NewRequest("POST", url, &buf)
 	if err != nil {
 		return err
 	}
