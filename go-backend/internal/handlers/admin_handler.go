@@ -1629,22 +1629,54 @@ func (h *AdminHandler) ReviewAppeal(c *gin.Context) {
 		return
 	}
 
-	// If approved and restore_content, restore the content
-	if req.Decision == "approved" && req.RestoreContent {
+	// If approved: restore user account status and all jailed content
+	if req.Decision == "approved" {
 		var violationID uuid.UUID
 		h.pool.QueryRow(ctx, `SELECT user_violation_id FROM user_appeals WHERE id = $1`, appealUUID).Scan(&violationID)
 
-		var flagID uuid.UUID
-		h.pool.QueryRow(ctx, `SELECT moderation_flag_id FROM user_violations WHERE id = $1`, violationID).Scan(&flagID)
+		// Get the user associated with this violation
+		var appealUserID uuid.UUID
+		h.pool.QueryRow(ctx, `SELECT user_id FROM user_violations WHERE id = $1`, violationID).Scan(&appealUserID)
 
-		var postID, commentID *uuid.UUID
-		h.pool.QueryRow(ctx, `SELECT post_id, comment_id FROM moderation_flags WHERE id = $1`, flagID).Scan(&postID, &commentID)
-
-		if postID != nil {
-			h.pool.Exec(ctx, `UPDATE posts SET status = 'active', deleted_at = NULL WHERE id = $1`, postID)
+		if appealUserID != uuid.Nil {
+			// Restore user account if they were banned or suspended
+			var userStatus string
+			h.pool.QueryRow(ctx, `SELECT status FROM users WHERE id = $1`, appealUserID).Scan(&userStatus)
+			if userStatus == "banned" || userStatus == "suspended" {
+				h.pool.Exec(ctx, `UPDATE users SET status = 'active', suspended_until = NULL WHERE id = $1`, appealUserID)
+				// Restore all jailed content
+				h.pool.Exec(ctx, `UPDATE posts SET status = 'active' WHERE author_id = $1 AND status = 'jailed'`, appealUserID)
+				h.pool.Exec(ctx, `UPDATE comments SET status = 'active' WHERE author_id = $1 AND status = 'jailed'`, appealUserID)
+				// Log the reinstatement
+				h.pool.Exec(ctx, `INSERT INTO user_status_history (user_id, old_status, new_status, reason, changed_by) VALUES ($1, $2, 'active', $3, $4)`,
+					appealUserID, userStatus, "Appeal approved: "+req.ReviewDecision, adminUUID)
+				// Notify user
+				if h.emailService != nil {
+					var userEmail, displayName string
+					h.pool.QueryRow(ctx, `SELECT u.email, COALESCE(p.display_name, '') FROM users u LEFT JOIN profiles p ON p.id = u.id WHERE u.id = $1`, appealUserID).Scan(&userEmail, &displayName)
+					if userEmail != "" {
+						go func() {
+							h.emailService.SendAccountRestoredEmail(userEmail, displayName, "Your appeal was approved.")
+						}()
+					}
+				}
+			}
 		}
-		if commentID != nil {
-			h.pool.Exec(ctx, `UPDATE comments SET status = 'active', deleted_at = NULL WHERE id = $1`, commentID)
+
+		// If restore_content is set, also restore the specific flagged item
+		if req.RestoreContent && violationID != uuid.Nil {
+			var flagID uuid.UUID
+			h.pool.QueryRow(ctx, `SELECT moderation_flag_id FROM user_violations WHERE id = $1`, violationID).Scan(&flagID)
+			if flagID != uuid.Nil {
+				var postID, commentID *uuid.UUID
+				h.pool.QueryRow(ctx, `SELECT post_id, comment_id FROM moderation_flags WHERE id = $1`, flagID).Scan(&postID, &commentID)
+				if postID != nil {
+					h.pool.Exec(ctx, `UPDATE posts SET status = 'active', deleted_at = NULL WHERE id = $1 AND status IN ('removed', 'flagged')`, postID)
+				}
+				if commentID != nil {
+					h.pool.Exec(ctx, `UPDATE comments SET status = 'active', deleted_at = NULL WHERE id = $1 AND status IN ('removed', 'flagged')`, commentID)
+				}
+			}
 		}
 	}
 
