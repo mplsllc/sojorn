@@ -50,8 +50,6 @@ type Config struct {
 	IcedAPIBase             string // IcedCoffee public-safety API base URL
 	EventbriteAPIKey        string // Eventbrite API key for event ingestion
 	TicketmasterAPIKey      string // Ticketmaster Discovery API key for event ingestion
-	Res211APIBase           string // 211 National Data Platform base URL
-	Res211APIKey            string // 211 API subscription key (Ocp-Apim-Subscription-Key)
 }
 
 func LoadConfig() *Config {
@@ -104,8 +102,6 @@ func LoadConfig() *Config {
 		IcedAPIBase:             getEnv("ICED_API_BASE", "http://127.0.0.1:8089"),
 		EventbriteAPIKey:        getEnv("EVENTBRITE_API_KEY", ""),
 		TicketmasterAPIKey:      getEnv("TICKETMASTER_API_KEY", ""),
-		Res211APIBase:           getEnv("RES_211_API_BASE", "https://api.211.org"),
-		Res211APIKey:            getEnv("RES_211_API_KEY", ""),
 	}
 }
 

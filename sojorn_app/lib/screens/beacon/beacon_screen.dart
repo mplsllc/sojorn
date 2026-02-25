@@ -39,10 +39,11 @@ import '../../theme/tokens.dart';
 import '../../theme/app_theme.dart';
 import '../../widgets/media/sojorn_avatar.dart';
 import '../../widgets/neighborhood/neighborhood_picker_sheet.dart';
+import 'package:url_launcher/url_launcher.dart';
 import '../../widgets/desktop/desktop_dialog_helper.dart';
 import '../../config/api_config.dart';
 
-enum BeaconTab { map, board, groups, resources }
+enum BeaconTab { map, board, search, groups }
 enum NeighborhoodHubTab { feed, chat, forum, members }
 
 class BeaconScreen extends ConsumerStatefulWidget {
@@ -57,11 +58,11 @@ class BeaconScreen extends ConsumerStatefulWidget {
 }
 
 class BeaconScreenState extends ConsumerState<BeaconScreen> with TickerProviderStateMixin {
-  static final List<BeaconTab> _tabOrder = [
+  static const List<BeaconTab> _tabOrder = [
     BeaconTab.map,
     BeaconTab.board,
     BeaconTab.groups,
-    BeaconTab.resources,
+    BeaconTab.search,
   ];
 
   final MapController _mapController = MapController();
@@ -129,21 +130,13 @@ class BeaconScreenState extends ConsumerState<BeaconScreen> with TickerProviderS
   // Beacon map type filter (hidden = not shown on map/list)
   Set<BeaconType> _hiddenTypes = {};
 
-  // 211 Resources state
-  List<Post> _resourcePosts = [];
-  bool _isLoadingResources = false;
-  String _selectedResourceCategory = '';
-
-  static const _resourceCategories = <({String key, String label, IconData icon})>[
-    (key: '', label: 'All', icon: Icons.apps),
-    (key: 'food', label: 'Food', icon: Icons.restaurant),
-    (key: 'housing', label: 'Housing', icon: Icons.home),
-    (key: 'mental_health', label: 'Mental Health', icon: Icons.psychology),
-    (key: 'medical', label: 'Medical', icon: Icons.local_hospital),
-    (key: 'legal', label: 'Legal', icon: Icons.gavel),
-    (key: 'utilities', label: 'Utilities', icon: Icons.bolt),
-    (key: 'substance_use', label: 'Treatment', icon: Icons.healing),
-  ];
+  // Beacon search state
+  final _searchController = TextEditingController();
+  bool _isSearching = false;
+  List<Map<String, dynamic>> _searchBeacons = [];
+  List<Map<String, dynamic>> _searchBoard = [];
+  List<Map<String, dynamic>> _searchGroups = [];
+  Timer? _searchDebounce;
 
   @override
   void initState() {
@@ -152,11 +145,10 @@ class BeaconScreenState extends ConsumerState<BeaconScreen> with TickerProviderS
     _tabController = TabController(length: 4, vsync: this);
     _tabController.addListener(() {
       if (!_tabController.indexIsChanging) {
-        const tabNames = ['Map', 'Commons', 'Groups', 'Resources'];
+        final tabNames = ['Map', 'Commons', 'Hub', 'Clusters'];
         debugPrint('[BEACON] Tab switched to: ${_tabController.index < tabNames.length ? tabNames[_tabController.index] : _tabController.index}');
         setState(() => _activeTab = _tabOrder[_tabController.index]);
         if (_tabController.index == 1 && _boardEntries.isEmpty) _loadBoardEntries();
-        if (_tabController.index == 3 && _resourcePosts.isEmpty) _loadResources();
       }
     });
     _mapCenter = widget.initialMapCenter ?? const LatLng(44.9778, -93.2650); // Minneapolis default, overridden by neighborhood/GPS
@@ -192,6 +184,8 @@ class BeaconScreenState extends ConsumerState<BeaconScreen> with TickerProviderS
   void dispose() {
     _sheetController.removeListener(_onSheetSizeChanged);
     _tabController.dispose();
+    _searchController.dispose();
+    _searchDebounce?.cancel();
     _beaconLoadDebounce?.cancel();
     super.dispose();
   }
@@ -455,26 +449,6 @@ class BeaconScreenState extends ConsumerState<BeaconScreen> with TickerProviderS
     } catch (e) {
       debugPrint('[Beacon] ✗ loadBeacons failed: $e');
       if (mounted) setState(() => _isLoading = false);
-    }
-  }
-
-  Future<void> _loadResources({bool forceRefresh = false}) async {
-    if (_isLoadingResources) return;
-    if (!forceRefresh && _resourcePosts.isNotEmpty) return;
-    final target = _userLocation ?? _mapCenter;
-    setState(() => _isLoadingResources = true);
-    try {
-      final posts = await ref.read(apiServiceProvider).fetchResources(
-        lat: target.latitude,
-        long: target.longitude,
-        radius: 20000,
-        category: _selectedResourceCategory.isEmpty ? null : _selectedResourceCategory,
-      );
-      if (mounted) setState(() => _resourcePosts = posts);
-    } catch (e) {
-      debugPrint('[Resources] fetch failed: $e');
-    } finally {
-      if (mounted) setState(() => _isLoadingResources = false);
     }
   }
 
@@ -862,6 +836,43 @@ class BeaconScreenState extends ConsumerState<BeaconScreen> with TickerProviderS
     );
   }
 
+  void _onSearchChanged(String query) {
+    _searchDebounce?.cancel();
+    if (query.trim().isEmpty) {
+      setState(() {
+        _searchBeacons = [];
+        _searchBoard = [];
+        _searchGroups = [];
+        _isSearching = false;
+      });
+      return;
+    }
+    _searchDebounce = Timer(const Duration(milliseconds: 400), () => _performBeaconSearch(query.trim()));
+  }
+
+  Future<void> _performBeaconSearch(String query) async {
+    setState(() => _isSearching = true);
+    try {
+      final data = await ApiService.instance.beaconSearch(
+        query: query,
+        lat: _userLocation?.latitude ?? _mapCenter.latitude,
+        lng: _userLocation?.longitude ?? _mapCenter.longitude,
+        radius: 50000,
+      );
+      if (mounted) {
+        setState(() {
+          _searchBeacons = (data['beacons'] as List?)?.cast<Map<String, dynamic>>() ?? [];
+          _searchBoard = (data['board_entries'] as List?)?.cast<Map<String, dynamic>>() ?? [];
+          _searchGroups = (data['groups'] as List?)?.cast<Map<String, dynamic>>() ?? [];
+          _isSearching = false;
+        });
+      }
+    } catch (e) {
+      if (kDebugMode) print('[BeaconSearch] Error: $e');
+      if (mounted) setState(() => _isSearching = false);
+    }
+  }
+
   Future<void> _toggleBoardVote(BoardEntry entry) async {
     try {
       final result = await ApiService.instance.toggleBoardVote(entryId: entry.id);
@@ -916,7 +927,7 @@ class BeaconScreenState extends ConsumerState<BeaconScreen> with TickerProviderS
                 Tab(text: 'Map', icon: Icon(Icons.map_outlined, size: SojornNav.beaconTabIconSize), iconMargin: EdgeInsets.only(bottom: 2)),
                 Tab(text: 'Commons', icon: Icon(Icons.location_city_outlined, size: SojornNav.beaconTabIconSize), iconMargin: EdgeInsets.only(bottom: 2)),
                 Tab(text: 'Groups', icon: Icon(Icons.groups_outlined, size: SojornNav.beaconTabIconSize), iconMargin: EdgeInsets.only(bottom: 2)),
-                Tab(text: 'Resources', icon: Icon(Icons.volunteer_activism, size: SojornNav.beaconTabIconSize), iconMargin: EdgeInsets.only(bottom: 2)),
+                Tab(text: 'Search', icon: Icon(Icons.search, size: SojornNav.beaconTabIconSize), iconMargin: EdgeInsets.only(bottom: 2)),
               ],
             ),
           ),
@@ -927,7 +938,7 @@ class BeaconScreenState extends ConsumerState<BeaconScreen> with TickerProviderS
                 _buildMapTab(),
                 _buildBoardView(),
                 _buildGroupsView(),
-                _buildResourcesView(),
+                _buildSearchView(),
               ],
             ),
           ),
@@ -1297,8 +1308,8 @@ class BeaconScreenState extends ConsumerState<BeaconScreen> with TickerProviderS
               ),
             ),
           const Spacer(),
-          // Inline layer filter chips
-          _buildMapLayerChips(),
+          // Filter button — badge shows how many types are hidden
+          _mapFilterButton(),
           const SizedBox(width: 8),
           // My location button
           _mapIconButton(Icons.my_location,
@@ -1311,101 +1322,60 @@ class BeaconScreenState extends ConsumerState<BeaconScreen> with TickerProviderS
     );
   }
 
-  // ─── Map layer groups for the inline filter chips ───────────────────────
-  static const _mapLayerGroups = <({
-    String label,
-    IconData icon,
-    Color color,
-    List<BeaconType> types,
-  })>[
-    (
-      label: 'Safety',
-      icon: Icons.shield_outlined,
-      color: Color(0xFFEF5350),
-      types: [
-        BeaconType.safety, BeaconType.suspiciousActivity,
-        BeaconType.officialPresence, BeaconType.checkpoint, BeaconType.taskForce,
-        BeaconType.hazard, BeaconType.fire, BeaconType.utilityAlert,
-        BeaconType.packageTheft, BeaconType.noiseReport, BeaconType.development,
-      ],
-    ),
-    (
-      label: 'Traffic',
-      icon: Icons.traffic_outlined,
-      color: Color(0xFFFFAB00),
-      types: [BeaconType.camera, BeaconType.sign, BeaconType.weatherStation],
-    ),
-    (
-      label: 'Resources',
-      icon: Icons.volunteer_activism_outlined,
-      color: Color(0xFF26A69A),
-      types: [BeaconType.resource],
-    ),
-  ];
+  final GlobalKey _filterButtonKey = GlobalKey();
+  final LayerLink _filterLayerLink = LayerLink();
 
-  Widget _buildMapLayerChips() {
-    return ClipRRect(
-      borderRadius: BorderRadius.circular(20),
-      child: BackdropFilter(
-        filter: ImageFilter.blur(sigmaX: 12, sigmaY: 12),
-        child: Container(
-          padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 4),
-          decoration: BoxDecoration(
-            color: SojornColors.basicWhite.withValues(alpha: 0.75),
-            borderRadius: BorderRadius.circular(20),
-            border: Border.all(color: SojornColors.basicWhite.withValues(alpha: 0.5), width: 0.5),
-            boxShadow: [BoxShadow(color: SojornColors.basicBlack.withValues(alpha: 0.08), blurRadius: 6)],
-          ),
-          child: Row(
-            mainAxisSize: MainAxisSize.min,
-            children: _mapLayerGroups.map((group) {
-              final isHidden = group.types.every((t) => _hiddenTypes.contains(t));
-              return GestureDetector(
-                onTap: () => setState(() {
-                  if (isHidden) {
-                    _hiddenTypes.removeAll(group.types);
-                  } else {
-                    _hiddenTypes.addAll(group.types);
-                  }
-                }),
-                child: AnimatedContainer(
-                  duration: const Duration(milliseconds: 180),
-                  margin: const EdgeInsets.symmetric(horizontal: 2),
-                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                  decoration: BoxDecoration(
-                    color: isHidden ? Colors.transparent : group.color.withValues(alpha: 0.13),
-                    borderRadius: BorderRadius.circular(14),
-                    border: Border.all(
-                      color: isHidden
-                          ? SojornColors.basicBlack.withValues(alpha: 0.15)
-                          : group.color,
-                      width: 1,
+  Widget _mapFilterButton() {
+    final hiddenCount = _hiddenTypes.length;
+    return CompositedTransformTarget(
+      link: _filterLayerLink,
+      child: GestureDetector(
+      key: _filterButtonKey,
+      onTap: _showFilterDropdown,
+      child: ClipRRect(
+        borderRadius: BorderRadius.circular(18),
+        child: BackdropFilter(
+          filter: ImageFilter.blur(sigmaX: 12, sigmaY: 12),
+          child: Stack(
+            clipBehavior: Clip.none,
+            children: [
+              Container(
+                width: 36, height: 36,
+                decoration: BoxDecoration(
+                  color: hiddenCount > 0
+                      ? AppTheme.navyBlue.withValues(alpha: 0.85)
+                      : SojornColors.basicWhite.withValues(alpha: 0.70),
+                  shape: BoxShape.circle,
+                  border: Border.all(color: SojornColors.basicWhite.withValues(alpha: 0.5), width: 0.5),
+                  boxShadow: [BoxShadow(color: SojornColors.basicBlack.withValues(alpha: 0.08), blurRadius: 6)],
+                ),
+                child: Icon(Icons.tune, size: 18,
+                  color: hiddenCount > 0
+                      ? Colors.white
+                      : AppTheme.navyBlue.withValues(alpha: 0.75)),
+              ),
+              if (hiddenCount > 0)
+                Positioned(
+                  top: -3, right: -3,
+                  child: Container(
+                    width: 16, height: 16,
+                    decoration: const BoxDecoration(
+                      color: Color(0xFFFF5722),
+                      shape: BoxShape.circle,
+                    ),
+                    child: Center(
+                      child: Text(
+                        '$hiddenCount',
+                        style: const TextStyle(color: Colors.white, fontSize: 10, fontWeight: FontWeight.w800),
+                      ),
                     ),
                   ),
-                  child: Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      Icon(group.icon, size: 13,
-                          color: isHidden
-                              ? SojornColors.basicBlack.withValues(alpha: 0.35)
-                              : group.color),
-                      const SizedBox(width: 3),
-                      Text(group.label,
-                          style: TextStyle(
-                            fontSize: 11,
-                            fontWeight: FontWeight.w600,
-                            color: isHidden
-                                ? SojornColors.basicBlack.withValues(alpha: 0.35)
-                                : group.color,
-                          )),
-                    ],
-                  ),
                 ),
-              );
-            }).toList(),
+            ],
           ),
         ),
       ),
+    ),
     );
   }
 
@@ -1429,6 +1399,70 @@ class BeaconScreenState extends ConsumerState<BeaconScreen> with TickerProviderS
         ),
       ),
     );
+  }
+
+  // ─── Filter categories ──────────────────────────────────────────────────
+  static const _filterCategories = <({String label, IconData icon, Color color, List<BeaconType> types})>[
+    (
+      label: 'Safety',
+      icon: Icons.shield,
+      color: Color(0xFFF44336),
+      types: [BeaconType.safety, BeaconType.suspiciousActivity, BeaconType.officialPresence, BeaconType.checkpoint, BeaconType.taskForce],
+    ),
+    (
+      label: 'Hazards',
+      icon: Icons.warning_rounded,
+      color: Color(0xFFFF5722),
+      types: [BeaconType.hazard, BeaconType.fire, BeaconType.utilityAlert],
+    ),
+    (
+      label: 'Traffic',
+      icon: Icons.traffic,
+      color: Color(0xFFFFAB00),
+      types: [BeaconType.camera, BeaconType.sign, BeaconType.weatherStation],
+    ),
+    (
+      label: 'Community',
+      icon: Icons.people,
+      color: Color(0xFF607D8B),
+      types: [BeaconType.packageTheft, BeaconType.noiseReport, BeaconType.development],
+    ),
+  ];
+
+  // ─── Compact filter dropdown ────────────────────────────────────────────
+  void _showFilterDropdown() {
+    final renderBox = _filterButtonKey.currentContext?.findRenderObject() as RenderBox?;
+    if (renderBox == null) return;
+    final buttonSize = renderBox.size;
+
+    late OverlayEntry overlay;
+    overlay = OverlayEntry(
+      builder: (_) => _FilterDropdownOverlay(
+        layerLink: _filterLayerLink,
+        buttonSize: buttonSize,
+        hiddenTypes: Set.of(_hiddenTypes),
+        categories: _filterCategories,
+        onToggleCategory: (cat) {
+          final allHidden = cat.types.every((t) => _hiddenTypes.contains(t));
+          setState(() {
+            if (allHidden) {
+              _hiddenTypes.removeAll(cat.types);
+            } else {
+              _hiddenTypes.addAll(cat.types);
+            }
+          });
+          // Rebuild overlay with new state
+          overlay.remove();
+          _showFilterDropdown();
+        },
+        onShowAll: () {
+          setState(() => _hiddenTypes = {});
+          overlay.remove();
+        },
+        onDismiss: () => overlay.remove(),
+      ),
+    );
+    Overlay.of(context).insert(overlay);
   }
 
   // ─── Floating status pill — glanceable summary between overlay bar and sheet ──
@@ -1545,7 +1579,7 @@ class BeaconScreenState extends ConsumerState<BeaconScreen> with TickerProviderS
     switch (_activeTab) {
       case BeaconTab.map: return 'Report';
       case BeaconTab.board: return 'Post';
-      case BeaconTab.resources: return 'Create';
+      case BeaconTab.search: return 'Create';
       case BeaconTab.groups: return 'New';
     }
   }
@@ -1559,7 +1593,7 @@ class BeaconScreenState extends ConsumerState<BeaconScreen> with TickerProviderS
       case BeaconTab.board:
         _onCreateBoardPost();
         break;
-      case BeaconTab.resources:
+      case BeaconTab.search:
         _onCreateBeacon();
         break;
       case BeaconTab.groups:
@@ -2199,212 +2233,210 @@ class BeaconScreenState extends ConsumerState<BeaconScreen> with TickerProviderS
     );
   }
 
-  // ─── Resources view (211 community resources) ──────────────────
-  Widget _buildResourcesView() {
-    final filtered = _selectedResourceCategory.isEmpty
-        ? _resourcePosts
-        : _resourcePosts.where((p) => p.tags?.contains(_selectedResourceCategory) == true).toList();
+  // ─── Search view ───────────────────────────────────────────────────
+  Widget _buildSearchView() {
+    final hasResults = _searchBeacons.isNotEmpty || _searchBoard.isNotEmpty || _searchGroups.isNotEmpty;
+    final hasQuery = _searchController.text.trim().isNotEmpty;
 
     return Container(
       color: AppTheme.scaffoldBg,
       child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          SizedBox(
-            height: 48,
-            child: ListView.builder(
-              scrollDirection: Axis.horizontal,
-              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-              itemCount: _resourceCategories.length,
-              itemBuilder: (_, i) {
-                final cat = _resourceCategories[i];
-                final isSelected = _selectedResourceCategory == cat.key;
-                return GestureDetector(
-                  onTap: () {
-                    setState(() => _selectedResourceCategory = cat.key);
-                    _loadResources(forceRefresh: true);
-                  },
-                  child: AnimatedContainer(
-                    duration: const Duration(milliseconds: 160),
-                    margin: const EdgeInsets.only(right: 6),
-                    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-                    decoration: BoxDecoration(
-                      color: isSelected ? AppTheme.brightNavy : AppTheme.cardSurface,
-                      borderRadius: BorderRadius.circular(14),
-                      border: Border.all(
-                        color: isSelected
-                            ? AppTheme.brightNavy
-                            : AppTheme.navyBlue.withValues(alpha: 0.15),
-                      ),
-                    ),
-                    child: Row(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        Icon(cat.icon, size: 13,
-                            color: isSelected
-                                ? Colors.white
-                                : AppTheme.navyBlue.withValues(alpha: 0.7)),
-                        const SizedBox(width: 4),
-                        Text(cat.label,
-                            style: TextStyle(
-                              fontSize: 12,
-                              fontWeight: FontWeight.w600,
-                              color: isSelected
-                                  ? Colors.white
-                                  : AppTheme.navyBlue.withValues(alpha: 0.8),
-                            )),
-                      ],
-                    ),
-                  ),
-                );
-              },
+          // Search input
+          Container(
+            margin: const EdgeInsets.fromLTRB(16, 12, 16, 8),
+            decoration: BoxDecoration(
+              color: AppTheme.cardSurface,
+              borderRadius: BorderRadius.circular(12),
+              border: Border.all(color: AppTheme.navyBlue.withValues(alpha: 0.1)),
+            ),
+            child: Material(
+              color: Colors.transparent,
+              child: TextField(
+                controller: _searchController,
+                onChanged: _onSearchChanged,
+                style: TextStyle(color: SojornColors.postContent, fontSize: 14),
+                decoration: InputDecoration(
+                  hintText: 'Search beacons, boards, groups…',
+                  hintStyle: TextStyle(color: SojornColors.textDisabled),
+                  prefixIcon: Icon(Icons.search, size: 20, color: SojornColors.textDisabled),
+                  suffixIcon: hasQuery
+                      ? IconButton(
+                          icon: Icon(Icons.close, size: 18, color: SojornColors.textDisabled),
+                          onPressed: () {
+                            _searchController.clear();
+                            _onSearchChanged('');
+                          },
+                        )
+                      : null,
+                  border: InputBorder.none,
+                  contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+                ),
+              ),
             ),
           ),
-          const Divider(height: 1),
+          // Results
           Expanded(
-            child: _isLoadingResources
+            child: _isSearching
                 ? const Center(child: CircularProgressIndicator())
-                : filtered.isEmpty
+                : !hasQuery
                     ? Center(
                         child: Column(
                           mainAxisSize: MainAxisSize.min,
                           children: [
-                            Icon(Icons.volunteer_activism,
-                                color: AppTheme.navyBlue.withValues(alpha: 0.15),
-                                size: 56),
+                            Icon(Icons.sensors, color: AppTheme.navyBlue.withValues(alpha: 0.15), size: 56),
                             const SizedBox(height: 12),
-                            Text('No resources found nearby',
-                                style: TextStyle(
-                                    color: AppTheme.navyBlue.withValues(alpha: 0.4),
-                                    fontSize: 15,
-                                    fontWeight: FontWeight.w600)),
+                            Text('Search the beacon ecosystem',
+                              style: TextStyle(color: AppTheme.navyBlue.withValues(alpha: 0.4), fontSize: 15, fontWeight: FontWeight.w600)),
                             const SizedBox(height: 4),
-                            Text('Try expanding your area or changing the category',
-                                style: TextStyle(
-                                    color: SojornColors.textDisabled, fontSize: 13)),
+                            Text('Find incidents, board posts, and public groups',
+                              style: TextStyle(color: SojornColors.textDisabled, fontSize: 13)),
                           ],
                         ),
                       )
-                    : ListView.builder(
-                        padding: const EdgeInsets.fromLTRB(12, 8, 12, 16),
-                        itemCount: filtered.length,
-                        itemBuilder: (_, i) => _buildResourceCard(filtered[i]),
-                      ),
+                    : !hasResults
+                        ? Center(
+                            child: Column(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                Icon(Icons.search_off, color: AppTheme.navyBlue.withValues(alpha: 0.2), size: 48),
+                                const SizedBox(height: 12),
+                                Text('No results found',
+                                  style: TextStyle(color: AppTheme.navyBlue.withValues(alpha: 0.4), fontSize: 15, fontWeight: FontWeight.w600)),
+                              ],
+                            ),
+                          )
+                        : ListView(
+                            padding: const EdgeInsets.symmetric(horizontal: 16),
+                            children: [
+                              if (_searchBeacons.isNotEmpty) ...[
+                                _searchSectionHeader('Beacons', Icons.sensors, _searchBeacons.length),
+                                ..._searchBeacons.map(_buildBeaconResult),
+                              ],
+                              if (_searchBoard.isNotEmpty) ...[
+                                _searchSectionHeader('Board Posts', Icons.forum, _searchBoard.length),
+                                ..._searchBoard.map(_buildBoardResult),
+                              ],
+                              if (_searchGroups.isNotEmpty) ...[
+                                _searchSectionHeader('Public Groups', Icons.groups, _searchGroups.length),
+                                ..._searchGroups.map(_buildGroupResult),
+                              ],
+                              const SizedBox(height: 16),
+                            ],
+                          ),
           ),
         ],
       ),
     );
   }
 
-  Widget _buildResourceCard(Post post) {
-    final title = (post.title?.isNotEmpty == true) ? post.title! : post.body ?? '';
-    final hasBody = post.title?.isNotEmpty == true && (post.body?.isNotEmpty ?? false);
-    final tags = post.tags ?? [];
-    final iconData = _resourceIconForTags(tags);
-    final dist = post.distanceMeters != null
-        ? post.distanceMeters! < 1000
-            ? '${post.distanceMeters!.round()}m'
-            : '${(post.distanceMeters! / 1000).toStringAsFixed(1)}km'
-        : null;
-
-    return Card(
-      margin: const EdgeInsets.only(bottom: 8),
-      color: AppTheme.cardSurface,
-      elevation: 0,
-      shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(SojornRadii.card)),
-      child: InkWell(
-        borderRadius: BorderRadius.circular(SojornRadii.card),
-        onTap: () => Navigator.of(context).push(
-            MaterialPageRoute(builder: (_) => BeaconDetailScreen(beaconPost: post))),
-        child: Padding(
-          padding: const EdgeInsets.all(12),
-          child: Row(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Container(
-                width: 40,
-                height: 40,
-                decoration: BoxDecoration(
-                  color: const Color(0xFF26A69A).withValues(alpha: 0.12),
-                  borderRadius: BorderRadius.circular(10),
-                ),
-                child: Icon(iconData, size: 20, color: const Color(0xFF26A69A)),
-              ),
-              const SizedBox(width: 10),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Row(children: [
-                      Expanded(
-                        child: Text(
-                          title,
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                          style: TextStyle(
-                              color: SojornColors.postContent,
-                              fontSize: 13,
-                              fontWeight: FontWeight.w600),
-                        ),
-                      ),
-                      if (dist != null) ...[
-                        const SizedBox(width: 6),
-                        Text(dist,
-                            style: TextStyle(
-                                color: SojornColors.textDisabled, fontSize: 11)),
-                      ],
-                    ]),
-                    if (hasBody) ...[
-                      const SizedBox(height: 3),
-                      Text(post.body!,
-                          maxLines: 2,
-                          overflow: TextOverflow.ellipsis,
-                          style: TextStyle(
-                              color: SojornColors.postContentLight, fontSize: 12)),
-                    ],
-                    if (tags.isNotEmpty) ...[
-                      const SizedBox(height: 5),
-                      Wrap(
-                        spacing: 4,
-                        children: tags.take(3).map((t) => Container(
-                          padding: const EdgeInsets.symmetric(
-                              horizontal: 6, vertical: 2),
-                          decoration: BoxDecoration(
-                            color: const Color(0xFF26A69A).withValues(alpha: 0.1),
-                            borderRadius: BorderRadius.circular(6),
-                          ),
-                          child: Text(t.replaceAll('_', ' '),
-                              style: const TextStyle(
-                                  fontSize: 10,
-                                  color: Color(0xFF26A69A),
-                                  fontWeight: FontWeight.w500)),
-                        )).toList(),
-                      ),
-                    ],
-                  ],
-                ),
-              ),
-            ],
-          ),
-        ),
+  Widget _searchSectionHeader(String title, IconData icon, int count) {
+    return Padding(
+      padding: const EdgeInsets.only(top: 16, bottom: 8),
+      child: Row(
+        children: [
+          Icon(icon, size: 16, color: AppTheme.brightNavy),
+          const SizedBox(width: 8),
+          Text(title, style: TextStyle(color: AppTheme.navyBlue, fontSize: 13, fontWeight: FontWeight.w700)),
+          const SizedBox(width: 6),
+          Text('($count)', style: TextStyle(color: SojornColors.textDisabled, fontSize: 12)),
+        ],
       ),
     );
   }
 
-  IconData _resourceIconForTags(List<String> tags) {
-    if (tags.contains('food')) return Icons.restaurant;
-    if (tags.contains('housing')) return Icons.home;
-    if (tags.contains('mental_health')) return Icons.psychology;
-    if (tags.contains('medical')) return Icons.local_hospital;
-    if (tags.contains('legal')) return Icons.gavel;
-    if (tags.contains('utilities')) return Icons.bolt;
-    if (tags.contains('substance_use')) return Icons.healing;
-    if (tags.contains('youth')) return Icons.child_care;
-    if (tags.contains('disability')) return Icons.accessible;
-    if (tags.contains('financial')) return Icons.attach_money;
-    if (tags.contains('crisis')) return Icons.crisis_alert;
-    return Icons.volunteer_activism;
+  Widget _buildBeaconResult(Map<String, dynamic> b) {
+    return Card(
+      margin: const EdgeInsets.only(bottom: 8),
+      color: AppTheme.cardSurface,
+      elevation: 0,
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+      child: ListTile(
+        dense: true,
+        leading: Icon(Icons.warning_amber, color: Colors.orange, size: 22),
+        title: Text(b['body'] ?? '', maxLines: 2, overflow: TextOverflow.ellipsis,
+          style: TextStyle(color: SojornColors.postContent, fontSize: 13)),
+        subtitle: Text('${b['category'] ?? 'incident'} · ${b['author_handle'] ?? ''}',
+          style: TextStyle(color: SojornColors.textDisabled, fontSize: 11)),
+        onTap: () {
+          // Navigate to beacon detail if possible
+        },
+      ),
+    );
+  }
+
+  Widget _buildBoardResult(Map<String, dynamic> b) {
+    final topic = b['topic'] as String? ?? 'community';
+    return Card(
+      margin: const EdgeInsets.only(bottom: 8),
+      color: AppTheme.cardSurface,
+      elevation: 0,
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+      child: ListTile(
+        dense: true,
+        leading: Icon(Icons.forum, color: AppTheme.brightNavy, size: 22),
+        title: Text(b['body'] ?? '', maxLines: 2, overflow: TextOverflow.ellipsis,
+          style: TextStyle(color: SojornColors.postContent, fontSize: 13)),
+        subtitle: Text('$topic · ${b['author_handle'] ?? ''}',
+          style: TextStyle(color: SojornColors.textDisabled, fontSize: 11)),
+        trailing: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(Icons.arrow_upward, size: 12, color: SojornColors.textDisabled),
+            Text('${b['upvotes'] ?? 0}', style: TextStyle(color: SojornColors.textDisabled, fontSize: 11)),
+          ],
+        ),
+        onTap: () {
+          final entry = BoardEntry.fromJson(b);
+          openDesktopDialog(
+            context,
+            width: 600,
+            child: BoardEntryDetailScreen(entry: entry),
+          );
+        },
+      ),
+    );
+  }
+
+  Widget _buildGroupResult(Map<String, dynamic> g) {
+    return Card(
+      margin: const EdgeInsets.only(bottom: 8),
+      color: AppTheme.cardSurface,
+      elevation: 0,
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+      child: ListTile(
+        dense: true,
+        leading: SojornAvatar(
+          displayName: g['name'] as String? ?? '',
+          avatarUrl: (g['avatar_url'] as String?)?.isNotEmpty == true ? g['avatar_url'] as String : null,
+          size: 36,
+        ),
+        title: Text(g['name'] ?? '', style: TextStyle(color: SojornColors.postContent, fontSize: 13, fontWeight: FontWeight.w600)),
+        subtitle: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            if ((g['description'] as String?)?.isNotEmpty == true) ...[
+              Text(
+                g['description'] as String,
+                maxLines: 2,
+                overflow: TextOverflow.ellipsis,
+                style: TextStyle(color: SojornColors.postContentLight, fontSize: 11),
+              ),
+              const SizedBox(height: 2),
+            ],
+            Text(
+              '${g['member_count'] ?? 0} member${(g['member_count'] ?? 0) == 1 ? '' : 's'} · ${g['type'] ?? ''}',
+              style: TextStyle(color: SojornColors.textDisabled, fontSize: 11),
+            ),
+          ],
+        ),
+        onTap: () {
+          final cluster = Cluster.fromJson(g);
+          _navigateToCluster(cluster);
+        },
+      ),
+    );
   }
 
   // ─── Groups view (clusters + capsules) ──────────────────────────────
@@ -4141,3 +4173,118 @@ class _VoteChip extends StatelessWidget {
   }
 }
 
+// ─── Compact filter dropdown overlay ──────────────────────────────────────
+class _FilterDropdownOverlay extends StatelessWidget {
+  final LayerLink layerLink;
+  final Size buttonSize;
+  final Set<BeaconType> hiddenTypes;
+  final List<({String label, IconData icon, Color color, List<BeaconType> types})> categories;
+  final void Function(({String label, IconData icon, Color color, List<BeaconType> types})) onToggleCategory;
+  final VoidCallback onShowAll;
+  final VoidCallback onDismiss;
+
+  const _FilterDropdownOverlay({
+    required this.layerLink,
+    required this.buttonSize,
+    required this.hiddenTypes,
+    required this.categories,
+    required this.onToggleCategory,
+    required this.onShowAll,
+    required this.onDismiss,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    const dropdownWidth = 180.0;
+
+    return Stack(
+      children: [
+        // Dismiss scrim
+        GestureDetector(
+          onTap: onDismiss,
+          behavior: HitTestBehavior.opaque,
+          child: const SizedBox.expand(),
+        ),
+        CompositedTransformFollower(
+          link: layerLink,
+          targetAnchor: Alignment.bottomRight,
+          followerAnchor: Alignment.topRight,
+          offset: const Offset(0, 6),
+          child: Material(
+            color: Colors.transparent,
+            child: Container(
+              width: dropdownWidth,
+              decoration: BoxDecoration(
+                color: Colors.white,
+                borderRadius: BorderRadius.circular(12),
+                boxShadow: [
+                  BoxShadow(color: Colors.black.withValues(alpha: 0.12), blurRadius: 16, offset: const Offset(0, 4)),
+                  BoxShadow(color: Colors.black.withValues(alpha: 0.06), blurRadius: 4),
+                ],
+              ),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  ...categories.map((cat) {
+                    final allHidden = cat.types.every((t) => hiddenTypes.contains(t));
+                    return InkWell(
+                      borderRadius: categories.first == cat
+                          ? const BorderRadius.vertical(top: Radius.circular(12))
+                          : BorderRadius.zero,
+                      onTap: () => onToggleCategory(cat),
+                      child: Padding(
+                        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                        child: Row(
+                          children: [
+                            Icon(cat.icon, size: 16,
+                              color: allHidden ? Colors.grey.shade400 : cat.color),
+                            const SizedBox(width: 10),
+                            Expanded(
+                              child: Text(cat.label,
+                                style: TextStyle(
+                                  fontSize: 14,
+                                  fontWeight: FontWeight.w500,
+                                  color: allHidden ? Colors.grey.shade400 : Colors.black87,
+                                )),
+                            ),
+                            Icon(
+                              allHidden ? Icons.visibility_off : Icons.visibility,
+                              size: 16,
+                              color: allHidden ? Colors.grey.shade400 : cat.color.withValues(alpha: 0.7),
+                            ),
+                          ],
+                        ),
+                      ),
+                    );
+                  }),
+                  if (hiddenTypes.isNotEmpty) ...[
+                    Divider(height: 1, color: Colors.grey.shade200),
+                    InkWell(
+                      borderRadius: const BorderRadius.vertical(bottom: Radius.circular(12)),
+                      onTap: onShowAll,
+                      child: Padding(
+                        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                        child: Row(
+                          children: [
+                            Icon(Icons.visibility, size: 16, color: AppTheme.navyBlue),
+                            const SizedBox(width: 10),
+                            Text('Show All',
+                              style: TextStyle(
+                                fontSize: 14,
+                                fontWeight: FontWeight.w600,
+                                color: AppTheme.navyBlue,
+                              )),
+                          ],
+                        ),
+                      ),
+                    ),
+                  ],
+                ],
+              ),
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+}

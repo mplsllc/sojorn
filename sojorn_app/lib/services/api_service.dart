@@ -1584,33 +1584,6 @@ class ApiService {
   }
 
   // =========================================================================
-  // 211 Resources
-  // =========================================================================
-
-  /// Fetch nearby 211 community resources (food, housing, mental health, etc.).
-  /// Uses a 24-hour server-side cache — first call fetches from 211 API,
-  /// subsequent calls within 24h return from DB.
-  Future<List<Post>> fetchResources({
-    required double lat,
-    required double long,
-    int radius = 20000,
-    String? category,
-  }) async {
-    var path = '/beacons/resources?lat=$lat&long=$long&radius=$radius';
-    if (category != null && category.isNotEmpty) {
-      path += '&category=${Uri.encodeComponent(category)}';
-    }
-    try {
-      final data = await _callGoApi(path, method: 'GET');
-      return (data['beacons'] as List? ?? [])
-          .map((j) => Post.fromJson(j as Map<String, dynamic>))
-          .toList();
-    } catch (_) {
-      return [];
-    }
-  }
-
-  // =========================================================================
   // Beacon Actions
   // =========================================================================
 

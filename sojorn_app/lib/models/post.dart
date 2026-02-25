@@ -95,9 +95,6 @@ class Post {
   // Official/government source fields
   final bool? isOfficial;
   final String? officialSource;
-  // Title field — used by external beacon sources (211 resources, weather stations)
-  // where title != body. Null for user-created posts.
-  final String? title;
 
   final double? latitude;
   final double? longitude;
@@ -177,7 +174,6 @@ class Post {
     this.myVote,
     this.isOfficial,
     this.officialSource,
-    this.title,
     this.latitude,
     this.longitude,
     this.distanceMeters,
@@ -339,7 +335,6 @@ class Post {
       myVote: json['my_vote'] as String?,
       isOfficial: json['is_official'] as bool?,
       officialSource: json['official_source'] as String?,
-      title: json['title'] as String?,
       latitude: _parseLatitude(json),
       longitude: _parseLongitude(json),
       distanceMeters: _parseDouble(json['distance_meters']),
@@ -413,7 +408,6 @@ class Post {
       'link_preview_description': linkPreviewDescription,
       'link_preview_image_url': linkPreviewImageUrl,
       'link_preview_site_name': linkPreviewSiteName,
-      if (title != null) 'title': title,
     };
   }
 }

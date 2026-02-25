@@ -229,7 +229,6 @@ func main() {
 	beaconIngestion := services.NewBeaconIngestionService(beaconAlertRepo, "http://127.0.0.1:8787", cfg.IcedAPIBase)
 	beaconIngestion.Start()
 	defer beaconIngestion.Stop()
-	res211Handler := handlers.NewResource211Handler(beaconAlertRepo, cfg.Res211APIBase, cfg.Res211APIKey)
 
 	adminHandler := handlers.NewAdminHandler(dbPool, moderationService, appealService, emailService, sightEngineService, officialAccountsService, linkPreviewService, localAIService, beaconAlertRepo, beaconIngestion, cfg.JWTSecret, s3Client, cfg.R2MediaBucket, cfg.R2VideoBucket, cfg.R2ImgDomain, cfg.R2VidDomain)
 
@@ -443,7 +442,6 @@ func main() {
 			authorized.GET("/beacons/signs", postHandler.GetOfficialSigns)
 			authorized.GET("/beacons/weather", postHandler.GetOfficialWeatherStations)
 			authorized.GET("/beacons/iced", icedHandler.GetIcedAlerts)
-			authorized.GET("/beacons/resources", res211Handler.GetResources)
 			authorized.POST("/beacons/:id/vouch", postHandler.VouchBeacon)
 			authorized.POST("/beacons/:id/report", postHandler.ReportBeacon)
 			authorized.POST("/beacons/:id/resolve", postHandler.ResolveBeacon)

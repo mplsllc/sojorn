@@ -76,7 +76,7 @@ enum BeaconType {
   lostPet('lost_pet', 'Lost Pet', 'Help find a missing pet', Icons.pets, Color(0xFF8D6E63), BeaconMode.discussion),
   question('question', 'General Question', 'Ask your neighborhood something', Icons.help_outline, Color(0xFF78909C), BeaconMode.discussion),
   event('event', 'Local Event', 'Share an upcoming event nearby', Icons.event, Color(0xFF7E57C2), BeaconMode.discussion),
-  resource('resource', 'Resource', 'Community resource or service', Icons.volunteer_activism, Color(0xFF26A69A), BeaconMode.geoAlert);
+  resource('resource', 'Resource Sharing', 'Offer or request items/help', Icons.handshake, Color(0xFF26A69A), BeaconMode.discussion);
 
   final String value;
   final String displayName;
