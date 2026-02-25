@@ -212,6 +212,7 @@ func (r *BeaconAlertRepository) GetNearbyAlerts(ctx context.Context, lat, lng fl
 		item := map[string]any{
 			"id":                 id,
 			"body":              body,
+			"title":             title,
 			"created_at":        createdAt.Format(time.RFC3339),
 			"is_beacon":         true,
 			"is_active_beacon":  true,
@@ -222,7 +223,7 @@ func (r *BeaconAlertRepository) GetNearbyAlerts(ctx context.Context, lat, lng fl
 			"verification_count": vouchCount,
 			"vouch_count":       vouchCount,
 			"report_count":      reportCount,
-			"status_color":      "green",
+			"status_color":      beaconAlertStatusColor(confidence),
 			"beacon_lat":        aLat,
 			"beacon_long":       aLng,
 			"distance_meters":   distanceMeters,
@@ -351,7 +352,7 @@ func (r *BeaconAlertRepository) GetNearbyAlerts(ctx context.Context, lat, lng fl
 			"verification_count": pVouchCount,
 			"vouch_count":       pVouchCount,
 			"report_count":      pReportCount,
-			"status_color":      "green",
+			"status_color":      beaconAlertStatusColor(conf),
 			"beacon_lat":        pLat,
 			"beacon_long":       pLng,
 			"distance_meters":   pDistanceMeters,
@@ -378,6 +379,16 @@ func (r *BeaconAlertRepository) GetNearbyAlerts(ctx context.Context, lat, lng fl
 		results = []map[string]any{}
 	}
 	return results, nil
+}
+
+// beaconAlertStatusColor returns a color string based on confidence score.
+func beaconAlertStatusColor(confidence float64) string {
+	if confidence > 0.7 {
+		return "green"
+	} else if confidence >= 0.3 {
+		return "yellow"
+	}
+	return "red"
 }
 
 // ─── Admin methods ──────────────────────────────────────────────────────────

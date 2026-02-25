@@ -254,7 +254,7 @@ class Beacon {
       authorAvatarUrl: json['author_avatar_url'] as String?,
       vouchCount: _parseInt(json['vouch_count']),
       reportCount: _parseInt(json['report_count']),
-      userVote: json['user_vote'] as String?,
+      userVote: (json['user_vote'] ?? json['my_vote']) as String?,
       groupId: json['group_id'] as String?,
       severity: BeaconSeverity.fromString(json['severity'] as String? ?? 'medium'),
       incidentStatus: BeaconIncidentStatus.fromString(json['incident_status'] as String? ?? 'active'),
