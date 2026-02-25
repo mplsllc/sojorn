@@ -3,6 +3,7 @@
 // See LICENSE file in the project root for full license text.
 
 import 'dart:async';
+import 'dart:math' as math;
 import 'dart:ui';
 import 'package:flutter/material.dart';
 import 'package:flutter/foundation.dart';
@@ -39,7 +40,6 @@ import '../../theme/tokens.dart';
 import '../../theme/app_theme.dart';
 import '../../widgets/media/sojorn_avatar.dart';
 import '../../widgets/neighborhood/neighborhood_picker_sheet.dart';
-import 'package:url_launcher/url_launcher.dart';
 import '../../widgets/desktop/desktop_dialog_helper.dart';
 import '../../config/api_config.dart';
 
@@ -70,6 +70,12 @@ class BeaconScreenState extends ConsumerState<BeaconScreen> with TickerProviderS
   final LocalIntelService _intelService = LocalIntelService();
   Timer? _beaconLoadDebounce;
   late final TabController _tabController;
+
+  // Reload throttling — only re-fetch when moved > 2.5 km or data is > 5 min old.
+  LatLng? _lastLoadCenter;
+  DateTime? _lastLoadTime;
+  static const double _reloadThresholdMeters = 2500;
+  static const Duration _reloadMaxAge = Duration(minutes: 5);
 
   List<Post> _allBeaconPosts = []; // unified: all sources combined
   List<Post> _beacons = [];       // user-created beacons (non-official)
@@ -403,8 +409,21 @@ class BeaconScreenState extends ConsumerState<BeaconScreen> with TickerProviderS
     }
   }
 
-  Future<void> _loadBeacons({LatLng? center}) async {
+  Future<void> _loadBeacons({LatLng? center, bool force = false}) async {
     final target = center ?? _userLocation ?? _mapCenter;
+
+    // Skip if we haven't moved far enough and data is still fresh.
+    if (!force && _lastLoadCenter != null && _lastLoadTime != null) {
+      final age = DateTime.now().difference(_lastLoadTime!);
+      final dist = _haversineMeters(_lastLoadCenter!, target);
+      if (dist < _reloadThresholdMeters && age < _reloadMaxAge) {
+        debugPrint('[Beacon] skip reload — ${dist.round()}m from last load, ${age.inSeconds}s ago');
+        return;
+      }
+    }
+    _lastLoadCenter = target;
+    _lastLoadTime = DateTime.now();
+
     debugPrint('[Beacon] loadBeacons lat=${target.latitude.toStringAsFixed(4)} lng=${target.longitude.toStringAsFixed(4)} radius=16000');
     setState(() => _isLoading = true);
     try {
@@ -415,6 +434,16 @@ class BeaconScreenState extends ConsumerState<BeaconScreen> with TickerProviderS
         radius: 16000,
       );
       debugPrint('[Beacon] fetched ${allPosts.length} unified beacons');
+
+      // Skip the heavy setState if the beacon set hasn't changed.
+      final newIds = allPosts.map((p) => p.id).toSet();
+      final oldIds = _allBeaconPosts.map((p) => p.id).toSet();
+      if (newIds == oldIds && _allBeaconPosts.isNotEmpty) {
+        debugPrint('[Beacon] skip setState — same ${newIds.length} beacons');
+        if (mounted) setState(() => _isLoading = false);
+        return;
+      }
+
       if (mounted) {
         setState(() {
           _allBeaconPosts = allPosts.where((p) => p.isBeaconPost).toList();
@@ -450,6 +479,19 @@ class BeaconScreenState extends ConsumerState<BeaconScreen> with TickerProviderS
       debugPrint('[Beacon] ✗ loadBeacons failed: $e');
       if (mounted) setState(() => _isLoading = false);
     }
+  }
+
+  /// Haversine distance in meters between two LatLng points.
+  double _haversineMeters(LatLng a, LatLng b) {
+    const r = 6371000.0;
+    final lat1 = a.latitude * math.pi / 180;
+    final lat2 = b.latitude * math.pi / 180;
+    final dLat = (b.latitude - a.latitude) * math.pi / 180;
+    final dLon = (b.longitude - a.longitude) * math.pi / 180;
+    final h = math.sin(dLat / 2) * math.sin(dLat / 2) +
+        math.cos(lat1) * math.cos(lat2) *
+        math.sin(dLon / 2) * math.sin(dLon / 2);
+    return 2 * r * math.asin(math.sqrt(h));
   }
 
   Future<void> _loadMapEvents() async {
@@ -1309,160 +1351,136 @@ class BeaconScreenState extends ConsumerState<BeaconScreen> with TickerProviderS
             ),
           const Spacer(),
           // Filter button — badge shows how many types are hidden
-          _mapFilterButton(),
+          _buildMapLayerChips(),
           const SizedBox(width: 8),
           // My location button
           _mapIconButton(Icons.my_location,
             onTap: _isLoadingLocation ? null : () => _getCurrentLocation(forceCenter: true)),
           const SizedBox(width: 8),
-          // Refresh button
-          _mapIconButton(Icons.refresh, onTap: () => _loadBeacons()),
+          // Refresh button — bypasses distance/age cache
+          _mapIconButton(Icons.refresh, onTap: () => _loadBeacons(force: true)),
         ],
       ),
     );
   }
 
-  final GlobalKey _filterButtonKey = GlobalKey();
-  final LayerLink _filterLayerLink = LayerLink();
 
-  Widget _mapFilterButton() {
-    final hiddenCount = _hiddenTypes.length;
-    return CompositedTransformTarget(
-      link: _filterLayerLink,
-      child: GestureDetector(
-      key: _filterButtonKey,
-      onTap: _showFilterDropdown,
-      child: ClipRRect(
-        borderRadius: BorderRadius.circular(18),
-        child: BackdropFilter(
-          filter: ImageFilter.blur(sigmaX: 12, sigmaY: 12),
-          child: Stack(
-            clipBehavior: Clip.none,
-            children: [
-              Container(
-                width: 36, height: 36,
-                decoration: BoxDecoration(
-                  color: hiddenCount > 0
-                      ? AppTheme.navyBlue.withValues(alpha: 0.85)
-                      : SojornColors.basicWhite.withValues(alpha: 0.70),
-                  shape: BoxShape.circle,
-                  border: Border.all(color: SojornColors.basicWhite.withValues(alpha: 0.5), width: 0.5),
-                  boxShadow: [BoxShadow(color: SojornColors.basicBlack.withValues(alpha: 0.08), blurRadius: 6)],
-                ),
-                child: Icon(Icons.tune, size: 18,
-                  color: hiddenCount > 0
-                      ? Colors.white
-                      : AppTheme.navyBlue.withValues(alpha: 0.75)),
-              ),
-              if (hiddenCount > 0)
-                Positioned(
-                  top: -3, right: -3,
-                  child: Container(
-                    width: 16, height: 16,
-                    decoration: const BoxDecoration(
-                      color: Color(0xFFFF5722),
-                      shape: BoxShape.circle,
-                    ),
-                    child: Center(
-                      child: Text(
-                        '$hiddenCount',
-                        style: const TextStyle(color: Colors.white, fontSize: 10, fontWeight: FontWeight.w800),
-                      ),
-                    ),
-                  ),
-                ),
-            ],
-          ),
-        ),
-      ),
-    ),
-    );
-  }
-
-  Widget _mapIconButton(IconData icon, {VoidCallback? onTap}) {
-    return GestureDetector(
-      onTap: onTap,
-      child: ClipRRect(
-        borderRadius: BorderRadius.circular(18),
-        child: BackdropFilter(
-          filter: ImageFilter.blur(sigmaX: 12, sigmaY: 12),
-          child: Container(
-            width: 36, height: 36,
-            decoration: BoxDecoration(
-              color: SojornColors.basicWhite.withValues(alpha: 0.70),
-              shape: BoxShape.circle,
-              border: Border.all(color: SojornColors.basicWhite.withValues(alpha: 0.5), width: 0.5),
-              boxShadow: [BoxShadow(color: SojornColors.basicBlack.withValues(alpha: 0.08), blurRadius: 6)],
-            ),
-            child: Icon(icon, size: 18, color: AppTheme.navyBlue.withValues(alpha: 0.75)),
-          ),
-        ),
-      ),
-    );
-  }
-
-  // ─── Filter categories ──────────────────────────────────────────────────
-  static const _filterCategories = <({String label, IconData icon, Color color, List<BeaconType> types})>[
+  // ─── Map layer filter chips — inline toggle row on the map overlay ───────
+  static const _mapLayerGroups = <({
+    String label,
+    IconData icon,
+    Color color,
+    List<BeaconType> types,
+  })>[
     (
       label: 'Safety',
-      icon: Icons.shield,
-      color: Color(0xFFF44336),
-      types: [BeaconType.safety, BeaconType.suspiciousActivity, BeaconType.officialPresence, BeaconType.checkpoint, BeaconType.taskForce],
+      icon: Icons.shield_outlined,
+      color: Color(0xFFEF5350),
+      types: [
+        BeaconType.safety, BeaconType.suspiciousActivity,
+        BeaconType.officialPresence, BeaconType.checkpoint, BeaconType.taskForce,
+      ],
     ),
     (
       label: 'Hazards',
-      icon: Icons.warning_rounded,
-      color: Color(0xFFFF5722),
+      icon: Icons.warning_amber_rounded,
+      color: Color(0xFFFF7043),
       types: [BeaconType.hazard, BeaconType.fire, BeaconType.utilityAlert],
     ),
     (
       label: 'Traffic',
-      icon: Icons.traffic,
+      icon: Icons.traffic_outlined,
       color: Color(0xFFFFAB00),
       types: [BeaconType.camera, BeaconType.sign, BeaconType.weatherStation],
     ),
     (
       label: 'Community',
-      icon: Icons.people,
-      color: Color(0xFF607D8B),
+      icon: Icons.people_outline,
+      color: Color(0xFF78909C),
       types: [BeaconType.packageTheft, BeaconType.noiseReport, BeaconType.development],
     ),
   ];
 
-  // ─── Compact filter dropdown ────────────────────────────────────────────
-  void _showFilterDropdown() {
-    final renderBox = _filterButtonKey.currentContext?.findRenderObject() as RenderBox?;
-    if (renderBox == null) return;
-    final buttonSize = renderBox.size;
-
-    late OverlayEntry overlay;
-    overlay = OverlayEntry(
-      builder: (_) => _FilterDropdownOverlay(
-        layerLink: _filterLayerLink,
-        buttonSize: buttonSize,
-        hiddenTypes: Set.of(_hiddenTypes),
-        categories: _filterCategories,
-        onToggleCategory: (cat) {
-          final allHidden = cat.types.every((t) => _hiddenTypes.contains(t));
-          setState(() {
-            if (allHidden) {
-              _hiddenTypes.removeAll(cat.types);
-            } else {
-              _hiddenTypes.addAll(cat.types);
-            }
-          });
-          // Rebuild overlay with new state
-          overlay.remove();
-          _showFilterDropdown();
-        },
-        onShowAll: () {
-          setState(() => _hiddenTypes = {});
-          overlay.remove();
-        },
-        onDismiss: () => overlay.remove(),
+  Widget _buildMapLayerChips() {
+    return ClipRRect(
+      borderRadius: BorderRadius.circular(22),
+      child: BackdropFilter(
+        filter: ImageFilter.blur(sigmaX: 10, sigmaY: 10),
+        child: Container(
+          height: 36,
+          padding: const EdgeInsets.symmetric(horizontal: 6),
+          decoration: BoxDecoration(
+            color: Colors.white.withValues(alpha: 0.82),
+            borderRadius: BorderRadius.circular(22),
+            border: Border.all(
+                color: Colors.white.withValues(alpha: 0.6), width: 0.5),
+            boxShadow: [
+              BoxShadow(
+                  color: Colors.black.withValues(alpha: 0.10),
+                  blurRadius: 8,
+                  offset: const Offset(0, 2))
+            ],
+          ),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: _mapLayerGroups.map((group) {
+              final isVisible =
+                  !group.types.every((t) => _hiddenTypes.contains(t));
+              return GestureDetector(
+                onTap: () => setState(() {
+                  if (isVisible) {
+                    _hiddenTypes.addAll(group.types);
+                  } else {
+                    _hiddenTypes.removeAll(group.types);
+                  }
+                }),
+                child: AnimatedContainer(
+                  duration: const Duration(milliseconds: 150),
+                  margin: const EdgeInsets.symmetric(horizontal: 2),
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                  decoration: BoxDecoration(
+                    color: isVisible
+                        ? group.color.withValues(alpha: 0.12)
+                        : Colors.transparent,
+                    borderRadius: BorderRadius.circular(14),
+                    border: Border.all(
+                      color: isVisible
+                          ? group.color.withValues(alpha: 0.8)
+                          : Colors.grey.withValues(alpha: 0.35),
+                      width: 1,
+                    ),
+                  ),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Icon(
+                        group.icon,
+                        size: 12,
+                        color: isVisible
+                            ? group.color
+                            : Colors.grey.withValues(alpha: 0.55),
+                      ),
+                      const SizedBox(width: 3),
+                      Text(
+                        group.label,
+                        style: TextStyle(
+                          fontSize: 11,
+                          fontWeight: FontWeight.w600,
+                          color: isVisible
+                              ? group.color
+                              : Colors.grey.withValues(alpha: 0.55),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              );
+            }).toList(),
+          ),
+        ),
       ),
     );
-    Overlay.of(context).insert(overlay);
   }
 
   // ─── Floating status pill — glanceable summary between overlay bar and sheet ──
@@ -3011,8 +3029,11 @@ class BeaconScreenState extends ConsumerState<BeaconScreen> with TickerProviderS
           userAgentPackageName: 'com.sojorn.app',
           retinaMode: RetinaMode.isHighDensity(context),
         ),
-        // Clustered beacon markers — auto-groups nearby pins
+        // Clustered beacon markers — auto-groups nearby pins.
+        // Key changes when filter state changes, forcing a full rebuild so the
+        // cluster layer re-reads the filtered marker list immediately.
         MarkerClusterLayerWidget(
+          key: ValueKey('clusters_${_hiddenTypes.hashCode}'),
           options: MarkerClusterLayerOptions(
             maxClusterRadius: 55,
             disableClusteringAtZoom: 16,
@@ -3262,7 +3283,13 @@ class BeaconScreenState extends ConsumerState<BeaconScreen> with TickerProviderS
     final beacon = post.toBeacon();
     final severityColor = beacon.pinColor;
     final typeIcon = beacon.beaconType.icon;
-    final isRecent = beacon.isRecent;
+    // Only animate if truly new (< 10 min) AND high/critical severity.
+    // MN511 cameras refresh frequently so many markers get recent timestamps —
+    // running 400 animation controllers for 200 beacons causes serious jank.
+    final isRecent = beacon.isRecent &&
+        DateTime.now().difference(beacon.createdAt).inMinutes < 10 &&
+        (beacon.severity == BeaconSeverity.high ||
+            beacon.severity == BeaconSeverity.critical);
 
     final fallbackBase = _userLocation ?? _mapCenter;
     final markerPosition = (post.latitude != null && post.longitude != null)
@@ -4173,118 +4200,3 @@ class _VoteChip extends StatelessWidget {
   }
 }
 
-// ─── Compact filter dropdown overlay ──────────────────────────────────────
-class _FilterDropdownOverlay extends StatelessWidget {
-  final LayerLink layerLink;
-  final Size buttonSize;
-  final Set<BeaconType> hiddenTypes;
-  final List<({String label, IconData icon, Color color, List<BeaconType> types})> categories;
-  final void Function(({String label, IconData icon, Color color, List<BeaconType> types})) onToggleCategory;
-  final VoidCallback onShowAll;
-  final VoidCallback onDismiss;
-
-  const _FilterDropdownOverlay({
-    required this.layerLink,
-    required this.buttonSize,
-    required this.hiddenTypes,
-    required this.categories,
-    required this.onToggleCategory,
-    required this.onShowAll,
-    required this.onDismiss,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    const dropdownWidth = 180.0;
-
-    return Stack(
-      children: [
-        // Dismiss scrim
-        GestureDetector(
-          onTap: onDismiss,
-          behavior: HitTestBehavior.opaque,
-          child: const SizedBox.expand(),
-        ),
-        CompositedTransformFollower(
-          link: layerLink,
-          targetAnchor: Alignment.bottomRight,
-          followerAnchor: Alignment.topRight,
-          offset: const Offset(0, 6),
-          child: Material(
-            color: Colors.transparent,
-            child: Container(
-              width: dropdownWidth,
-              decoration: BoxDecoration(
-                color: Colors.white,
-                borderRadius: BorderRadius.circular(12),
-                boxShadow: [
-                  BoxShadow(color: Colors.black.withValues(alpha: 0.12), blurRadius: 16, offset: const Offset(0, 4)),
-                  BoxShadow(color: Colors.black.withValues(alpha: 0.06), blurRadius: 4),
-                ],
-              ),
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  ...categories.map((cat) {
-                    final allHidden = cat.types.every((t) => hiddenTypes.contains(t));
-                    return InkWell(
-                      borderRadius: categories.first == cat
-                          ? const BorderRadius.vertical(top: Radius.circular(12))
-                          : BorderRadius.zero,
-                      onTap: () => onToggleCategory(cat),
-                      child: Padding(
-                        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-                        child: Row(
-                          children: [
-                            Icon(cat.icon, size: 16,
-                              color: allHidden ? Colors.grey.shade400 : cat.color),
-                            const SizedBox(width: 10),
-                            Expanded(
-                              child: Text(cat.label,
-                                style: TextStyle(
-                                  fontSize: 14,
-                                  fontWeight: FontWeight.w500,
-                                  color: allHidden ? Colors.grey.shade400 : Colors.black87,
-                                )),
-                            ),
-                            Icon(
-                              allHidden ? Icons.visibility_off : Icons.visibility,
-                              size: 16,
-                              color: allHidden ? Colors.grey.shade400 : cat.color.withValues(alpha: 0.7),
-                            ),
-                          ],
-                        ),
-                      ),
-                    );
-                  }),
-                  if (hiddenTypes.isNotEmpty) ...[
-                    Divider(height: 1, color: Colors.grey.shade200),
-                    InkWell(
-                      borderRadius: const BorderRadius.vertical(bottom: Radius.circular(12)),
-                      onTap: onShowAll,
-                      child: Padding(
-                        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-                        child: Row(
-                          children: [
-                            Icon(Icons.visibility, size: 16, color: AppTheme.navyBlue),
-                            const SizedBox(width: 10),
-                            Text('Show All',
-                              style: TextStyle(
-                                fontSize: 14,
-                                fontWeight: FontWeight.w600,
-                                color: AppTheme.navyBlue,
-                              )),
-                          ],
-                        ),
-                      ),
-                    ),
-                  ],
-                ],
-              ),
-            ),
-          ),
-        ),
-      ],
-    );
-  }
-}
