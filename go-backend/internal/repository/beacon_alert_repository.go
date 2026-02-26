@@ -202,6 +202,97 @@ func (r *BeaconAlertRepository) CleanOrphaned(ctx context.Context, source string
 	return tag.RowsAffected(), nil
 }
 
+// GetAllCameras returns all active cameras statewide (no radius filter).
+// Cameras are permanent infrastructure loaded once per client session.
+func (r *BeaconAlertRepository) GetAllCameras(ctx context.Context) ([]map[string]any, error) {
+	query := `
+		SELECT
+			id, external_id, source, beacon_type, severity, title, body,
+			lat, lng, radius, image_url, video_url,
+			is_official, official_source, author_id, author_handle, author_display,
+			status, incident_status, confidence,
+			tags, created_at
+		FROM beacon_alerts
+		WHERE source = 'mn511_camera' AND status = 'active'
+		ORDER BY title
+	`
+
+	rows, err := r.pool.Query(ctx, query)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var results []map[string]any
+	for rows.Next() {
+		var (
+			aID, aExtID, aSource, aType, aSeverity, aTitle, aBody string
+			aLat, aLng                                             float64
+			aRadius                                                int
+			aImgURL, aVidURL                                       *string
+			isOfficial                                             bool
+			officialSource                                         *string
+			authorID, authorHandle, authorDisplay                  *string
+			aStatus, aIncidentStatus                               string
+			aConfidence                                            float64
+			tags                                                   []string
+			createdAt                                              time.Time
+		)
+		if err := rows.Scan(
+			&aID, &aExtID, &aSource, &aType, &aSeverity, &aTitle, &aBody,
+			&aLat, &aLng, &aRadius, &aImgURL, &aVidURL,
+			&isOfficial, &officialSource, &authorID, &authorHandle, &authorDisplay,
+			&aStatus, &aIncidentStatus, &aConfidence,
+			&tags, &createdAt,
+		); err != nil {
+			return nil, err
+		}
+
+		result := map[string]any{
+			"id":               aID,
+			"external_id":      aExtID,
+			"source":           aSource,
+			"beacon_type":      aType,
+			"severity":         aSeverity,
+			"title":            aTitle,
+			"body":             aBody,
+			"beacon_lat":       aLat,
+			"beacon_long":      aLng,
+			"radius":           aRadius,
+			"is_official":      isOfficial,
+			"tags":             tags,
+			"status":           aStatus,
+			"incident_status":  aIncidentStatus,
+			"confidence":       aConfidence,
+			"created_at":       createdAt,
+			"vouch_count":      0,
+			"report_count":     0,
+			"distance_meters":  0.0,
+		}
+		if aImgURL != nil {
+			result["image_url"] = *aImgURL
+		}
+		if aVidURL != nil {
+			result["video_url"] = *aVidURL
+		}
+		if officialSource != nil {
+			result["official_source"] = *officialSource
+		}
+		if authorID != nil {
+			result["author_id"] = *authorID
+		}
+		if authorHandle != nil {
+			result["author_handle"] = *authorHandle
+		}
+		if authorDisplay != nil {
+			result["author_display"] = *authorDisplay
+		}
+		results = append(results, result)
+	}
+
+	return results, nil
+}
+
 // GetNearbyAlerts returns all active, non-expired alerts within radius meters of (lat, lng).
 // Also includes user-created beacons from the posts table.
 func (r *BeaconAlertRepository) GetNearbyAlerts(ctx context.Context, lat, lng float64, radius int, userID string) ([]map[string]any, error) {
@@ -216,6 +307,7 @@ func (r *BeaconAlertRepository) GetNearbyAlerts(ctx context.Context, lat, lng fl
 			ST_Distance(location, ST_SetSRID(ST_Point($2, $1), 4326)::geography) AS distance_meters
 		FROM beacon_alerts
 		WHERE status = 'active'
+		  AND source != 'mn511_camera'
 		  AND (expires_at IS NULL OR expires_at > NOW())
 		  AND ST_DWithin(location, ST_SetSRID(ST_Point($2, $1), 4326)::geography, $3)
 		ORDER BY created_at DESC

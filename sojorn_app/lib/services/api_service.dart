@@ -791,20 +791,13 @@ class ApiService {
   }
 
 
-  Future<List<Post>> fetchOfficialCameras({
-    required double lat,
-    required double long,
-    int radius = 16000,
-  }) async {
+  /// Fetches all cameras statewide. Cameras are permanent infrastructure —
+  /// call once per session and cache the result.
+  Future<List<Post>> fetchAllCameras() async {
     try {
       final data = await _callGoApi(
         '/beacons/cameras',
         method: 'GET',
-        queryParams: {
-          'lat': lat.toString(),
-          'long': long.toString(),
-          'radius': radius.toString(),
-        },
       );
       return (data['beacons'] as List)
           .map((json) => Post.fromJson(json))

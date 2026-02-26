@@ -438,7 +438,7 @@ func main() {
 			authorized.GET("/beacons/nearby", postHandler.GetNearbyBeacons)
 			authorized.GET("/beacons/unified", beaconUnifiedHandler.GetUnifiedBeacons)
 			authorized.GET("/beacons/official", postHandler.GetOfficialAlerts)
-			authorized.GET("/beacons/cameras", postHandler.GetOfficialCameras)
+			authorized.GET("/beacons/cameras", beaconUnifiedHandler.GetAllCameras)
 			authorized.GET("/beacons/signs", postHandler.GetOfficialSigns)
 			authorized.GET("/beacons/weather", postHandler.GetOfficialWeatherStations)
 			authorized.GET("/beacons/iced", icedHandler.GetIcedAlerts)

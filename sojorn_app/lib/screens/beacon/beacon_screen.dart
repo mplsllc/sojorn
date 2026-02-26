@@ -80,7 +80,8 @@ class BeaconScreenState extends ConsumerState<BeaconScreen> with TickerProviderS
   List<Post> _beacons = [];       // user-created beacons (non-official)
   List<Post> _officialPosts = []; // official alerts (MN511, IcedCoffee)
   List<GroupEvent> _mapEvents = []; // public events with coordinates
-  List<Beacon> _cameraPosts = []; // cameras (filtered from unified)
+  List<Beacon> _cameraPosts = []; // cameras (loaded once, cached for session)
+  bool _camerasLoaded = false;
   List<Beacon> _signPosts = [];   // signs (filtered from unified)
   List<Beacon> _weatherPosts = []; // weather stations (filtered from unified)
   List<Beacon> _beaconModels = [];
@@ -161,6 +162,8 @@ class BeaconScreenState extends ConsumerState<BeaconScreen> with TickerProviderS
     if (widget.initialMapCenter != null) {
       _loadBeacons(center: widget.initialMapCenter);
     }
+    // Load cameras once for the session (permanent infrastructure, never re-fetched).
+    _loadCamerasOnce();
     // Check home neighborhood FIRST — it provides map center + pre-loads data.
     // GPS location runs in parallel and refines the position once resolved.
     _checkHomeNeighborhood();
@@ -408,6 +411,26 @@ class BeaconScreenState extends ConsumerState<BeaconScreen> with TickerProviderS
     }
   }
 
+  /// Loads all cameras statewide once per session. Cameras are permanent
+  /// infrastructure and never need to be re-fetched on pan/zoom.
+  Future<void> _loadCamerasOnce() async {
+    if (_camerasLoaded) return;
+    _camerasLoaded = true;
+    try {
+      final apiService = ref.read(apiServiceProvider);
+      final cameras = await apiService.fetchAllCameras();
+      debugPrint('[Beacon] loaded ${cameras.length} cameras (cached for session)');
+      if (mounted) {
+        setState(() {
+          _cameraPosts = cameras.map((p) => p.toBeacon()).toList();
+        });
+      }
+    } catch (e) {
+      debugPrint('[Beacon] camera load failed: $e');
+      _camerasLoaded = false; // retry on next attempt
+    }
+  }
+
   Future<void> _loadBeacons({LatLng? center, bool force = false}) async {
     final target = center ?? _userLocation ?? _mapCenter;
 
@@ -457,8 +480,7 @@ class BeaconScreenState extends ConsumerState<BeaconScreen> with TickerProviderS
           _allBeaconPosts = allPosts.where((p) => p.isBeaconPost).toList();
 
           // Split into sub-lists by beacon_type and official status.
-          // Cameras are intentionally NOT in layerTypes — they cluster with
-          // officialPosts so they appear at all zoom levels statewide.
+          // Cameras are loaded separately via _loadCamerasOnce() — not from unified.
           const layerTypes = {BeaconType.sign, BeaconType.weatherStation};
           _beacons = _allBeaconPosts
               .where((p) => p.isOfficial != true && !layerTypes.contains(p.beaconType))
@@ -472,9 +494,6 @@ class BeaconScreenState extends ConsumerState<BeaconScreen> with TickerProviderS
           _officialPosts = _allBeaconPosts
               .where((p) => p.isOfficial == true && !layerTypes.contains(p.beaconType))
               .toList();
-          _cameraPosts = _allBeaconPosts
-              .where((p) => p.beaconType == BeaconType.camera)
-              .map((p) => p.toBeacon()).toList();
           _signPosts = _allBeaconPosts
               .where((p) => p.beaconType == BeaconType.sign)
               .map((p) => p.toBeacon()).toList();
@@ -3112,6 +3131,7 @@ class BeaconScreenState extends ConsumerState<BeaconScreen> with TickerProviderS
         .where((p) =>
             p.isBeaconPost &&
             (p.beaconType?.isGeoAlert ?? false) &&
+            p.beaconType != BeaconType.camera &&
             !_hiddenTypes.contains(p.beaconType))
         .map((p) => _createMarker(p))
         .toList();

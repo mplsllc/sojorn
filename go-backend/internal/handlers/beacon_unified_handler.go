@@ -13,6 +13,21 @@ import (
 	"gitlab.com/patrickbritton3/sojorn/go-backend/pkg/utils"
 )
 
+// GetAllCameras returns all active cameras statewide.
+// Cameras are permanent infrastructure — clients should call this once
+// per session and cache the result.
+// GET /api/v1/beacons/cameras
+func (h *BeaconUnifiedHandler) GetAllCameras(c *gin.Context) {
+	results, err := h.repo.GetAllCameras(c.Request.Context())
+	if err != nil {
+		log.Error().Err(err).Msg("cameras: query failed")
+		c.JSON(http.StatusOK, gin.H{"beacons": []gin.H{}})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{"beacons": results})
+}
+
 // BeaconUnifiedHandler serves the single unified beacon endpoint that
 // returns all alert types (external + user-created) in one response.
 type BeaconUnifiedHandler struct {
