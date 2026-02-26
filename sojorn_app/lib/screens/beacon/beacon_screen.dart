@@ -41,7 +41,6 @@ import '../../theme/app_theme.dart';
 import '../../widgets/media/sojorn_avatar.dart';
 import '../../widgets/neighborhood/neighborhood_picker_sheet.dart';
 import '../../widgets/desktop/desktop_dialog_helper.dart';
-import '../../config/api_config.dart';
 
 enum BeaconTab { map, board, search, groups }
 enum NeighborhoodHubTab { feed, chat, forum, members }
@@ -3883,7 +3882,7 @@ class _SignDetailSheet extends StatelessWidget {
             ClipRRect(
               borderRadius: BorderRadius.circular(10),
               child: Image.network(
-                ApiConfig.proxyImageUrl(sign.imageUrl!),
+                sign.imageUrl!, // R2/S3 sign GIFs are public — load directly, no proxy
                 fit: BoxFit.contain,
                 height: 140,
                 errorBuilder: (_, __, ___) => const SizedBox.shrink(),
