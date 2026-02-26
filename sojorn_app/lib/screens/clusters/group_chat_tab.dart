@@ -234,15 +234,28 @@ class _GroupChatTabState extends State<GroupChatTab> {
 
   Future<void> _submitReport(String entryId, String reason, String sample) async {
     try {
-      await ApiService.instance.callGoApi(
-        '/capsules/${widget.groupId}/entries/$entryId/report',
-        method: 'POST',
-        body: {
-          'reason': reason,
-          if (sample.isNotEmpty && sample != '[Decryption failed]')
-            'decrypted_sample': sample,
-        },
-      );
+      if (widget.isEncrypted) {
+        // Encrypted capsule: use capsule entry report endpoint (includes decrypted_sample)
+        await ApiService.instance.callGoApi(
+          '/capsules/${widget.groupId}/entries/$entryId/report',
+          method: 'POST',
+          body: {
+            'reason': reason,
+            if (sample.isNotEmpty && sample != '[Decryption failed]')
+              'decrypted_sample': sample,
+          },
+        );
+      } else {
+        // Regular group: use message report endpoint
+        await ApiService.instance.callGoApi(
+          '/capsules/${widget.groupId}/messages/$entryId/report',
+          method: 'POST',
+          body: {
+            'reason': reason,
+            'description': sample.length > 200 ? sample.substring(0, 200) : sample,
+          },
+        );
+      }
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(content: Text('Report submitted. Thank you.')),
@@ -365,7 +378,7 @@ class _GroupChatTabState extends State<GroupChatTab> {
                                 isEncrypted: widget.isEncrypted,
                                 timeStr: _timeStr(msg['created_at']?.toString()),
                                 gifUrl: msg['gif_url'] as String?,
-                                onReport: (!isMine && widget.isEncrypted)
+                                onReport: !isMine
                                     ? () => _reportMessage(msg)
                                     : null,
                               );
@@ -422,14 +435,11 @@ class _ChatBubble extends StatelessWidget {
     final displayName = message['author_display_name'] as String? ?? handle;
     final avatarUrl = message['author_avatar_url'] as String?;
 
-    // Color scheme: mine = brand blue + white text / others = light gray + dark text.
+    // Color scheme: mine = brand indigo + white text / others = slate-100 + dark text.
     final bubbleBg = isMine
         ? (isEncrypted ? const Color(0xFF2E7D32) : AppTheme.brightNavy)
         : const Color(0xFFF1F5F9);
     final textColor = isMine ? Colors.white : SojornColors.postContent;
-    final metaColor = isMine
-        ? Colors.white.withValues(alpha: 0.65)
-        : SojornColors.textDisabled;
 
     final isDesktop = MediaQuery.of(context).size.width >= 900;
 
@@ -449,25 +459,18 @@ class _ChatBubble extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          // Sender name + time
-          Row(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              if (!isMine) ...[
-                Text(
-                  displayName.isNotEmpty ? displayName : handle,
-                  style: TextStyle(
-                    color: AppTheme.navyBlue,
-                    fontSize: isDesktop ? 13 : 11,
-                    fontWeight: FontWeight.w700,
-                  ),
-                ),
-                const SizedBox(width: 4),
-              ],
-              Text(timeStr, style: TextStyle(color: metaColor, fontSize: isDesktop ? 12 : 10)),
-            ],
-          ),
-          const SizedBox(height: 3),
+          // Sender name (other users only)
+          if (!isMine) ...[
+            Text(
+              displayName.isNotEmpty ? displayName : handle,
+              style: TextStyle(
+                color: AppTheme.navyBlue,
+                fontSize: isDesktop ? 13 : 11,
+                fontWeight: FontWeight.w700,
+              ),
+            ),
+            const SizedBox(height: 3),
+          ],
           if (body.isNotEmpty)
             Text(body, style: TextStyle(color: textColor, fontSize: isDesktop ? 15 : 14, height: 1.4)),
           if (gifUrl != null) ...[
@@ -501,16 +504,36 @@ class _ChatBubble extends StatelessWidget {
           right: isMine ? 0 : 48,
           top: 2, bottom: 2,
         ),
-        child: Row(
-          crossAxisAlignment: CrossAxisAlignment.end,
-          mainAxisAlignment: isMine ? MainAxisAlignment.end : MainAxisAlignment.start,
+        child: Column(
+          crossAxisAlignment: isMine ? CrossAxisAlignment.end : CrossAxisAlignment.start,
           children: [
-            // Avatar for other users' messages
-            if (!isMine) ...[
-              _MiniAvatar(handle: handle, avatarUrl: avatarUrl),
-              const SizedBox(width: 6),
-            ],
-            Flexible(child: bubble),
+            Row(
+              crossAxisAlignment: CrossAxisAlignment.end,
+              mainAxisAlignment: isMine ? MainAxisAlignment.end : MainAxisAlignment.start,
+              children: [
+                // Avatar for other users' messages
+                if (!isMine) ...[
+                  _MiniAvatar(handle: handle, avatarUrl: avatarUrl),
+                  const SizedBox(width: 6),
+                ],
+                Flexible(child: bubble),
+              ],
+            ),
+            // Timestamp below the bubble
+            Padding(
+              padding: EdgeInsets.only(
+                left: isMine ? 0 : 34,
+                right: isMine ? 4 : 0,
+                top: 2,
+              ),
+              child: Text(
+                timeStr,
+                style: TextStyle(
+                  color: SojornColors.textDisabled.withValues(alpha: 0.6),
+                  fontSize: 10,
+                ),
+              ),
+            ),
           ],
         ),
       ),

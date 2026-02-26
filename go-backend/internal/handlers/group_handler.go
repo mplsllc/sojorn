@@ -1003,3 +1003,305 @@ func (h *GroupHandler) SearchUsersForInvite(c *gin.Context) {
 	}
 	c.JSON(http.StatusOK, gin.H{"users": users})
 }
+
+// ═══════════════════════════════════════════════════════════════════════
+// GROUP CONTENT REPORTING & MODERATION
+// ═══════════════════════════════════════════════════════════════════════
+
+// ReportCapsuleEntry — POST /capsules/:id/entries/:entryId/report
+// Used by encrypted capsules — reporter submits decrypted_sample.
+func (h *GroupHandler) ReportCapsuleEntry(c *gin.Context) {
+	userID, groupID, _, ok := h.requireMembership(c)
+	if !ok {
+		return
+	}
+	entryID, err := uuid.Parse(c.Param("entryId"))
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid entry ID"})
+		return
+	}
+
+	var req struct {
+		Reason          string `json:"reason" binding:"required"`
+		DecryptedSample string `json:"decrypted_sample"`
+	}
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+
+	_, err = h.pool.Exec(c.Request.Context(), `
+		INSERT INTO capsule_reports (reporter_id, capsule_id, entry_id, decrypted_sample, reason, status)
+		VALUES ($1, $2, $3, $4, $5, 'pending')
+	`, userID, groupID, entryID, nilIfEmpty(req.DecryptedSample), req.Reason)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to submit report"})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{"message": "Report submitted"})
+}
+
+// ReportGroupMessage — POST /capsules/:id/messages/:messageId/report
+// For regular (non-encrypted) group messages.
+func (h *GroupHandler) ReportGroupMessage(c *gin.Context) {
+	userID, groupID, _, ok := h.requireMembership(c)
+	if !ok {
+		return
+	}
+	messageID := c.Param("messageId")
+
+	var req struct {
+		Reason      string `json:"reason" binding:"required"`
+		Description string `json:"description"`
+	}
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+
+	// Look up message author
+	var authorID uuid.UUID
+	var body string
+	err := h.pool.QueryRow(c.Request.Context(),
+		`SELECT sender_id, body FROM group_messages WHERE id = $1::uuid AND group_id = $2`,
+		messageID, groupID).Scan(&authorID, &body)
+	if err != nil {
+		c.JSON(http.StatusNotFound, gin.H{"error": "message not found"})
+		return
+	}
+
+	// Can't report own messages
+	if authorID == userID {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "cannot report your own message"})
+		return
+	}
+
+	preview := body
+	if len(preview) > 200 {
+		preview = preview[:200] + "…"
+	}
+
+	desc := req.Description
+	if desc == "" {
+		desc = preview
+	}
+
+	_, err = h.pool.Exec(c.Request.Context(), `
+		INSERT INTO reports (reporter_id, target_user_id, group_id, violation_type, description, status)
+		VALUES ($1, $2, $3, $4, $5, 'pending')
+	`, userID, authorID, groupID, req.Reason, desc)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to submit report"})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{"message": "Report submitted"})
+}
+
+// ReportGroupPost — POST /capsules/:id/posts/:postId/report
+func (h *GroupHandler) ReportGroupPost(c *gin.Context) {
+	userID, groupID, _, ok := h.requireMembership(c)
+	if !ok {
+		return
+	}
+	postID := c.Param("postId")
+
+	var req struct {
+		Reason      string `json:"reason" binding:"required"`
+		Description string `json:"description"`
+	}
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+
+	var authorID uuid.UUID
+	var body string
+	err := h.pool.QueryRow(c.Request.Context(),
+		`SELECT author_id, body FROM group_posts WHERE id = $1::uuid AND group_id = $2`,
+		postID, groupID).Scan(&authorID, &body)
+	if err != nil {
+		c.JSON(http.StatusNotFound, gin.H{"error": "post not found"})
+		return
+	}
+
+	if authorID == userID {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "cannot report your own post"})
+		return
+	}
+
+	preview := body
+	if len(preview) > 200 {
+		preview = preview[:200] + "…"
+	}
+
+	desc := req.Description
+	if desc == "" {
+		desc = preview
+	}
+
+	pID, _ := uuid.Parse(postID)
+	_, err = h.pool.Exec(c.Request.Context(), `
+		INSERT INTO reports (reporter_id, target_user_id, post_id, group_id, violation_type, description, status)
+		VALUES ($1, $2, $3, $4, $5, $6, 'pending')
+	`, userID, authorID, pID, groupID, req.Reason, desc)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to submit report"})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{"message": "Report submitted"})
+}
+
+// GetGroupReports — GET /capsules/:id/reports
+// Returns pending reports scoped to this group. Requires owner/admin role.
+func (h *GroupHandler) GetGroupReports(c *gin.Context) {
+	_, groupID, role, ok := h.requireMembership(c)
+	if !ok {
+		return
+	}
+	if !isAdminOrOwner(role) {
+		c.JSON(http.StatusForbidden, gin.H{"error": "admin or owner required"})
+		return
+	}
+
+	ctx := c.Request.Context()
+	statusFilter := c.DefaultQuery("status", "pending")
+	limit, _ := strconv.Atoi(c.DefaultQuery("limit", "50"))
+	offset, _ := strconv.Atoi(c.DefaultQuery("offset", "0"))
+
+	// Combine reports table (regular) + capsule_reports (encrypted)
+	rows, err := h.pool.Query(ctx, `
+		(
+			SELECT r.id, r.reporter_id, r.target_user_id, r.violation_type,
+			       r.description, r.status, r.created_at, 'report' AS source,
+			       COALESCE(pr.handle, '') AS reporter_handle,
+			       COALESCE(pt.handle, '') AS target_handle
+			FROM reports r
+			LEFT JOIN profiles pr ON r.reporter_id = pr.id
+			LEFT JOIN profiles pt ON r.target_user_id = pt.id
+			WHERE r.group_id = $1 AND r.status = $2
+		)
+		UNION ALL
+		(
+			SELECT cr.id, cr.reporter_id, '00000000-0000-0000-0000-000000000000'::uuid AS target_user_id, cr.reason AS violation_type,
+			       COALESCE(cr.decrypted_sample, '') AS description, cr.status, cr.created_at,
+			       'capsule_report' AS source,
+			       COALESCE(p.handle, '') AS reporter_handle,
+			       '' AS target_handle
+			FROM capsule_reports cr
+			LEFT JOIN profiles p ON cr.reporter_id = p.id
+			WHERE cr.capsule_id = $1 AND cr.status = $2
+		)
+		ORDER BY created_at ASC
+		LIMIT $3 OFFSET $4
+	`, groupID, statusFilter, limit, offset)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to list reports"})
+		return
+	}
+	defer rows.Close()
+
+	var reports []gin.H
+	for rows.Next() {
+		var rID, reporterID, targetID uuid.UUID
+		var violationType, description, status, source, reporterHandle, targetHandle string
+		var createdAt time.Time
+		if err := rows.Scan(&rID, &reporterID, &targetID, &violationType,
+			&description, &status, &createdAt, &source,
+			&reporterHandle, &targetHandle); err != nil {
+			continue
+		}
+		reports = append(reports, gin.H{
+			"id": rID, "reporter_id": reporterID, "target_user_id": targetID,
+			"violation_type": violationType, "description": description,
+			"status": status, "created_at": createdAt, "source": source,
+			"reporter_handle": reporterHandle, "target_handle": targetHandle,
+		})
+	}
+	if reports == nil {
+		reports = []gin.H{}
+	}
+	c.JSON(http.StatusOK, gin.H{"reports": reports})
+}
+
+// UpdateGroupReport — PATCH /capsules/:id/reports/:reportId
+// Allows group admin to action/dismiss a report scoped to their group.
+func (h *GroupHandler) UpdateGroupReport(c *gin.Context) {
+	_, groupID, role, ok := h.requireMembership(c)
+	if !ok {
+		return
+	}
+	if !isAdminOrOwner(role) {
+		c.JSON(http.StatusForbidden, gin.H{"error": "admin or owner required"})
+		return
+	}
+
+	reportID := c.Param("reportId")
+	var req struct {
+		Status string `json:"status" binding:"required,oneof=reviewed dismissed actioned"`
+		Source string `json:"source"` // "report" or "capsule_report"
+	}
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+
+	ctx := c.Request.Context()
+
+	if req.Source == "capsule_report" {
+		// Verify report belongs to this group
+		_, err := h.pool.Exec(ctx,
+			`UPDATE capsule_reports SET status = $1, updated_at = NOW()
+			 WHERE id = $2::uuid AND capsule_id = $3`,
+			req.Status, reportID, groupID)
+		if err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to update report"})
+			return
+		}
+	} else {
+		_, err := h.pool.Exec(ctx,
+			`UPDATE reports SET status = $1
+			 WHERE id = $2::uuid AND group_id = $3`,
+			req.Status, reportID, groupID)
+		if err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to update report"})
+			return
+		}
+	}
+
+	c.JSON(http.StatusOK, gin.H{"message": "Report updated"})
+}
+
+// DeleteGroupMessage — DELETE /capsules/:id/messages/:messageId
+// Allows group admin to remove a message.
+func (h *GroupHandler) DeleteGroupMessage(c *gin.Context) {
+	_, groupID, role, ok := h.requireMembership(c)
+	if !ok {
+		return
+	}
+	if !isAdminOrOwner(role) {
+		c.JSON(http.StatusForbidden, gin.H{"error": "admin or owner required"})
+		return
+	}
+
+	messageID := c.Param("messageId")
+	_, err := h.pool.Exec(c.Request.Context(),
+		`DELETE FROM group_messages WHERE id = $1::uuid AND group_id = $2`,
+		messageID, groupID)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to delete message"})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{"message": "Message deleted"})
+}
+
+func nilIfEmpty(s string) *string {
+	if s == "" {
+		return nil
+	}
+	return &s
+}
+

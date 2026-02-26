@@ -405,11 +405,13 @@ func (h *UserHandler) ReportUser(c *gin.Context) {
 	reporterID, _ := c.Get("user_id")
 
 	var input struct {
-		TargetUserID  string `json:"target_user_id" binding:"required"`
-		PostID        string `json:"post_id"`
-		CommentID     string `json:"comment_id"`
-		ViolationType string `json:"violation_type" binding:"required"`
-		Description   string `json:"description"`
+		TargetUserID   string `json:"target_user_id" binding:"required"`
+		PostID         string `json:"post_id"`
+		CommentID      string `json:"comment_id"`
+		GroupID        string `json:"group_id"`
+		NeighborhoodID string `json:"neighborhood_id"`
+		ViolationType  string `json:"violation_type" binding:"required"`
+		Description    string `json:"description"`
 	}
 
 	if err := c.ShouldBindJSON(&input); err != nil {
@@ -434,6 +436,14 @@ func (h *UserHandler) ReportUser(c *gin.Context) {
 	if input.CommentID != "" {
 		cID, _ := uuid.Parse(input.CommentID)
 		report.CommentID = &cID
+	}
+	if input.GroupID != "" {
+		gID, _ := uuid.Parse(input.GroupID)
+		report.GroupID = &gID
+	}
+	if input.NeighborhoodID != "" {
+		nID, _ := uuid.Parse(input.NeighborhoodID)
+		report.NeighborhoodID = &nID
 	}
 
 	if err := h.repo.CreateReport(c.Request.Context(), report); err != nil {

@@ -1692,16 +1692,36 @@ func (h *AdminHandler) ListReports(c *gin.Context) {
 	limit, _ := strconv.Atoi(c.DefaultQuery("limit", "50"))
 	offset, _ := strconv.Atoi(c.DefaultQuery("offset", "0"))
 	statusFilter := c.DefaultQuery("status", "pending")
+	contextFilter := c.DefaultQuery("context", "") // "neighborhood", "group", or "" for all
+
+	whereClause := "WHERE r.status = $1"
+	countWhere := "WHERE status = $1"
+	switch contextFilter {
+	case "neighborhood":
+		whereClause += " AND r.neighborhood_id IS NOT NULL"
+		countWhere += " AND neighborhood_id IS NOT NULL"
+	case "group":
+		whereClause += " AND r.group_id IS NOT NULL"
+		countWhere += " AND group_id IS NOT NULL"
+	case "user":
+		whereClause += " AND r.group_id IS NULL AND r.neighborhood_id IS NULL"
+		countWhere += " AND group_id IS NULL AND neighborhood_id IS NULL"
+	}
 
 	rows, err := h.pool.Query(ctx, `
 		SELECT r.id, r.reporter_id, r.target_user_id, r.post_id, r.comment_id,
+		       r.group_id, r.neighborhood_id,
 		       r.violation_type, r.description, r.status, r.created_at,
 		       pr_reporter.handle as reporter_handle,
-		       pr_target.handle as target_handle
+		       pr_target.handle as target_handle,
+		       g.name as group_name,
+		       ns.name as neighborhood_name
 		FROM reports r
 		LEFT JOIN profiles pr_reporter ON r.reporter_id = pr_reporter.id
 		LEFT JOIN profiles pr_target ON r.target_user_id = pr_target.id
-		WHERE r.status = $1
+		LEFT JOIN groups g ON r.group_id = g.id
+		LEFT JOIN neighborhood_seeds ns ON r.neighborhood_id = ns.id
+		`+whereClause+`
 		ORDER BY r.created_at ASC
 		LIMIT $2 OFFSET $3
 	`, statusFilter, limit, offset)
@@ -1712,29 +1732,38 @@ func (h *AdminHandler) ListReports(c *gin.Context) {
 	defer rows.Close()
 
 	var total int
-	h.pool.QueryRow(ctx, `SELECT COUNT(*) FROM reports WHERE status = $1`, statusFilter).Scan(&total)
+	h.pool.QueryRow(ctx, `SELECT COUNT(*) FROM reports `+countWhere, statusFilter).Scan(&total)
 
 	var reports []gin.H
 	for rows.Next() {
 		var rID, reporterID, targetUserID uuid.UUID
-		var postID, commentID *uuid.UUID
+		var postID, commentID, groupID, neighborhoodID *uuid.UUID
 		var violationType, description, rStatus string
 		var rCreatedAt time.Time
-		var reporterHandle, targetHandle *string
+		var reporterHandle, targetHandle, groupName, neighborhoodName *string
 
 		if err := rows.Scan(&rID, &reporterID, &targetUserID, &postID, &commentID,
+			&groupID, &neighborhoodID,
 			&violationType, &description, &rStatus, &rCreatedAt,
-			&reporterHandle, &targetHandle); err != nil {
+			&reporterHandle, &targetHandle, &groupName, &neighborhoodName); err != nil {
 			continue
 		}
 
-		reports = append(reports, gin.H{
+		r := gin.H{
 			"id": rID, "reporter_id": reporterID, "target_user_id": targetUserID,
 			"post_id": postID, "comment_id": commentID,
+			"group_id": groupID, "neighborhood_id": neighborhoodID,
 			"violation_type": violationType, "description": description,
 			"status": rStatus, "created_at": rCreatedAt,
 			"reporter_handle": reporterHandle, "target_handle": targetHandle,
-		})
+		}
+		if groupName != nil {
+			r["group_name"] = *groupName
+		}
+		if neighborhoodName != nil {
+			r["neighborhood_name"] = *neighborhoodName
+		}
+		reports = append(reports, r)
 	}
 
 	if reports == nil {
@@ -4351,6 +4380,27 @@ func (h *AdminHandler) AdminRemoveGroupMember(c *gin.Context) {
 	h.pool.Exec(c.Request.Context(),
 		`UPDATE groups SET key_rotation_needed = true WHERE id = $1`, groupID)
 	c.JSON(http.StatusOK, gin.H{"message": "member removed"})
+}
+
+// AdminUpdateMemberRole PATCH /admin/groups/:id/members/:userId
+func (h *AdminHandler) AdminUpdateMemberRole(c *gin.Context) {
+	groupID := c.Param("id")
+	userID := c.Param("userId")
+	var req struct {
+		Role string `json:"role" binding:"required,oneof=member admin owner"`
+	}
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+	_, err := h.pool.Exec(c.Request.Context(),
+		`UPDATE group_members SET role = $1 WHERE group_id = $2 AND user_id = $3`,
+		req.Role, groupID, userID)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"message": "role updated"})
 }
 
 // ──────────────────────────────────────────────────────────────────────────────

@@ -11,6 +11,7 @@ import '../../services/auth_service.dart';
 import '../../services/capsule_security_service.dart';
 import '../../theme/tokens.dart';
 import '../../theme/app_theme.dart';
+import '../../utils/snackbar_ext.dart';
 import 'group_feed_tab.dart';
 import 'group_chat_tab.dart';
 import 'group_forum_tab.dart';
@@ -42,6 +43,12 @@ class _GroupScreenState extends ConsumerState<GroupScreen>
   String? _currentUserId;
   late bool _isMember;
   bool _isJoining = false;
+  String? _myRole;
+  bool get _isGroupAdmin => _myRole == 'owner' || _myRole == 'admin';
+
+  // Mod data
+  List<Map<String, dynamic>> _modReports = [];
+  bool _modLoading = false;
 
   bool get isEncrypted => widget.group.isEncrypted;
 
@@ -53,6 +60,60 @@ class _GroupScreenState extends ConsumerState<GroupScreen>
     _isMember = widget.group.isMember;
     if (isEncrypted) {
       _unlockCapsule();
+    }
+    _fetchMyRole();
+  }
+
+  Future<void> _fetchMyRole() async {
+    try {
+      final members = await ApiService.instance.fetchGroupMembers(widget.group.id);
+      for (final m in members) {
+        if (m['user_id']?.toString() == _currentUserId) {
+          final role = m['role'] as String?;
+          if (role != _myRole) {
+            _myRole = role;
+            if (_isGroupAdmin && _tabController.length == 5) {
+              // Rebuild with Mod tab
+              final oldIndex = _tabController.index;
+              _tabController.dispose();
+              _tabController = TabController(length: 6, vsync: this, initialIndex: oldIndex.clamp(0, 5));
+              _loadModReports();
+            }
+            if (mounted) setState(() {});
+          }
+          break;
+        }
+      }
+    } catch (_) {}
+  }
+
+  Future<void> _loadModReports() async {
+    setState(() => _modLoading = true);
+    try {
+      final res = await ApiService.instance.callGoApi(
+        '/capsules/${widget.group.id}/reports?status=pending&limit=50',
+      );
+      if (mounted) {
+        setState(() {
+          _modReports = List<Map<String, dynamic>>.from(res['reports'] ?? []);
+          _modLoading = false;
+        });
+      }
+    } catch (_) {
+      if (mounted) setState(() => _modLoading = false);
+    }
+  }
+
+  Future<void> _actionReport(String reportId, String status, String source) async {
+    try {
+      await ApiService.instance.callGoApi(
+        '/capsules/${widget.group.id}/reports/$reportId',
+        method: 'PATCH',
+        body: {'status': status, 'source': source},
+      );
+      _loadModReports();
+    } catch (e) {
+      if (mounted) context.showError('Failed to update report');
     }
   }
 
@@ -106,12 +167,15 @@ class _GroupScreenState extends ConsumerState<GroupScreen>
       labelColor: AppTheme.navyBlue,
       unselectedLabelColor: SojornColors.textDisabled,
       labelStyle: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600),
-      tabs: const [
-        Tab(icon: Icon(Icons.dynamic_feed, size: 18), text: 'Feed'),
-        Tab(icon: Icon(Icons.chat_bubble, size: 18), text: 'Chat'),
-        Tab(icon: Icon(Icons.forum, size: 18), text: 'Forum'),
-        Tab(icon: Icon(Icons.event, size: 18), text: 'Events'),
-        Tab(icon: Icon(Icons.people, size: 18), text: 'Members'),
+      isScrollable: _isGroupAdmin,
+      tabs: [
+        const Tab(icon: Icon(Icons.dynamic_feed, size: 18), text: 'Feed'),
+        const Tab(icon: Icon(Icons.chat_bubble, size: 18), text: 'Chat'),
+        const Tab(icon: Icon(Icons.forum, size: 18), text: 'Forum'),
+        const Tab(icon: Icon(Icons.event, size: 18), text: 'Events'),
+        const Tab(icon: Icon(Icons.people, size: 18), text: 'Members'),
+        if (_isGroupAdmin)
+          const Tab(icon: Icon(Icons.shield, size: 18), text: 'Mod'),
       ],
     );
 
@@ -143,6 +207,7 @@ class _GroupScreenState extends ConsumerState<GroupScreen>
           group: widget.group,
           isEncrypted: isEncrypted,
         ),
+        if (_isGroupAdmin) _buildModTab(),
       ],
     );
 
@@ -335,12 +400,15 @@ class _GroupScreenState extends ConsumerState<GroupScreen>
           labelColor: AppTheme.navyBlue,
           unselectedLabelColor: SojornColors.textDisabled,
           labelStyle: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600),
-          tabs: const [
-            Tab(icon: Icon(Icons.dynamic_feed, size: 18), text: 'Feed'),
-            Tab(icon: Icon(Icons.chat_bubble, size: 18), text: 'Chat'),
-            Tab(icon: Icon(Icons.forum, size: 18), text: 'Forum'),
-            Tab(icon: Icon(Icons.event, size: 18), text: 'Events'),
-            Tab(icon: Icon(Icons.people, size: 18), text: 'Members'),
+          isScrollable: _isGroupAdmin,
+          tabs: [
+            const Tab(icon: Icon(Icons.dynamic_feed, size: 18), text: 'Feed'),
+            const Tab(icon: Icon(Icons.chat_bubble, size: 18), text: 'Chat'),
+            const Tab(icon: Icon(Icons.forum, size: 18), text: 'Forum'),
+            const Tab(icon: Icon(Icons.event, size: 18), text: 'Events'),
+            const Tab(icon: Icon(Icons.people, size: 18), text: 'Members'),
+            if (_isGroupAdmin)
+              const Tab(icon: Icon(Icons.shield, size: 18), text: 'Mod'),
           ],
         ),
       ),
@@ -462,6 +530,140 @@ class _GroupScreenState extends ConsumerState<GroupScreen>
         ),
       ),
     );
+  }
+
+  Widget _buildModTab() {
+    if (_modLoading && _modReports.isEmpty) {
+      return const Center(child: CircularProgressIndicator());
+    }
+    if (_modReports.isEmpty) {
+      return Center(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(Icons.verified_user, size: 48, color: SojornColors.textDisabled.withValues(alpha: 0.4)),
+            const SizedBox(height: 12),
+            Text('No pending reports', style: TextStyle(color: SojornColors.textDisabled, fontSize: 14)),
+            const SizedBox(height: 4),
+            Text('All clear in this group', style: TextStyle(color: SojornColors.textDisabled.withValues(alpha: 0.6), fontSize: 12)),
+          ],
+        ),
+      );
+    }
+
+    return RefreshIndicator(
+      onRefresh: _loadModReports,
+      child: ListView.builder(
+        padding: const EdgeInsets.fromLTRB(12, 8, 12, 80),
+        itemCount: _modReports.length,
+        itemBuilder: (_, i) {
+          final r = _modReports[i];
+          final type = r['violation_type'] as String? ?? 'unknown';
+          final desc = r['description'] as String? ?? '';
+          final reporter = r['reporter_handle'] as String? ?? '?';
+          final target = r['target_handle'] as String? ?? '';
+          final source = r['source'] as String? ?? 'report';
+          final createdAt = r['created_at'] as String? ?? '';
+          final reportId = r['id']?.toString() ?? '';
+
+          return Container(
+            margin: const EdgeInsets.only(bottom: 8),
+            decoration: BoxDecoration(
+              color: AppTheme.cardSurface,
+              borderRadius: BorderRadius.circular(SojornRadii.card),
+              border: Border.all(color: AppTheme.navyBlue.withValues(alpha: 0.08)),
+            ),
+            child: Padding(
+              padding: const EdgeInsets.all(14),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    children: [
+                      Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                        decoration: BoxDecoration(
+                          color: const Color(0xFFFFF3E0),
+                          borderRadius: BorderRadius.circular(6),
+                        ),
+                        child: Text(type, style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w700, color: Color(0xFFE65100))),
+                      ),
+                      if (source == 'capsule_report') ...[
+                        const SizedBox(width: 6),
+                        Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                          decoration: BoxDecoration(
+                            color: const Color(0xFF4CAF50).withValues(alpha: 0.15),
+                            borderRadius: BorderRadius.circular(4),
+                          ),
+                          child: const Text('E2EE', style: TextStyle(fontSize: 9, fontWeight: FontWeight.w700, color: Color(0xFF2E7D32))),
+                        ),
+                      ],
+                      const SizedBox(width: 8),
+                      Text('by @$reporter', style: TextStyle(fontSize: 11, color: SojornColors.textDisabled)),
+                      const Spacer(),
+                      if (createdAt.isNotEmpty)
+                        Text(_formatTime(createdAt), style: TextStyle(fontSize: 10, color: SojornColors.textDisabled)),
+                    ],
+                  ),
+                  if (target.isNotEmpty) ...[
+                    const SizedBox(height: 6),
+                    Text('Target: @$target', style: TextStyle(fontSize: 12, color: SojornColors.postContentLight)),
+                  ],
+                  if (desc.isNotEmpty) ...[
+                    const SizedBox(height: 6),
+                    Text(desc, style: TextStyle(fontSize: 13, color: SojornColors.postContent), maxLines: 3, overflow: TextOverflow.ellipsis),
+                  ],
+                  const SizedBox(height: 10),
+                  Row(
+                    children: [
+                      Expanded(
+                        child: OutlinedButton.icon(
+                          onPressed: () => _actionReport(reportId, 'dismissed', source),
+                          icon: const Icon(Icons.close, size: 16),
+                          label: const Text('Dismiss'),
+                          style: OutlinedButton.styleFrom(
+                            foregroundColor: SojornColors.textDisabled,
+                            side: BorderSide(color: AppTheme.navyBlue.withValues(alpha: 0.12)),
+                            padding: const EdgeInsets.symmetric(vertical: 8),
+                            textStyle: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600),
+                          ),
+                        ),
+                      ),
+                      const SizedBox(width: 8),
+                      Expanded(
+                        child: FilledButton.icon(
+                          onPressed: () => _actionReport(reportId, 'actioned', source),
+                          icon: const Icon(Icons.check, size: 16),
+                          label: const Text('Action'),
+                          style: FilledButton.styleFrom(
+                            backgroundColor: isEncrypted ? const Color(0xFF4CAF50) : AppTheme.brightNavy,
+                            padding: const EdgeInsets.symmetric(vertical: 8),
+                            textStyle: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600),
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ],
+              ),
+            ),
+          );
+        },
+      ),
+    );
+  }
+
+  String _formatTime(String iso) {
+    try {
+      final dt = DateTime.parse(iso);
+      final diff = DateTime.now().difference(dt);
+      if (diff.inMinutes < 60) return '${diff.inMinutes}m ago';
+      if (diff.inHours < 24) return '${diff.inHours}h ago';
+      return '${diff.inDays}d ago';
+    } catch (_) {
+      return '';
+    }
   }
 
   Widget _buildErrorScreen() {

@@ -703,6 +703,159 @@ func (h *NeighborhoodHandler) GetMyNeighborhood(c *gin.Context) {
 	c.JSON(http.StatusOK, result)
 }
 
+// GetNeighborhoodReports lists reports scoped to a neighborhood.
+// Requires the caller to be an admin/owner of the neighborhood group, OR a superadmin.
+// GET /neighborhoods/:id/reports?status=pending&limit=50&offset=0
+func (h *NeighborhoodHandler) GetNeighborhoodReports(c *gin.Context) {
+	userIDStr, _ := c.Get("user_id")
+	userID, err := uuid.Parse(userIDStr.(string))
+	if err != nil {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "unauthorized"})
+		return
+	}
+
+	neighborhoodID, err := uuid.Parse(c.Param("id"))
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid neighborhood id"})
+		return
+	}
+
+	ctx := c.Request.Context()
+
+	// Check authorization: must be admin/owner of the neighborhood group, or superadmin
+	authorized := false
+
+	// Check superadmin
+	var userRole string
+	_ = h.pool.QueryRow(ctx, `SELECT role FROM profiles WHERE id = $1`, userID).Scan(&userRole)
+	if userRole == "superadmin" || userRole == "admin" {
+		authorized = true
+	}
+
+	if !authorized {
+		// Check if user is admin/owner of the neighborhood's linked group
+		var groupRole string
+		err = h.pool.QueryRow(ctx, `
+			SELECT gm.role FROM group_members gm
+			JOIN neighborhood_seeds ns ON ns.group_id = gm.group_id
+			WHERE ns.id = $1 AND gm.user_id = $2
+		`, neighborhoodID, userID).Scan(&groupRole)
+		if err == nil && (groupRole == "admin" || groupRole == "owner") {
+			authorized = true
+		}
+	}
+
+	if !authorized {
+		c.JSON(http.StatusForbidden, gin.H{"error": "neighborhood admin or superadmin required"})
+		return
+	}
+
+	statusFilter := c.DefaultQuery("status", "pending")
+	limit, _ := strconv.Atoi(c.DefaultQuery("limit", "50"))
+	offset, _ := strconv.Atoi(c.DefaultQuery("offset", "0"))
+
+	rows, err := h.pool.Query(ctx, `
+		SELECT r.id, r.reporter_id, r.target_user_id, r.violation_type,
+		       r.description, r.status, r.created_at,
+		       COALESCE(pr.handle, '') AS reporter_handle,
+		       COALESCE(pt.handle, '') AS target_handle
+		FROM reports r
+		LEFT JOIN profiles pr ON r.reporter_id = pr.id
+		LEFT JOIN profiles pt ON r.target_user_id = pt.id
+		WHERE r.neighborhood_id = $1 AND r.status = $2
+		ORDER BY r.created_at ASC
+		LIMIT $3 OFFSET $4
+	`, neighborhoodID, statusFilter, limit, offset)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to list reports"})
+		return
+	}
+	defer rows.Close()
+
+	var reports []gin.H
+	for rows.Next() {
+		var rID, reporterID, targetID uuid.UUID
+		var violationType, description, status, reporterHandle, targetHandle string
+		var createdAt time.Time
+		if err := rows.Scan(&rID, &reporterID, &targetID, &violationType,
+			&description, &status, &createdAt,
+			&reporterHandle, &targetHandle); err != nil {
+			continue
+		}
+		reports = append(reports, gin.H{
+			"id": rID, "reporter_id": reporterID, "target_user_id": targetID,
+			"violation_type": violationType, "description": description,
+			"status": status, "created_at": createdAt,
+			"reporter_handle": reporterHandle, "target_handle": targetHandle,
+		})
+	}
+	if reports == nil {
+		reports = []gin.H{}
+	}
+	c.JSON(http.StatusOK, gin.H{"reports": reports})
+}
+
+// UpdateNeighborhoodReport updates a report scoped to a neighborhood.
+// PATCH /neighborhoods/:id/reports/:reportId
+func (h *NeighborhoodHandler) UpdateNeighborhoodReport(c *gin.Context) {
+	userIDStr, _ := c.Get("user_id")
+	userID, err := uuid.Parse(userIDStr.(string))
+	if err != nil {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "unauthorized"})
+		return
+	}
+
+	neighborhoodID, err := uuid.Parse(c.Param("id"))
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid neighborhood id"})
+		return
+	}
+
+	ctx := c.Request.Context()
+
+	// Same auth check as GetNeighborhoodReports
+	authorized := false
+	var userRole string
+	_ = h.pool.QueryRow(ctx, `SELECT role FROM profiles WHERE id = $1`, userID).Scan(&userRole)
+	if userRole == "superadmin" || userRole == "admin" {
+		authorized = true
+	}
+	if !authorized {
+		var groupRole string
+		err = h.pool.QueryRow(ctx, `
+			SELECT gm.role FROM group_members gm
+			JOIN neighborhood_seeds ns ON ns.group_id = gm.group_id
+			WHERE ns.id = $1 AND gm.user_id = $2
+		`, neighborhoodID, userID).Scan(&groupRole)
+		if err == nil && (groupRole == "admin" || groupRole == "owner") {
+			authorized = true
+		}
+	}
+	if !authorized {
+		c.JSON(http.StatusForbidden, gin.H{"error": "neighborhood admin or superadmin required"})
+		return
+	}
+
+	reportID := c.Param("reportId")
+	var req struct {
+		Status string `json:"status" binding:"required,oneof=reviewed dismissed actioned"`
+	}
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+
+	_, err = h.pool.Exec(ctx,
+		`UPDATE reports SET status = $1 WHERE id = $2::uuid AND neighborhood_id = $3`,
+		req.Status, reportID, neighborhoodID)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to update report"})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{"message": "Report updated"})
+}
+
 // seedRow is an internal struct for scanning neighborhood_seeds rows.
 type seedRow struct {
 	ID           uuid.UUID

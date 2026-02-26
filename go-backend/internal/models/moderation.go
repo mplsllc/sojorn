@@ -11,15 +11,17 @@ import (
 )
 
 type Report struct {
-	ID            uuid.UUID  `json:"id"`
-	ReporterID    uuid.UUID  `json:"reporter_id"`
-	TargetUserID  uuid.UUID  `json:"target_user_id"`
-	PostID        *uuid.UUID `json:"post_id,omitempty"`
-	CommentID     *uuid.UUID `json:"comment_id,omitempty"`
-	ViolationType string     `json:"violation_type"`
-	Description   string     `json:"description"`
-	Status        string     `json:"status"`
-	CreatedAt     time.Time  `json:"created_at"`
+	ID              uuid.UUID  `json:"id"`
+	ReporterID      uuid.UUID  `json:"reporter_id"`
+	TargetUserID    uuid.UUID  `json:"target_user_id"`
+	PostID          *uuid.UUID `json:"post_id,omitempty"`
+	CommentID       *uuid.UUID `json:"comment_id,omitempty"`
+	GroupID         *uuid.UUID `json:"group_id,omitempty"`
+	NeighborhoodID  *uuid.UUID `json:"neighborhood_id,omitempty"`
+	ViolationType   string     `json:"violation_type"`
+	Description     string     `json:"description"`
+	Status          string     `json:"status"`
+	CreatedAt       time.Time  `json:"created_at"`
 }
 
 type AbuseLog struct {

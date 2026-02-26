@@ -232,11 +232,12 @@ class ApiClient {
   }
 
   // Reports
-  async listReports(params: { limit?: number; offset?: number; status?: string } = {}) {
+  async listReports(params: { limit?: number; offset?: number; status?: string; context?: string } = {}) {
     const qs = new URLSearchParams();
     if (params.limit) qs.set('limit', String(params.limit));
     if (params.offset) qs.set('offset', String(params.offset));
     if (params.status) qs.set('status', params.status || 'pending');
+    if (params.context) qs.set('context', params.context);
     return this.request<any>(`/api/v1/admin/reports?${qs}`);
   }
 
@@ -783,6 +784,13 @@ class ApiClient {
 
   async removeGroupMember(groupId: string, userId: string) {
     return this.request<any>(`/api/v1/admin/groups/${groupId}/members/${userId}`, { method: 'DELETE' });
+  }
+
+  async updateGroupMemberRole(groupId: string, userId: string, role: string) {
+    return this.request<any>(`/api/v1/admin/groups/${groupId}/members/${userId}`, {
+      method: 'PATCH',
+      body: JSON.stringify({ role }),
+    });
   }
 
   // Quip repair

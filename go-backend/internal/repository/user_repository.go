@@ -421,14 +421,16 @@ func (r *UserRepository) GetBlockedUsers(ctx context.Context, userID string) ([]
 
 func (r *UserRepository) CreateReport(ctx context.Context, report *models.Report) error {
 	query := `
-		INSERT INTO public.reports (reporter_id, target_user_id, post_id, comment_id, violation_type, description, status)
-		VALUES ($1::uuid, $2::uuid, $3, $4, $5, $6, 'pending')
+		INSERT INTO public.reports (reporter_id, target_user_id, post_id, comment_id, group_id, neighborhood_id, violation_type, description, status)
+		VALUES ($1::uuid, $2::uuid, $3, $4, $5, $6, $7, $8, 'pending')
 	`
 	_, err := r.pool.Exec(ctx, query,
 		report.ReporterID,
 		report.TargetUserID,
 		report.PostID,
 		report.CommentID,
+		report.GroupID,
+		report.NeighborhoodID,
 		report.ViolationType,
 		report.Description,
 	)

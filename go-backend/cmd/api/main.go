@@ -582,6 +582,10 @@ func main() {
 				neighborhoods.GET("/search", neighborhoodHandler.SearchByZip)
 				neighborhoods.POST("/choose", neighborhoodHandler.Choose)
 				neighborhoods.GET("/mine", neighborhoodHandler.GetMyNeighborhood)
+
+				// Neighborhood moderation (admin/owner only)
+				neighborhoods.GET("/:id/reports", neighborhoodHandler.GetNeighborhoodReports)
+				neighborhoods.PATCH("/:id/reports/:reportId", neighborhoodHandler.UpdateNeighborhoodReport)
 			}
 
 			// Groups system (community groups with discovery and membership)
@@ -648,6 +652,14 @@ func main() {
 				capsules.DELETE("/:id", groupHandler.DeleteGroup)
 				capsules.POST("/:id/invite-member", groupHandler.InviteToGroup)
 				capsules.GET("/:id/search-users", groupHandler.SearchUsersForInvite)
+
+				// Reporting & moderation (group admins + members)
+				capsules.POST("/:id/entries/:entryId/report", groupHandler.ReportCapsuleEntry)
+				capsules.POST("/:id/messages/:messageId/report", groupHandler.ReportGroupMessage)
+				capsules.POST("/:id/posts/:postId/report", groupHandler.ReportGroupPost)
+				capsules.GET("/:id/reports", groupHandler.GetGroupReports)
+				capsules.PATCH("/:id/reports/:reportId", groupHandler.UpdateGroupReport)
+				capsules.DELETE("/:id/messages/:messageId", groupHandler.DeleteGroupMessage)
 			}
 
 			// Capsule key management (per-user encrypted key store)
@@ -869,6 +881,7 @@ func main() {
 		admin.DELETE("/groups/:id", adminHandler.AdminDeleteGroup)
 		admin.GET("/groups/:id/members", adminHandler.AdminListGroupMembers)
 		admin.DELETE("/groups/:id/members/:userId", adminHandler.AdminRemoveGroupMember)
+		admin.PATCH("/groups/:id/members/:userId", adminHandler.AdminUpdateMemberRole)
 
 		// Quip repair
 		admin.GET("/quips/broken", adminHandler.GetBrokenQuips)

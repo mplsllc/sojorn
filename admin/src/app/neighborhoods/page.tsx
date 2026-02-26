@@ -48,6 +48,9 @@ export default function NeighborhoodsPage() {
   const [boardLoading, setBoardLoading] = useState(false);
   const [boardSearch, setBoardSearch] = useState('');
   const [adminUserId, setAdminUserId] = useState('');
+  const [adminSearchQuery, setAdminSearchQuery] = useState('');
+  const [adminSearchResults, setAdminSearchResults] = useState<any[]>([]);
+  const [adminSearching, setAdminSearching] = useState(false);
   const [admins, setAdmins] = useState<NeighborhoodAdmin[]>([]);
   const [adminLoading, setAdminLoading] = useState(false);
   const [showCreate, setShowCreate] = useState(false);
@@ -122,9 +125,29 @@ export default function NeighborhoodsPage() {
     if (!selected || !adminUserId.trim()) return;
     await api.setNeighborhoodAdmin(selected.id, adminUserId.trim(), action);
     setAdminUserId('');
+    setAdminSearchQuery('');
+    setAdminSearchResults([]);
     fetchNeighborhoods();
     fetchNeighborhoodAdmins(selected.id);
     fetchBoardEntries(selected.id, boardSearch);
+  };
+
+  const searchAdminUsers = async (query: string) => {
+    setAdminSearchQuery(query);
+    setAdminUserId('');
+    if (query.length < 2) { setAdminSearchResults([]); return; }
+    setAdminSearching(true);
+    try {
+      const data = await api.listUsers({ search: query, limit: 10 });
+      setAdminSearchResults(data.users || []);
+    } catch { setAdminSearchResults([]); }
+    setAdminSearching(false);
+  };
+
+  const selectAdminUser = (user: any) => {
+    setAdminUserId(user.id);
+    setAdminSearchQuery(`@${user.handle || user.display_name || user.id}`);
+    setAdminSearchResults([]);
   };
 
   const removeAdminById = async (userId: string) => {
@@ -351,10 +374,37 @@ export default function NeighborhoodsPage() {
 
               <div className="border border-warm-300 rounded-lg p-3 bg-warm-50">
                 <p className="text-xs font-semibold uppercase tracking-wide text-gray-500 mb-2">Neighborhood Admins</p>
-                <div className="flex gap-2">
-                  <input className="input" placeholder="User ID to assign/remove" value={adminUserId} onChange={(e) => setAdminUserId(e.target.value)} />
-                  <button className="btn-primary text-sm" onClick={() => updateAdmin('assign')}><Shield className="w-4 h-4" />Assign</button>
-                  <button className="btn-secondary text-sm" onClick={() => updateAdmin('remove')}><ShieldOff className="w-4 h-4" />Remove</button>
+                <div className="relative">
+                  <div className="flex gap-2">
+                    <div className="relative flex-1">
+                      <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-gray-400" />
+                      <input
+                        className="input pl-8"
+                        placeholder="Search by handle or name..."
+                        value={adminSearchQuery}
+                        onChange={(e) => searchAdminUsers(e.target.value)}
+                        onFocus={() => { if (adminSearchQuery.length >= 2) searchAdminUsers(adminSearchQuery); }}
+                      />
+                      {adminSearchResults.length > 0 && (
+                        <div className="absolute z-20 left-0 right-0 top-full mt-1 bg-white border border-warm-300 rounded-lg shadow-lg max-h-48 overflow-y-auto">
+                          {adminSearchResults.map((u: any) => (
+                            <button
+                              key={u.id}
+                              type="button"
+                              className="w-full text-left px-3 py-2 hover:bg-warm-50 border-b border-warm-100 last:border-0"
+                              onClick={() => selectAdminUser(u)}
+                            >
+                              <p className="text-sm font-medium text-gray-900">{u.display_name || u.handle}</p>
+                              <p className="text-xs text-gray-500">@{u.handle} · {u.email}</p>
+                            </button>
+                          ))}
+                        </div>
+                      )}
+                      {adminSearching && <p className="absolute z-20 left-0 right-0 top-full mt-1 bg-white border border-warm-300 rounded-lg shadow-lg px-3 py-2 text-xs text-gray-500">Searching…</p>}
+                    </div>
+                    <button className="btn-primary text-sm whitespace-nowrap" disabled={!adminUserId} onClick={() => updateAdmin('assign')}><Shield className="w-4 h-4" />Assign</button>
+                    <button className="btn-secondary text-sm whitespace-nowrap" disabled={!adminUserId} onClick={() => updateAdmin('remove')}><ShieldOff className="w-4 h-4" />Remove</button>
+                  </div>
                 </div>
                 <div className="mt-3 rounded-lg border border-warm-300 bg-white overflow-hidden">
                   <div className="px-3 py-2 border-b border-warm-200 text-xs font-semibold text-gray-600">Current Moderators</div>

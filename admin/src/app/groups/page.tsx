@@ -8,7 +8,7 @@ import AdminShell from '@/components/AdminShell';
 import { api } from '@/lib/api';
 import { formatDate } from '@/lib/utils';
 import { useEffect, useState } from 'react';
-import { Search, Trash2, Users, RotateCcw, Pencil, Save, X } from 'lucide-react';
+import { Search, Trash2, Users, RotateCcw, Pencil, Save, X, Shield, ShieldOff } from 'lucide-react';
 
 export default function GroupsPage() {
   const [groups, setGroups] = useState<any[]>([]);
@@ -87,6 +87,17 @@ export default function GroupsPage() {
     try {
       await api.removeGroupMember(groupId, userId);
       setMembers((prev) => prev.filter((m) => m.user_id !== userId));
+    } catch (e: any) {
+      alert(e.message);
+    }
+  };
+
+  const toggleAdmin = async (userId: string, currentRole: string) => {
+    if (!selectedGroup) return;
+    const newRole = currentRole === 'admin' ? 'member' : 'admin';
+    try {
+      await api.updateGroupMemberRole(selectedGroup.id, userId, newRole);
+      setMembers((prev) => prev.map((m) => m.user_id === userId ? { ...m, role: newRole } : m));
     } catch (e: any) {
       alert(e.message);
     }
@@ -207,16 +218,34 @@ export default function GroupsPage() {
                   <li key={m.user_id} className="px-4 py-2.5 flex items-center justify-between text-sm">
                     <div>
                       <p className="font-medium text-gray-800">{m.username || m.display_name}</p>
-                      <p className="text-xs text-gray-400">{m.role}</p>
+                      <p className="text-xs text-gray-400 flex items-center gap-1">
+                        <span className={`inline-block px-1.5 py-0.5 rounded text-[10px] font-semibold ${
+                          m.role === 'owner' ? 'bg-purple-100 text-purple-700' :
+                          m.role === 'admin' ? 'bg-blue-100 text-blue-700' :
+                          'bg-gray-100 text-gray-600'
+                        }`}>{m.role}</span>
+                        <span>@{m.handle || m.username || '?'}</span>
+                      </p>
                     </div>
                     {m.role !== 'owner' && (
-                      <button
-                        onClick={() => removeMember(selectedGroup.id, m.user_id)}
-                        className="text-red-400 hover:text-red-600 p-1"
-                        title="Remove member"
-                      >
-                        <Trash2 className="w-3.5 h-3.5" />
-                      </button>
+                      <div className="flex items-center gap-1">
+                        <button
+                          type="button"
+                          onClick={() => toggleAdmin(m.user_id, m.role)}
+                          className={`p-1 ${m.role === 'admin' ? 'text-amber-500 hover:text-amber-700' : 'text-blue-500 hover:text-blue-700'}`}
+                          title={m.role === 'admin' ? 'Demote to member' : 'Promote to admin'}
+                        >
+                          {m.role === 'admin' ? <ShieldOff className="w-3.5 h-3.5" /> : <Shield className="w-3.5 h-3.5" />}
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => removeMember(selectedGroup.id, m.user_id)}
+                          className="text-red-400 hover:text-red-600 p-1"
+                          title="Remove member"
+                        >
+                          <Trash2 className="w-3.5 h-3.5" />
+                        </button>
+                      </div>
                     )}
                   </li>
                 ))}

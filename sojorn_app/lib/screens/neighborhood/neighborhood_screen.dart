@@ -6,6 +6,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/foundation.dart';
 import 'package:geolocator/geolocator.dart';
+import 'package:url_launcher/url_launcher.dart';
 
 import '../../models/board_entry.dart';
 import '../../models/group.dart';
@@ -90,7 +91,7 @@ class _NeighborhoodScreenState extends State<NeighborhoodScreen>
   @override
   void initState() {
     super.initState();
-    _tabController = TabController(length: 5, vsync: this);
+    _tabController = TabController(length: _isAdmin ? 6 : 5, vsync: this);
     _tabController.addListener(_onTabChanged);
     _currentUserId = AuthService.instance.currentUser?.id;
 
@@ -128,6 +129,10 @@ class _NeighborhoodScreenState extends State<NeighborhoodScreen>
       if (_tabController.index == 4 && _allMembers.isEmpty && !_isLoadingMembers) {
         _loadMembers();
       }
+      // Lazy-load mod tab
+      if (_isAdmin && _tabController.index == 5 && _modReports.isEmpty && !_modLoading) {
+        _loadModReports();
+      }
     }
   }
 
@@ -138,6 +143,7 @@ class _NeighborhoodScreenState extends State<NeighborhoodScreen>
   void _resolveRole() {
     final role = _neighborhood?['role'] as String?;
     final exileStatus = _neighborhood?['exile_status'] as String?;
+    final wasAdmin = _isAdmin;
 
     if (exileStatus == 'active') {
       _resolvedRole = 'exile';
@@ -149,6 +155,61 @@ class _NeighborhoodScreenState extends State<NeighborhoodScreen>
       _resolvedRole = 'resident';
     } else {
       _resolvedRole = 'visitor';
+    }
+
+    // Rebuild tab controller if admin status changed (adds/removes Mod tab)
+    if (_isAdmin != wasAdmin) {
+      final oldIndex = _tabController.index;
+      _tabController.removeListener(_onTabChanged);
+      _tabController.dispose();
+      _tabController = TabController(
+        length: _isAdmin ? 6 : 5,
+        vsync: this,
+        initialIndex: oldIndex.clamp(0, (_isAdmin ? 5 : 4)),
+      );
+      _tabController.addListener(_onTabChanged);
+      if (_isAdmin) _loadModReports();
+    }
+  }
+
+  // ══════════════════════════════════════════════════════════════════════════
+  // MODERATION DATA
+  // ══════════════════════════════════════════════════════════════════════════
+
+  List<Map<String, dynamic>> _modReports = [];
+  bool _modLoading = false;
+
+  Future<void> _loadModReports() async {
+    final nId = _getNeighborhoodId();
+    if (nId == null) return;
+    setState(() => _modLoading = true);
+    try {
+      final res = await ApiService.instance.callGoApi(
+        '/neighborhoods/$nId/reports?status=pending&limit=50',
+      );
+      if (mounted) {
+        setState(() {
+          _modReports = List<Map<String, dynamic>>.from(res['reports'] ?? []);
+          _modLoading = false;
+        });
+      }
+    } catch (_) {
+      if (mounted) setState(() => _modLoading = false);
+    }
+  }
+
+  Future<void> _actionModReport(String reportId, String status) async {
+    final nId = _getNeighborhoodId();
+    if (nId == null) return;
+    try {
+      await ApiService.instance.callGoApi(
+        '/neighborhoods/$nId/reports/$reportId',
+        method: 'PATCH',
+        body: {'status': status},
+      );
+      _loadModReports();
+    } catch (e) {
+      if (mounted) context.showError('Failed to update report');
     }
   }
 
@@ -343,6 +404,12 @@ class _NeighborhoodScreenState extends State<NeighborhoodScreen>
     return hoodData?['group_id'] as String?;
   }
 
+  String? _getNeighborhoodId() {
+    final hoodData =
+        _neighborhood?['neighborhood'] as Map<String, dynamic>?;
+    return hoodData?['id']?.toString();
+  }
+
   GroupRole? _getMappedRole() {
     // In neighborhoods, residents can create events (broader than groups)
     if (_resolvedRole == 'admin' || _resolvedRole == 'moderator' || _resolvedRole == 'resident') {
@@ -387,15 +454,18 @@ class _NeighborhoodScreenState extends State<NeighborhoodScreen>
     final tabBar = TabBar(
       controller: _tabController,
       indicatorColor: AppTheme.brightNavy,
+      indicatorWeight: 2.5,
       labelColor: AppTheme.navyText,
       unselectedLabelColor: SojornColors.textDisabled,
       labelStyle: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600),
-      tabs: const [
-        Tab(icon: Icon(Icons.dynamic_feed, size: 18), text: 'Feed'),
-        Tab(icon: Icon(Icons.chat_bubble, size: 18), text: 'Chat'),
-        Tab(icon: Icon(Icons.forum, size: 18), text: 'Forum'),
-        Tab(icon: Icon(Icons.event, size: 18), text: 'Events'),
-        Tab(icon: Icon(Icons.people, size: 18), text: 'Members'),
+      tabs: [
+        const Tab(icon: Icon(Icons.dynamic_feed, size: 18), text: 'Feed'),
+        const Tab(icon: Icon(Icons.chat_bubble, size: 18), text: 'Chat'),
+        const Tab(icon: Icon(Icons.forum, size: 18), text: 'Forum'),
+        const Tab(icon: Icon(Icons.event, size: 18), text: 'Events'),
+        const Tab(icon: Icon(Icons.people, size: 18), text: 'Members'),
+        if (_isAdmin)
+          const Tab(icon: Icon(Icons.shield, size: 18), text: 'Mod'),
       ],
     );
 
@@ -409,27 +479,35 @@ class _NeighborhoodScreenState extends State<NeighborhoodScreen>
             child: tabBar,
           ),
           Expanded(
-            child: Row(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Expanded(
-                  child: TabBarView(
-                    controller: _tabController,
-                    children: [
-                      _buildFeedTab(),
-                      _buildChatTab(),
-                      _buildForumTab(),
-                      _buildEventsTab(),
-                      _buildMembersTab(),
+            child: Center(
+              child: ConstrainedBox(
+                constraints: const BoxConstraints(maxWidth: 1100),
+                child: Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Expanded(
+                      child: TabBarView(
+                        controller: _tabController,
+                        children: [
+                          _buildFeedTab(),
+                          _buildChatTab(),
+                          _buildForumTab(),
+                          _buildEventsTab(),
+                          _buildMembersTab(),
+                          if (_isAdmin) _buildModTab(),
+                        ],
+                      ),
+                    ),
+                    if (showSidebar) ...[
+                      const SizedBox(width: 20),
+                      SizedBox(
+                        width: 260,
+                        child: _buildRightSidebar(activeNow, memberCount),
+                      ),
                     ],
-                  ),
+                  ],
                 ),
-                if (showSidebar)
-                  SizedBox(
-                    width: (totalWidth * 0.24).clamp(240.0, 300.0),
-                    child: _buildRightSidebar(activeNow, memberCount),
-                  ),
-              ],
+              ),
             ),
           ),
         ],
@@ -455,12 +533,15 @@ class _NeighborhoodScreenState extends State<NeighborhoodScreen>
       labelColor: AppTheme.navyText,
       unselectedLabelColor: SojornColors.textDisabled,
       labelStyle: const TextStyle(fontSize: 11, fontWeight: FontWeight.w600),
-      tabs: const [
-        Tab(icon: Icon(Icons.dynamic_feed, size: 16), text: 'Feed'),
-        Tab(icon: Icon(Icons.chat_bubble, size: 16), text: 'Chat'),
-        Tab(icon: Icon(Icons.forum, size: 16), text: 'Forum'),
-        Tab(icon: Icon(Icons.event, size: 16), text: 'Events'),
-        Tab(icon: Icon(Icons.people, size: 16), text: 'Members'),
+      isScrollable: _isAdmin, // scrollable when mod tab present
+      tabs: [
+        const Tab(icon: Icon(Icons.dynamic_feed, size: 16), text: 'Feed'),
+        const Tab(icon: Icon(Icons.chat_bubble, size: 16), text: 'Chat'),
+        const Tab(icon: Icon(Icons.forum, size: 16), text: 'Forum'),
+        const Tab(icon: Icon(Icons.event, size: 16), text: 'Events'),
+        const Tab(icon: Icon(Icons.people, size: 16), text: 'Members'),
+        if (_isAdmin)
+          const Tab(icon: Icon(Icons.shield, size: 16), text: 'Mod'),
       ],
     );
 
@@ -484,6 +565,7 @@ class _NeighborhoodScreenState extends State<NeighborhoodScreen>
             _buildForumTab(),
             _buildEventsTab(),
             _buildMembersTab(),
+            if (_isAdmin) _buildModTab(),
           ],
         ),
       ),
@@ -510,7 +592,8 @@ class _NeighborhoodScreenState extends State<NeighborhoodScreen>
     final bannerUrl = (_neighborhood?['neighborhood']
         as Map<String, dynamic>?)?['banner_url'] as String?;
     final hasBanner = bannerUrl != null && bannerUrl.isNotEmpty;
-    final height = compact ? 160.0 : 220.0;
+    final isDesktop = !compact;
+    final height = compact ? 160.0 : 110.0;
 
     return ClipRRect(
       borderRadius:
@@ -526,34 +609,42 @@ class _NeighborhoodScreenState extends State<NeighborhoodScreen>
               Image.network(bannerUrl, fit: BoxFit.cover)
             else
               Container(
-                decoration: BoxDecoration(
+                decoration: const BoxDecoration(
                   gradient: LinearGradient(
                     colors: [
-                      AppTheme.brightNavy,
-                      AppTheme.royalPurple.withValues(alpha: 0.85),
+                      Color(0xFF312E81),
+                      Color(0xFF4338CA),
+                      Color(0xFF6366F1),
+                      Color(0xFF818CF8),
                     ],
                     begin: Alignment.topLeft,
                     end: Alignment.bottomRight,
                   ),
                 ),
               ),
-            // Dark overlay
-            Container(
-              decoration: BoxDecoration(
-                gradient: LinearGradient(
-                  begin: Alignment.topCenter,
-                  end: Alignment.bottomCenter,
-                  colors: [
-                    Colors.transparent,
-                    Colors.black.withValues(alpha: 0.5)
-                  ],
-                  stops: const [0.3, 1.0],
+            // Dot pattern overlay
+            if (!hasBanner)
+              Positioned.fill(
+                child: CustomPaint(painter: _DotPatternPainter()),
+              ),
+            // Dark overlay (mobile only — desktop is tight enough)
+            if (!isDesktop)
+              Container(
+                decoration: BoxDecoration(
+                  gradient: LinearGradient(
+                    begin: Alignment.topCenter,
+                    end: Alignment.bottomCenter,
+                    colors: [
+                      Colors.transparent,
+                      Colors.black.withValues(alpha: 0.5)
+                    ],
+                    stops: const [0.3, 1.0],
+                  ),
                 ),
               ),
-            ),
             // Info overlay
             Positioned(
-              bottom: 20,
+              bottom: isDesktop ? 14 : 20,
               left: 24,
               right: 24,
               child: Column(
@@ -562,14 +653,14 @@ class _NeighborhoodScreenState extends State<NeighborhoodScreen>
                   Row(
                     children: [
                       Container(
-                        width: 40,
-                        height: 40,
+                        width: 48,
+                        height: 48,
                         decoration: BoxDecoration(
                           color: Colors.white.withValues(alpha: 0.2),
-                          borderRadius: BorderRadius.circular(10),
+                          borderRadius: BorderRadius.circular(12),
                         ),
                         child: const Icon(Icons.location_city,
-                            color: Colors.white, size: 22),
+                            color: Colors.white, size: 24),
                       ),
                       const SizedBox(width: 12),
                       Expanded(
@@ -577,8 +668,8 @@ class _NeighborhoodScreenState extends State<NeighborhoodScreen>
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
                             Text(name,
-                                style: const TextStyle(
-                                    fontSize: 22,
+                                style: TextStyle(
+                                    fontSize: isDesktop ? 20 : 22,
                                     fontWeight: FontWeight.w800,
                                     color: Colors.white),
                                 maxLines: 1,
@@ -586,68 +677,117 @@ class _NeighborhoodScreenState extends State<NeighborhoodScreen>
                             if (city.isNotEmpty)
                               Text(city,
                                   style: TextStyle(
-                                      fontSize: 14,
+                                      fontSize: isDesktop ? 12 : 14,
                                       color: Colors.white
                                           .withValues(alpha: 0.8))),
                           ],
                         ),
                       ),
-                    ],
-                  ),
-                  const SizedBox(height: 10),
-                  Row(
-                    children: [
-                      Icon(Icons.people,
-                          size: 14,
-                          color: Colors.white.withValues(alpha: 0.7)),
-                      const SizedBox(width: 5),
-                      Text('$memberCount members',
-                          style: TextStyle(
-                              fontSize: 13,
-                              color:
-                                  Colors.white.withValues(alpha: 0.85),
-                              fontWeight: FontWeight.w500)),
-                      const SizedBox(width: 12),
-                      Container(
-                        width: 7,
-                        height: 7,
-                        decoration: const BoxDecoration(
-                            color: Color(0xFF4CAF50),
-                            shape: BoxShape.circle),
-                      ),
-                      const SizedBox(width: 4),
-                      Text('$activeNow online',
-                          style: TextStyle(
-                              fontSize: 13,
-                              color:
-                                  Colors.white.withValues(alpha: 0.85),
-                              fontWeight: FontWeight.w500)),
-                      const SizedBox(width: 12),
-                      // Role badge
-                      Container(
-                        padding: const EdgeInsets.symmetric(
-                            horizontal: 8, vertical: 3),
-                        decoration: BoxDecoration(
-                          color: Colors.white.withValues(alpha: 0.2),
-                          borderRadius: BorderRadius.circular(999),
+                      // Stats inline on desktop
+                      if (isDesktop) ...[
+                        Icon(Icons.people,
+                            size: 14,
+                            color: Colors.white.withValues(alpha: 0.7)),
+                        const SizedBox(width: 5),
+                        Text('$memberCount',
+                            style: TextStyle(
+                                fontSize: 13,
+                                color: Colors.white.withValues(alpha: 0.85),
+                                fontWeight: FontWeight.w600)),
+                        const SizedBox(width: 12),
+                        Container(
+                          width: 7,
+                          height: 7,
+                          decoration: const BoxDecoration(
+                              color: Color(0xFF22C55E),
+                              shape: BoxShape.circle),
                         ),
-                        child: Text(
-                          _resolvedRole == 'admin'
-                              ? 'Admin'
-                              : _resolvedRole == 'moderator'
-                                  ? 'Moderator'
-                                  : _resolvedRole == 'visitor'
-                                      ? 'Visitor'
-                                      : 'Resident',
-                          style: TextStyle(
-                            fontSize: 10,
-                            fontWeight: FontWeight.w700,
-                            color: Colors.white.withValues(alpha: 0.9),
+                        const SizedBox(width: 4),
+                        Text('$activeNow',
+                            style: TextStyle(
+                                fontSize: 13,
+                                color: Colors.white.withValues(alpha: 0.85),
+                                fontWeight: FontWeight.w600)),
+                        const SizedBox(width: 12),
+                        Container(
+                          padding: const EdgeInsets.symmetric(
+                              horizontal: 8, vertical: 3),
+                          decoration: BoxDecoration(
+                            color: Colors.white.withValues(alpha: 0.2),
+                            borderRadius: BorderRadius.circular(999),
+                          ),
+                          child: Text(
+                            _resolvedRole == 'admin'
+                                ? 'Admin'
+                                : _resolvedRole == 'moderator'
+                                    ? 'Moderator'
+                                    : _resolvedRole == 'visitor'
+                                        ? 'Visitor'
+                                        : 'Resident',
+                            style: TextStyle(
+                              fontSize: 10,
+                              fontWeight: FontWeight.w700,
+                              color: Colors.white.withValues(alpha: 0.9),
+                            ),
                           ),
                         ),
-                      ),
+                      ],
                     ],
                   ),
+                  // Mobile-only bottom row
+                  if (!isDesktop) ...[
+                    const SizedBox(height: 10),
+                    Row(
+                      children: [
+                        Icon(Icons.people,
+                            size: 14,
+                            color: Colors.white.withValues(alpha: 0.7)),
+                        const SizedBox(width: 5),
+                        Text('$memberCount members',
+                            style: TextStyle(
+                                fontSize: 13,
+                                color: Colors.white.withValues(alpha: 0.85),
+                                fontWeight: FontWeight.w500)),
+                        const SizedBox(width: 12),
+                        Container(
+                          width: 7,
+                          height: 7,
+                          decoration: const BoxDecoration(
+                              color: Color(0xFF4CAF50),
+                              shape: BoxShape.circle),
+                        ),
+                        const SizedBox(width: 4),
+                        Text('$activeNow online',
+                            style: TextStyle(
+                                fontSize: 13,
+                                color: Colors.white.withValues(alpha: 0.85),
+                                fontWeight: FontWeight.w500)),
+                        const SizedBox(width: 12),
+                        Container(
+                          padding: const EdgeInsets.symmetric(
+                              horizontal: 8, vertical: 3),
+                          decoration: BoxDecoration(
+                            color: Colors.white.withValues(alpha: 0.2),
+                            borderRadius: BorderRadius.circular(999),
+                          ),
+                          child: Text(
+                            _resolvedRole == 'admin'
+                                ? 'Admin'
+                                : _resolvedRole == 'moderator'
+                                    ? 'Moderator'
+                                    : _resolvedRole == 'visitor'
+                                        ? 'Visitor'
+                                        : 'Resident',
+                            style: TextStyle(
+                              fontSize: 10,
+                              fontWeight: FontWeight.w700,
+                              color: Colors.white.withValues(alpha: 0.9),
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ],
                   // Visitor hint
                   if (_isVisitor) ...[
                     const SizedBox(height: 8),
@@ -881,6 +1021,37 @@ class _NeighborhoodScreenState extends State<NeighborhoodScreen>
     }
   }
 
+  Widget _buildSortPill(String value, String label) {
+    final isSelected = _boardSort == value;
+    return GestureDetector(
+      onTap: () {
+        if (!isSelected) {
+          setState(() => _boardSort = value);
+          _reloadBoard();
+        }
+      },
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 150),
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+        decoration: BoxDecoration(
+          color: isSelected ? AppTheme.cardSurface : Colors.transparent,
+          borderRadius: BorderRadius.circular(6),
+          boxShadow: isSelected
+              ? [BoxShadow(color: Colors.black.withValues(alpha: 0.06), blurRadius: 4, offset: const Offset(0, 1))]
+              : null,
+        ),
+        child: Text(
+          label,
+          style: TextStyle(
+            fontSize: 12,
+            fontWeight: isSelected ? FontWeight.w700 : FontWeight.w500,
+            color: isSelected ? AppTheme.navyText : SojornColors.textDisabled,
+          ),
+        ),
+      ),
+    );
+  }
+
   Widget _buildBoardHeader() {
     return Column(
       children: [
@@ -889,26 +1060,19 @@ class _NeighborhoodScreenState extends State<NeighborhoodScreen>
           child: Row(
             mainAxisAlignment: MainAxisAlignment.end,
             children: [
-              DropdownButtonHideUnderline(
-                child: DropdownButton<String>(
-                  value: _boardSort,
-                  isDense: true,
-                  style: TextStyle(
-                      fontSize: 11, color: AppTheme.navyText),
-                  items: const [
-                    DropdownMenuItem(
-                        value: 'new', child: Text('New')),
-                    DropdownMenuItem(
-                        value: 'top', child: Text('Top')),
-                    DropdownMenuItem(
-                        value: 'hot', child: Text('Hot')),
+              Container(
+                padding: const EdgeInsets.all(2),
+                decoration: BoxDecoration(
+                  color: AppTheme.scaffoldBg,
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    _buildSortPill('new', 'New'),
+                    _buildSortPill('hot', 'Hot'),
+                    _buildSortPill('top', 'Top'),
                   ],
-                  onChanged: (val) {
-                    if (val != null) {
-                      setState(() => _boardSort = val);
-                      _reloadBoard();
-                    }
-                  },
                 ),
               ),
             ],
@@ -999,29 +1163,61 @@ class _NeighborhoodScreenState extends State<NeighborhoodScreen>
   }
 
   Widget _buildForumDirectory() {
-    return ListView.separated(
-      padding: const EdgeInsets.fromLTRB(12, 12, 12, 20),
-      itemCount: BoardTopic.values.length,
-      separatorBuilder: (_, __) => const SizedBox(height: 8),
-      itemBuilder: (_, i) {
-        final topic = BoardTopic.values[i];
-        final count = _topicCounts[topic] ?? 0;
-        final desc = _topicDescriptions[topic] ?? '';
+    final activeSubs = BoardTopic.values.where((t) => (_topicCounts[t] ?? 0) > 0).toList();
+    final emptySubs = BoardTopic.values.where((t) => (_topicCounts[t] ?? 0) == 0).toList();
+    final allItems = <Widget>[];
 
-        return InkWell(
-          borderRadius: BorderRadius.circular(12),
-          onTap: () {
-            setState(() => _forumActiveTopic = topic);
-            _loadForumEntries(topic);
-          },
+    for (final topic in activeSubs) {
+      allItems.add(_buildForumDirectoryRow(topic, isActive: true));
+    }
+
+    if (emptySubs.isNotEmpty && activeSubs.isNotEmpty) {
+      allItems.add(Padding(
+        padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 14),
+        child: Row(
+          children: [
+            Expanded(child: Divider(color: AppTheme.navyBlue.withValues(alpha: 0.08))),
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 10),
+              child: Text('No posts yet — be the first',
+                  style: TextStyle(fontSize: 11, color: SojornColors.textDisabled, fontStyle: FontStyle.italic)),
+            ),
+            Expanded(child: Divider(color: AppTheme.navyBlue.withValues(alpha: 0.08))),
+          ],
+        ),
+      ));
+    }
+
+    for (final topic in emptySubs) {
+      allItems.add(_buildForumDirectoryRow(topic, isActive: false));
+    }
+
+    return ListView(
+      padding: const EdgeInsets.fromLTRB(12, 12, 12, 20),
+      children: allItems,
+    );
+  }
+
+  Widget _buildForumDirectoryRow(BoardTopic topic, {required bool isActive}) {
+    final count = _topicCounts[topic] ?? 0;
+    final desc = _topicDescriptions[topic] ?? '';
+
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 8),
+      child: _HoverHighlight(
+        borderRadius: BorderRadius.circular(12),
+        onTap: () {
+          setState(() => _forumActiveTopic = topic);
+          _loadForumEntries(topic);
+        },
+        child: Opacity(
+          opacity: isActive ? 1.0 : 0.65,
           child: Container(
-            padding: const EdgeInsets.symmetric(
-                horizontal: 14, vertical: 12),
+            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
             decoration: BoxDecoration(
               color: AppTheme.cardSurface,
               borderRadius: BorderRadius.circular(12),
-              border: Border.all(
-                  color: AppTheme.navyBlue.withValues(alpha: 0.08)),
+              border: Border.all(color: AppTheme.navyBlue.withValues(alpha: 0.08)),
             ),
             child: Row(
               children: [
@@ -1032,49 +1228,52 @@ class _NeighborhoodScreenState extends State<NeighborhoodScreen>
                     color: topic.color.withValues(alpha: 0.12),
                     borderRadius: BorderRadius.circular(12),
                   ),
-                  child: Icon(topic.icon,
-                      size: 22, color: topic.color),
+                  child: Icon(topic.icon, size: 22, color: topic.color),
                 ),
                 const SizedBox(width: 12),
                 Expanded(
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Text(
-                        topic.displayName,
-                        style: TextStyle(
-                          color: AppTheme.navyBlue,
-                          fontSize: 14,
-                          fontWeight: FontWeight.w700,
-                        ),
-                      ),
+                      Text(topic.displayName,
+                          style: TextStyle(
+                              color: AppTheme.navyBlue,
+                              fontSize: 14,
+                              fontWeight: FontWeight.w700)),
                       const SizedBox(height: 2),
                       Text(
-                        desc,
+                        isActive ? desc : 'Be the first to post!',
                         style: TextStyle(
                           color: SojornColors.textDisabled,
                           fontSize: 12,
+                          fontStyle: isActive ? FontStyle.normal : FontStyle.italic,
                         ),
                       ),
                     ],
                   ),
                 ),
-                Text(
-                  '$count',
-                  style: TextStyle(
-                    color: topic.color,
-                    fontSize: 13,
-                    fontWeight: FontWeight.w700,
-                  ),
-                ),
+                if (isActive)
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                    decoration: BoxDecoration(
+                      color: const Color(0xFF4338CA).withValues(alpha: 0.1),
+                      borderRadius: BorderRadius.circular(10),
+                    ),
+                    child: Text('$count',
+                        style: const TextStyle(
+                            color: Color(0xFF4338CA),
+                            fontSize: 12,
+                            fontWeight: FontWeight.w800)),
+                  )
+                else
+                  Text('0', style: TextStyle(color: SojornColors.textDisabled, fontSize: 12)),
                 const SizedBox(width: 4),
-                Icon(Icons.chevron_right,
-                    size: 18, color: SojornColors.textDisabled),
+                Icon(Icons.chevron_right, size: 18, color: SojornColors.textDisabled),
               ],
             ),
           ),
-        );
-      },
+        ),
+      ),
     );
   }
 
@@ -1431,6 +1630,169 @@ class _NeighborhoodScreenState extends State<NeighborhoodScreen>
   }
 
   // ══════════════════════════════════════════════════════════════════════════
+  // NEIGHBORHOOD REPORT SHEET
+  // ══════════════════════════════════════════════════════════════════════════
+
+  void _showNeighborhoodReportSheet() {
+    String? selectedType;
+    final descCtrl = TextEditingController();
+    bool submitting = false;
+
+    final issueTypes = {
+      'spam': 'Spam or unwanted content',
+      'harassment': 'Harassment or bullying',
+      'safety': 'Safety concern',
+      'inappropriate': 'Inappropriate content',
+      'other': 'Other',
+    };
+
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: AppTheme.cardSurface,
+      isScrollControlled: true,
+      builder: (ctx) => StatefulBuilder(
+        builder: (ctx, setSheetState) {
+          final hoodName = (_neighborhood?['neighborhood']
+              as Map<String, dynamic>?)?['name'] as String? ?? 'this neighborhood';
+          return Padding(
+            padding: EdgeInsets.fromLTRB(
+                20, 16, 20, MediaQuery.of(ctx).viewInsets.bottom + 16),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Center(
+                  child: Container(
+                      width: 40,
+                      height: 4,
+                      decoration: BoxDecoration(
+                          color: AppTheme.navyBlue.withValues(alpha: 0.15),
+                          borderRadius: BorderRadius.circular(2))),
+                ),
+                const SizedBox(height: 16),
+                Text('Report an Issue',
+                    style: TextStyle(
+                        color: AppTheme.navyBlue,
+                        fontSize: 16,
+                        fontWeight: FontWeight.w700)),
+                const SizedBox(height: 4),
+                Text('Report a problem in $hoodName',
+                    style: TextStyle(
+                        color: SojornColors.textDisabled, fontSize: 12)),
+                const SizedBox(height: 16),
+                // Issue type chips
+                Wrap(
+                  spacing: 8,
+                  runSpacing: 8,
+                  children: issueTypes.entries.map((e) {
+                    final selected = selectedType == e.key;
+                    return ChoiceChip(
+                      label: Text(e.value),
+                      selected: selected,
+                      onSelected: (_) =>
+                          setSheetState(() => selectedType = e.key),
+                      selectedColor: AppTheme.brightNavy,
+                      backgroundColor: AppTheme.scaffoldBg,
+                      labelStyle: TextStyle(
+                        fontSize: 12,
+                        fontWeight:
+                            selected ? FontWeight.w600 : FontWeight.w400,
+                        color: selected
+                            ? Colors.white
+                            : SojornColors.postContentLight,
+                      ),
+                      side: BorderSide(
+                        color: selected
+                            ? AppTheme.brightNavy
+                            : AppTheme.navyText.withValues(alpha: 0.15),
+                      ),
+                      visualDensity: VisualDensity.compact,
+                    );
+                  }).toList(),
+                ),
+                const SizedBox(height: 16),
+                TextField(
+                  controller: descCtrl,
+                  style: TextStyle(
+                      color: SojornColors.postContent, fontSize: 14),
+                  maxLines: 3,
+                  decoration: InputDecoration(
+                    hintText: 'Describe the issue (optional)',
+                    hintStyle: TextStyle(color: SojornColors.textDisabled),
+                    filled: true,
+                    fillColor: AppTheme.scaffoldBg,
+                    border: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(10),
+                        borderSide: BorderSide.none),
+                  ),
+                ),
+                const SizedBox(height: 16),
+                SizedBox(
+                  width: double.infinity,
+                  child: ElevatedButton(
+                    onPressed: selectedType == null || submitting
+                        ? null
+                        : () async {
+                            setSheetState(() => submitting = true);
+                            try {
+                              final groupId = _getGroupId() ?? '';
+                              final neighborhoodId = _getNeighborhoodId();
+                              await ApiService.instance.callGoApi(
+                                '/users/report',
+                                method: 'POST',
+                                body: {
+                                  'target_user_id': _currentUserId ?? '',
+                                  'violation_type': 'neighborhood_$selectedType',
+                                  'description':
+                                      '[Neighborhood: $hoodName (group:$groupId)] ${descCtrl.text.trim()}',
+                                  if (neighborhoodId != null)
+                                    'neighborhood_id': neighborhoodId,
+                                },
+                              );
+                              if (ctx.mounted) {
+                                Navigator.pop(ctx);
+                              }
+                              if (mounted) {
+                                context.showSuccess('Report submitted. Thank you.');
+                              }
+                            } catch (e) {
+                              if (mounted) {
+                                context.showError('Failed to submit report');
+                              }
+                            }
+                            if (ctx.mounted) {
+                              setSheetState(() => submitting = false);
+                            }
+                          },
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: AppTheme.brightNavy,
+                      foregroundColor: SojornColors.basicWhite,
+                      disabledBackgroundColor:
+                          AppTheme.brightNavy.withValues(alpha: 0.4),
+                      padding: const EdgeInsets.symmetric(vertical: 12),
+                      shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(10)),
+                    ),
+                    child: submitting
+                        ? const SizedBox(
+                            width: 18,
+                            height: 18,
+                            child: CircularProgressIndicator(
+                                strokeWidth: 2, color: Colors.white))
+                        : const Text('Submit Report',
+                            style: TextStyle(
+                                fontWeight: FontWeight.bold, fontSize: 15)),
+                  ),
+                ),
+              ],
+            ),
+          );
+        },
+      ),
+    );
+  }
+
+  // ══════════════════════════════════════════════════════════════════════════
   // EVENTS TAB
   // ══════════════════════════════════════════════════════════════════════════
 
@@ -1535,75 +1897,98 @@ class _NeighborhoodScreenState extends State<NeighborhoodScreen>
                           m['role'] as String? ?? 'member';
                       final isMe = m['user_id']?.toString() ==
                           _currentUserId;
+                      final isOnline = m['is_online'] as bool? ?? false;
                       final canManage = _myMemberRole == 'owner' ||
                           _myMemberRole == 'admin';
 
-                      return ListTile(
-                        onLongPress: canManage && !isMe
-                            ? () => _showMemberActions(m)
-                            : null,
+                      return _HoverHighlight(
+                        borderRadius: BorderRadius.circular(8),
                         onTap: canManage && !isMe
                             ? () => _showMemberActions(m)
                             : null,
-                        contentPadding:
-                            const EdgeInsets.symmetric(
-                                horizontal: 4, vertical: 2),
-                        leading: SojornAvatar(
-                          displayName: displayName.isNotEmpty
-                              ? displayName
-                              : handle,
-                          avatarUrl: avatarUrl.isNotEmpty
-                              ? avatarUrl
+                        child: ListTile(
+                          onLongPress: canManage && !isMe
+                              ? () => _showMemberActions(m)
                               : null,
-                          size: 40,
-                        ),
-                        title: Row(
-                          children: [
-                            Flexible(
-                              child: Text(
-                                displayName.isNotEmpty
+                          contentPadding:
+                              const EdgeInsets.symmetric(
+                                  horizontal: 4, vertical: 2),
+                          leading: Stack(
+                            clipBehavior: Clip.none,
+                            children: [
+                              SojornAvatar(
+                                displayName: displayName.isNotEmpty
                                     ? displayName
                                     : handle,
-                                style: TextStyle(
-                                    color: AppTheme.navyBlue,
-                                    fontWeight: FontWeight.w600,
-                                    fontSize: 14),
-                                overflow:
-                                    TextOverflow.ellipsis,
+                                avatarUrl: avatarUrl.isNotEmpty
+                                    ? avatarUrl
+                                    : null,
+                                size: 40,
                               ),
-                            ),
-                            if (isMe) ...[
-                              const SizedBox(width: 6),
-                              Text('(you)',
-                                  style: TextStyle(
-                                      color: SojornColors
-                                          .textDisabled,
-                                      fontSize: 11)),
+                              if (isOnline)
+                                Positioned(
+                                  right: -1,
+                                  bottom: -1,
+                                  child: Container(
+                                    width: 12,
+                                    height: 12,
+                                    decoration: BoxDecoration(
+                                      color: const Color(0xFF22C55E),
+                                      shape: BoxShape.circle,
+                                      border: Border.all(color: AppTheme.cardSurface, width: 2),
+                                    ),
+                                  ),
+                                ),
                             ],
-                          ],
-                        ),
-                        subtitle: Text('@$handle',
-                            style: TextStyle(
-                                color:
-                                    SojornColors.textDisabled,
-                                fontSize: 12)),
-                        trailing: Container(
-                          padding: const EdgeInsets.symmetric(
-                              horizontal: 8, vertical: 3),
-                          decoration: BoxDecoration(
-                            color: _roleColor(role)
-                                .withValues(alpha: 0.12),
-                            borderRadius:
-                                BorderRadius.circular(6),
                           ),
-                          child: Text(
-                            _roleName(role),
-                            style: TextStyle(
-                                color: _roleColor(role),
-                                fontSize: 10,
-                                fontWeight: FontWeight.w700,
-                                letterSpacing: 0.5),
+                          title: Row(
+                            children: [
+                              Flexible(
+                                child: Text(
+                                  displayName.isNotEmpty
+                                      ? displayName
+                                      : handle,
+                                  style: TextStyle(
+                                      color: AppTheme.navyBlue,
+                                      fontWeight: FontWeight.w600,
+                                      fontSize: 14),
+                                  overflow:
+                                      TextOverflow.ellipsis,
+                                ),
+                              ),
+                              if (isMe) ...[
+                                const SizedBox(width: 6),
+                                Text('(you)',
+                                    style: TextStyle(
+                                        color: SojornColors
+                                            .textDisabled,
+                                        fontSize: 11)),
+                              ],
+                              if (role == 'admin' || role == 'owner') ...[
+                                const SizedBox(width: 6),
+                                Container(
+                                  padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1),
+                                  decoration: BoxDecoration(
+                                    color: _roleColor(role).withValues(alpha: 0.15),
+                                    borderRadius: BorderRadius.circular(4),
+                                  ),
+                                  child: Text(
+                                    _roleName(role),
+                                    style: TextStyle(
+                                        color: _roleColor(role),
+                                        fontSize: 9,
+                                        fontWeight: FontWeight.w800,
+                                        letterSpacing: 0.5),
+                                  ),
+                                ),
+                              ],
+                            ],
                           ),
+                          subtitle: Text('@$handle',
+                              style: TextStyle(
+                                  color:
+                                      SojornColors.textDisabled,
+                                  fontSize: 12)),
                         ),
                       );
                     },
@@ -1612,6 +1997,147 @@ class _NeighborhoodScreenState extends State<NeighborhoodScreen>
         ),
       ],
     );
+  }
+
+  // ══════════════════════════════════════════════════════════════════════════
+  // MOD TAB (admin only)
+  // ══════════════════════════════════════════════════════════════════════════
+
+  Widget _buildModTab() {
+    if (_modLoading && _modReports.isEmpty) {
+      return const Center(child: CircularProgressIndicator());
+    }
+
+    if (_modReports.isEmpty) {
+      return Center(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(Icons.verified_user, size: 48, color: SojornColors.textDisabled.withValues(alpha: 0.4)),
+            const SizedBox(height: 12),
+            Text('No pending reports', style: TextStyle(color: SojornColors.textDisabled, fontSize: 14)),
+            const SizedBox(height: 4),
+            Text('All clear in this neighborhood', style: TextStyle(color: SojornColors.textDisabled.withValues(alpha: 0.6), fontSize: 12)),
+          ],
+        ),
+      );
+    }
+
+    return RefreshIndicator(
+      onRefresh: _loadModReports,
+      child: ListView.builder(
+        padding: const EdgeInsets.fromLTRB(12, 8, 12, 80),
+        itemCount: _modReports.length,
+        itemBuilder: (_, i) {
+          final r = _modReports[i];
+          final type = r['violation_type'] as String? ?? 'unknown';
+          final desc = r['description'] as String? ?? '';
+          final reporter = r['reporter_handle'] as String? ?? '?';
+          final target = r['target_handle'] as String? ?? '';
+          final createdAt = r['created_at'] as String? ?? '';
+          final reportId = r['id']?.toString() ?? '';
+
+          // Parse type for display
+          final displayType = type.replaceFirst('neighborhood_', '').replaceAll('_', ' ');
+
+          return Container(
+            margin: const EdgeInsets.only(bottom: 8),
+            decoration: BoxDecoration(
+              color: AppTheme.cardSurface,
+              borderRadius: BorderRadius.circular(SojornRadii.card),
+              border: Border.all(color: AppTheme.navyBlue.withValues(alpha: 0.08)),
+            ),
+            child: Padding(
+              padding: const EdgeInsets.all(14),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    children: [
+                      Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                        decoration: BoxDecoration(
+                          color: const Color(0xFFFFF3E0),
+                          borderRadius: BorderRadius.circular(6),
+                        ),
+                        child: Text(
+                          displayType,
+                          style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w700, color: Color(0xFFE65100)),
+                        ),
+                      ),
+                      const SizedBox(width: 8),
+                      Text('by @$reporter', style: TextStyle(fontSize: 11, color: SojornColors.textDisabled)),
+                      const Spacer(),
+                      if (createdAt.isNotEmpty)
+                        Text(
+                          _formatReportTime(createdAt),
+                          style: TextStyle(fontSize: 10, color: SojornColors.textDisabled),
+                        ),
+                    ],
+                  ),
+                  if (target.isNotEmpty) ...[
+                    const SizedBox(height: 6),
+                    Text('Target: @$target', style: TextStyle(fontSize: 12, color: SojornColors.postContentLight)),
+                  ],
+                  if (desc.isNotEmpty) ...[
+                    const SizedBox(height: 6),
+                    Text(
+                      desc,
+                      style: TextStyle(fontSize: 13, color: SojornColors.postContent),
+                      maxLines: 3,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  ],
+                  const SizedBox(height: 10),
+                  Row(
+                    children: [
+                      Expanded(
+                        child: OutlinedButton.icon(
+                          onPressed: () => _actionModReport(reportId, 'dismissed'),
+                          icon: const Icon(Icons.close, size: 16),
+                          label: const Text('Dismiss'),
+                          style: OutlinedButton.styleFrom(
+                            foregroundColor: SojornColors.textDisabled,
+                            side: BorderSide(color: AppTheme.navyBlue.withValues(alpha: 0.12)),
+                            padding: const EdgeInsets.symmetric(vertical: 8),
+                            textStyle: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600),
+                          ),
+                        ),
+                      ),
+                      const SizedBox(width: 8),
+                      Expanded(
+                        child: FilledButton.icon(
+                          onPressed: () => _actionModReport(reportId, 'actioned'),
+                          icon: const Icon(Icons.check, size: 16),
+                          label: const Text('Action'),
+                          style: FilledButton.styleFrom(
+                            backgroundColor: AppTheme.brightNavy,
+                            padding: const EdgeInsets.symmetric(vertical: 8),
+                            textStyle: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600),
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ],
+              ),
+            ),
+          );
+        },
+      ),
+    );
+  }
+
+  String _formatReportTime(String iso) {
+    try {
+      final dt = DateTime.parse(iso);
+      final diff = DateTime.now().difference(dt);
+      if (diff.inMinutes < 60) return '${diff.inMinutes}m ago';
+      if (diff.inHours < 24) return '${diff.inHours}h ago';
+      return '${diff.inDays}d ago';
+    } catch (_) {
+      return '';
+    }
   }
 
   Color _roleColor(String role) {
@@ -1867,12 +2393,32 @@ class _NeighborhoodScreenState extends State<NeighborhoodScreen>
                           '';
                       final avatarUrl =
                           m['avatar_url'] as String? ?? '';
-                      return SojornAvatar(
-                        displayName: displayName,
-                        avatarUrl: avatarUrl.isNotEmpty
-                            ? avatarUrl
-                            : null,
-                        size: 36,
+                      final isOnline = m['is_online'] as bool? ?? false;
+                      return Stack(
+                        clipBehavior: Clip.none,
+                        children: [
+                          SojornAvatar(
+                            displayName: displayName,
+                            avatarUrl: avatarUrl.isNotEmpty
+                                ? avatarUrl
+                                : null,
+                            size: 36,
+                          ),
+                          if (isOnline)
+                            Positioned(
+                              right: -1,
+                              bottom: -1,
+                              child: Container(
+                                width: 10,
+                                height: 10,
+                                decoration: BoxDecoration(
+                                  color: const Color(0xFF22C55E),
+                                  shape: BoxShape.circle,
+                                  border: Border.all(color: AppTheme.cardSurface, width: 2),
+                                ),
+                              ),
+                            ),
+                        ],
                       );
                     }).toList(),
                   ),
@@ -1954,7 +2500,56 @@ class _NeighborhoodScreenState extends State<NeighborhoodScreen>
               ),
             ),
           ],
+
+          // Quick Links
+          const SizedBox(height: 14),
+          _buildSidebarCard(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text('Quick Links',
+                    style: TextStyle(
+                        fontSize: 12,
+                        fontWeight: FontWeight.w700,
+                        color: AppTheme.navyText)),
+                const SizedBox(height: 8),
+                _buildQuickLink(Icons.menu_book_outlined, 'Community Guidelines', onTap: () {
+                  launchUrl(Uri.parse('https://sojorn.net/moderation'), mode: LaunchMode.externalApplication);
+                }),
+                _buildQuickLink(Icons.flag_outlined, 'Report an Issue', onTap: () {
+                  _showNeighborhoodReportSheet();
+                }),
+                _buildQuickLink(Icons.swap_horiz_outlined, 'Change Neighborhood', onTap: () async {
+                  final result = await NeighborhoodPickerSheet.show(context, isChangeMode: true);
+                  if (result != null && mounted) _loadData();
+                }),
+              ],
+            ),
+          ),
         ],
+      ),
+    );
+  }
+
+  Widget _buildQuickLink(IconData icon, String label, {VoidCallback? onTap}) {
+    return InkWell(
+      onTap: onTap ?? () {},
+      borderRadius: BorderRadius.circular(6),
+      child: Padding(
+        padding: const EdgeInsets.symmetric(vertical: 6),
+        child: Row(
+          children: [
+            Icon(icon, size: 14, color: AppTheme.navyText.withValues(alpha: 0.5)),
+            const SizedBox(width: 8),
+            Expanded(
+              child: Text(label,
+                  style: TextStyle(
+                      fontSize: 11,
+                      color: AppTheme.navyText.withValues(alpha: 0.7))),
+            ),
+            Icon(Icons.chevron_right, size: 14, color: SojornColors.textDisabled),
+          ],
+        ),
       ),
     );
   }
@@ -2036,179 +2631,236 @@ class _NeighborhoodScreenState extends State<NeighborhoodScreen>
     final authorName = entry.authorDisplayName.isNotEmpty
         ? entry.authorDisplayName
         : entry.authorHandle;
-    return GestureDetector(
+
+    // Extract title if body starts with ##
+    String? cardTitle;
+    String cardBody = entry.body;
+    if (entry.body.startsWith('## ')) {
+      final lines = entry.body.split('\n');
+      cardTitle = lines.first.substring(3).trim();
+      cardBody = lines.skip(1).join('\n').trim();
+    }
+
+    return _HoverCard(
       onTap: () => _openBoardEntry(entry),
-      child: Container(
-        padding: const EdgeInsets.all(12),
-        decoration: BoxDecoration(
-          color: entry.isPinned
-              ? AppTheme.brightNavy.withValues(alpha: 0.03)
-              : AppTheme.cardSurface,
-          borderRadius: BorderRadius.circular(SojornRadii.card),
-          border: Border.all(
-            color: entry.isPinned
-                ? AppTheme.brightNavy.withValues(alpha: 0.24)
-                : AppTheme.navyBlue.withValues(alpha: 0.08),
-          ),
-        ),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
+      child: IntrinsicHeight(
+        child: Row(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            Row(
-              children: [
-                Container(
-                  padding: const EdgeInsets.symmetric(
-                      horizontal: 7, vertical: 3),
-                  decoration: BoxDecoration(
-                    color: topicColor.withValues(alpha: 0.1),
-                    borderRadius: BorderRadius.circular(6),
-                  ),
-                  child: Row(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        Icon(entry.topic.icon,
-                            size: 11, color: topicColor),
-                        const SizedBox(width: 4),
-                        Text(entry.topic.displayName,
-                            style: TextStyle(
-                                fontSize: 10,
-                                fontWeight: FontWeight.w600,
-                                color: topicColor)),
-                      ]),
-                ),
-                if (entry.tag != null) ...[
-                  const SizedBox(width: 6),
-                  Container(
-                    padding: const EdgeInsets.symmetric(
-                        horizontal: 6, vertical: 2),
-                    decoration: BoxDecoration(
-                      color: entry.tag!.color
-                          .withValues(alpha: 0.12),
-                      borderRadius: BorderRadius.circular(4),
-                    ),
-                    child: Row(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          Icon(entry.tag!.icon,
-                              size: 10,
-                              color: entry.tag!.color),
-                          const SizedBox(width: 3),
-                          Text(entry.tag!.displayName,
-                              style: TextStyle(
-                                  fontSize: 9,
-                                  fontWeight: FontWeight.w700,
-                                  color: entry.tag!.color)),
-                        ]),
-                  ),
-                ],
-                if (entry.isPinned) ...[
-                  const SizedBox(width: 6),
-                  Icon(Icons.push_pin,
-                      size: 11, color: AppTheme.brightNavy),
-                ],
-                const Spacer(),
-                Text(entry.getTimeAgo(),
-                    style: TextStyle(
-                        color: SojornColors.textDisabled,
-                        fontSize: 10)),
-                if (_isNeighborhoodAdmin) ...[
-                  const SizedBox(width: 4),
-                  PopupMenuButton<String>(
-                    icon: Icon(Icons.more_vert,
-                        size: 14,
-                        color: SojornColors.textDisabled),
-                    iconSize: 14,
-                    padding: EdgeInsets.zero,
-                    onSelected: (action) =>
-                        _onAdminAction(action, entry),
-                    itemBuilder: (_) => [
-                      const PopupMenuItem(
-                          value: 'pin',
-                          child: Text('Pin post',
-                              style: TextStyle(fontSize: 13))),
-                      const PopupMenuItem(
-                          value: 'tag',
-                          child: Text('Set tag',
-                              style: TextStyle(fontSize: 13))),
-                      const PopupMenuItem(
-                          value: 'remove',
-                          child: Text('Remove post',
-                              style: TextStyle(fontSize: 13))),
-                    ],
-                  ),
-                ],
-              ],
-            ),
-            const SizedBox(height: 8),
-            Row(
-              children: [
-                SojornAvatar(
-                  displayName: authorName,
-                  avatarUrl: entry.authorAvatarUrl.isNotEmpty
-                      ? entry.authorAvatarUrl
-                      : null,
-                  size: 36,
-                ),
-                const SizedBox(width: 8),
-                Flexible(
-                  child: Text(authorName,
-                      style: TextStyle(
-                          color: SojornColors.postContent,
-                          fontSize: 14,
-                          fontWeight: FontWeight.w600),
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis),
-                ),
-              ],
-            ),
-            const SizedBox(height: 8),
-            Text(entry.body,
-                maxLines: 3,
-                overflow: TextOverflow.ellipsis,
-                style: TextStyle(
-                    color: SojornColors.postContentLight,
-                    fontSize: 15,
-                    height: 1.45)),
-            if (entry.imageUrl != null) ...[
-              const SizedBox(height: 8),
-              ClipRRect(
-                borderRadius: BorderRadius.circular(8),
-                child: Image.network(entry.imageUrl!,
-                    height: 120,
-                    width: double.infinity,
-                    fit: BoxFit.cover),
+            // Colored left border
+            Container(
+              width: 4,
+              decoration: BoxDecoration(
+                color: topicColor,
+                borderRadius: const BorderRadius.horizontal(left: Radius.circular(SojornRadii.card)),
               ),
-            ],
-            const SizedBox(height: 8),
-            Row(
-              children: [
-                Icon(
-                  entry.hasVoted
-                      ? Icons.arrow_upward
-                      : Icons.arrow_upward_outlined,
-                  size: 13,
-                  color: entry.hasVoted
-                      ? AppTheme.brightNavy
-                      : SojornColors.textDisabled,
+            ),
+            // Card content
+            Expanded(
+              child: Container(
+                padding: const EdgeInsets.all(12),
+                decoration: BoxDecoration(
+                  color: entry.isPinned
+                      ? AppTheme.brightNavy.withValues(alpha: 0.03)
+                      : AppTheme.cardSurface,
+                  borderRadius: const BorderRadius.horizontal(right: Radius.circular(SojornRadii.card)),
+                  border: Border.all(
+                    color: entry.isPinned
+                        ? AppTheme.brightNavy.withValues(alpha: 0.24)
+                        : AppTheme.navyBlue.withValues(alpha: 0.08),
+                  ),
                 ),
-                const SizedBox(width: 4),
-                Text('${entry.upvotes}',
-                    style: TextStyle(
-                        color: entry.hasVoted
-                            ? AppTheme.brightNavy
-                            : SojornColors.textDisabled,
-                        fontSize: 11,
-                        fontWeight: FontWeight.w600)),
-                const SizedBox(width: 12),
-                Icon(Icons.chat_bubble_outline,
-                    size: 12,
-                    color: SojornColors.textDisabled),
-                const SizedBox(width: 4),
-                Text('${entry.replyCount}',
-                    style: TextStyle(
-                        color: SojornColors.textDisabled,
-                        fontSize: 11)),
-              ],
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      children: [
+                        Container(
+                          padding: const EdgeInsets.symmetric(
+                              horizontal: 7, vertical: 3),
+                          decoration: BoxDecoration(
+                            color: topicColor.withValues(alpha: 0.1),
+                            borderRadius: BorderRadius.circular(6),
+                          ),
+                          child: Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                Icon(entry.topic.icon,
+                                    size: 11, color: topicColor),
+                                const SizedBox(width: 4),
+                                Text(entry.topic.displayName,
+                                    style: TextStyle(
+                                        fontSize: 10,
+                                        fontWeight: FontWeight.w600,
+                                        color: topicColor)),
+                              ]),
+                        ),
+                        if (entry.tag != null) ...[
+                          const SizedBox(width: 6),
+                          Container(
+                            padding: const EdgeInsets.symmetric(
+                                horizontal: 6, vertical: 2),
+                            decoration: BoxDecoration(
+                              color: entry.tag!.color
+                                  .withValues(alpha: 0.12),
+                              borderRadius: BorderRadius.circular(4),
+                            ),
+                            child: Row(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  Icon(entry.tag!.icon,
+                                      size: 10,
+                                      color: entry.tag!.color),
+                                  const SizedBox(width: 3),
+                                  Text(entry.tag!.displayName,
+                                      style: TextStyle(
+                                          fontSize: 9,
+                                          fontWeight: FontWeight.w700,
+                                          color: entry.tag!.color)),
+                                ]),
+                          ),
+                        ],
+                        if (entry.isPinned) ...[
+                          const SizedBox(width: 6),
+                          Icon(Icons.push_pin,
+                              size: 11, color: AppTheme.brightNavy),
+                        ],
+                        const Spacer(),
+                        Text(entry.getTimeAgo(),
+                            style: TextStyle(
+                                color: SojornColors.textDisabled,
+                                fontSize: 10)),
+                        if (_isNeighborhoodAdmin) ...[
+                          const SizedBox(width: 4),
+                          PopupMenuButton<String>(
+                            icon: Icon(Icons.more_vert,
+                                size: 14,
+                                color: SojornColors.textDisabled),
+                            iconSize: 14,
+                            padding: EdgeInsets.zero,
+                            onSelected: (action) =>
+                                _onAdminAction(action, entry),
+                            itemBuilder: (_) => [
+                              const PopupMenuItem(
+                                  value: 'pin',
+                                  child: Text('Pin post',
+                                      style: TextStyle(fontSize: 13))),
+                              const PopupMenuItem(
+                                  value: 'tag',
+                                  child: Text('Set tag',
+                                      style: TextStyle(fontSize: 13))),
+                              const PopupMenuItem(
+                                  value: 'remove',
+                                  child: Text('Remove post',
+                                      style: TextStyle(fontSize: 13))),
+                            ],
+                          ),
+                        ],
+                      ],
+                    ),
+                    const SizedBox(height: 8),
+                    Row(
+                      children: [
+                        SojornAvatar(
+                          displayName: authorName,
+                          avatarUrl: entry.authorAvatarUrl.isNotEmpty
+                              ? entry.authorAvatarUrl
+                              : null,
+                          size: 36,
+                        ),
+                        const SizedBox(width: 8),
+                        Flexible(
+                          child: Text(authorName,
+                              style: TextStyle(
+                                  color: SojornColors.postContent,
+                                  fontSize: 14,
+                                  fontWeight: FontWeight.w600),
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 8),
+                    if (cardTitle != null) ...[
+                      Text(cardTitle,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: TextStyle(
+                              color: AppTheme.navyBlue,
+                              fontSize: 15,
+                              fontWeight: FontWeight.w700,
+                              height: 1.3)),
+                      if (cardBody.isNotEmpty) ...[
+                        const SizedBox(height: 4),
+                        Text(cardBody,
+                            maxLines: 2,
+                            overflow: TextOverflow.ellipsis,
+                            style: TextStyle(
+                                color: SojornColors.postContentLight,
+                                fontSize: 14,
+                                height: 1.4)),
+                      ],
+                    ] else
+                      Text(cardBody,
+                          maxLines: 3,
+                          overflow: TextOverflow.ellipsis,
+                          style: TextStyle(
+                              color: SojornColors.postContentLight,
+                              fontSize: 15,
+                              height: 1.45)),
+                    if (entry.imageUrl != null) ...[
+                      const SizedBox(height: 8),
+                      ClipRRect(
+                        borderRadius: BorderRadius.circular(8),
+                        child: Image.network(entry.imageUrl!,
+                            height: 120,
+                            width: double.infinity,
+                            fit: BoxFit.cover),
+                      ),
+                    ],
+                    const SizedBox(height: 8),
+                    Row(
+                      children: [
+                        Icon(
+                          entry.hasVoted
+                              ? Icons.arrow_upward
+                              : Icons.arrow_upward_outlined,
+                          size: 13,
+                          color: entry.hasVoted
+                              ? AppTheme.brightNavy
+                              : SojornColors.textDisabled,
+                        ),
+                        const SizedBox(width: 4),
+                        Text('${entry.upvotes}',
+                            style: TextStyle(
+                                color: entry.hasVoted
+                                    ? AppTheme.brightNavy
+                                    : SojornColors.textDisabled,
+                                fontSize: 11,
+                                fontWeight: FontWeight.w600)),
+                        const SizedBox(width: 12),
+                        Icon(Icons.chat_bubble_outline,
+                            size: 12,
+                            color: SojornColors.textDisabled),
+                        const SizedBox(width: 4),
+                        Text('${entry.replyCount}',
+                            style: TextStyle(
+                                color: SojornColors.textDisabled,
+                                fontSize: 11)),
+                        const Spacer(),
+                        IconButton(
+                          icon: Icon(Icons.share_outlined,
+                              size: 14, color: SojornColors.textDisabled),
+                          onPressed: () {},
+                          padding: EdgeInsets.zero,
+                          constraints: const BoxConstraints(minWidth: 28, minHeight: 28),
+                          visualDensity: VisualDensity.compact,
+                        ),
+                      ],
+                    ),
+                  ],
+                ),
+              ),
             ),
           ],
         ),
@@ -2217,16 +2869,40 @@ class _NeighborhoodScreenState extends State<NeighborhoodScreen>
   }
 
   void _openBoardEntry(BoardEntry entry) async {
-    final updated = await Navigator.of(context).push<BoardEntry>(
-        MaterialPageRoute(
-            builder: (_) =>
-                BoardEntryDetailScreen(entry: entry)));
+    final isDesktop = MediaQuery.of(context).size.width >= 900;
+    BoardEntry? updated;
+    if (isDesktop) {
+      updated = await showDialog<BoardEntry>(
+        context: context,
+        barrierDismissible: true,
+        barrierColor: Colors.black38,
+        builder: (_) => Dialog(
+          insetPadding: const EdgeInsets.symmetric(horizontal: 80, vertical: 40),
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(SojornRadii.modal),
+          ),
+          clipBehavior: Clip.antiAlias,
+          child: ConstrainedBox(
+            constraints: BoxConstraints(
+              maxWidth: 600,
+              maxHeight: MediaQuery.of(context).size.height - 80,
+            ),
+            child: BoardEntryDetailScreen(entry: entry),
+          ),
+        ),
+      );
+    } else {
+      updated = await Navigator.of(context).push<BoardEntry>(
+          MaterialPageRoute(
+              builder: (_) =>
+                  BoardEntryDetailScreen(entry: entry)));
+    }
     if (updated != null && mounted) {
       final idx =
-          _boardEntries.indexWhere((e) => e.id == updated.id);
+          _boardEntries.indexWhere((e) => e.id == updated!.id);
       if (idx >= 0) {
         setState(() {
-          _boardEntries[idx] = updated;
+          _boardEntries[idx] = updated!;
           _recomputeStats();
         });
       }
@@ -2393,4 +3069,102 @@ class _TabBarDelegate extends SliverPersistentHeaderDelegate {
 
   @override
   bool shouldRebuild(covariant _TabBarDelegate oldDelegate) => false;
+}
+
+// ══════════════════════════════════════════════════════════════════════════
+// Dot pattern painter for hero banner
+// ══════════════════════════════════════════════════════════════════════════
+
+class _DotPatternPainter extends CustomPainter {
+  @override
+  void paint(Canvas canvas, Size size) {
+    final paint = Paint()
+      ..color = Colors.white.withValues(alpha: 0.06)
+      ..style = PaintingStyle.fill;
+    const spacing = 40.0;
+    const radius = 1.5;
+    for (double x = 0; x < size.width; x += spacing) {
+      for (double y = 0; y < size.height; y += spacing) {
+        canvas.drawCircle(Offset(x, y), radius, paint);
+      }
+    }
+  }
+
+  @override
+  bool shouldRepaint(covariant CustomPainter oldDelegate) => false;
+}
+
+// ══════════════════════════════════════════════════════════════════════════
+// Hover card with shadow lift
+// ══════════════════════════════════════════════════════════════════════════
+
+class _HoverCard extends StatefulWidget {
+  final Widget child;
+  final VoidCallback onTap;
+  const _HoverCard({required this.child, required this.onTap});
+
+  @override
+  State<_HoverCard> createState() => _HoverCardState();
+}
+
+class _HoverCardState extends State<_HoverCard> {
+  bool _hovered = false;
+
+  @override
+  Widget build(BuildContext context) {
+    return MouseRegion(
+      onEnter: (_) => setState(() => _hovered = true),
+      onExit: (_) => setState(() => _hovered = false),
+      child: GestureDetector(
+        onTap: widget.onTap,
+        child: AnimatedContainer(
+          duration: const Duration(milliseconds: 150),
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(SojornRadii.card),
+            boxShadow: _hovered
+                ? [BoxShadow(color: Colors.black.withValues(alpha: 0.08), blurRadius: 8, offset: const Offset(0, 2))]
+                : [],
+          ),
+          child: widget.child,
+        ),
+      ),
+    );
+  }
+}
+
+// ══════════════════════════════════════════════════════════════════════════
+// Hover highlight for rows (forum directory, member list)
+// ══════════════════════════════════════════════════════════════════════════
+
+class _HoverHighlight extends StatefulWidget {
+  final Widget child;
+  final BorderRadius borderRadius;
+  final VoidCallback? onTap;
+  const _HoverHighlight({required this.child, required this.borderRadius, this.onTap});
+
+  @override
+  State<_HoverHighlight> createState() => _HoverHighlightState();
+}
+
+class _HoverHighlightState extends State<_HoverHighlight> {
+  bool _hovered = false;
+
+  @override
+  Widget build(BuildContext context) {
+    return MouseRegion(
+      onEnter: (_) => setState(() => _hovered = true),
+      onExit: (_) => setState(() => _hovered = false),
+      child: GestureDetector(
+        onTap: widget.onTap,
+        child: AnimatedContainer(
+          duration: const Duration(milliseconds: 120),
+          decoration: BoxDecoration(
+            color: _hovered ? const Color(0xFF4338CA).withValues(alpha: 0.04) : Colors.transparent,
+            borderRadius: widget.borderRadius,
+          ),
+          child: widget.child,
+        ),
+      ),
+    );
+  }
 }

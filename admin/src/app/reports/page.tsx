@@ -9,26 +9,34 @@ import SelectionBar from '@/components/SelectionBar';
 import { api } from '@/lib/api';
 import { statusColor, formatDateTime } from '@/lib/utils';
 import { useEffect, useState } from 'react';
-import { Flag, CheckCircle, XCircle, AlertTriangle } from 'lucide-react';
+import { Flag, CheckCircle, XCircle, AlertTriangle, Building2, Users, MessageSquare } from 'lucide-react';
 import Link from 'next/link';
+
+const contextFilters = [
+  { value: '', label: 'All Reports' },
+  { value: 'user', label: 'User Reports' },
+  { value: 'neighborhood', label: 'Neighborhood' },
+  { value: 'group', label: 'Group / Capsule' },
+];
 
 export default function ReportsPage() {
   const [reports, setReports] = useState<any[]>([]);
   const [total, setTotal] = useState(0);
   const [loading, setLoading] = useState(true);
   const [statusFilter, setStatusFilter] = useState('pending');
+  const [contextFilter, setContextFilter] = useState('');
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [bulkLoading, setBulkLoading] = useState(false);
 
   const fetchReports = () => {
     setLoading(true);
-    api.listReports({ limit: 50, status: statusFilter })
+    api.listReports({ limit: 50, status: statusFilter, context: contextFilter || undefined })
       .then((data) => { setReports(data.reports); setTotal(data.total); })
       .catch(() => {})
       .finally(() => setLoading(false));
   };
 
-  useEffect(() => { fetchReports(); }, [statusFilter]);
+  useEffect(() => { fetchReports(); }, [statusFilter, contextFilter]);
 
   const handleUpdate = async (id: string, status: string) => {
     try {
@@ -70,6 +78,23 @@ export default function ReportsPage() {
         </select>
       </div>
 
+      <div className="mb-4 flex gap-2">
+        {contextFilters.map((f) => (
+          <button
+            key={f.value}
+            type="button"
+            onClick={() => setContextFilter(f.value)}
+            className={`px-3 py-1.5 rounded-full text-xs font-medium transition-colors ${
+              contextFilter === f.value
+                ? 'bg-brand-600 text-white'
+                : 'bg-warm-200 text-gray-600 hover:bg-warm-300'
+            }`}
+          >
+            {f.label}
+          </button>
+        ))}
+      </div>
+
       {statusFilter === 'pending' && (
         <SelectionBar
           count={selected.size}
@@ -107,6 +132,7 @@ export default function ReportsPage() {
                 <th className="table-header">Reporter</th>
                 <th className="table-header">Target</th>
                 <th className="table-header">Type</th>
+                <th className="table-header">Context</th>
                 <th className="table-header">Description</th>
                 <th className="table-header">Content</th>
                 <th className="table-header">Status</th>
@@ -136,6 +162,21 @@ export default function ReportsPage() {
                     <span className="badge bg-orange-50 text-orange-700">
                       <AlertTriangle className="w-3 h-3 mr-1" />{report.violation_type}
                     </span>
+                  </td>
+                  <td className="table-cell">
+                    {report.group_name && (
+                      <span className="badge bg-purple-50 text-purple-700 text-xs">
+                        <MessageSquare className="w-3 h-3 mr-1" />{report.group_name}
+                      </span>
+                    )}
+                    {report.neighborhood_name && (
+                      <span className="badge bg-blue-50 text-blue-700 text-xs">
+                        <Building2 className="w-3 h-3 mr-1" />{report.neighborhood_name}
+                      </span>
+                    )}
+                    {!report.group_name && !report.neighborhood_name && (
+                      <span className="text-xs text-gray-400">—</span>
+                    )}
                   </td>
                   <td className="table-cell max-w-xs">
                     <p className="text-sm text-gray-700 line-clamp-2">{report.description}</p>
