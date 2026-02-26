@@ -456,8 +456,10 @@ class BeaconScreenState extends ConsumerState<BeaconScreen> with TickerProviderS
         setState(() {
           _allBeaconPosts = allPosts.where((p) => p.isBeaconPost).toList();
 
-          // Split into sub-lists by beacon_type and official status
-          const layerTypes = {BeaconType.camera, BeaconType.sign, BeaconType.weatherStation};
+          // Split into sub-lists by beacon_type and official status.
+          // Cameras are intentionally NOT in layerTypes — they cluster with
+          // officialPosts so they appear at all zoom levels statewide.
+          const layerTypes = {BeaconType.sign, BeaconType.weatherStation};
           _beacons = _allBeaconPosts
               .where((p) => p.isOfficial != true && !layerTypes.contains(p.beaconType))
               .toList()
@@ -607,6 +609,10 @@ class BeaconScreenState extends ConsumerState<BeaconScreen> with TickerProviderS
   }
 
   void _onMarkerTap(Post post) {
+    if (post.beaconType == BeaconType.camera) {
+      _showCameraSheet(post.toBeacon());
+      return;
+    }
     openDesktopDialog(
       context,
       width: 700,
