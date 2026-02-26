@@ -1347,57 +1347,56 @@ class BeaconScreenState extends ConsumerState<BeaconScreen> with TickerProviderS
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          // Row 1: weather + action buttons
+          // Single row: weather + layer chips + location button
           Row(
             children: [
               // Weather chip — frosted glass
               if (_weather != null)
-                ClipRRect(
-                  borderRadius: BorderRadius.circular(22),
-                  child: BackdropFilter(
-                    filter: ImageFilter.blur(sigmaX: 18, sigmaY: 18),
-                    child: Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
-                      decoration: BoxDecoration(
-                        color: SojornColors.basicWhite.withValues(alpha: 0.28),
-                        borderRadius: BorderRadius.circular(22),
-                        border: Border.all(
-                          color: SojornColors.basicWhite.withValues(alpha: 0.55),
-                          width: 1.0,
+                Padding(
+                  padding: const EdgeInsets.only(right: 6),
+                  child: ClipRRect(
+                    borderRadius: BorderRadius.circular(22),
+                    child: BackdropFilter(
+                      filter: ImageFilter.blur(sigmaX: 18, sigmaY: 18),
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                        decoration: BoxDecoration(
+                          color: SojornColors.basicWhite.withValues(alpha: 0.28),
+                          borderRadius: BorderRadius.circular(22),
+                          border: Border.all(
+                            color: SojornColors.basicWhite.withValues(alpha: 0.55),
+                            width: 1.0,
+                          ),
+                          boxShadow: [
+                            BoxShadow(color: SojornColors.basicBlack.withValues(alpha: 0.10), blurRadius: 10),
+                          ],
                         ),
-                        boxShadow: [
-                          BoxShadow(color: SojornColors.basicBlack.withValues(alpha: 0.10), blurRadius: 10),
-                        ],
-                      ),
-                      child: Row(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          Icon(_weatherIcon(_weather!.weatherCode), size: 17,
-                            color: AppTheme.navyBlue.withValues(alpha: 0.85)),
-                          const SizedBox(width: 6),
-                          Text('${_weather!.temperature.round()}°F',
-                            style: TextStyle(
-                              color: AppTheme.navyBlue,
-                              fontSize: 15,
-                              fontWeight: FontWeight.w800,
-                            )),
-                        ],
+                        child: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Icon(_weatherIcon(_weather!.weatherCode), size: 15,
+                              color: AppTheme.navyBlue.withValues(alpha: 0.85)),
+                            const SizedBox(width: 4),
+                            Text('${_weather!.temperature.round()}°F',
+                              style: TextStyle(
+                                color: AppTheme.navyBlue,
+                                fontSize: 13,
+                                fontWeight: FontWeight.w800,
+                              )),
+                          ],
+                        ),
                       ),
                     ),
                   ),
                 ),
-              const Spacer(),
+              // Layer filter chips — fills remaining space
+              Expanded(child: _buildMapLayerChips()),
+              const SizedBox(width: 6),
               // My location button
               _mapIconButton(Icons.my_location,
                 onTap: _isLoadingLocation ? null : () => _getCurrentLocation(forceCenter: true)),
-              const SizedBox(width: 8),
-              // Refresh button — bypasses distance/age cache
-              _mapIconButton(Icons.refresh, onTap: () => _loadBeacons(force: true)),
             ],
           ),
-          const SizedBox(height: 8),
-          // Row 2: layer filter chips — full width so they never overflow
-          _buildMapLayerChips(),
         ],
       ),
     );
@@ -1408,18 +1407,18 @@ class BeaconScreenState extends ConsumerState<BeaconScreen> with TickerProviderS
     return GestureDetector(
       onTap: onTap,
       child: ClipRRect(
-        borderRadius: BorderRadius.circular(18),
+        borderRadius: BorderRadius.circular(16),
         child: BackdropFilter(
           filter: ImageFilter.blur(sigmaX: 12, sigmaY: 12),
           child: Container(
-            width: 36, height: 36,
+            width: 32, height: 32,
             decoration: BoxDecoration(
               color: SojornColors.basicWhite.withValues(alpha: 0.70),
               shape: BoxShape.circle,
               border: Border.all(color: SojornColors.basicWhite.withValues(alpha: 0.5), width: 0.5),
               boxShadow: [BoxShadow(color: SojornColors.basicBlack.withValues(alpha: 0.08), blurRadius: 6)],
             ),
-            child: Icon(icon, size: 18, color: AppTheme.navyBlue.withValues(alpha: 0.75)),
+            child: Icon(icon, size: 16, color: AppTheme.navyBlue.withValues(alpha: 0.75)),
           ),
         ),
       ),
@@ -1468,8 +1467,8 @@ class BeaconScreenState extends ConsumerState<BeaconScreen> with TickerProviderS
       child: BackdropFilter(
         filter: ImageFilter.blur(sigmaX: 10, sigmaY: 10),
         child: Container(
-          height: 36,
-          padding: const EdgeInsets.symmetric(horizontal: 6),
+          height: 32,
+          padding: const EdgeInsets.symmetric(horizontal: 4),
           decoration: BoxDecoration(
             color: Colors.white.withValues(alpha: 0.82),
             borderRadius: BorderRadius.circular(22),
@@ -1483,7 +1482,7 @@ class BeaconScreenState extends ConsumerState<BeaconScreen> with TickerProviderS
             ],
           ),
           child: Row(
-            mainAxisSize: MainAxisSize.min,
+            mainAxisAlignment: MainAxisAlignment.spaceEvenly,
             children: _mapLayerGroups.map((group) {
               final isVisible =
                   !group.types.every((t) => _hiddenTypes.contains(t));
@@ -1497,9 +1496,9 @@ class BeaconScreenState extends ConsumerState<BeaconScreen> with TickerProviderS
                 }),
                 child: AnimatedContainer(
                   duration: const Duration(milliseconds: 150),
-                  margin: const EdgeInsets.symmetric(horizontal: 2),
+                  margin: const EdgeInsets.symmetric(horizontal: 1),
                   padding:
-                      const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                      const EdgeInsets.symmetric(horizontal: 6, vertical: 3),
                   decoration: BoxDecoration(
                     color: isVisible
                         ? group.color.withValues(alpha: 0.12)
@@ -1517,16 +1516,16 @@ class BeaconScreenState extends ConsumerState<BeaconScreen> with TickerProviderS
                     children: [
                       Icon(
                         group.icon,
-                        size: 12,
+                        size: 11,
                         color: isVisible
                             ? group.color
                             : Colors.grey.withValues(alpha: 0.55),
                       ),
-                      const SizedBox(width: 3),
+                      const SizedBox(width: 2),
                       Text(
                         group.label,
                         style: TextStyle(
-                          fontSize: 11,
+                          fontSize: 10,
                           fontWeight: FontWeight.w600,
                           color: isVisible
                               ? group.color
