@@ -424,14 +424,23 @@ class BeaconScreenState extends ConsumerState<BeaconScreen> with TickerProviderS
     _lastLoadCenter = target;
     _lastLoadTime = DateTime.now();
 
-    debugPrint('[Beacon] loadBeacons lat=${target.latitude.toStringAsFixed(4)} lng=${target.longitude.toStringAsFixed(4)} radius=16000');
+    debugPrint('[Beacon] loadBeacons lat=${target.latitude.toStringAsFixed(4)} lng=${target.longitude.toStringAsFixed(4)}');
     setState(() => _isLoading = true);
     try {
       final apiService = ref.read(apiServiceProvider);
+      // Use viewport diagonal as radius so cameras/signs fill the whole screen.
+      // Falls back to 40km if bounds aren't available yet (first load).
+      int radius = 40000;
+      try {
+        final bounds = _mapController.camera.visibleBounds;
+        final diagMeters = _haversineMeters(bounds.southWest, bounds.northEast);
+        radius = (diagMeters / 2 * 1.2).round().clamp(16000, 100000);
+      } catch (_) {}
+
       final allPosts = await apiService.fetchUnifiedBeacons(
         lat: target.latitude,
         long: target.longitude,
-        radius: 16000,
+        radius: radius,
       );
       debugPrint('[Beacon] fetched ${allPosts.length} unified beacons');
 
@@ -3874,7 +3883,7 @@ class _SignDetailSheet extends StatelessWidget {
             ClipRRect(
               borderRadius: BorderRadius.circular(10),
               child: Image.network(
-                '${ApiConfig.baseUrl}/api/v1/image-proxy?url=${Uri.encodeComponent(sign.imageUrl!)}',
+                ApiConfig.proxyImageUrl(sign.imageUrl!),
                 fit: BoxFit.contain,
                 height: 140,
                 errorBuilder: (_, __, ___) => const SizedBox.shrink(),
