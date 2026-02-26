@@ -96,19 +96,70 @@ func (r *BeaconAlertRepository) UpsertAlert(ctx context.Context, a *BeaconAlert)
 	return err
 }
 
-// BulkUpsert inserts/updates multiple alerts efficiently.
+// BulkUpsert inserts/updates multiple alerts efficiently using a single transaction.
+// Wrapping individual upserts in a transaction cuts 5000 round-trips to one commit.
 func (r *BeaconAlertRepository) BulkUpsert(ctx context.Context, alerts []*BeaconAlert) (int, error) {
 	if len(alerts) == 0 {
 		return 0, nil
 	}
 
+	tx, err := r.pool.Begin(ctx)
+	if err != nil {
+		return 0, fmt.Errorf("BulkUpsert begin tx: %w", err)
+	}
+	defer tx.Rollback(ctx) //nolint:errcheck
+
+	query := `
+		INSERT INTO beacon_alerts (
+			external_id, source, beacon_type, severity, title, body,
+			lat, lng, radius, image_url, video_url,
+			is_official, official_source, author_id, author_handle, author_display,
+			status, incident_status, confidence, vouch_count, report_count,
+			tags, expires_at, created_at
+		) VALUES (
+			$1, $2, $3, $4, $5, $6,
+			$7, $8, $9, $10, $11,
+			$12, $13, $14, $15, $16,
+			$17, $18, $19, $20, $21,
+			$22, $23, $24
+		)
+		ON CONFLICT (source, external_id) DO UPDATE SET
+			beacon_type = EXCLUDED.beacon_type,
+			severity = EXCLUDED.severity,
+			title = EXCLUDED.title,
+			body = EXCLUDED.body,
+			lat = EXCLUDED.lat,
+			lng = EXCLUDED.lng,
+			radius = EXCLUDED.radius,
+			image_url = EXCLUDED.image_url,
+			video_url = EXCLUDED.video_url,
+			status = EXCLUDED.status,
+			incident_status = EXCLUDED.incident_status,
+			confidence = EXCLUDED.confidence,
+			vouch_count = EXCLUDED.vouch_count,
+			report_count = EXCLUDED.report_count,
+			tags = EXCLUDED.tags,
+			expires_at = EXCLUDED.expires_at
+	`
+
 	count := 0
 	for _, a := range alerts {
-		if err := r.UpsertAlert(ctx, a); err != nil {
-			log.Error().Err(err).Str("source", a.Source).Str("external_id", a.ExternalID).Msg("beacon_alerts: upsert failed")
+		_, err := tx.Exec(ctx, query,
+			a.ExternalID, a.Source, a.BeaconType, a.Severity, a.Title, a.Body,
+			a.Lat, a.Lng, a.Radius, a.ImageURL, a.VideoURL,
+			a.IsOfficial, a.OfficialSource, a.AuthorID, a.AuthorHandle, a.AuthorDisplay,
+			a.Status, a.IncidentStatus, a.Confidence, a.VouchCount, a.ReportCount,
+			a.Tags, a.ExpiresAt, a.CreatedAt,
+		)
+		if err != nil {
+			log.Error().Err(err).Str("source", a.Source).Str("id", a.ExternalID).Msg("beacon_alerts: bulk upsert row failed")
 			continue
 		}
 		count++
+	}
+
+	if err := tx.Commit(ctx); err != nil {
+		return 0, fmt.Errorf("BulkUpsert commit: %w", err)
 	}
 	return count, nil
 }
