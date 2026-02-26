@@ -1158,16 +1158,21 @@ func (r *PostRepository) RemoveBeaconVote(ctx context.Context, beaconID string, 
 		return fmt.Errorf("failed to remove beacon report: %w", err)
 	}
 
-	// If a vouch was removed, update confidence score
+	// If a vouch was removed, update confidence score and re-check priority
 	if result.RowsAffected() > 0 {
 		updateQuery := `
-			UPDATE public.posts 
+			UPDATE public.posts
 			SET confidence_score = (
 				SELECT COALESCE(
 					0.5 + (COUNT(*) * 0.1),
 					0.5
-				) 
-				FROM public.beacon_vouches 
+				)
+				FROM public.beacon_vouches
+				WHERE beacon_id = $1::uuid
+			),
+			is_priority = (
+				SELECT COUNT(*) >= 3
+				FROM public.beacon_vouches
 				WHERE beacon_id = $1::uuid
 			)
 			WHERE id = $1::uuid

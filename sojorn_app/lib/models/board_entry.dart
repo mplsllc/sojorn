@@ -3,6 +3,7 @@
 // See LICENSE file in the project root for full license text.
 
 import 'package:flutter/material.dart';
+import '../utils/time_ago.dart';
 
 /// Standalone neighborhood board entry — completely separate from Post/Beacon.
 class BoardEntry {
@@ -40,7 +41,14 @@ class BoardEntry {
     this.hasVoted = false,
   });
 
-  BoardEntry copyWith({BoardTag? tag, bool clearTag = false}) {
+  BoardEntry copyWith({
+    BoardTag? tag,
+    bool clearTag = false,
+    int? upvotes,
+    int? replyCount,
+    bool? isPinned,
+    bool? hasVoted,
+  }) {
     return BoardEntry(
       id: id,
       body: body,
@@ -49,14 +57,14 @@ class BoardEntry {
       tag: clearTag ? null : (tag ?? this.tag),
       lat: lat,
       long: long,
-      upvotes: upvotes,
-      replyCount: replyCount,
-      isPinned: isPinned,
+      upvotes: upvotes ?? this.upvotes,
+      replyCount: replyCount ?? this.replyCount,
+      isPinned: isPinned ?? this.isPinned,
       createdAt: createdAt,
       authorHandle: authorHandle,
       authorDisplayName: authorDisplayName,
       authorAvatarUrl: authorAvatarUrl,
-      hasVoted: hasVoted,
+      hasVoted: hasVoted ?? this.hasVoted,
     );
   }
 
@@ -80,14 +88,7 @@ class BoardEntry {
     );
   }
 
-  String getTimeAgo() {
-    final diff = DateTime.now().difference(createdAt);
-    if (diff.inMinutes < 1) return 'Just now';
-    if (diff.inHours < 1) return '${diff.inMinutes}m ago';
-    if (diff.inDays < 1) return '${diff.inHours}h ago';
-    if (diff.inDays < 7) return '${diff.inDays}d ago';
-    return '${(diff.inDays / 7).floor()}w ago';
-  }
+  String getTimeAgo() => timeAgo(createdAt);
 }
 
 class BoardReply {
@@ -124,13 +125,7 @@ class BoardReply {
     );
   }
 
-  String getTimeAgo() {
-    final diff = DateTime.now().difference(createdAt);
-    if (diff.inMinutes < 1) return 'Just now';
-    if (diff.inHours < 1) return '${diff.inMinutes}m ago';
-    if (diff.inDays < 1) return '${diff.inHours}h ago';
-    return '${diff.inDays}d ago';
-  }
+  String getTimeAgo() => timeAgo(createdAt);
 }
 
 enum BoardTopic {

@@ -360,78 +360,134 @@ class _GroupForumTabState extends State<GroupForumTab> {
   }
 
   Widget _buildSubforumDirectory() {
-    return ListView.separated(
-      padding: const EdgeInsets.fromLTRB(12, 12, 12, 20),
-      itemCount: _subforums.length,
-      separatorBuilder: (_, __) => const SizedBox(height: 8),
-      itemBuilder: (_, i) {
-        final subforum = _subforums[i];
-        final count = _threads.where((t) => (t['category'] as String? ?? 'General') == subforum).length;
-        final description = _subforumDescriptions[subforum] ?? '';
+    // Separate active (has threads) from empty subforums
+    final activeSubs = <String>[];
+    final emptySubs = <String>[];
+    for (final subforum in _subforums) {
+      final count = _threads.where((t) => (t['category'] as String? ?? 'General') == subforum).length;
+      if (count > 0) {
+        activeSubs.add(subforum);
+      } else {
+        emptySubs.add(subforum);
+      }
+    }
 
-        return InkWell(
-          borderRadius: BorderRadius.circular(12),
-          onTap: () {
-            setState(() => _activeSubforum = subforum);
-            _loadThreads();
-          },
-          child: Container(
-            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
-            decoration: BoxDecoration(
-              color: AppTheme.cardSurface,
-              borderRadius: BorderRadius.circular(12),
-              border: Border.all(color: AppTheme.navyBlue.withValues(alpha: 0.08)),
-            ),
+    return ListView(
+      padding: const EdgeInsets.fromLTRB(12, 12, 12, 20),
+      children: [
+        // Active categories first
+        ...activeSubs.map((subforum) => _buildSubforumCard(subforum, isActive: true)),
+
+        // Separator if both sections exist
+        if (activeSubs.isNotEmpty && emptySubs.isNotEmpty) ...[
+          Padding(
+            padding: const EdgeInsets.symmetric(vertical: 12),
             child: Row(
               children: [
-                Container(
-                  width: 34,
-                  height: 34,
-                  decoration: BoxDecoration(
-                    color: AppTheme.brightNavy.withValues(alpha: 0.1),
-                    borderRadius: BorderRadius.circular(9),
-                  ),
-                  child: Icon(Icons.forum, size: 18, color: AppTheme.brightNavy),
+                Expanded(child: Divider(color: AppTheme.navyBlue.withValues(alpha: 0.08))),
+                Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 10),
+                  child: Text('No posts yet', style: TextStyle(color: SojornColors.textDisabled, fontSize: 11, fontWeight: FontWeight.w500)),
                 ),
-                const SizedBox(width: 12),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        subforum,
-                        style: TextStyle(
-                          color: AppTheme.navyBlue,
-                          fontSize: 14,
-                          fontWeight: FontWeight.w700,
-                        ),
-                      ),
-                      const SizedBox(height: 2),
-                      Text(
-                        description,
-                        style: TextStyle(
-                          color: SojornColors.textDisabled,
-                          fontSize: 12,
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-                Text(
-                  '$count',
-                  style: TextStyle(
-                    color: AppTheme.brightNavy,
-                    fontSize: 13,
-                    fontWeight: FontWeight.w700,
-                  ),
-                ),
-                const SizedBox(width: 4),
-                Icon(Icons.chevron_right, size: 18, color: SojornColors.textDisabled),
+                Expanded(child: Divider(color: AppTheme.navyBlue.withValues(alpha: 0.08))),
               ],
             ),
           ),
-        );
-      },
+        ],
+
+        // Empty categories
+        ...emptySubs.map((subforum) => _buildSubforumCard(subforum, isActive: false)),
+      ],
+    );
+  }
+
+  Widget _buildSubforumCard(String subforum, {required bool isActive}) {
+    final count = _threads.where((t) => (t['category'] as String? ?? 'General') == subforum).length;
+    final description = _subforumDescriptions[subforum] ?? '';
+
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 8),
+      child: InkWell(
+        borderRadius: BorderRadius.circular(12),
+        onTap: () {
+          setState(() => _activeSubforum = subforum);
+          _loadThreads();
+        },
+        child: Container(
+          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+          decoration: BoxDecoration(
+            color: isActive ? AppTheme.cardSurface : AppTheme.cardSurface.withValues(alpha: 0.5),
+            borderRadius: BorderRadius.circular(12),
+            border: Border.all(
+              color: isActive
+                  ? AppTheme.navyBlue.withValues(alpha: 0.08)
+                  : AppTheme.navyBlue.withValues(alpha: 0.06),
+              style: isActive ? BorderStyle.solid : BorderStyle.solid,
+            ),
+          ),
+          child: Row(
+            children: [
+              Container(
+                width: 34,
+                height: 34,
+                decoration: BoxDecoration(
+                  color: isActive
+                      ? AppTheme.brightNavy.withValues(alpha: 0.1)
+                      : AppTheme.navyBlue.withValues(alpha: 0.05),
+                  borderRadius: BorderRadius.circular(9),
+                ),
+                child: Icon(Icons.forum, size: 18,
+                    color: isActive ? AppTheme.brightNavy : SojornColors.textDisabled),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      subforum,
+                      style: TextStyle(
+                        color: isActive ? AppTheme.navyBlue : SojornColors.postContentLight,
+                        fontSize: 14,
+                        fontWeight: isActive ? FontWeight.w700 : FontWeight.w600,
+                      ),
+                    ),
+                    const SizedBox(height: 2),
+                    Text(
+                      isActive ? description : 'Be the first to post!',
+                      style: TextStyle(
+                        color: SojornColors.textDisabled,
+                        fontSize: 12,
+                        fontStyle: isActive ? FontStyle.normal : FontStyle.italic,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              if (isActive) ...[
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
+                  decoration: BoxDecoration(
+                    color: AppTheme.brightNavy,
+                    borderRadius: BorderRadius.circular(999),
+                  ),
+                  child: Text(
+                    '$count',
+                    style: const TextStyle(
+                      color: SojornColors.basicWhite,
+                      fontSize: 11,
+                      fontWeight: FontWeight.w800,
+                    ),
+                  ),
+                ),
+                const SizedBox(width: 4),
+              ],
+              Icon(Icons.chevron_right, size: 18,
+                  color: isActive ? SojornColors.textDisabled : SojornColors.textDisabled.withValues(alpha: 0.4)),
+            ],
+          ),
+        ),
+      ),
     );
   }
 }

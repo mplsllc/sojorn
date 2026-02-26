@@ -18,6 +18,7 @@ import '../../models/post.dart';
 import '../../models/beacon.dart';
 import '../../models/cluster.dart';
 import '../../models/board_entry.dart';
+import '../../models/neighborhood.dart';
 import '../../models/local_intel.dart';
 import '../../models/group.dart' as group_models;
 import '../../services/api_service.dart';
@@ -32,6 +33,7 @@ import 'create_board_post_sheet.dart';
 import 'board_entry_detail_screen.dart';
 import '../clusters/group_screen.dart';
 import '../clusters/group_chat_tab.dart';
+import '../clusters/group_events_tab.dart';
 import '../clusters/group_forum_tab.dart';
 import '../clusters/group_members_tab.dart';
 import '../events/event_detail_screen.dart';
@@ -43,7 +45,7 @@ import '../../widgets/neighborhood/neighborhood_picker_sheet.dart';
 import '../../widgets/desktop/desktop_dialog_helper.dart';
 
 enum BeaconTab { map, board, search, groups }
-enum NeighborhoodHubTab { feed, chat, forum, members }
+enum NeighborhoodHubTab { feed, chat, forum, events, members }
 
 class BeaconScreen extends ConsumerStatefulWidget {
   static final GlobalKey<BeaconScreenState> globalKey = GlobalKey<BeaconScreenState>();
@@ -123,18 +125,17 @@ class BeaconScreenState extends ConsumerState<BeaconScreen> with TickerProviderS
   GroupCategory? _selectedGroupCategory;
 
   // Neighborhood detection state
-  Map<String, dynamic>? _neighborhood;
+  NeighborhoodInfo? _neighborhood;
   bool _isDetectingNeighborhood = false;
   bool _neighborhoodDetected = false;
   bool _homeNeighborhoodChecked = false;
-  bool _canChangeNeighborhood = true;
-  String? _nextChangeDate;
 
   // Sheet size tracking (for toggle button and tap-outside-to-close overlay)
   double _sheetSize = 0.15;
 
   // Beacon map type filter (hidden = not shown on map/list)
   Set<BeaconType> _hiddenTypes = {};
+  int? _expandedFilterGroup; // index into _mapLayerGroups, null = collapsed
 
   // Beacon search state
   final _searchController = TextEditingController();
@@ -290,20 +291,16 @@ class BeaconScreenState extends ConsumerState<BeaconScreen> with TickerProviderS
     try {
       final data = await ApiService.instance.detectNeighborhood(lat: lat, long: lng);
       if (mounted) {
+        final info = NeighborhoodInfo.fromJson(data);
         setState(() {
-          _neighborhood = data;
+          _neighborhood = info;
           _neighborhoodDetected = true;
           _isDetectingNeighborhood = false;
         });
         // Update location name with neighborhood
-        final hood = data['neighborhood'] as Map<String, dynamic>?;
-        if (hood != null) {
-          final name = hood['name'] as String? ?? '';
-          final city = hood['city'] as String? ?? '';
-          debugPrint('[Beacon] neighborhood detected: $name, $city');
-          if (name.isNotEmpty) {
-            setState(() => _locationName = city.isNotEmpty ? '$name, $city' : name);
-          }
+        if (info.name.isNotEmpty) {
+          debugPrint('[Beacon] neighborhood detected: ${info.name}, ${info.city}');
+          setState(() => _locationName = info.displayName);
         } else {
           debugPrint('[Beacon] neighborhood: none returned for lat=$lat lng=$lng');
         }
@@ -328,35 +325,24 @@ class BeaconScreenState extends ConsumerState<BeaconScreen> with TickerProviderS
       final mine = await ApiService.instance.getMyNeighborhood();
       if (mine == null || !mounted) return;
 
-      final onboarded = mine['onboarded'] == true;
-      final hood = mine['neighborhood'] as Map<String, dynamic>?;
-      final canChange = mine['can_change'] as bool? ?? true;
-      final nextChange = mine['next_change_allowed_at'] as String?;
-      debugPrint('[BEACON] Home neighborhood: onboarded=$onboarded, hood=${hood?['name']}, canChange=$canChange');
+      final info = NeighborhoodInfo.fromJson(mine);
+      debugPrint('[BEACON] Home neighborhood: onboarded=${info.onboarded}, hood=${info.name}, canChange=${info.canChange}');
 
-      if (onboarded && hood != null) {
-        // User already chose a neighborhood — load it and skip GPS detect
-        final name = hood['name'] as String? ?? '';
-        final city = hood['city'] as String? ?? '';
-        // Use neighborhood coords as map center immediately (avoids SF default)
-        final hoodLat = (hood['lat'] as num?)?.toDouble();
-        final hoodLng = (hood['lng'] as num?)?.toDouble();
+      if (info.onboarded && info.name.isNotEmpty) {
         setState(() {
-          _neighborhood = mine;
+          _neighborhood = info;
           _neighborhoodDetected = true;
           _homeNeighborhoodChecked = true;
-          _canChangeNeighborhood = canChange;
-          _nextChangeDate = nextChange;
-          if (name.isNotEmpty) {
-            _locationName = city.isNotEmpty ? '$name, $city' : name;
+          if (info.name.isNotEmpty) {
+            _locationName = info.displayName;
           }
-          if (hoodLat != null && hoodLng != null) {
-            _mapCenter = LatLng(hoodLat, hoodLng);
-            debugPrint('[BEACON] Using neighborhood center: ${hoodLat.toStringAsFixed(4)}, ${hoodLng.toStringAsFixed(4)}');
+          if (info.lat != null && info.lng != null) {
+            _mapCenter = LatLng(info.lat!, info.lng!);
+            debugPrint('[BEACON] Using neighborhood center: ${info.lat!.toStringAsFixed(4)}, ${info.lng!.toStringAsFixed(4)}');
           }
         });
         // Move map to neighborhood center and pre-load data with correct coords
-        if (hoodLat != null && hoodLng != null && !_suppressAutoCenterOnUser) {
+        if (info.lat != null && info.lng != null && !_suppressAutoCenterOnUser) {
           try { _mapController.move(_mapCenter, _currentZoom); } catch (_) {}
           _loadBeacons(center: _mapCenter);
         }
@@ -376,7 +362,7 @@ class BeaconScreenState extends ConsumerState<BeaconScreen> with TickerProviderS
   /// Show the neighborhood picker if the user hasn't completed onboarding.
   void _maybeShowNeighborhoodPicker() {
     // Check the onboarded flag from the /mine response
-    if (_neighborhood != null && _neighborhood!['onboarded'] == true) return;
+    if (_neighborhood != null && _neighborhood!.onboarded) return;
     // Delay slightly so the screen is fully visible first
     Future.delayed(const Duration(milliseconds: 600), () {
       if (!mounted) return;
@@ -391,19 +377,14 @@ class BeaconScreenState extends ConsumerState<BeaconScreen> with TickerProviderS
       nextChangeDate: nextChangeDate,
     );
     if (result != null && mounted) {
+      final info = NeighborhoodInfo.fromJson(result);
       setState(() {
-        _neighborhood = result;
+        _neighborhood = info;
         _neighborhoodDetected = true;
-      });
-      // Update location name
-      final hood = result['neighborhood'] as Map<String, dynamic>?;
-      if (hood != null) {
-        final name = hood['name'] as String? ?? '';
-        final city = hood['city'] as String? ?? '';
-        if (name.isNotEmpty) {
-          setState(() => _locationName = city.isNotEmpty ? '$name, $city' : name);
+        if (info.name.isNotEmpty) {
+          _locationName = info.displayName;
         }
-      }
+      });
       // Refresh saved neighborhood state (cooldown, next change date)
       _checkHomeNeighborhood();
       // Reload board for new neighborhood
@@ -616,6 +597,23 @@ class BeaconScreenState extends ConsumerState<BeaconScreen> with TickerProviderS
     ));
   }
 
+  /// Switch the Commons tab to a different neighborhood without navigating away.
+  void _switchNeighborhoodTo(Cluster cluster) {
+    setState(() {
+      _neighborhood = NeighborhoodInfo(
+        groupId: cluster.id,
+        name: cluster.name,
+        lat: cluster.lat,
+        lng: cluster.lng,
+      );
+      _lastNeighborhoodMetaGroupId = null; // force hub meta reload
+      if (cluster.lat != null && cluster.lng != null) {
+        _mapCenter = LatLng(cluster.lat!, cluster.lng!);
+      }
+    });
+    _loadBoardEntries();
+  }
+
   void _onMapPositionChanged(MapCamera camera, bool hasGesture) {
     _mapCenter = camera.center;
     _currentZoom = camera.zoom;
@@ -661,66 +659,6 @@ class BeaconScreenState extends ConsumerState<BeaconScreen> with TickerProviderS
     );
   }
 
-  Widget _buildBoardSortChip(String key, String label) {
-    final selected = _boardSort == key;
-    return Material(
-      color: Colors.transparent,
-      child: InkWell(
-        onTap: () {
-          if (selected) return;
-          setState(() => _boardSort = key);
-          _loadBoardEntries();
-        },
-        borderRadius: BorderRadius.circular(8),
-        child: Container(
-          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
-          decoration: BoxDecoration(
-            color: selected ? AppTheme.brightNavy : AppTheme.cardSurface,
-            borderRadius: BorderRadius.circular(8),
-            border: Border.all(
-              color: selected ? AppTheme.brightNavy : AppTheme.navyBlue.withValues(alpha: 0.12),
-              width: 1,
-            ),
-          ),
-          child: Text(
-            label,
-            style: TextStyle(
-              color: selected ? SojornColors.basicWhite : AppTheme.brightNavy,
-              fontSize: 12,
-              fontWeight: FontWeight.w600,
-            ),
-          ),
-        ),
-      ),
-    );
-  }
-
-  Widget _buildHeroStat(IconData icon, String value, String label) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
-      decoration: BoxDecoration(
-        color: Colors.white.withValues(alpha: 0.55),
-        borderRadius: BorderRadius.circular(10),
-      ),
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Icon(icon, size: 14, color: AppTheme.brightNavy),
-          const SizedBox(width: 4),
-          Text(
-            value,
-            style: TextStyle(color: AppTheme.navyBlue, fontSize: 12, fontWeight: FontWeight.w700),
-          ),
-          const SizedBox(width: 4),
-          Text(
-            label,
-            style: TextStyle(color: SojornColors.textDisabled, fontSize: 11, fontWeight: FontWeight.w500),
-          ),
-        ],
-      ),
-    );
-  }
-
   Future<void> _loadBoardEntries() async {
     if (_isLoadingBoard) return;
     debugPrint('[BEACON] Loading board entries for ${_mapCenter.latitude.toStringAsFixed(4)}, ${_mapCenter.longitude.toStringAsFixed(4)} topic=${_selectedBoardTopic?.value} sort=$_boardSort');
@@ -753,20 +691,13 @@ class BeaconScreenState extends ConsumerState<BeaconScreen> with TickerProviderS
   }
 
   String? get _neighborhoodGroupId {
-    if (_neighborhood == null) return null;
-    final direct = _neighborhood!['group_id'] as String?;
-    if (direct != null && direct.isNotEmpty) return direct;
-    final nested = _neighborhood!['neighborhood'] as Map<String, dynamic>?;
-    return nested?['group_id'] as String?;
+    final gid = _neighborhood?.groupId;
+    return (gid != null && gid.isNotEmpty) ? gid : null;
   }
 
   String get _neighborhoodName {
-    if (_neighborhood == null) return 'Commons';
-    final direct = _neighborhood!['name'] as String?;
-    if (direct != null && direct.isNotEmpty) return direct;
-    final nested = _neighborhood!['neighborhood'] as Map<String, dynamic>?;
-    final nestedName = nested?['name'] as String?;
-    return (nestedName != null && nestedName.isNotEmpty) ? nestedName : 'Commons';
+    final name = _neighborhood?.name;
+    return (name != null && name.isNotEmpty) ? name : 'Commons';
   }
 
   Future<void> _loadNeighborhoodHubMeta(String groupId) async {
@@ -1395,6 +1326,9 @@ class BeaconScreenState extends ConsumerState<BeaconScreen> with TickerProviderS
                 onTap: _isLoadingLocation ? null : () => _getCurrentLocation(forceCenter: true)),
             ],
           ),
+          // Sub-filter dropdown — slides open below the chip bar
+          if (_expandedFilterGroup != null)
+            _buildSubFilterDropdown(_mapLayerGroups[_expandedFilterGroup!]),
         ],
       ),
     );
@@ -1482,82 +1416,93 @@ class BeaconScreenState extends ConsumerState<BeaconScreen> with TickerProviderS
           child: Row(
             mainAxisAlignment: MainAxisAlignment.spaceEvenly,
             children: _mapLayerGroups.map((group) {
+              final groupIdx = _mapLayerGroups.indexOf(group);
               final visibleCount =
                   group.types.where((t) => !_hiddenTypes.contains(t)).length;
               final allVisible = visibleCount == group.types.length;
               final noneVisible = visibleCount == 0;
               final isVisible = !noneVisible;
-              return GestureDetector(
-                // Tap: toggle entire group
-                onTap: () => setState(() {
-                  if (isVisible) {
-                    _hiddenTypes.addAll(group.types);
-                  } else {
-                    _hiddenTypes.removeAll(group.types);
-                  }
-                }),
-                // Long-press: show sub-type filter popup
-                onLongPress: () => _showSubFilterPopup(group),
-                child: AnimatedContainer(
-                  duration: const Duration(milliseconds: 150),
-                  margin: const EdgeInsets.symmetric(horizontal: 1),
-                  padding:
-                      const EdgeInsets.symmetric(horizontal: 6, vertical: 3),
-                  decoration: BoxDecoration(
+              final isExpanded = _expandedFilterGroup == groupIdx;
+              return AnimatedContainer(
+                duration: const Duration(milliseconds: 150),
+                margin: const EdgeInsets.symmetric(horizontal: 1),
+                padding: const EdgeInsets.only(left: 6, top: 3, bottom: 3),
+                decoration: BoxDecoration(
+                  color: isVisible
+                      ? group.color.withValues(alpha: 0.12)
+                      : Colors.transparent,
+                  borderRadius: BorderRadius.circular(14),
+                  border: Border.all(
                     color: isVisible
-                        ? group.color.withValues(alpha: 0.12)
-                        : Colors.transparent,
-                    borderRadius: BorderRadius.circular(14),
-                    border: Border.all(
-                      color: isVisible
-                          ? group.color.withValues(alpha: 0.8)
-                          : Colors.grey.withValues(alpha: 0.35),
-                      width: 1,
-                    ),
+                        ? group.color.withValues(alpha: 0.8)
+                        : Colors.grey.withValues(alpha: 0.35),
+                    width: 1,
                   ),
-                  child: Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      Icon(
-                        group.icon,
-                        size: 11,
-                        color: isVisible
-                            ? group.color
-                            : Colors.grey.withValues(alpha: 0.55),
-                      ),
-                      const SizedBox(width: 2),
-                      Text(
-                        group.label,
-                        style: TextStyle(
-                          fontSize: 10,
-                          fontWeight: FontWeight.w600,
-                          color: isVisible
-                              ? group.color
-                              : Colors.grey.withValues(alpha: 0.55),
-                        ),
-                      ),
-                      // Partial selection indicator
-                      if (isVisible && !allVisible) ...[
-                        const SizedBox(width: 2),
-                        Text(
-                          '$visibleCount',
-                          style: TextStyle(
-                            fontSize: 8,
-                            fontWeight: FontWeight.w700,
-                            color: group.color.withValues(alpha: 0.6),
+                ),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    // Tap label area: toggle entire group
+                    GestureDetector(
+                      behavior: HitTestBehavior.opaque,
+                      onTap: () => setState(() {
+                        if (isVisible) {
+                          _hiddenTypes.addAll(group.types);
+                        } else {
+                          _hiddenTypes.removeAll(group.types);
+                        }
+                      }),
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Icon(
+                            group.icon,
+                            size: 11,
+                            color: isVisible
+                                ? group.color
+                                : Colors.grey.withValues(alpha: 0.55),
                           ),
-                        ),
-                      ],
-                      const SizedBox(width: 1),
-                      Icon(
-                        Icons.keyboard_arrow_down_rounded,
-                        size: 10,
-                        color: isVisible
-                            ? group.color.withValues(alpha: 0.6)
-                            : Colors.grey.withValues(alpha: 0.4),
+                          const SizedBox(width: 2),
+                          Text(
+                            group.label,
+                            style: TextStyle(
+                              fontSize: 10,
+                              fontWeight: FontWeight.w600,
+                              color: isVisible
+                                  ? group.color
+                                  : Colors.grey.withValues(alpha: 0.55),
+                            ),
+                          ),
+                          if (isVisible && !allVisible) ...[
+                            const SizedBox(width: 2),
+                            Text(
+                              '$visibleCount',
+                              style: TextStyle(
+                                fontSize: 8,
+                                fontWeight: FontWeight.w700,
+                                color: group.color.withValues(alpha: 0.6),
+                              ),
+                            ),
+                          ],
+                        ],
                       ),
-                    ],
-                  ),
+                    ),
+                    // Tap arrow: toggle sub-filter dropdown
+                    GestureDetector(
+                      behavior: HitTestBehavior.opaque,
+                      onTap: () => _toggleSubFilter(groupIdx),
+                      child: Padding(
+                        padding: const EdgeInsets.only(left: 1, right: 4),
+                        child: Icon(
+                          isExpanded ? Icons.keyboard_arrow_up_rounded : Icons.keyboard_arrow_down_rounded,
+                          size: 12,
+                          color: isVisible
+                              ? group.color.withValues(alpha: 0.6)
+                              : Colors.grey.withValues(alpha: 0.4),
+                        ),
+                      ),
+                    ),
+                  ],
                 ),
               );
             }).toList(),
@@ -1567,23 +1512,84 @@ class BeaconScreenState extends ConsumerState<BeaconScreen> with TickerProviderS
     );
   }
 
-  void _showSubFilterPopup(({String label, IconData icon, Color color, List<BeaconType> types}) group) {
-    final RenderBox? overlay = Overlay.of(context).context.findRenderObject() as RenderBox?;
-    if (overlay == null) return;
+  void _toggleSubFilter(int groupIndex) {
+    setState(() {
+      _expandedFilterGroup = _expandedFilterGroup == groupIndex ? null : groupIndex;
+    });
+  }
 
-    showDialog(
-      context: context,
-      barrierColor: Colors.black12,
-      builder: (ctx) => _SubFilterDialog(
-        group: group,
-        hiddenTypes: Set.of(_hiddenTypes),
-        onChanged: (newHidden) {
-          setState(() {
-            // Remove all group types first, then add back the hidden ones
-            _hiddenTypes.removeAll(group.types);
-            _hiddenTypes.addAll(newHidden);
-          });
-        },
+  Widget _buildSubFilterDropdown(({String label, IconData icon, Color color, List<BeaconType> types}) group) {
+    return Padding(
+      padding: const EdgeInsets.only(top: 4),
+      child: ClipRRect(
+        borderRadius: BorderRadius.circular(8),
+        child: BackdropFilter(
+          filter: ImageFilter.blur(sigmaX: 14, sigmaY: 14),
+          child: Container(
+            decoration: BoxDecoration(
+              color: Colors.white.withValues(alpha: 0.92),
+              borderRadius: BorderRadius.circular(8),
+              border: Border.all(color: Colors.grey.withValues(alpha: 0.3)),
+              boxShadow: [
+                BoxShadow(
+                  color: Colors.black.withValues(alpha: 0.10),
+                  blurRadius: 8,
+                  offset: const Offset(0, 2),
+                ),
+              ],
+            ),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: group.types.asMap().entries.map((entry) {
+                final idx = entry.key;
+                final type = entry.value;
+                final visible = !_hiddenTypes.contains(type);
+                final isLast = idx == group.types.length - 1;
+                return GestureDetector(
+                  behavior: HitTestBehavior.opaque,
+                  onTap: () => setState(() {
+                    if (visible) {
+                      _hiddenTypes.add(type);
+                    } else {
+                      _hiddenTypes.remove(type);
+                    }
+                  }),
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                    decoration: BoxDecoration(
+                      border: isLast ? null : Border(
+                        bottom: BorderSide(color: Colors.grey.withValues(alpha: 0.15)),
+                      ),
+                    ),
+                    child: Row(
+                      children: [
+                        Icon(type.icon, size: 14,
+                          color: visible ? type.color : Colors.grey.withValues(alpha: 0.4)),
+                        const SizedBox(width: 8),
+                        Expanded(
+                          child: Text(
+                            type.displayName,
+                            style: TextStyle(
+                              fontSize: 12,
+                              fontWeight: FontWeight.w500,
+                              color: visible ? Colors.black87 : Colors.grey.withValues(alpha: 0.5),
+                            ),
+                          ),
+                        ),
+                        Icon(
+                          visible ? Icons.check_box_rounded : Icons.check_box_outline_blank_rounded,
+                          size: 16,
+                          color: visible ? group.color : Colors.grey.withValues(alpha: 0.35),
+                        ),
+                      ],
+                    ),
+                  ),
+                );
+              }).toList(),
+            ),
+          ),
+        ),
       ),
     );
   }
@@ -1673,24 +1679,31 @@ class BeaconScreenState extends ConsumerState<BeaconScreen> with TickerProviderS
 
     final availableSwitchTargets = _clusters.where((c) => c.id != groupId).take(8).toList();
 
+    final memberCount = _activeNeighborhoodMemberCount > 0 ? _activeNeighborhoodMemberCount : hubCluster.memberCount;
+
     return Column(
       children: [
         Container(
           color: AppTheme.cardSurface,
           child: Column(
             children: [
+              // ── Header row ──
               Padding(
-                padding: const EdgeInsets.fromLTRB(14, 12, 14, 6),
+                padding: const EdgeInsets.fromLTRB(16, 14, 12, 10),
                 child: Row(
                   children: [
                     Container(
-                      width: 32,
-                      height: 32,
+                      width: 34,
+                      height: 34,
                       decoration: BoxDecoration(
-                        color: AppTheme.brightNavy.withValues(alpha: 0.12),
-                        borderRadius: BorderRadius.circular(10),
+                        gradient: LinearGradient(
+                          begin: Alignment.topLeft,
+                          end: Alignment.bottomRight,
+                          colors: [AppTheme.brightNavy, AppTheme.brightNavy.withValues(alpha: 0.7)],
+                        ),
+                        borderRadius: BorderRadius.circular(9),
                       ),
-                      child: Icon(Icons.home_filled, size: 18, color: AppTheme.brightNavy),
+                      child: const Icon(Icons.home_filled, size: 17, color: SojornColors.basicWhite),
                     ),
                     const SizedBox(width: 10),
                     Expanded(
@@ -1704,18 +1717,20 @@ class BeaconScreenState extends ConsumerState<BeaconScreen> with TickerProviderS
                                   groupName,
                                   maxLines: 1,
                                   overflow: TextOverflow.ellipsis,
-                                  style: TextStyle(color: AppTheme.navyBlue, fontSize: 18, fontWeight: FontWeight.w800),
+                                  style: TextStyle(color: AppTheme.navyBlue, fontSize: 16, fontWeight: FontWeight.w700, height: 1.2),
                                 ),
                               ),
-                              const SizedBox(width: 4),
                               if (availableSwitchTargets.isNotEmpty)
                                 PopupMenuButton<String>(
                                   tooltip: 'Quick switch',
                                   icon: Icon(Icons.keyboard_arrow_down, size: 18, color: SojornColors.textDisabled),
                                   onSelected: (value) {
                                     final target = _clusters.where((c) => c.id == value).firstOrNull;
-                                    if (target != null) {
+                                    if (target == null) return;
+                                    if (target.isCapsule) {
                                       _navigateToCluster(target);
+                                    } else {
+                                      _switchNeighborhoodTo(target);
                                     }
                                   },
                                   itemBuilder: (_) => availableSwitchTargets
@@ -1731,11 +1746,7 @@ class BeaconScreenState extends ConsumerState<BeaconScreen> with TickerProviderS
                                               ),
                                               const SizedBox(width: 8),
                                               Expanded(
-                                                child: Text(
-                                                  c.name,
-                                                  maxLines: 1,
-                                                  overflow: TextOverflow.ellipsis,
-                                                ),
+                                                child: Text(c.name, maxLines: 1, overflow: TextOverflow.ellipsis),
                                               ),
                                             ],
                                           ),
@@ -1745,23 +1756,25 @@ class BeaconScreenState extends ConsumerState<BeaconScreen> with TickerProviderS
                                 ),
                             ],
                           ),
-                          const SizedBox(height: 3),
+                          const SizedBox(height: 2),
                           Row(
                             children: [
-                              Icon(Icons.bolt, size: 12, color: AppTheme.brightNavy.withValues(alpha: 0.8)),
-                              const SizedBox(width: 4),
+                              if (_activeNowCount > 0 || _isLoadingNeighborhoodHubMeta) ...[
+                                Container(
+                                  width: 6, height: 6,
+                                  decoration: const BoxDecoration(color: Color(0xFF22C55E), shape: BoxShape.circle),
+                                ),
+                                const SizedBox(width: 4),
+                                Text(
+                                  _isLoadingNeighborhoodHubMeta ? '...' : '$_activeNowCount online',
+                                  style: TextStyle(color: SojornColors.textDisabled, fontSize: 12),
+                                ),
+                                const SizedBox(width: 4),
+                                Text(' \u00B7 ', style: TextStyle(color: SojornColors.textDisabled, fontSize: 12)),
+                              ],
                               Text(
-                                _isLoadingNeighborhoodHubMeta
-                                    ? 'Checking activity...'
-                                    : '$_activeNowCount active now',
-                                style: TextStyle(color: SojornColors.textDisabled, fontSize: 11, fontWeight: FontWeight.w600),
-                              ),
-                              const SizedBox(width: 10),
-                              Icon(Icons.people, size: 12, color: SojornColors.textDisabled),
-                              const SizedBox(width: 4),
-                              Text(
-                                '${_activeNeighborhoodMemberCount > 0 ? _activeNeighborhoodMemberCount : hubCluster.memberCount} members',
-                                style: TextStyle(color: SojornColors.textDisabled, fontSize: 11),
+                                '$memberCount member${memberCount == 1 ? '' : 's'}',
+                                style: TextStyle(color: SojornColors.textDisabled, fontSize: 12),
                               ),
                             ],
                           ),
@@ -1770,78 +1783,41 @@ class BeaconScreenState extends ConsumerState<BeaconScreen> with TickerProviderS
                     ),
                     if (isAdmin)
                       Container(
+                        margin: const EdgeInsets.only(right: 4),
                         padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                        decoration: BoxDecoration(color: AppTheme.brightNavy.withValues(alpha: 0.1), borderRadius: BorderRadius.circular(6)),
+                        decoration: BoxDecoration(
+                          color: AppTheme.brightNavy.withValues(alpha: 0.08),
+                          borderRadius: BorderRadius.circular(6),
+                          border: Border.all(color: AppTheme.brightNavy.withValues(alpha: 0.2)),
+                        ),
                         child: Text('ADMIN', style: TextStyle(color: AppTheme.brightNavy, fontSize: 10, fontWeight: FontWeight.bold)),
                       ),
                     IconButton(
                       onPressed: () => _showNeighborhoodPicker(
                         isChangeMode: true,
-                        nextChangeDate: _canChangeNeighborhood ? null : _nextChangeDate,
+                        nextChangeDate: (_neighborhood?.canChange ?? true) ? null : _neighborhood?.nextChangeAllowedAt,
                       ),
                       icon: Icon(Icons.swap_horiz_rounded, size: 20, color: SojornColors.textDisabled),
                       tooltip: 'Change neighborhood',
+                      visualDensity: VisualDensity.compact,
                     ),
                   ],
                 ),
               ),
-              Padding(
-                padding: const EdgeInsets.fromLTRB(12, 2, 12, 10),
-                child: Container(
-                  padding: const EdgeInsets.all(4),
-                  decoration: BoxDecoration(
-                    color: AppTheme.scaffoldBg,
-                    borderRadius: BorderRadius.circular(999),
-                    border: Border.all(color: AppTheme.navyBlue.withValues(alpha: 0.08)),
-                  ),
+              // ── Underline tab bar ──
+              Container(
+                decoration: BoxDecoration(
+                  border: Border(bottom: BorderSide(color: AppTheme.navyBlue.withValues(alpha: 0.08))),
+                ),
+                child: SingleChildScrollView(
+                  scrollDirection: Axis.horizontal,
                   child: Row(
                     children: [
-                      Expanded(
-                        child: Tooltip(
-                          message: 'Recent posts from members',
-                          child: _buildHubSegment(
-                            label: 'Feed',
-                            icon: Icons.rss_feed,
-                            selected: _activeNeighborhoodHubTab == NeighborhoodHubTab.feed,
-                            onTap: () => setState(() => _activeNeighborhoodHubTab = NeighborhoodHubTab.feed),
-                          ),
-                        ),
-                      ),
-                      Expanded(
-                        child: Tooltip(
-                          message: 'Live group chat',
-                          child: _buildHubSegment(
-                            label: 'Chat',
-                            icon: Icons.chat_bubble_outline,
-                            badgeCount: _chatActivityCount,
-                            selected: _activeNeighborhoodHubTab == NeighborhoodHubTab.chat,
-                            onTap: () => setState(() => _activeNeighborhoodHubTab = NeighborhoodHubTab.chat),
-                          ),
-                        ),
-                      ),
-                      Expanded(
-                        child: Tooltip(
-                          message: 'Threaded discussions',
-                          child: _buildHubSegment(
-                            label: 'Forum',
-                            icon: Icons.forum_outlined,
-                            badgeCount: _forumActivityCount,
-                            selected: _activeNeighborhoodHubTab == NeighborhoodHubTab.forum,
-                            onTap: () => setState(() => _activeNeighborhoodHubTab = NeighborhoodHubTab.forum),
-                          ),
-                        ),
-                      ),
-                      Expanded(
-                        child: Tooltip(
-                          message: 'Group members',
-                          child: _buildHubSegment(
-                            label: 'Members',
-                            icon: Icons.groups_2_outlined,
-                            selected: _activeNeighborhoodHubTab == NeighborhoodHubTab.members,
-                            onTap: () => setState(() => _activeNeighborhoodHubTab = NeighborhoodHubTab.members),
-                          ),
-                        ),
-                      ),
+                      _buildHubUnderlineTab('Feed', NeighborhoodHubTab.feed),
+                      _buildHubUnderlineTab('Chat', NeighborhoodHubTab.chat, badgeCount: _chatActivityCount),
+                      _buildHubUnderlineTab('Forum', NeighborhoodHubTab.forum, badgeCount: _forumActivityCount),
+                      _buildHubUnderlineTab('Events', NeighborhoodHubTab.events),
+                      _buildHubUnderlineTab('Members', NeighborhoodHubTab.members),
                     ],
                   ),
                 ),
@@ -1857,6 +1833,7 @@ class BeaconScreenState extends ConsumerState<BeaconScreen> with TickerProviderS
                 currentUserId: AuthService.instance.currentUser?.id,
               ),
             NeighborhoodHubTab.forum => GroupForumTab(groupId: groupId),
+            NeighborhoodHubTab.events => GroupEventsTab(groupId: groupId),
             NeighborhoodHubTab.members => GroupMembersTab(
                 groupId: groupId,
                 group: hubCluster,
@@ -1868,66 +1845,59 @@ class BeaconScreenState extends ConsumerState<BeaconScreen> with TickerProviderS
     );
   }
 
-  Widget _buildHubSegment({
-    required String label,
-    required IconData icon,
-    required bool selected,
-    required VoidCallback onTap,
-    int badgeCount = 0,
-  }) {
+  Widget _buildHubUnderlineTab(String label, NeighborhoodHubTab tab, {int badgeCount = 0}) {
+    final selected = _activeNeighborhoodHubTab == tab;
     return GestureDetector(
-      onTap: onTap,
-      child: AnimatedContainer(
-        duration: const Duration(milliseconds: 160),
-        curve: Curves.easeOut,
-        padding: const EdgeInsets.symmetric(vertical: 7),
-        decoration: BoxDecoration(
-          color: selected ? AppTheme.navyBlue : Colors.transparent,
-          borderRadius: BorderRadius.circular(999),
-        ),
-        child: Row(
-          mainAxisAlignment: MainAxisAlignment.center,
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Icon(icon, size: 14, color: selected ? SojornColors.basicWhite : SojornColors.textDisabled),
-            const SizedBox(width: 5),
-            Text(
-              label,
-              style: TextStyle(
-                fontSize: 11,
-                fontWeight: FontWeight.w700,
-                color: selected ? SojornColors.basicWhite : SojornColors.textDisabled,
+      onTap: () => setState(() => _activeNeighborhoodHubTab = tab),
+      behavior: HitTestBehavior.opaque,
+      child: Container(
+        padding: const EdgeInsets.only(top: 10, bottom: 12, left: 16, right: 16),
+          decoration: BoxDecoration(
+            border: Border(
+              bottom: BorderSide(
+                color: selected ? AppTheme.brightNavy : Colors.transparent,
+                width: 2.5,
               ),
             ),
-            if (badgeCount > 0) ...[
-              const SizedBox(width: 5),
-              Container(
-                padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1),
-                decoration: BoxDecoration(
-                  color: selected ? SojornColors.basicWhite : AppTheme.brightNavy,
-                  borderRadius: BorderRadius.circular(999),
-                ),
-                child: Text(
-                  badgeCount > 9 ? '9+' : '$badgeCount',
-                  style: TextStyle(
-                    color: selected ? AppTheme.navyBlue : SojornColors.basicWhite,
-                    fontSize: 9,
-                    fontWeight: FontWeight.w800,
-                  ),
+          ),
+          child: Row(
+            mainAxisAlignment: MainAxisAlignment.center,
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Text(
+                label,
+                style: TextStyle(
+                  fontSize: 13.5,
+                  fontWeight: selected ? FontWeight.w700 : FontWeight.w500,
+                  color: selected ? AppTheme.brightNavy : SojornColors.textDisabled,
                 ),
               ),
+              if (badgeCount > 0) ...[
+                const SizedBox(width: 5),
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1),
+                  decoration: BoxDecoration(
+                    color: AppTheme.brightNavy,
+                    borderRadius: BorderRadius.circular(999),
+                  ),
+                  child: Text(
+                    badgeCount > 9 ? '9+' : '$badgeCount',
+                    style: const TextStyle(color: SojornColors.basicWhite, fontSize: 9, fontWeight: FontWeight.w800),
+                  ),
+                ),
+              ],
             ],
-          ],
+          ),
         ),
-      ),
     );
   }
 
   Widget _buildNeighborhoodFeedPane(String groupName) {
     return Column(
       children: [
+        // ── Compose bar ──
         Container(
-          margin: const EdgeInsets.fromLTRB(12, 10, 12, 6),
+          margin: const EdgeInsets.fromLTRB(14, 10, 14, 6),
           padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
           decoration: BoxDecoration(
             color: AppTheme.cardSurface,
@@ -1941,10 +1911,10 @@ class BeaconScreenState extends ConsumerState<BeaconScreen> with TickerProviderS
               onTap: _onCreateBoardPost,
               child: Row(
                 children: [
-                  CircleAvatar(
-                    radius: 14,
-                    backgroundColor: AppTheme.brightNavy.withValues(alpha: 0.12),
-                    child: Icon(Icons.edit, size: 14, color: AppTheme.brightNavy.withValues(alpha: 0.8)),
+                  SojornAvatar(
+                    displayName: AuthService.instance.currentUser?.userMetadata['display_name'] as String? ?? '',
+                    avatarUrl: AuthService.instance.currentUser?.userMetadata['avatar_url'] as String?,
+                    size: 32,
                   ),
                   const SizedBox(width: 10),
                   Expanded(
@@ -1952,38 +1922,64 @@ class BeaconScreenState extends ConsumerState<BeaconScreen> with TickerProviderS
                       "What's happening in $groupName?",
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
-                      style: TextStyle(color: SojornColors.textDisabled, fontSize: 13),
+                      style: TextStyle(color: SojornColors.textDisabled, fontSize: 14),
                     ),
                   ),
                   FilledButton(
                     onPressed: _onCreateBoardPost,
                     style: FilledButton.styleFrom(
-                      backgroundColor: AppTheme.navyBlue,
+                      backgroundColor: AppTheme.brightNavy,
                       foregroundColor: SojornColors.basicWhite,
-                      minimumSize: const Size(0, 30),
-                      padding: const EdgeInsets.symmetric(horizontal: 12),
+                      minimumSize: const Size(0, 32),
+                      padding: const EdgeInsets.symmetric(horizontal: 16),
                       visualDensity: VisualDensity.compact,
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
                     ),
-                    child: const Text('Post', style: TextStyle(fontSize: 12, fontWeight: FontWeight.w700)),
+                    child: const Text('Post', style: TextStyle(fontSize: 13, fontWeight: FontWeight.w700)),
                   ),
                 ],
               ),
             ),
           ),
         ),
-        Container(
-          padding: const EdgeInsets.fromLTRB(12, 4, 12, 8),
-          color: AppTheme.scaffoldBg,
+        // ── Single-row: sort toggle | divider | category filters ──
+        SingleChildScrollView(
+          scrollDirection: Axis.horizontal,
+          padding: const EdgeInsets.fromLTRB(14, 4, 14, 10),
           child: Row(
             children: [
-              Icon(Icons.filter_list, size: 14, color: SojornColors.textDisabled),
+              // Sort toggle (pill group)
+              Container(
+                padding: const EdgeInsets.all(2),
+                decoration: BoxDecoration(
+                  color: AppTheme.scaffoldBg,
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    _buildBoardSortPill('new', 'New'),
+                    _buildBoardSortPill('hot', '\u{1F525} Hot'),
+                  ],
+                ),
+              ),
+              // Divider
+              Container(
+                width: 1, height: 20,
+                margin: const EdgeInsets.symmetric(horizontal: 10),
+                color: AppTheme.navyBlue.withValues(alpha: 0.12),
+              ),
+              // Category filters
+              _buildBoardFilterChip(null, 'All', Icons.grid_view, AppTheme.brightNavy),
               const SizedBox(width: 6),
-              _buildBoardSortChip('new', 'New'),
-              const SizedBox(width: 6),
-              _buildBoardSortChip('hot', 'Hot'),
+              ...BoardTopic.values.map((t) => Padding(
+                padding: const EdgeInsets.only(right: 6),
+                child: _buildBoardFilterChip(t, t.displayName, t.icon, t.color),
+              )),
             ],
           ),
         ),
+        // ── Post list ──
         Expanded(
           child: _isLoadingBoard && _boardEntries.isEmpty
               ? const Center(child: CircularProgressIndicator())
@@ -1995,17 +1991,24 @@ class BeaconScreenState extends ConsumerState<BeaconScreen> with TickerProviderS
                           Icon(Icons.forum_outlined, size: 52, color: AppTheme.navyBlue.withValues(alpha: 0.18)),
                           const SizedBox(height: 14),
                           Text('No posts yet', style: TextStyle(color: SojornColors.textDisabled, fontSize: 15, fontWeight: FontWeight.w600)),
-                          const SizedBox(height: 4),
-                          Text('Share something with $groupName', style: TextStyle(color: SojornColors.textDisabled, fontSize: 13)),
+                          const SizedBox(height: 6),
+                          Padding(
+                            padding: const EdgeInsets.symmetric(horizontal: 40),
+                            child: Text(
+                              'The neighborhood board is where residents share local news, ask questions, and help each other.',
+                              textAlign: TextAlign.center,
+                              style: TextStyle(color: SojornColors.textDisabled, fontSize: 13, height: 1.4),
+                            ),
+                          ),
                           const SizedBox(height: 20),
-                          OutlinedButton.icon(
+                          FilledButton.icon(
                             onPressed: _onCreateBoardPost,
                             icon: const Icon(Icons.edit_outlined, size: 16),
                             label: const Text('Post to Board'),
-                            style: OutlinedButton.styleFrom(
-                              foregroundColor: AppTheme.brightNavy,
-                              side: BorderSide(color: AppTheme.brightNavy.withValues(alpha: 0.5)),
-                              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+                            style: FilledButton.styleFrom(
+                              backgroundColor: AppTheme.brightNavy,
+                              foregroundColor: SojornColors.basicWhite,
+                              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
                             ),
                           ),
                         ],
@@ -2014,7 +2017,7 @@ class BeaconScreenState extends ConsumerState<BeaconScreen> with TickerProviderS
                   : RefreshIndicator(
                       onRefresh: _loadBoardEntries,
                       child: ListView.separated(
-                        padding: const EdgeInsets.all(12),
+                        padding: const EdgeInsets.fromLTRB(14, 0, 14, 14),
                         itemCount: _boardEntries.length,
                         separatorBuilder: (_, __) => const SizedBox(height: 8),
                         itemBuilder: (context, i) => _buildBoardEntryCard(_boardEntries[i]),
@@ -2022,6 +2025,32 @@ class BeaconScreenState extends ConsumerState<BeaconScreen> with TickerProviderS
                     ),
         ),
       ],
+    );
+  }
+
+  Widget _buildBoardSortPill(String value, String label) {
+    final selected = _boardSort == value;
+    return GestureDetector(
+      onTap: () {
+        setState(() => _boardSort = value);
+        _loadBoardEntries();
+      },
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 5),
+        decoration: BoxDecoration(
+          color: selected ? AppTheme.cardSurface : Colors.transparent,
+          borderRadius: BorderRadius.circular(6),
+          boxShadow: selected ? [BoxShadow(color: Colors.black.withValues(alpha: 0.06), blurRadius: 2, offset: const Offset(0, 1))] : null,
+        ),
+        child: Text(
+          label,
+          style: TextStyle(
+            fontSize: 12,
+            fontWeight: FontWeight.w600,
+            color: selected ? AppTheme.navyBlue : SojornColors.textDisabled,
+          ),
+        ),
+      ),
     );
   }
 
@@ -2063,7 +2092,6 @@ class BeaconScreenState extends ConsumerState<BeaconScreen> with TickerProviderS
   Widget _buildBoardEntryCard(BoardEntry entry) {
     final topicColor = entry.topic.color;
     final authorName = entry.authorDisplayName.isNotEmpty ? entry.authorDisplayName : entry.authorHandle;
-    final avatarInitial = authorName.isNotEmpty ? authorName[0].toUpperCase() : 'N';
     return GestureDetector(
       onTap: () async {
         final isDesktop = MediaQuery.of(context).size.width >= 900;
@@ -2087,173 +2115,172 @@ class BeaconScreenState extends ConsumerState<BeaconScreen> with TickerProviderS
           });
         }
       },
-      child: Container(
-        padding: const EdgeInsets.all(12),
-        decoration: BoxDecoration(
-          color: entry.isPinned ? AppTheme.brightNavy.withValues(alpha: 0.03) : AppTheme.cardSurface,
-          borderRadius: BorderRadius.circular(12),
-          border: Border.all(
-            color: entry.isPinned ? AppTheme.brightNavy.withValues(alpha: 0.24) : AppTheme.navyBlue.withValues(alpha: 0.08),
+      child: IntrinsicHeight(
+        child: Container(
+          decoration: BoxDecoration(
+            color: entry.isPinned ? AppTheme.brightNavy.withValues(alpha: 0.03) : AppTheme.cardSurface,
+            borderRadius: BorderRadius.circular(12),
+            border: Border.all(
+              color: entry.isPinned ? AppTheme.brightNavy.withValues(alpha: 0.24) : AppTheme.navyBlue.withValues(alpha: 0.08),
+            ),
           ),
-        ),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            if (entry.isPinned) ...[
-              Container(
-                margin: const EdgeInsets.only(bottom: 6),
-                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                decoration: BoxDecoration(
-                  color: AppTheme.brightNavy.withValues(alpha: 0.12),
-                  borderRadius: BorderRadius.circular(6),
+          child: Row(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+            // Colored left border strip
+            Container(
+              width: 4,
+              decoration: BoxDecoration(
+                color: topicColor,
+                borderRadius: const BorderRadius.only(
+                  topLeft: Radius.circular(12),
+                  bottomLeft: Radius.circular(12),
                 ),
-                child: Row(
-                  mainAxisSize: MainAxisSize.min,
+              ),
+            ),
+            // Card content
+            Expanded(
+              child: Padding(
+                padding: const EdgeInsets.all(12),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Icon(Icons.push_pin, size: 12, color: AppTheme.brightNavy),
-                    const SizedBox(width: 4),
-                    Text('Pinned by moderators', style: TextStyle(fontSize: 11, color: AppTheme.brightNavy, fontWeight: FontWeight.w700)),
+                    if (entry.isPinned) ...[
+                      Container(
+                        margin: const EdgeInsets.only(bottom: 6),
+                        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                        decoration: BoxDecoration(
+                          color: AppTheme.brightNavy.withValues(alpha: 0.12),
+                          borderRadius: BorderRadius.circular(6),
+                        ),
+                        child: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Icon(Icons.push_pin, size: 11, color: AppTheme.brightNavy),
+                            const SizedBox(width: 4),
+                            Text('Pinned', style: TextStyle(fontSize: 10, color: AppTheme.brightNavy, fontWeight: FontWeight.w700)),
+                          ],
+                        ),
+                      ),
+                    ],
+                    // Header: author row + time
+                    Row(
+                      children: [
+                        SojornAvatar(
+                          displayName: entry.authorDisplayName.isNotEmpty ? entry.authorDisplayName : entry.authorHandle,
+                          avatarUrl: entry.authorAvatarUrl.isNotEmpty ? entry.authorAvatarUrl : null,
+                          size: 28,
+                        ),
+                        const SizedBox(width: 8),
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                authorName,
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                                style: TextStyle(color: SojornColors.postContent, fontSize: 13, fontWeight: FontWeight.w600),
+                              ),
+                              const SizedBox(height: 1),
+                              Row(
+                                children: [
+                                  Icon(entry.topic.icon, size: 11, color: topicColor),
+                                  const SizedBox(width: 3),
+                                  Text(entry.topic.displayName,
+                                    style: TextStyle(fontSize: 11, fontWeight: FontWeight.w500, color: topicColor)),
+                                  const SizedBox(width: 6),
+                                  Text('·', style: TextStyle(color: SojornColors.textDisabled, fontSize: 11)),
+                                  const SizedBox(width: 6),
+                                  Text(entry.getTimeAgo(), style: TextStyle(color: SojornColors.textDisabled, fontSize: 11)),
+                                ],
+                              ),
+                            ],
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 8),
+                    // Body
+                    Text(entry.body, maxLines: 4, overflow: TextOverflow.ellipsis,
+                      style: TextStyle(color: SojornColors.postContentLight, fontSize: 14, height: 1.4)),
+                    // Image
+                    if (entry.imageUrl != null) ...[
+                      const SizedBox(height: 8),
+                      ClipRRect(
+                        borderRadius: BorderRadius.circular(8),
+                        child: Image.network(entry.imageUrl!, height: 140, width: double.infinity, fit: BoxFit.cover),
+                      ),
+                    ],
+                    const SizedBox(height: 8),
+                    // Bottom action bar: upvote | comments | flag
+                    Row(
+                      children: [
+                        // Upvote button
+                        Material(
+                          color: Colors.transparent,
+                          child: InkWell(
+                            onTap: () => _toggleBoardVote(entry),
+                            borderRadius: BorderRadius.circular(18),
+                            child: Padding(
+                              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                              child: Row(mainAxisSize: MainAxisSize.min, children: [
+                                Icon(
+                                  entry.hasVoted ? Icons.arrow_upward : Icons.arrow_upward_outlined,
+                                  size: 15,
+                                  color: entry.hasVoted ? AppTheme.brightNavy : SojornColors.textDisabled,
+                                ),
+                                const SizedBox(width: 3),
+                                Text('${entry.upvotes}', style: TextStyle(
+                                  color: entry.hasVoted ? AppTheme.brightNavy : SojornColors.textDisabled,
+                                  fontSize: 12,
+                                  fontWeight: FontWeight.w600,
+                                )),
+                              ]),
+                            ),
+                          ),
+                        ),
+                        const SizedBox(width: 10),
+                        // Reply count
+                        Padding(
+                          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                          child: Row(mainAxisSize: MainAxisSize.min, children: [
+                            Icon(Icons.chat_bubble_outline, size: 14, color: SojornColors.textDisabled),
+                            const SizedBox(width: 3),
+                            Text('${entry.replyCount}', style: TextStyle(color: SojornColors.textDisabled, fontSize: 12, fontWeight: FontWeight.w600)),
+                          ]),
+                        ),
+                        const Spacer(),
+                        // Flag/Report button
+                        if (_isNeighborhoodAdmin)
+                          PopupMenuButton<String>(
+                            icon: Icon(Icons.more_horiz, size: 16, color: SojornColors.textDisabled),
+                            onSelected: (val) {
+                              if (val == 'remove') _removeBoardEntry(entry);
+                              if (val == 'flag') _flagBoardEntry(entry);
+                            },
+                            itemBuilder: (_) => [
+                              const PopupMenuItem(value: 'flag', child: Text('Flag Content')),
+                              const PopupMenuItem(value: 'remove', child: Text('Remove (Admin)', style: TextStyle(color: SojornColors.destructive))),
+                            ],
+                          )
+                        else
+                          IconButton(
+                            icon: Icon(Icons.flag_outlined, size: 14, color: SojornColors.textDisabled.withValues(alpha: 0.5)),
+                            onPressed: () => _flagBoardEntry(entry),
+                            tooltip: 'Report Content',
+                            constraints: const BoxConstraints(minWidth: 36, minHeight: 36),
+                            padding: EdgeInsets.zero,
+                          ),
+                      ],
+                    ),
                   ],
                 ),
               ),
-            ],
-            // Header: topic badge + time
-            Row(
-              children: [
-                Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-                  decoration: BoxDecoration(
-                    color: topicColor.withValues(alpha: 0.1),
-                    borderRadius: BorderRadius.circular(6),
-                  ),
-                  child: Row(mainAxisSize: MainAxisSize.min, children: [
-                    Icon(entry.topic.icon, size: 12, color: topicColor),
-                    const SizedBox(width: 4),
-                    Text(entry.topic.displayName,
-                      style: TextStyle(fontSize: 11, fontWeight: FontWeight.w600, color: topicColor)),
-                  ]),
-                ),
-                if (entry.isPinned) ...[
-                  const SizedBox(width: 6),
-                  Icon(Icons.push_pin, size: 12, color: AppTheme.brightNavy),
-                ],
-                const Spacer(),
-                Text(entry.getTimeAgo(), style: TextStyle(color: SojornColors.textDisabled, fontSize: 11)),
-              ],
-            ),
-            const SizedBox(height: 8),
-            // User row: avatar + name + resident badge
-            Row(
-              children: [
-                SojornAvatar(
-                  displayName: entry.authorDisplayName.isNotEmpty ? entry.authorDisplayName : entry.authorHandle,
-                  avatarUrl: entry.authorAvatarUrl.isNotEmpty ? entry.authorAvatarUrl : null,
-                  size: 24,
-                ),
-                const SizedBox(width: 8),
-                Expanded(
-                  child: Row(
-                    children: [
-                      Text(
-                        authorName,
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                        style: TextStyle(color: SojornColors.postContent, fontSize: 13, fontWeight: FontWeight.w600),
-                      ),
-                      const SizedBox(width: 6),
-                      Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                        decoration: BoxDecoration(
-                          color: AppTheme.brightNavy.withValues(alpha: 0.1),
-                          borderRadius: BorderRadius.circular(999),
-                        ),
-                        child: Text(
-                          'Resident',
-                          style: TextStyle(fontSize: 9, fontWeight: FontWeight.w700, color: AppTheme.brightNavy),
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-              ],
-            ),
-            const SizedBox(height: 8),
-            // Body
-            Text(entry.body, maxLines: 4, overflow: TextOverflow.ellipsis,
-              style: TextStyle(color: SojornColors.postContentLight, fontSize: 14, height: 1.4)),
-            // Image
-            if (entry.imageUrl != null) ...[
-              const SizedBox(height: 8),
-              ClipRRect(
-                borderRadius: BorderRadius.circular(8),
-                child: Image.network(entry.imageUrl!, height: 140, width: double.infinity, fit: BoxFit.cover),
-              ),
-            ],
-            const SizedBox(height: 10),
-            // Bottom action bar: upvote | comments | flag
-            Row(
-              children: [
-                // Upvote button
-                Material(
-                  color: Colors.transparent,
-                  child: InkWell(
-                    onTap: () => _toggleBoardVote(entry),
-                    borderRadius: BorderRadius.circular(18),
-                    child: Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-                      constraints: const BoxConstraints(minHeight: 36, minWidth: 48),
-                      child: Row(mainAxisSize: MainAxisSize.min, children: [
-                        Icon(
-                          entry.hasVoted ? Icons.arrow_upward : Icons.arrow_upward_outlined,
-                          size: 16,
-                          color: entry.hasVoted ? AppTheme.brightNavy : SojornColors.textDisabled,
-                        ),
-                        const SizedBox(width: 4),
-                        Text('${entry.upvotes}', style: TextStyle(
-                          color: entry.hasVoted ? AppTheme.brightNavy : SojornColors.textDisabled,
-                          fontSize: 12,
-                          fontWeight: FontWeight.w600,
-                        )),
-                      ]),
-                    ),
-                  ),
-                ),
-                const SizedBox(width: 12),
-                // Reply count
-                Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-                  constraints: const BoxConstraints(minHeight: 36, minWidth: 48),
-                  child: Row(mainAxisSize: MainAxisSize.min, children: [
-                    Icon(Icons.chat_bubble_outline, size: 15, color: SojornColors.textDisabled),
-                    const SizedBox(width: 4),
-                    Text('${entry.replyCount}', style: TextStyle(color: SojornColors.textDisabled, fontSize: 12, fontWeight: FontWeight.w600)),
-                  ]),
-                ),
-                const Spacer(),
-                // Flag/Report button
-                if (_isNeighborhoodAdmin)
-                  PopupMenuButton<String>(
-                    icon: Icon(Icons.more_horiz, size: 16, color: SojornColors.textDisabled),
-                    onSelected: (val) {
-                      if (val == 'remove') _removeBoardEntry(entry);
-                      if (val == 'flag') _flagBoardEntry(entry);
-                    },
-                    itemBuilder: (_) => [
-                      const PopupMenuItem(value: 'flag', child: Text('Flag Content')),
-                      const PopupMenuItem(value: 'remove', child: Text('Remove (Admin)', style: TextStyle(color: SojornColors.destructive))),
-                    ],
-                  )
-                else
-                  IconButton(
-                    icon: Icon(Icons.flag_outlined, size: 16, color: SojornColors.textDisabled.withValues(alpha: 0.5)),
-                    onPressed: () => _flagBoardEntry(entry),
-                    tooltip: 'Report Content',
-                    constraints: const BoxConstraints(minWidth: 40, minHeight: 40),
-                  ),
-              ],
             ),
           ],
         ),
+      ),
       ),
     );
   }
@@ -2384,7 +2411,16 @@ class BeaconScreenState extends ConsumerState<BeaconScreen> with TickerProviderS
         subtitle: Text('${b['category'] ?? 'incident'} · ${b['author_handle'] ?? ''}',
           style: TextStyle(color: SojornColors.textDisabled, fontSize: 11)),
         onTap: () {
-          // Navigate to beacon detail if possible
+          try {
+            final post = Post.fromJson(b);
+            openDesktopDialog(
+              context,
+              width: 700,
+              child: BeaconDetailScreen(beaconPost: post),
+            );
+          } catch (_) {
+            // Search result may lack required Post fields — ignore
+          }
         },
       ),
     );
@@ -2471,8 +2507,8 @@ class BeaconScreenState extends ConsumerState<BeaconScreen> with TickerProviderS
         : _clusters.where((c) => c.category == _selectedGroupCategory).toList();
     
     // Filter out current neighborhood board group
-    if (_neighborhood != null && _neighborhood!['group_id'] != null) {
-      final hoodGroupId = _neighborhood!['group_id'];
+    final hoodGroupId = _neighborhoodGroupId;
+    if (hoodGroupId != null) {
       filtered = filtered.where((c) => c.id != hoodGroupId).toList();
     }
 
@@ -2483,8 +2519,7 @@ class BeaconScreenState extends ConsumerState<BeaconScreen> with TickerProviderS
         ? _discoverClusters
         : _discoverClusters.where((c) => c.category == _selectedGroupCategory).toList();
     // Also filter out neighborhood group from discover
-    if (_neighborhood != null && _neighborhood!['group_id'] != null) {
-      final hoodGroupId = _neighborhood!['group_id'];
+    if (hoodGroupId != null) {
       filteredDiscover = filteredDiscover.where((c) => c.id != hoodGroupId).toList();
     }
 
@@ -3649,165 +3684,6 @@ class _CreateGroupInlineState extends ConsumerState<_CreateGroupInline> {
             ),
           ),
         ],
-      ),
-    );
-  }
-}
-
-// ─── Sub-filter dialog — individual type toggles within a category ─────
-class _SubFilterDialog extends StatefulWidget {
-  final ({String label, IconData icon, Color color, List<BeaconType> types}) group;
-  final Set<BeaconType> hiddenTypes;
-  final ValueChanged<Set<BeaconType>> onChanged;
-
-  const _SubFilterDialog({
-    required this.group,
-    required this.hiddenTypes,
-    required this.onChanged,
-  });
-
-  @override
-  State<_SubFilterDialog> createState() => _SubFilterDialogState();
-}
-
-class _SubFilterDialogState extends State<_SubFilterDialog> {
-  late Set<BeaconType> _localHidden;
-
-  @override
-  void initState() {
-    super.initState();
-    _localHidden = Set.of(widget.hiddenTypes);
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    final group = widget.group;
-    return Align(
-      alignment: Alignment.topCenter,
-      child: Padding(
-        padding: EdgeInsets.only(top: MediaQuery.of(context).padding.top + 48, left: 12, right: 12),
-        child: Material(
-          color: Colors.transparent,
-          child: ClipRRect(
-            borderRadius: BorderRadius.circular(16),
-            child: BackdropFilter(
-              filter: ImageFilter.blur(sigmaX: 20, sigmaY: 20),
-              child: Container(
-                width: double.infinity,
-                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-                decoration: BoxDecoration(
-                  color: Colors.white.withValues(alpha: 0.92),
-                  borderRadius: BorderRadius.circular(16),
-                  border: Border.all(color: group.color.withValues(alpha: 0.3)),
-                  boxShadow: [
-                    BoxShadow(
-                      color: Colors.black.withValues(alpha: 0.12),
-                      blurRadius: 16,
-                      offset: const Offset(0, 4),
-                    ),
-                  ],
-                ),
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    // Header
-                    Row(
-                      children: [
-                        Icon(group.icon, size: 16, color: group.color),
-                        const SizedBox(width: 8),
-                        Text(
-                          group.label,
-                          style: TextStyle(
-                            fontSize: 14,
-                            fontWeight: FontWeight.w700,
-                            color: group.color,
-                          ),
-                        ),
-                        const Spacer(),
-                        // Toggle all
-                        GestureDetector(
-                          onTap: () {
-                            final allVisible = group.types.every((t) => !_localHidden.contains(t));
-                            setState(() {
-                              if (allVisible) {
-                                _localHidden.addAll(group.types);
-                              } else {
-                                _localHidden.removeAll(group.types);
-                              }
-                            });
-                            widget.onChanged(_localHidden.intersection(group.types.toSet()));
-                          },
-                          child: Text(
-                            group.types.every((t) => !_localHidden.contains(t)) ? 'Hide All' : 'Show All',
-                            style: TextStyle(
-                              fontSize: 12,
-                              fontWeight: FontWeight.w600,
-                              color: group.color,
-                            ),
-                          ),
-                        ),
-                      ],
-                    ),
-                    const SizedBox(height: 8),
-                    // Individual type toggles
-                    ...group.types.map((type) {
-                      final visible = !_localHidden.contains(type);
-                      return GestureDetector(
-                        behavior: HitTestBehavior.opaque,
-                        onTap: () {
-                          setState(() {
-                            if (visible) {
-                              _localHidden.add(type);
-                            } else {
-                              _localHidden.remove(type);
-                            }
-                          });
-                          widget.onChanged(_localHidden.intersection(group.types.toSet()));
-                        },
-                        child: Padding(
-                          padding: const EdgeInsets.symmetric(vertical: 6),
-                          child: Row(
-                            children: [
-                              AnimatedContainer(
-                                duration: const Duration(milliseconds: 150),
-                                width: 20, height: 20,
-                                decoration: BoxDecoration(
-                                  color: visible ? type.color.withValues(alpha: 0.15) : Colors.grey.withValues(alpha: 0.08),
-                                  borderRadius: BorderRadius.circular(6),
-                                  border: Border.all(
-                                    color: visible ? type.color : Colors.grey.withValues(alpha: 0.3),
-                                    width: 1.5,
-                                  ),
-                                ),
-                                child: visible
-                                    ? Icon(Icons.check, size: 13, color: type.color)
-                                    : null,
-                              ),
-                              const SizedBox(width: 10),
-                              Icon(type.icon, size: 16, color: visible ? type.color : Colors.grey.withValues(alpha: 0.4)),
-                              const SizedBox(width: 8),
-                              Expanded(
-                                child: Text(
-                                  type.displayName,
-                                  style: TextStyle(
-                                    fontSize: 13,
-                                    fontWeight: FontWeight.w500,
-                                    color: visible ? Colors.black87 : Colors.grey.withValues(alpha: 0.5),
-                                  ),
-                                ),
-                              ),
-                            ],
-                          ),
-                        ),
-                      );
-                    }),
-                  ],
-                ),
-              ),
-            ),
-          ),
-        ),
       ),
     );
   }

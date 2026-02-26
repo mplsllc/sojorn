@@ -182,15 +182,36 @@ class _GroupMembersTabState extends State<GroupMembersTab> {
                         final avatarUrl = m['avatar_url'] as String? ?? '';
                         final role = m['role'] as String? ?? 'member';
                         final isMe = m['user_id']?.toString() == _currentUserId;
+                        final isOnline = m['is_online'] as bool? ?? false;
 
                         return ListTile(
                           onLongPress: canManage && !isMe ? () => _showMemberActions(m) : null,
                           onTap: canManage && !isMe ? () => _showMemberActions(m) : null,
                           contentPadding: const EdgeInsets.symmetric(horizontal: 4, vertical: 2),
-                          leading: SojornAvatar(
-                            displayName: displayName.isNotEmpty ? displayName : handle,
-                            avatarUrl: avatarUrl.isNotEmpty ? avatarUrl : null,
-                            size: 40,
+                          leading: Stack(
+                            clipBehavior: Clip.none,
+                            children: [
+                              SojornAvatar(
+                                displayName: displayName.isNotEmpty ? displayName : handle,
+                                avatarUrl: avatarUrl.isNotEmpty ? avatarUrl : null,
+                                size: 40,
+                              ),
+                              // Online indicator dot
+                              if (isOnline)
+                                Positioned(
+                                  right: -1,
+                                  bottom: -1,
+                                  child: Container(
+                                    width: 12,
+                                    height: 12,
+                                    decoration: BoxDecoration(
+                                      color: const Color(0xFF22C55E),
+                                      shape: BoxShape.circle,
+                                      border: Border.all(color: AppTheme.cardSurface, width: 2),
+                                    ),
+                                  ),
+                                ),
+                            ],
                           ),
                           title: Row(
                             children: [
@@ -205,20 +226,23 @@ class _GroupMembersTabState extends State<GroupMembersTab> {
                                 const SizedBox(width: 6),
                                 Text('(you)', style: TextStyle(color: SojornColors.textDisabled, fontSize: 11)),
                               ],
+                              if (role == 'admin' || role == 'owner') ...[
+                                const SizedBox(width: 6),
+                                Container(
+                                  padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1),
+                                  decoration: BoxDecoration(
+                                    color: _roleColor(role).withValues(alpha: 0.15),
+                                    borderRadius: BorderRadius.circular(4),
+                                  ),
+                                  child: Text(
+                                    role == 'owner' ? 'OWNER' : 'ADMIN',
+                                    style: TextStyle(color: _roleColor(role), fontSize: 9, fontWeight: FontWeight.w800, letterSpacing: 0.5),
+                                  ),
+                                ),
+                              ],
                             ],
                           ),
                           subtitle: Text('@$handle', style: TextStyle(color: SojornColors.textDisabled, fontSize: 12)),
-                          trailing: Container(
-                            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-                            decoration: BoxDecoration(
-                              color: _roleColor(role).withValues(alpha: 0.12),
-                              borderRadius: BorderRadius.circular(6),
-                            ),
-                            child: Text(
-                              role.toUpperCase(),
-                              style: TextStyle(color: _roleColor(role), fontSize: 10, fontWeight: FontWeight.w700, letterSpacing: 0.5),
-                            ),
-                          ),
                         );
                       },
                     ),
