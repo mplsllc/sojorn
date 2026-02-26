@@ -1097,7 +1097,7 @@ class BeaconScreenState extends ConsumerState<BeaconScreen> with TickerProviderS
           ),
           child: Column(
             children: [
-              ActiveAlertsTicker(alerts: _beaconModels, onAlertTap: _onBeaconModelTap),
+              ActiveAlertsTicker(alerts: _beaconModels.where((b) => !_hiddenTypes.contains(b.beaconType)).toList(), onAlertTap: _onBeaconModelTap),
               if (_activeGeoAlerts.isNotEmpty)
                 Padding(
                   padding: const EdgeInsets.fromLTRB(16, 8, 16, 2),
@@ -1210,7 +1210,7 @@ class BeaconScreenState extends ConsumerState<BeaconScreen> with TickerProviderS
                       controller: scrollController,
                       slivers: [
                         SliverToBoxAdapter(
-                          child: ActiveAlertsTicker(alerts: _beaconModels, onAlertTap: _onBeaconModelTap),
+                          child: ActiveAlertsTicker(alerts: _beaconModels.where((b) => !_hiddenTypes.contains(b.beaconType)).toList(), onAlertTap: _onBeaconModelTap),
                         ),
                         if (_activeGeoAlerts.isNotEmpty)
                           SliverToBoxAdapter(
@@ -1308,8 +1308,6 @@ class BeaconScreenState extends ConsumerState<BeaconScreen> with TickerProviderS
               child: const SizedBox.expand(),
             ),
           ),
-        // Floating status pill — glanceable summary above collapsed sheet
-        _buildFloatingStatusPill(screenH),
         // FAB — create a new report
         if (_sheetSize < 0.6)
           Positioned(
@@ -1484,9 +1482,13 @@ class BeaconScreenState extends ConsumerState<BeaconScreen> with TickerProviderS
           child: Row(
             mainAxisAlignment: MainAxisAlignment.spaceEvenly,
             children: _mapLayerGroups.map((group) {
-              final isVisible =
-                  !group.types.every((t) => _hiddenTypes.contains(t));
+              final visibleCount =
+                  group.types.where((t) => !_hiddenTypes.contains(t)).length;
+              final allVisible = visibleCount == group.types.length;
+              final noneVisible = visibleCount == 0;
+              final isVisible = !noneVisible;
               return GestureDetector(
+                // Tap: toggle entire group
                 onTap: () => setState(() {
                   if (isVisible) {
                     _hiddenTypes.addAll(group.types);
@@ -1494,6 +1496,8 @@ class BeaconScreenState extends ConsumerState<BeaconScreen> with TickerProviderS
                     _hiddenTypes.removeAll(group.types);
                   }
                 }),
+                // Long-press: show sub-type filter popup
+                onLongPress: () => _showSubFilterPopup(group),
                 child: AnimatedContainer(
                   duration: const Duration(milliseconds: 150),
                   margin: const EdgeInsets.symmetric(horizontal: 1),
@@ -1532,6 +1536,26 @@ class BeaconScreenState extends ConsumerState<BeaconScreen> with TickerProviderS
                               : Colors.grey.withValues(alpha: 0.55),
                         ),
                       ),
+                      // Partial selection indicator
+                      if (isVisible && !allVisible) ...[
+                        const SizedBox(width: 2),
+                        Text(
+                          '$visibleCount',
+                          style: TextStyle(
+                            fontSize: 8,
+                            fontWeight: FontWeight.w700,
+                            color: group.color.withValues(alpha: 0.6),
+                          ),
+                        ),
+                      ],
+                      const SizedBox(width: 1),
+                      Icon(
+                        Icons.keyboard_arrow_down_rounded,
+                        size: 10,
+                        color: isVisible
+                            ? group.color.withValues(alpha: 0.6)
+                            : Colors.grey.withValues(alpha: 0.4),
+                      ),
                     ],
                   ),
                 ),
@@ -1543,100 +1567,23 @@ class BeaconScreenState extends ConsumerState<BeaconScreen> with TickerProviderS
     );
   }
 
-  // ─── Floating status pill — glanceable summary between overlay bar and sheet ──
-  Widget _buildFloatingStatusPill(double screenH) {
-    // Count = total active alerts (same as the list below — pill IS the entry point)
-    final total = _activeGeoAlerts.length;
+  void _showSubFilterPopup(({String label, IconData icon, Color color, List<BeaconType> types}) group) {
+    final RenderBox? overlay = Overlay.of(context).context.findRenderObject() as RenderBox?;
+    if (overlay == null) return;
 
-    // Color driven by highest severity tier present
-    final hasCritical = _beaconModels.any((b) =>
-        b.beaconType.isGeoAlert &&
-        b.severity == BeaconSeverity.critical &&
-        b.incidentStatus == BeaconIncidentStatus.active);
-    final hasHigh = _beaconModels.any((b) =>
-        b.beaconType.isGeoAlert &&
-        b.severity == BeaconSeverity.high &&
-        b.incidentStatus == BeaconIncidentStatus.active);
-
-    final Color pillColor;
-    final IconData pillIcon;
-
-    if (total == 0) {
-      pillColor = const Color(0xFF4CAF50);
-      pillIcon = Icons.shield;
-    } else if (hasCritical) {
-      pillColor = SojornColors.destructive;
-      pillIcon = Icons.warning_rounded;
-    } else if (hasHigh) {
-      pillColor = const Color(0xFFFF5722);
-      pillIcon = Icons.error_outline;
-    } else {
-      pillColor = const Color(0xFFFFC107);
-      pillIcon = Icons.info_outline;
-    }
-
-    final pillText = total == 0
-        ? 'All Clear'
-        : '$total Alert${total == 1 ? '' : 's'} Nearby';
-
-    // Float left (avoids FAB on the right); hides as sheet opens past halfway
-    final pillBottom = (screenH * _sheetSize).clamp(screenH * 0.15, screenH * 0.5) + 14.0;
-    final visible = _sheetSize < 0.55;
-
-    return Positioned(
-      bottom: pillBottom,
-      left: 16,
-      child: AnimatedOpacity(
-        opacity: visible ? 1.0 : 0.0,
-        duration: const Duration(milliseconds: 200),
-        child: GestureDetector(
-          onTap: () {
-            if (!_sheetController.isAttached) return;
-            _sheetController.animateTo(0.5,
-                duration: const Duration(milliseconds: 300), curve: Curves.easeOut);
-          },
-          child: ClipRRect(
-            borderRadius: BorderRadius.circular(22),
-            child: BackdropFilter(
-              filter: ImageFilter.blur(sigmaX: 18, sigmaY: 18),
-              child: Container(
-                padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
-                decoration: BoxDecoration(
-                  // Translucent tint — blur does the heavy lifting
-                  color: pillColor.withValues(alpha: 0.28),
-                  borderRadius: BorderRadius.circular(22),
-                  border: Border.all(
-                    color: pillColor.withValues(alpha: 0.5),
-                    width: 1.0,
-                  ),
-                  boxShadow: [
-                    BoxShadow(
-                      color: pillColor.withValues(alpha: 0.18),
-                      blurRadius: 12,
-                      offset: const Offset(0, 3),
-                    ),
-                  ],
-                ),
-                child: Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Icon(pillIcon, size: 14, color: pillColor),
-                    const SizedBox(width: 6),
-                    Text(pillText,
-                      style: TextStyle(
-                        color: pillColor,
-                        fontSize: 13,
-                        fontWeight: FontWeight.w800,
-                      )),
-                    const SizedBox(width: 5),
-                    Icon(Icons.keyboard_arrow_up_rounded, size: 15,
-                      color: pillColor.withValues(alpha: 0.65)),
-                  ],
-                ),
-              ),
-            ),
-          ),
-        ),
+    showDialog(
+      context: context,
+      barrierColor: Colors.black12,
+      builder: (ctx) => _SubFilterDialog(
+        group: group,
+        hiddenTypes: Set.of(_hiddenTypes),
+        onChanged: (newHidden) {
+          setState(() {
+            // Remove all group types first, then add back the hidden ones
+            _hiddenTypes.removeAll(group.types);
+            _hiddenTypes.addAll(newHidden);
+          });
+        },
       ),
     );
   }
@@ -3108,14 +3055,14 @@ class BeaconScreenState extends ConsumerState<BeaconScreen> with TickerProviderS
         // Public event markers — calendar pins for events with coordinates
         if (_mapEvents.isNotEmpty)
           MarkerLayer(markers: _buildEventMarkers()),
-        // Camera markers — shown only when zoomed in enough (≥ 12)
-        if (_currentZoom >= 12.0 && _cameraPosts.isNotEmpty)
+        // Camera markers — shown only when zoomed in enough (≥ 12) and not hidden
+        if (_currentZoom >= 12.0 && _cameraPosts.isNotEmpty && !_hiddenTypes.contains(BeaconType.camera))
           MarkerLayer(markers: _buildCameraMarkers()),
-        // DMS sign markers — zoom ≥ 11
-        if (_currentZoom >= 11.0 && _signPosts.isNotEmpty)
+        // DMS sign markers — zoom ≥ 11 and not hidden
+        if (_currentZoom >= 11.0 && _signPosts.isNotEmpty && !_hiddenTypes.contains(BeaconType.sign))
           MarkerLayer(markers: _buildSignMarkers()),
-        // RWIS weather station markers — zoom ≥ 10
-        if (_currentZoom >= 10.0 && _weatherPosts.isNotEmpty)
+        // RWIS weather station markers — zoom ≥ 10 and not hidden
+        if (_currentZoom >= 10.0 && _weatherPosts.isNotEmpty && !_hiddenTypes.contains(BeaconType.weatherStation))
           MarkerLayer(markers: _buildWeatherMarkers()),
         // User location marker (not clustered)
         if (_locationPermissionGranted && _userLocation != null)
@@ -3702,6 +3649,165 @@ class _CreateGroupInlineState extends ConsumerState<_CreateGroupInline> {
             ),
           ),
         ],
+      ),
+    );
+  }
+}
+
+// ─── Sub-filter dialog — individual type toggles within a category ─────
+class _SubFilterDialog extends StatefulWidget {
+  final ({String label, IconData icon, Color color, List<BeaconType> types}) group;
+  final Set<BeaconType> hiddenTypes;
+  final ValueChanged<Set<BeaconType>> onChanged;
+
+  const _SubFilterDialog({
+    required this.group,
+    required this.hiddenTypes,
+    required this.onChanged,
+  });
+
+  @override
+  State<_SubFilterDialog> createState() => _SubFilterDialogState();
+}
+
+class _SubFilterDialogState extends State<_SubFilterDialog> {
+  late Set<BeaconType> _localHidden;
+
+  @override
+  void initState() {
+    super.initState();
+    _localHidden = Set.of(widget.hiddenTypes);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final group = widget.group;
+    return Align(
+      alignment: Alignment.topCenter,
+      child: Padding(
+        padding: EdgeInsets.only(top: MediaQuery.of(context).padding.top + 48, left: 12, right: 12),
+        child: Material(
+          color: Colors.transparent,
+          child: ClipRRect(
+            borderRadius: BorderRadius.circular(16),
+            child: BackdropFilter(
+              filter: ImageFilter.blur(sigmaX: 20, sigmaY: 20),
+              child: Container(
+                width: double.infinity,
+                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                decoration: BoxDecoration(
+                  color: Colors.white.withValues(alpha: 0.92),
+                  borderRadius: BorderRadius.circular(16),
+                  border: Border.all(color: group.color.withValues(alpha: 0.3)),
+                  boxShadow: [
+                    BoxShadow(
+                      color: Colors.black.withValues(alpha: 0.12),
+                      blurRadius: 16,
+                      offset: const Offset(0, 4),
+                    ),
+                  ],
+                ),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    // Header
+                    Row(
+                      children: [
+                        Icon(group.icon, size: 16, color: group.color),
+                        const SizedBox(width: 8),
+                        Text(
+                          group.label,
+                          style: TextStyle(
+                            fontSize: 14,
+                            fontWeight: FontWeight.w700,
+                            color: group.color,
+                          ),
+                        ),
+                        const Spacer(),
+                        // Toggle all
+                        GestureDetector(
+                          onTap: () {
+                            final allVisible = group.types.every((t) => !_localHidden.contains(t));
+                            setState(() {
+                              if (allVisible) {
+                                _localHidden.addAll(group.types);
+                              } else {
+                                _localHidden.removeAll(group.types);
+                              }
+                            });
+                            widget.onChanged(_localHidden.intersection(group.types.toSet()));
+                          },
+                          child: Text(
+                            group.types.every((t) => !_localHidden.contains(t)) ? 'Hide All' : 'Show All',
+                            style: TextStyle(
+                              fontSize: 12,
+                              fontWeight: FontWeight.w600,
+                              color: group.color,
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 8),
+                    // Individual type toggles
+                    ...group.types.map((type) {
+                      final visible = !_localHidden.contains(type);
+                      return GestureDetector(
+                        behavior: HitTestBehavior.opaque,
+                        onTap: () {
+                          setState(() {
+                            if (visible) {
+                              _localHidden.add(type);
+                            } else {
+                              _localHidden.remove(type);
+                            }
+                          });
+                          widget.onChanged(_localHidden.intersection(group.types.toSet()));
+                        },
+                        child: Padding(
+                          padding: const EdgeInsets.symmetric(vertical: 6),
+                          child: Row(
+                            children: [
+                              AnimatedContainer(
+                                duration: const Duration(milliseconds: 150),
+                                width: 20, height: 20,
+                                decoration: BoxDecoration(
+                                  color: visible ? type.color.withValues(alpha: 0.15) : Colors.grey.withValues(alpha: 0.08),
+                                  borderRadius: BorderRadius.circular(6),
+                                  border: Border.all(
+                                    color: visible ? type.color : Colors.grey.withValues(alpha: 0.3),
+                                    width: 1.5,
+                                  ),
+                                ),
+                                child: visible
+                                    ? Icon(Icons.check, size: 13, color: type.color)
+                                    : null,
+                              ),
+                              const SizedBox(width: 10),
+                              Icon(type.icon, size: 16, color: visible ? type.color : Colors.grey.withValues(alpha: 0.4)),
+                              const SizedBox(width: 8),
+                              Expanded(
+                                child: Text(
+                                  type.displayName,
+                                  style: TextStyle(
+                                    fontSize: 13,
+                                    fontWeight: FontWeight.w500,
+                                    color: visible ? Colors.black87 : Colors.grey.withValues(alpha: 0.5),
+                                  ),
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      );
+                    }),
+                  ],
+                ),
+              ),
+            ),
+          ),
+        ),
       ),
     );
   }
