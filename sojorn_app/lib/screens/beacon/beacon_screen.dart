@@ -433,7 +433,7 @@ class BeaconScreenState extends ConsumerState<BeaconScreen> with TickerProviderS
       try {
         final bounds = _mapController.camera.visibleBounds;
         final diagMeters = _haversineMeters(bounds.southWest, bounds.northEast);
-        radius = (diagMeters / 2 * 1.2).round().clamp(16000, 100000);
+        radius = (diagMeters / 2 * 1.2).round().clamp(8000, 50000);
       } catch (_) {}
 
       final allPosts = await apiService.fetchUnifiedBeacons(

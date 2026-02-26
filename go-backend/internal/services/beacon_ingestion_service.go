@@ -13,6 +13,7 @@ import (
 	"io"
 	"math"
 	"net/http"
+	"strings"
 	"sync"
 	"time"
 
@@ -319,6 +320,7 @@ func (s *BeaconIngestionService) ingestMN511Alerts(ctx context.Context) (int, er
 
 type mn511CamIngestion struct {
 	ID                    string  `json:"id"`
+	URI                   string  `json:"uri"`
 	Title                 string  `json:"title"`
 	Category              string  `json:"category"`
 	URL                   string  `json:"url"`
@@ -338,20 +340,20 @@ type mn511CamIngestionResp struct {
 }
 
 // ingestMN511Cameras upserts MN511 camera views into beacon_alerts.
-// Cameras are permanent infrastructure — we NEVER call CleanOrphaned for them.
-// The MN511 proxy (port 8787) stores cameras in SQLite with a default limit=500.
-// We pass limit=5000 to get all cameras statewide in a single request.
-// On subsequent runs, skip if already populated (cameras rarely change).
+// Cameras are permanent infrastructure — fetched once, stored forever.
+// The MN511 proxy keeps historical snapshots (IDs like camera/447254/4136196501
+// where the first component is a snapshot ID that changes each scrape cycle).
+// We extract the stable camera ID (second component) as external_id to deduplicate.
 func (s *BeaconIngestionService) ingestMN511Cameras(ctx context.Context) (int, error) {
 	existing, err := s.repo.CountBySource(ctx, "mn511_camera")
-	if err == nil && existing >= 1000 {
+	if err == nil && existing >= 3000 {
 		log.Debug().Int("existing", existing).Msg("beacon ingestion: mn511 cameras — skip (already populated)")
 		return 0, nil
 	}
 
-	// Single request with high limit to get all cameras statewide.
-	// The proxy's SQLite DB has ~5000 cameras; limit=5000 gets them all.
-	apiURL := fmt.Sprintf("%s/api/camera-views?bbox=-97.5,43.5,-89.5,49.5&limit=5000", s.mn511Base)
+	// The proxy's SQLite stores ~9000+ rows (historical snapshots).
+	// Fetch all with a high limit, then deduplicate by stable camera ID.
+	apiURL := fmt.Sprintf("%s/api/camera-views?bbox=-97.5,43.5,-89.5,49.5&limit=10000", s.mn511Base)
 	body, err := s.fetchJSON(apiURL)
 	if err != nil {
 		log.Error().Err(err).Msg("beacon ingestion: mn511 cameras fetch failed")
@@ -371,12 +373,28 @@ func (s *BeaconIngestionService) ingestMN511Cameras(ctx context.Context) (int, e
 	display := "MN 511"
 	authorID := "00000000-0000-0000-0000-000000000511"
 
+	// Deduplicate by stable camera ID (second component of "camera/SNAPSHOT/STABLE").
+	// The proxy returns newest first (ORDER BY last_updated_at DESC), so the first
+	// occurrence of each stable ID is the most recent data.
+	seen := make(map[string]bool)
 	var allAlerts []*repository.BeaconAlert
 
 	for _, cam := range resp.Cameras {
 		if cam.Lat == 0 || cam.Lon == 0 {
 			continue
 		}
+
+		// Extract stable camera ID: "camera/447254/4136196501" → "4136196501"
+		stableID := cam.ID
+		parts := strings.Split(cam.ID, "/")
+		if len(parts) == 3 {
+			stableID = parts[2]
+		}
+
+		if seen[stableID] {
+			continue
+		}
+		seen[stableID] = true
 
 		streamURL := ""
 		for _, s := range cam.Sources {
@@ -400,7 +418,7 @@ func (s *BeaconIngestionService) ingestMN511Cameras(ctx context.Context) (int, e
 		}
 
 		allAlerts = append(allAlerts, &repository.BeaconAlert{
-			ExternalID:     cam.ID,
+			ExternalID:     stableID,
 			Source:         "mn511_camera",
 			BeaconType:     "camera",
 			Severity:       "low",
@@ -433,8 +451,7 @@ func (s *BeaconIngestionService) ingestMN511Cameras(ctx context.Context) (int, e
 		log.Error().Err(upsertErr).Msg("beacon ingestion: mn511 cameras upsert failed")
 		return count, upsertErr
 	}
-	// NO CleanOrphaned — cameras are permanent infrastructure.
-	log.Info().Int("upserted", count).Int("fetched", len(resp.Cameras)).Msg("beacon ingestion: mn511 cameras complete")
+	log.Info().Int("upserted", count).Int("unique_cameras", len(seen)).Int("fetched", len(resp.Cameras)).Msg("beacon ingestion: mn511 cameras complete")
 	return count, nil
 }
 
