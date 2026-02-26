@@ -339,111 +339,89 @@ type mn511CamIngestionResp struct {
 
 // ingestMN511Cameras upserts MN511 camera views into beacon_alerts.
 // Cameras are permanent infrastructure — we NEVER call CleanOrphaned for them.
-// On first run (< 200 cameras in DB), performs a tiled sweep across Minnesota
-// to overcome the MN511 API 500-record cap. Subsequent runs skip periodic
-// re-fetch entirely (camera locations and stream URLs rarely change).
+// The MN511 proxy (port 8787) stores cameras in SQLite with a default limit=500.
+// We pass limit=5000 to get all cameras statewide in a single request.
+// On subsequent runs, skip if already populated (cameras rarely change).
 func (s *BeaconIngestionService) ingestMN511Cameras(ctx context.Context) (int, error) {
-	// Check existing count — if we already have a good set, skip the fetch.
-	// Cameras are permanent; there's no need to re-ingest them every 2 minutes.
 	existing, err := s.repo.CountBySource(ctx, "mn511_camera")
-	if err == nil && existing >= 200 {
+	if err == nil && existing >= 1000 {
 		log.Debug().Int("existing", existing).Msg("beacon ingestion: mn511 cameras — skip (already populated)")
 		return 0, nil
 	}
 
-	log.Info().Int("existing", existing).Msg("beacon ingestion: mn511 cameras — full tiled sweep starting")
-
-	// Tile Minnesota (43.5–49.5°N, 97.5–89.5°W) in 0.5° steps.
-	// Dense metro tiles may still cap at 500, but we'll capture far more
-	// than the previous single-request approach.
-	type tile struct{ minLon, minLat, maxLon, maxLat float64 }
-	var tiles []tile
-	step := 0.5
-	for lat := 43.5; lat < 49.5; lat += step {
-		for lon := -97.5; lon < -89.5; lon += step {
-			tiles = append(tiles, tile{lon, lat, lon + step, lat + step})
-		}
+	// Single request with high limit to get all cameras statewide.
+	// The proxy's SQLite DB has ~5000 cameras; limit=5000 gets them all.
+	apiURL := fmt.Sprintf("%s/api/camera-views?bbox=-97.5,43.5,-89.5,49.5&limit=5000", s.mn511Base)
+	body, err := s.fetchJSON(apiURL)
+	if err != nil {
+		log.Error().Err(err).Msg("beacon ingestion: mn511 cameras fetch failed")
+		return 0, err
 	}
 
-	seen := map[string]struct{}{}
-	var allAlerts []*repository.BeaconAlert
+	var resp mn511CamIngestionResp
+	if err := json.Unmarshal(body, &resp); err != nil {
+		log.Error().Err(err).Msg("beacon ingestion: mn511 cameras parse failed")
+		return 0, err
+	}
+
+	log.Info().Int("returned", len(resp.Cameras)).Int("existing", existing).Msg("beacon ingestion: mn511 cameras fetched")
 
 	src := "MN 511"
 	handle := "@mn511"
 	display := "MN 511"
 	authorID := "00000000-0000-0000-0000-000000000511"
 
-	for _, t := range tiles {
-		bbox := fmt.Sprintf("%.2f,%.2f,%.2f,%.2f", t.minLon, t.minLat, t.maxLon, t.maxLat)
-		apiURL := fmt.Sprintf("%s/api/camera-views?bbox=%s", s.mn511Base, bbox)
-		body, err := s.fetchJSON(apiURL)
-		if err != nil {
-			log.Warn().Err(err).Str("bbox", bbox).Msg("beacon ingestion: mn511 cameras tile fetch failed — skipping tile")
+	var allAlerts []*repository.BeaconAlert
+
+	for _, cam := range resp.Cameras {
+		if cam.Lat == 0 || cam.Lon == 0 {
 			continue
 		}
 
-		var resp mn511CamIngestionResp
-		if err := json.Unmarshal(body, &resp); err != nil {
-			continue
+		streamURL := ""
+		for _, s := range cam.Sources {
+			if s.Type == "application/x-mpegURL" || s.Src != "" {
+				streamURL = s.Src
+				break
+			}
 		}
 
-		for _, cam := range resp.Cameras {
-			if cam.Lat == 0 || cam.Lon == 0 {
-				continue
-			}
-			if _, dup := seen[cam.ID]; dup {
-				continue
-			}
-			seen[cam.ID] = struct{}{}
-
-			streamURL := ""
-			for _, s := range cam.Sources {
-				if s.Type == "application/x-mpegURL" || s.Src != "" {
-					streamURL = s.Src
-					break
-				}
-			}
-
-			displayTitle := cam.Title
-			if cam.ParentRouteDesignator != "" {
-				displayTitle = cam.ParentRouteDesignator + " — " + cam.Title
-			}
-
-			var imgPtr, vidPtr *string
-			if cam.URL != "" {
-				imgPtr = &cam.URL
-			}
-			if streamURL != "" {
-				vidPtr = &streamURL
-			}
-
-			allAlerts = append(allAlerts, &repository.BeaconAlert{
-				ExternalID:     cam.ID,
-				Source:         "mn511_camera",
-				BeaconType:     "camera",
-				Severity:       "low",
-				Title:          displayTitle,
-				Body:           displayTitle,
-				Lat:            cam.Lat,
-				Lng:            cam.Lon,
-				Radius:         50,
-				ImageURL:       imgPtr,
-				VideoURL:       vidPtr,
-				IsOfficial:     true,
-				OfficialSource: &src,
-				AuthorID:       &authorID,
-				AuthorHandle:   &handle,
-				AuthorDisplay:  &display,
-				Status:         "active",
-				IncidentStatus: "active",
-				Confidence:     1.0,
-				Tags:           []string{},
-				CreatedAt:      time.Now().UTC(),
-			})
+		displayTitle := cam.Title
+		if cam.ParentRouteDesignator != "" {
+			displayTitle = cam.ParentRouteDesignator + " — " + cam.Title
 		}
 
-		// Brief pause to avoid hammering the MN511 proxy
-		time.Sleep(50 * time.Millisecond)
+		var imgPtr, vidPtr *string
+		if cam.URL != "" {
+			imgPtr = &cam.URL
+		}
+		if streamURL != "" {
+			vidPtr = &streamURL
+		}
+
+		allAlerts = append(allAlerts, &repository.BeaconAlert{
+			ExternalID:     cam.ID,
+			Source:         "mn511_camera",
+			BeaconType:     "camera",
+			Severity:       "low",
+			Title:          displayTitle,
+			Body:           displayTitle,
+			Lat:            cam.Lat,
+			Lng:            cam.Lon,
+			Radius:         50,
+			ImageURL:       imgPtr,
+			VideoURL:       vidPtr,
+			IsOfficial:     true,
+			OfficialSource: &src,
+			AuthorID:       &authorID,
+			AuthorHandle:   &handle,
+			AuthorDisplay:  &display,
+			Status:         "active",
+			IncidentStatus: "active",
+			Confidence:     1.0,
+			Tags:           []string{},
+			CreatedAt:      time.Now().UTC(),
+		})
 	}
 
 	if len(allAlerts) == 0 {
@@ -456,7 +434,7 @@ func (s *BeaconIngestionService) ingestMN511Cameras(ctx context.Context) (int, e
 		return count, upsertErr
 	}
 	// NO CleanOrphaned — cameras are permanent infrastructure.
-	log.Info().Int("upserted", count).Int("tiles", len(tiles)).Int("unique", len(seen)).Msg("beacon ingestion: mn511 cameras tiled sweep complete")
+	log.Info().Int("upserted", count).Int("fetched", len(resp.Cameras)).Msg("beacon ingestion: mn511 cameras complete")
 	return count, nil
 }
 
