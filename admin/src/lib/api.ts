@@ -78,6 +78,13 @@ class ApiClient {
     return this.request<any>(`/api/v1/admin/users/${id}`, { method: 'DELETE' });
   }
 
+  async warnUser(params: { user_id?: string; post_id?: string; message: string; content_type?: string }) {
+    return this.request<any>('/api/v1/admin/warn', {
+      method: 'POST',
+      body: JSON.stringify(params),
+    });
+  }
+
   async updateUserStatus(id: string, status: string, reason: string) {
     return this.request<any>(`/api/v1/admin/users/${id}/status`, {
       method: 'PATCH',

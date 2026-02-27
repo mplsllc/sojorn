@@ -11,9 +11,9 @@ import { useEffect, useState } from 'react';
 import { Users, FileText, Shield, Scale, Flag, TrendingDown, UserPlus, Bot, Brain, Activity } from 'lucide-react';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, LineChart, Line } from 'recharts';
 
-function StatCard({ label, value, sub, borderColor, icon: Icon }: { label: string; value: number | string; sub?: string; borderColor: string; icon: any }) {
-  return (
-    <div className={`card p-5 border-t-4 ${borderColor}`}>
+function StatCard({ label, value, sub, borderColor, icon: Icon, href }: { label: string; value: number | string; sub?: string; borderColor: string; icon: any; href?: string }) {
+  const inner = (
+    <div className={`card p-5 border-t-4 ${borderColor} ${href ? 'hover:shadow-md transition-shadow cursor-pointer' : ''}`}>
       <div className="flex items-center justify-between">
         <div>
           <p className="text-sm font-medium text-gray-500">{label}</p>
@@ -24,6 +24,7 @@ function StatCard({ label, value, sub, borderColor, icon: Icon }: { label: strin
       </div>
     </div>
   );
+  return href ? <a href={href}>{inner}</a> : inner;
 }
 
 export default function DashboardPage() {
@@ -81,31 +82,31 @@ export default function DashboardPage() {
         <>
           {/* 5 Top Stat Cards */}
           <div className="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-5 gap-4 mb-6">
-            <StatCard label="Total Users" value={stats.users?.total || 0} sub={`${stats.users?.new_today || 0} new today`} borderColor="border-purple-500" icon={Users} />
-            <StatCard label="Posts Today" value={stats.posts?.new_today || 0} sub={`${stats.posts?.total || 0} total`} borderColor="border-green-500" icon={FileText} />
-            <StatCard label="Pending Reviews" value={stats.moderation?.pending_flags || 0} sub="moderation queue" borderColor="border-orange-500" icon={Shield} />
-            <StatCard label="Open Reports" value={stats.reports?.pending || 0} sub={`${stats.appeals?.pending || 0} appeals`} borderColor="border-red-500" icon={Flag} />
-            <StatCard label="Active Users" value={stats.users?.active || 0} sub={`${stats.users?.banned || 0} banned`} borderColor="border-cyan-500" icon={UserPlus} />
+            <StatCard label="Total Users" value={stats.users?.total || 0} sub={`${stats.users?.new_today || 0} new today`} borderColor="border-purple-500" icon={Users} href="/users" />
+            <StatCard label="Posts Today" value={stats.posts?.new_today || 0} sub={`${stats.posts?.total || 0} total`} borderColor="border-green-500" icon={FileText} href="/posts" />
+            <StatCard label="Pending Reviews" value={stats.moderation?.pending_flags || 0} sub="moderation queue" borderColor="border-orange-500" icon={Shield} href="/moderation" />
+            <StatCard label="Open Reports" value={stats.reports?.pending || 0} sub={`${stats.appeals?.pending || 0} appeals`} borderColor="border-red-500" icon={Flag} href="/reports" />
+            <StatCard label="Active Users" value={stats.users?.active || 0} sub={`${stats.users?.banned || 0} banned`} borderColor="border-cyan-500" icon={UserPlus} href="/users" />
           </div>
 
           {/* Secondary Stats Row */}
           <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
-            <div className="card p-4 text-center">
+            <a href="/moderation" className="card p-4 text-center hover:shadow-md transition-shadow">
               <p className="text-lg font-bold text-gray-900">{stats.posts?.flagged || 0}</p>
               <p className="text-xs text-gray-500">Flagged Posts</p>
-            </div>
-            <div className="card p-4 text-center">
+            </a>
+            <a href="/appeals" className="card p-4 text-center hover:shadow-md transition-shadow">
               <p className="text-lg font-bold text-gray-900">{stats.appeals?.pending || 0}</p>
               <p className="text-xs text-gray-500">Pending Appeals</p>
-            </div>
-            <div className="card p-4 text-center">
+            </a>
+            <a href="/users?status=banned" className="card p-4 text-center hover:shadow-md transition-shadow">
               <p className="text-lg font-bold text-gray-900">{stats.users?.banned || 0}</p>
               <p className="text-xs text-gray-500">Banned Users</p>
-            </div>
-            <div className="card p-4 text-center">
+            </a>
+            <a href="/users?status=suspended" className="card p-4 text-center hover:shadow-md transition-shadow">
               <p className="text-lg font-bold text-gray-900">{stats.users?.suspended || 0}</p>
               <p className="text-xs text-gray-500">Suspended</p>
-            </div>
+            </a>
           </div>
 
           {/* Tabbed Content Area */}

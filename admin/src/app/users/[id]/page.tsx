@@ -9,7 +9,7 @@ import { api } from '@/lib/api';
 import { statusColor, formatDateTime } from '@/lib/utils';
 import { useEffect, useState } from 'react';
 import { useParams, useRouter } from 'next/navigation';
-import { ArrowLeft, Shield, Ban, CheckCircle, XCircle, Star, RotateCcw, Pencil, UserPlus, UserMinus, Users, Save, X, RefreshCcw, Mail, Trash2 } from 'lucide-react';
+import { ArrowLeft, Shield, Ban, CheckCircle, XCircle, Star, RotateCcw, Pencil, UserPlus, UserMinus, Users, Save, X, RefreshCcw, Mail, Trash2, AlertTriangle } from 'lucide-react';
 import Link from 'next/link';
 
 export default function UserDetailPage() {
@@ -23,6 +23,8 @@ export default function UserDetailPage() {
   const [customReason, setCustomReason] = useState(false);
   const [showDeleteModal, setShowDeleteModal] = useState(false);
   const [deleteConfirm, setDeleteConfirm] = useState('');
+  const [showWarnModal, setShowWarnModal] = useState(false);
+  const [warnMessage, setWarnMessage] = useState('');
 
   const reasonPresets: Record<string, string[]> = {
     banned: [
@@ -114,6 +116,21 @@ export default function UserDetailPage() {
       alert(`Feed impressions reset. ${result.deleted ?? 0} records cleared.`);
     } catch (e: any) {
       alert(`Reset failed: ${e.message}`);
+    }
+    setActionLoading(false);
+  };
+
+  const handleWarnUser = async () => {
+    if (!warnMessage.trim()) return;
+    setActionLoading(true);
+    try {
+      const result = await api.warnUser({ user_id: params.id as string, message: warnMessage.trim() });
+      setShowWarnModal(false);
+      setWarnMessage('');
+      fetchUser();
+      alert(`Warning sent. User now has ${result.strike_count ?? '?'} strike(s) in the last 30 days.`);
+    } catch (e: any) {
+      alert(`Warning failed: ${e.message}`);
     }
     setActionLoading(false);
   };
@@ -227,6 +244,14 @@ export default function UserDetailPage() {
                       </button>
                     )}
                   </div>
+                </div>
+
+                {/* Warn */}
+                <div>
+                  <p className="text-xs font-medium text-gray-500 mb-2">Warning</p>
+                  <button onClick={() => setShowWarnModal(true)} className="bg-yellow-500 text-white px-3 py-1.5 rounded-lg text-xs font-medium hover:bg-yellow-600 flex items-center gap-1" disabled={actionLoading}>
+                    <AlertTriangle className="w-3.5 h-3.5" /> Warn User
+                  </button>
                 </div>
 
                 {/* Role */}
@@ -382,6 +407,39 @@ export default function UserDetailPage() {
       )}
 
       {/* Hard Delete Confirmation Modal */}
+      {/* Warn User Modal */}
+      {showWarnModal && (
+        <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50" onClick={() => { setShowWarnModal(false); setWarnMessage(''); }}>
+          <div className="card p-6 w-full max-w-md mx-4" onClick={(e) => e.stopPropagation()}>
+            <div className="flex items-center gap-3 mb-4">
+              <div className="w-10 h-10 rounded-full bg-yellow-100 flex items-center justify-center flex-shrink-0">
+                <AlertTriangle className="w-5 h-5 text-yellow-600" />
+              </div>
+              <div>
+                <h3 className="text-lg font-semibold text-gray-900">Warn User</h3>
+                <p className="text-sm text-gray-500">This adds a strike and sends an in-app + email notification.</p>
+              </div>
+            </div>
+            <div className="mb-4">
+              <label className="block text-sm font-medium text-gray-700 mb-1">Warning Message</label>
+              <textarea
+                value={warnMessage}
+                onChange={(e) => setWarnMessage(e.target.value)}
+                rows={3}
+                className="input text-sm w-full"
+                placeholder="Explain what the user did wrong..."
+              />
+            </div>
+            <div className="flex justify-end gap-3">
+              <button type="button" onClick={() => { setShowWarnModal(false); setWarnMessage(''); }} className="btn-secondary text-sm">Cancel</button>
+              <button type="button" onClick={handleWarnUser} disabled={actionLoading || !warnMessage.trim()} className="bg-yellow-500 text-white px-4 py-2 rounded-lg text-sm font-medium hover:bg-yellow-600 disabled:opacity-50">
+                {actionLoading ? 'Sending...' : 'Send Warning'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {showDeleteModal && (
         <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50" onClick={() => { setShowDeleteModal(false); setDeleteConfirm(''); }}>
           <div className="card p-6 w-full max-w-md mx-4" onClick={(e) => e.stopPropagation()}>
