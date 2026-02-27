@@ -8,7 +8,9 @@ import (
 	"context"
 	"encoding/json"
 	"net/http"
+	"strconv"
 	"strings"
+	"time"
 
 	"github.com/gin-gonic/gin"
 	"github.com/google/uuid"
@@ -724,4 +726,81 @@ func (h *UserHandler) ExportData(c *gin.Context) {
 	c.Header("Content-Disposition", "attachment; filename=sojorn_data_export.json")
 	c.Header("Content-Type", "application/json")
 	c.JSON(http.StatusOK, exportData)
+}
+
+func (h *UserHandler) GetMyReports(c *gin.Context) {
+	reporterID, _ := c.Get("user_id")
+	ctx := c.Request.Context()
+
+	limit, _ := strconv.Atoi(c.DefaultQuery("limit", "20"))
+	offset, _ := strconv.Atoi(c.DefaultQuery("offset", "0"))
+	if limit > 100 {
+		limit = 100
+	}
+	if limit < 1 {
+		limit = 20
+	}
+	if offset < 0 {
+		offset = 0
+	}
+
+	pool := h.repo.Pool()
+
+	// Count total
+	var total int
+	pool.QueryRow(ctx, `SELECT COUNT(*) FROM reports WHERE reporter_id = $1::uuid`, reporterID).Scan(&total)
+
+	// Get reports with joined context
+	rows, err := pool.Query(ctx, `
+		SELECT r.id, r.violation_type, r.description, r.status, r.created_at,
+		       p.handle as target_handle,
+		       g.name as group_name,
+		       ns.name as neighborhood_name
+		FROM reports r
+		LEFT JOIN profiles p ON r.target_user_id = p.id
+		LEFT JOIN groups g ON r.group_id = g.id
+		LEFT JOIN neighborhood_seeds ns ON r.neighborhood_id = ns.id
+		WHERE r.reporter_id = $1::uuid
+		ORDER BY r.created_at DESC
+		LIMIT $2 OFFSET $3
+	`, reporterID, limit, offset)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to fetch reports"})
+		return
+	}
+	defer rows.Close()
+
+	var reports []gin.H
+	for rows.Next() {
+		var id uuid.UUID
+		var violationType, description, status string
+		var createdAt time.Time
+		var targetHandle, groupName, neighborhoodName *string
+
+		if err := rows.Scan(&id, &violationType, &description, &status, &createdAt,
+			&targetHandle, &groupName, &neighborhoodName); err != nil {
+			continue
+		}
+		reports = append(reports, gin.H{
+			"id":                 id,
+			"violation_type":     violationType,
+			"description":        description,
+			"status":             status,
+			"created_at":         createdAt,
+			"target_handle":      targetHandle,
+			"group_name":         groupName,
+			"neighborhood_name":  neighborhoodName,
+		})
+	}
+
+	if reports == nil {
+		reports = []gin.H{}
+	}
+
+	c.JSON(http.StatusOK, gin.H{
+		"reports": reports,
+		"total":   total,
+		"limit":   limit,
+		"offset":  offset,
+	})
 }

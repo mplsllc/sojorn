@@ -12,7 +12,7 @@ interface AuthContextType {
   isLoading: boolean;
   user: any | null;
   login: (email: string, password: string, altchaToken?: string) => Promise<void>;
-  logout: () => void;
+  logout: () => Promise<void>;
 }
 
 const AuthContext = createContext<AuthContextType>({
@@ -20,7 +20,7 @@ const AuthContext = createContext<AuthContextType>({
   isLoading: true,
   user: null,
   login: async () => {},
-  logout: () => {},
+  logout: async () => {},
 });
 
 export function AuthProvider({ children }: { children: ReactNode }) {
@@ -29,33 +29,42 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<any | null>(null);
 
   useEffect(() => {
-    const token = api.getToken();
-    if (token) {
-      // Validate token by hitting dashboard
-      api.getDashboardStats()
-        .then(() => {
-          setIsAuthenticated(true);
-        })
-        .catch(() => {
-          api.setToken(null);
-          setIsAuthenticated(false);
-        })
-        .finally(() => setIsLoading(false));
-    } else {
-      setIsLoading(false);
-    }
+    // Validate existing cookie by hitting the dashboard endpoint.
+    // If the cookie is valid the request succeeds; if not we're unauthenticated.
+    api.getDashboardStats()
+      .then((data: any) => {
+        setIsAuthenticated(true);
+        // Restore user info from sessionStorage if available
+        if (typeof window !== 'undefined') {
+          const stored = sessionStorage.getItem('admin_user');
+          if (stored) {
+            try { setUser(JSON.parse(stored)); } catch {}
+          }
+        }
+      })
+      .catch(() => {
+        setIsAuthenticated(false);
+      })
+      .finally(() => setIsLoading(false));
   }, []);
 
   const login = async (email: string, password: string, altchaToken?: string) => {
     const data = await api.login(email, password, altchaToken);
     setIsAuthenticated(true);
     setUser(data.user);
+    // Store user info (role, handle, etc.) for sidebar filtering on refresh
+    if (typeof window !== 'undefined') {
+      sessionStorage.setItem('admin_user', JSON.stringify(data.user));
+    }
   };
 
-  const logout = () => {
-    api.setToken(null);
+  const logout = async () => {
+    await api.logout();
     setIsAuthenticated(false);
     setUser(null);
+    if (typeof window !== 'undefined') {
+      sessionStorage.removeItem('admin_user');
+    }
   };
 
   return (

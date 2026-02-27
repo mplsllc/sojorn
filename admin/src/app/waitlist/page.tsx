@@ -5,6 +5,7 @@
 'use client';
 
 import AdminShell from '@/components/AdminShell';
+import AdminOnlyGuard from '@/components/AdminOnlyGuard';
 import { api } from '@/lib/api';
 import { formatDateTime } from '@/lib/utils';
 import { useEffect, useState } from 'react';
@@ -82,6 +83,7 @@ export default function WaitlistPage() {
   entries.forEach((e) => { counts[e.status || 'pending'] = (counts[e.status || 'pending'] || 0) + 1; });
 
   return (
+    <AdminOnlyGuard>
     <AdminShell>
       <div className="mb-6 flex items-center justify-between">
         <div>
@@ -250,5 +252,6 @@ export default function WaitlistPage() {
         </div>
       )}
     </AdminShell>
+    </AdminOnlyGuard>
   );
 }

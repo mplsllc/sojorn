@@ -5,6 +5,7 @@
 'use client';
 
 import AdminShell from '@/components/AdminShell';
+import AdminOnlyGuard from '@/components/AdminOnlyGuard';
 import { api } from '@/lib/api';
 import { useEffect, useState } from 'react';
 import { Mail, Send, ChevronLeft, Save, Eye, EyeOff, ArrowLeft } from 'lucide-react';
@@ -364,6 +365,7 @@ export default function EmailSettingsPage() {
   };
 
   return (
+    <AdminOnlyGuard>
     <AdminShell>
       {selected ? (
         <TemplateEditor
@@ -410,5 +412,6 @@ export default function EmailSettingsPage() {
         </>
       )}
     </AdminShell>
+    </AdminOnlyGuard>
   );
 }

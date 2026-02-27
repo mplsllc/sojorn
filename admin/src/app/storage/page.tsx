@@ -5,6 +5,7 @@
 'use client';
 
 import AdminShell from '@/components/AdminShell';
+import AdminOnlyGuard from '@/components/AdminOnlyGuard';
 import { api } from '@/lib/api';
 import { useEffect, useState } from 'react';
 import { HardDrive, Folder, FileImage, Film, Trash2, ExternalLink, ChevronRight, ArrowLeft, RefreshCw, Image, Copy, Check } from 'lucide-react';
@@ -118,6 +119,7 @@ export default function StoragePage() {
   };
 
   return (
+    <AdminOnlyGuard>
     <AdminShell>
       <div className="mb-6 flex items-center justify-between">
         <div>
@@ -383,5 +385,6 @@ export default function StoragePage() {
         </div>
       )}
     </AdminShell>
+    </AdminOnlyGuard>
   );
 }

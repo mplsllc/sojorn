@@ -5,6 +5,7 @@
 'use client';
 
 import AdminShell from '@/components/AdminShell';
+import AdminOnlyGuard from '@/components/AdminOnlyGuard';
 import { api } from '@/lib/api';
 import { useEffect, useState } from 'react';
 import { AtSign, Plus, Trash2, Search, Check, X, Clock, ChevronDown, Upload } from 'lucide-react';
@@ -21,6 +22,7 @@ export default function UsernamesPage() {
   const [tab, setTab] = useState<'reserved' | 'claims'>('reserved');
 
   return (
+    <AdminOnlyGuard>
     <AdminShell>
       <div className="mb-6">
         <h1 className="text-2xl font-bold text-gray-900">Username Management</h1>
@@ -49,6 +51,7 @@ export default function UsernamesPage() {
 
       {tab === 'reserved' ? <ReservedTab /> : <ClaimsTab />}
     </AdminShell>
+    </AdminOnlyGuard>
   );
 }
 

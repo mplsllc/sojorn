@@ -5,6 +5,7 @@
 'use client';
 
 import AdminShell from '@/components/AdminShell';
+import AdminOnlyGuard from '@/components/AdminOnlyGuard';
 import { api } from '@/lib/api';
 import { useEffect, useState } from 'react';
 import {
@@ -222,6 +223,7 @@ export default function OfficialAccountsPage() {
   };
 
   return (
+    <AdminOnlyGuard>
     <AdminShell>
       <div className="mb-6 flex items-center justify-between">
         <div>
@@ -392,6 +394,7 @@ export default function OfficialAccountsPage() {
         </div>
       )}
     </AdminShell>
+    </AdminOnlyGuard>
   );
 }
 

@@ -5,42 +5,19 @@
 const API_BASE = process.env.NEXT_PUBLIC_API_URL || 'https://api.sojorn.net';
 
 class ApiClient {
-  private token: string | null = null;
-
-  setToken(token: string | null) {
-    this.token = token;
-    if (token) {
-      if (typeof window !== 'undefined') localStorage.setItem('admin_token', token);
-    } else {
-      if (typeof window !== 'undefined') localStorage.removeItem('admin_token');
-    }
-  }
-
-  getToken(): string | null {
-    if (this.token) return this.token;
-    if (typeof window !== 'undefined') {
-      this.token = localStorage.getItem('admin_token');
-    }
-    return this.token;
-  }
-
   private async request<T>(path: string, options: RequestInit = {}): Promise<T> {
-    const token = this.getToken();
     const headers: Record<string, string> = {
       'Content-Type': 'application/json',
       ...(options.headers as Record<string, string>),
     };
-    if (token) {
-      headers['Authorization'] = `Bearer ${token}`;
-    }
 
     const res = await fetch(`${API_BASE}${path}`, {
       ...options,
       headers,
+      credentials: 'include',
     });
 
     if (res.status === 401) {
-      this.setToken(null);
       if (typeof window !== 'undefined') {
         window.location.href = '/login';
       }
@@ -59,12 +36,18 @@ class ApiClient {
   async login(email: string, password: string, altchaToken?: string) {
     const body: Record<string, string> = { email, password };
     if (altchaToken) body.altcha_token = altchaToken;
-    const data = await this.request<{ access_token: string; user: any }>('/api/v1/admin/login', {
+    const data = await this.request<{ user: any }>('/api/v1/admin/login', {
       method: 'POST',
       body: JSON.stringify(body),
     });
-    this.setToken(data.access_token);
     return data;
+  }
+
+  async logout() {
+    await fetch(`${API_BASE}/api/v1/admin/logout`, {
+      method: 'POST',
+      credentials: 'include',
+    }).catch(() => {});
   }
 
   // Dashboard
@@ -516,24 +499,18 @@ class ApiClient {
   async uploadTestImage(file: File) {
     const formData = new FormData();
     formData.append('file', file);
-    
-    const token = this.getToken();
-    const headers: Record<string, string> = {};
-    if (token) {
-      headers['Authorization'] = `Bearer ${token}`;
-    }
-    
+
     const response = await fetch(`${API_BASE}/api/v1/admin/upload-test-image`, {
       method: 'POST',
       body: formData,
-      headers,
+      credentials: 'include',
     });
-    
+
     if (!response.ok) {
       const errorText = await response.text();
       throw new Error(`Upload failed: ${response.status} - ${errorText}`);
     }
-    
+
     return response.json();
   }
 
@@ -690,13 +667,10 @@ class ApiClient {
   async uploadSocialCookies(platform: string, file: File) {
     const formData = new FormData();
     formData.append('cookies', file);
-    const token = this.getToken();
-    const headers: Record<string, string> = {};
-    if (token) headers['Authorization'] = `Bearer ${token}`;
     const res = await fetch(`${API_BASE}/api/v1/admin/social/cookies/${platform}`, {
       method: 'POST',
-      headers,
       body: formData,
+      credentials: 'include',
     });
     if (!res.ok) {
       const err = await res.json().catch(() => ({ error: res.statusText }));

@@ -5,6 +5,7 @@
 'use client';
 
 import AdminShell from '@/components/AdminShell';
+import AdminOnlyGuard from '@/components/AdminOnlyGuard';
 import { api } from '@/lib/api';
 import { formatDate, truncate } from '@/lib/utils';
 import { ChevronLeft, ChevronRight, Search, Shield, ShieldOff, MessageSquare, Users, Building2, Pin, PinOff, Plus, Pencil, Trash2, Save } from 'lucide-react';
@@ -222,6 +223,7 @@ export default function NeighborhoodsPage() {
   };
 
   return (
+    <AdminOnlyGuard>
     <AdminShell>
       <div className="mb-6 flex items-center justify-between">
         <div>
@@ -525,5 +527,6 @@ export default function NeighborhoodsPage() {
         </div>
       )}
     </AdminShell>
+    </AdminOnlyGuard>
   );
 }

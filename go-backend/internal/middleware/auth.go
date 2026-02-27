@@ -49,21 +49,28 @@ func AuthMiddleware(jwtSecret string, pool ...*pgxpool.Pool) gin.HandlerFunc {
 	}
 
 	return func(c *gin.Context) {
+		var tokenString string
+
+		// Try Authorization header first (used by Flutter app and API clients)
 		authHeader := c.GetHeader("Authorization")
-		if authHeader == "" {
-			c.JSON(http.StatusUnauthorized, gin.H{"error": "Authorization header is required"})
-			c.Abort()
-			return
+		if authHeader != "" {
+			parts := strings.Split(authHeader, " ")
+			if len(parts) != 2 || parts[0] != "Bearer" {
+				c.JSON(http.StatusUnauthorized, gin.H{"error": "Authorization header must be Bearer token"})
+				c.Abort()
+				return
+			}
+			tokenString = parts[1]
+		} else {
+			// Fallback: read from HttpOnly cookie (used by admin panel)
+			cookie, err := c.Cookie("admin_token")
+			if err != nil || cookie == "" {
+				c.JSON(http.StatusUnauthorized, gin.H{"error": "Authentication required"})
+				c.Abort()
+				return
+			}
+			tokenString = cookie
 		}
-
-		parts := strings.Split(authHeader, " ")
-		if len(parts) != 2 || parts[0] != "Bearer" {
-			c.JSON(http.StatusUnauthorized, gin.H{"error": "Authorization header must be Bearer token"})
-			c.Abort()
-			return
-		}
-
-		tokenString := parts[1]
 
 		userID, claims, err := ParseToken(tokenString, jwtSecret)
 		if err != nil {

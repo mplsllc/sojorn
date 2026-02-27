@@ -1868,6 +1868,10 @@ class ApiService {
     return await _callGoApi('/dashboard/layout', method: 'PUT', body: layout);
   }
 
+  Future<Map<String, dynamic>> getUserDashboardLayout(String userId) async {
+    return await _callGoApi('/users/$userId/dashboard-layout', method: 'GET');
+  }
+
   // =========================================================================
   // Profile Layout (own profile)
   // =========================================================================
@@ -1904,6 +1908,49 @@ class ApiService {
       'message': message,
       'content_type': contentType,
     });
+  }
+
+  // =========================================================================
+  // Violations & Appeals
+  // =========================================================================
+
+  /// Get the current user's violation history.
+  Future<Map<String, dynamic>> getMyViolations({int limit = 20, int offset = 0}) async {
+    return callGoApi('/appeals', method: 'GET', queryParams: {'limit': '$limit', 'offset': '$offset'});
+  }
+
+  /// Get a summary of the current user's violation standing.
+  Future<Map<String, dynamic>> getViolationSummary() async {
+    return callGoApi('/appeals/summary', method: 'GET');
+  }
+
+  /// Submit an appeal against a specific violation.
+  Future<Map<String, dynamic>> createAppeal({
+    required String violationId,
+    required String reason,
+    String? context,
+    List<String>? evidenceUrls,
+  }) async {
+    return callGoApi('/appeals', method: 'POST', body: {
+      'user_violation_id': violationId,
+      'appeal_reason': reason,
+      if (context != null) 'appeal_context': context,
+      if (evidenceUrls != null && evidenceUrls.isNotEmpty) 'evidence_urls': evidenceUrls,
+    });
+  }
+
+  /// Get detail for a specific appeal.
+  Future<Map<String, dynamic>> getAppealDetail(String id, String violationId) async {
+    return callGoApi('/appeals/$id', method: 'GET', queryParams: {'violation_id': violationId});
+  }
+
+  // =========================================================================
+  // Report History
+  // =========================================================================
+
+  /// Get the current user's submitted report history.
+  Future<Map<String, dynamic>> getMyReports({int limit = 20, int offset = 0}) async {
+    return callGoApi('/reports/mine', method: 'GET', queryParams: {'limit': '$limit', 'offset': '$offset'});
   }
 
 }

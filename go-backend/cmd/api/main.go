@@ -230,7 +230,7 @@ func main() {
 	beaconIngestion.Start()
 	defer beaconIngestion.Stop()
 
-	adminHandler := handlers.NewAdminHandler(dbPool, moderationService, appealService, emailService, sightEngineService, officialAccountsService, linkPreviewService, localAIService, beaconAlertRepo, beaconIngestion, cfg.JWTSecret, s3Client, cfg.R2MediaBucket, cfg.R2VideoBucket, cfg.R2ImgDomain, cfg.R2VidDomain)
+	adminHandler := handlers.NewAdminHandler(dbPool, moderationService, appealService, emailService, sightEngineService, officialAccountsService, linkPreviewService, localAIService, beaconAlertRepo, beaconIngestion, cfg.JWTSecret, cfg.Env == "production", s3Client, cfg.R2MediaBucket, cfg.R2VideoBucket, cfg.R2ImgDomain, cfg.R2VidDomain)
 
 	accountHandler := handlers.NewAccountHandler(userRepo, emailService, cfg)
 
@@ -451,6 +451,9 @@ func main() {
 			authorized.GET("/categories/settings", categoryHandler.GetUserCategorySettings)
 			authorized.POST("/analysis/tone", analysisHandler.CheckTone)
 			authorized.POST("/moderate", moderationHandler.CheckContent)
+
+			// User reports
+			authorized.GET("/reports/mine", userHandler.GetMyReports)
 
 			// Chat routes
 			authorized.GET("/conversations", chatHandler.GetConversations)
@@ -702,6 +705,7 @@ func main() {
 			// Dashboard widget layout (customizable home page)
 			authorized.GET("/dashboard/layout", dashboardLayoutHandler.GetDashboardLayout)
 			authorized.PUT("/dashboard/layout", dashboardLayoutHandler.SaveDashboardLayout)
+			authorized.GET("/users/:id/dashboard-layout", dashboardLayoutHandler.GetUserDashboardLayout)
 
 			// Audio library (Freesound proxy — returns 503 until FREESOUND_API_KEY is set)
 			authorized.GET("/audio/library", audioHandler.SearchAudioLibrary)
@@ -715,7 +719,8 @@ func main() {
 	}
 
 	// Admin login (no auth middleware - this IS the auth step)
-	r.POST("/api/v1/admin/login", adminHandler.AdminLogin)
+	r.POST("/api/v1/admin/login", middleware.RateLimit(0.1, 2), adminHandler.AdminLogin)
+	r.POST("/api/v1/admin/logout", adminHandler.AdminLogout)
 
 	// ──────────────────────────────────────────────
 	// Admin Panel API (requires auth + admin role)
@@ -724,34 +729,25 @@ func main() {
 	admin.Use(middleware.AuthMiddleware(cfg.JWTSecret, dbPool))
 	admin.Use(middleware.AdminMiddleware(dbPool))
 	{
-		// Dashboard
+		// ── Moderator-accessible routes ──────────────────────────
+		// These routes are available to both admin and moderator roles.
+
+		// Dashboard (read-only)
 		admin.GET("/dashboard", adminHandler.GetDashboardStats)
 		admin.GET("/growth", adminHandler.GetGrowthStats)
 
-		// User Management
+		// User lookup (read-only)
 		admin.GET("/users", adminHandler.ListUsers)
 		admin.GET("/users/:id", adminHandler.GetUser)
-		admin.PATCH("/users/:id/status", adminHandler.UpdateUserStatus)
-		admin.PATCH("/users/:id/role", adminHandler.UpdateUserRole)
-		admin.PATCH("/users/:id/verification", adminHandler.UpdateUserVerification)
+
+		// Warnings & strikes
 		admin.POST("/users/:id/reset-strikes", adminHandler.ResetUserStrikes)
 		admin.POST("/warn", adminHandler.WarnUser)
-		admin.PATCH("/users/:id/profile", adminHandler.AdminUpdateProfile)
-		admin.PATCH("/users/:id/email", adminHandler.AdminUpdateUserEmail)
-		admin.POST("/users/:id/follows", adminHandler.AdminManageFollow)
-		admin.GET("/users/:id/follows", adminHandler.AdminListFollows)
-		admin.DELETE("/users/:id", adminHandler.HardDeleteUser)
 
-		// Post Management
+		// Post review
 		admin.GET("/posts", adminHandler.ListPosts)
 		admin.GET("/posts/:id", adminHandler.GetPost)
-		admin.PATCH("/posts/:id", adminHandler.AdminUpdatePost)
 		admin.PATCH("/posts/:id/status", adminHandler.UpdatePostStatus)
-		admin.DELETE("/posts/:id", adminHandler.DeletePost)
-		admin.POST("/posts/bulk", adminHandler.BulkUpdatePosts)
-
-		// User Bulk
-		admin.POST("/users/bulk", adminHandler.BulkUpdateUsers)
 
 		// Moderation Queue
 		admin.GET("/moderation", adminHandler.GetModerationQueue)
@@ -771,148 +767,168 @@ func main() {
 		admin.GET("/capsule-reports", adminHandler.ListCapsuleReports)
 		admin.PATCH("/capsule-reports/:id", adminHandler.UpdateCapsuleReportStatus)
 
-		// Algorithm / Feed Config
-		admin.GET("/algorithm", adminHandler.GetAlgorithmConfig)
-		admin.PUT("/algorithm", adminHandler.UpdateAlgorithmConfig)
-
-		// Categories
-		admin.GET("/categories", adminHandler.ListCategories)
-		admin.POST("/categories", adminHandler.CreateCategory)
-		admin.PATCH("/categories/:id", adminHandler.UpdateCategory)
-		admin.DELETE("/categories/:id", adminHandler.AdminDeleteCategory)
-
-		// Neighborhoods
-		admin.GET("/neighborhoods", adminHandler.ListNeighborhoods)
-		admin.POST("/neighborhoods", adminHandler.AdminCreateNeighborhood)
-		admin.PATCH("/neighborhoods/:id", adminHandler.AdminUpdateNeighborhood)
-		admin.DELETE("/neighborhoods/:id", adminHandler.AdminDeleteNeighborhood)
-		admin.POST("/neighborhoods/:id/admins", adminHandler.SetNeighborhoodAdmin)
-		admin.GET("/neighborhoods/:id/admins", adminHandler.ListNeighborhoodAdmins)
-		admin.GET("/neighborhoods/:id/board", adminHandler.ListNeighborhoodBoardEntries)
-		admin.PATCH("/neighborhoods/:id/board/:entryId", adminHandler.UpdateNeighborhoodBoardEntry)
-
-		// System
-		admin.GET("/health", adminHandler.GetSystemHealth)
+		// Audit log (read-only)
 		admin.GET("/audit-log", adminHandler.GetAuditLog)
 
-		// R2 Storage
-		admin.GET("/storage/stats", adminHandler.GetStorageStats)
-		admin.GET("/storage/objects", adminHandler.ListStorageObjects)
-		admin.GET("/storage/object", adminHandler.GetStorageObject)
-		admin.DELETE("/storage/object", adminHandler.DeleteStorageObject)
+		// ── Admin-only routes ────────────────────────────────────
+		// These routes require full admin access (not moderators).
+		adminOnly := admin.Group("")
+		adminOnly.Use(middleware.AdminOnlyMiddleware())
+		{
+			// User mutations
+			adminOnly.PATCH("/users/:id/status", adminHandler.UpdateUserStatus)
+			adminOnly.PATCH("/users/:id/role", adminHandler.UpdateUserRole)
+			adminOnly.PATCH("/users/:id/verification", adminHandler.UpdateUserVerification)
+			adminOnly.PATCH("/users/:id/profile", adminHandler.AdminUpdateProfile)
+			adminOnly.PATCH("/users/:id/email", adminHandler.AdminUpdateUserEmail)
+			adminOnly.POST("/users/:id/follows", adminHandler.AdminManageFollow)
+			adminOnly.GET("/users/:id/follows", adminHandler.AdminListFollows)
+			adminOnly.DELETE("/users/:id", adminHandler.HardDeleteUser)
+			adminOnly.POST("/users/bulk", adminHandler.BulkUpdateUsers)
+			adminOnly.POST("/users/create", adminHandler.AdminCreateUser)
+			adminOnly.DELETE("/users/:id/feed-impressions", adminHandler.AdminResetFeedImpressions)
 
-		// Reserved Usernames
-		admin.GET("/usernames/reserved", adminHandler.ListReservedUsernames)
-		admin.POST("/usernames/reserved", adminHandler.AddReservedUsername)
-		admin.POST("/usernames/reserved/bulk", adminHandler.BulkAddReservedUsernames)
-		admin.DELETE("/usernames/reserved/:id", adminHandler.RemoveReservedUsername)
+			// Post mutations (beyond status changes)
+			adminOnly.PATCH("/posts/:id", adminHandler.AdminUpdatePost)
+			adminOnly.DELETE("/posts/:id", adminHandler.DeletePost)
+			adminOnly.POST("/posts/bulk", adminHandler.BulkUpdatePosts)
+			adminOnly.PATCH("/posts/:id/thumbnail", adminHandler.SetPostThumbnail)
 
-		// Username Claim Requests
-		admin.GET("/usernames/claims", adminHandler.ListClaimRequests)
-		admin.PATCH("/usernames/claims/:id", adminHandler.ReviewClaimRequest)
+			// Algorithm / Feed Config
+			adminOnly.GET("/algorithm", adminHandler.GetAlgorithmConfig)
+			adminOnly.PUT("/algorithm", adminHandler.UpdateAlgorithmConfig)
+			adminOnly.GET("/feed-scores", adminHandler.AdminGetFeedScores)
 
-		// Ollama Model Management
-		admin.GET("/ai/ollama/status", adminHandler.OllamaModelStatus)
-		admin.POST("/ai/ollama/load/:name", adminHandler.OllamaLoadModel)
-		admin.POST("/ai/ollama/unload/:name", adminHandler.OllamaUnloadModel)
-		admin.DELETE("/ai/ollama/models/:name", adminHandler.OllamaDeleteModel)
-		admin.POST("/ai/ollama/pull", adminHandler.OllamaPullModel)
+			// Categories
+			adminOnly.GET("/categories", adminHandler.ListCategories)
+			adminOnly.POST("/categories", adminHandler.CreateCategory)
+			adminOnly.PATCH("/categories/:id", adminHandler.UpdateCategory)
+			adminOnly.DELETE("/categories/:id", adminHandler.AdminDeleteCategory)
 
-		// AI Moderation Config
-		admin.GET("/ai/models", adminHandler.ListModels)
-		admin.GET("/ai/models/local", adminHandler.ListLocalModels)
-		admin.GET("/ai/config", adminHandler.GetAIModerationConfigs)
-		admin.PUT("/ai/config", adminHandler.SetAIModerationConfig)
-		admin.POST("/ai/test", adminHandler.TestAIModeration)
+			// Neighborhoods
+			adminOnly.GET("/neighborhoods", adminHandler.ListNeighborhoods)
+			adminOnly.POST("/neighborhoods", adminHandler.AdminCreateNeighborhood)
+			adminOnly.PATCH("/neighborhoods/:id", adminHandler.AdminUpdateNeighborhood)
+			adminOnly.DELETE("/neighborhoods/:id", adminHandler.AdminDeleteNeighborhood)
+			adminOnly.POST("/neighborhoods/:id/admins", adminHandler.SetNeighborhoodAdmin)
+			adminOnly.GET("/neighborhoods/:id/admins", adminHandler.ListNeighborhoodAdmins)
+			adminOnly.GET("/neighborhoods/:id/board", adminHandler.ListNeighborhoodBoardEntries)
+			adminOnly.PATCH("/neighborhoods/:id/board/:entryId", adminHandler.UpdateNeighborhoodBoardEntry)
 
-		// AI Moderation Audit Log
-		admin.GET("/ai/moderation-log", adminHandler.GetAIModerationLog)
-		admin.POST("/ai/moderation-log/:id/feedback", adminHandler.SubmitAIModerationFeedback)
-		admin.GET("/ai/training-data", adminHandler.ExportAITrainingData)
+			// System
+			adminOnly.GET("/health", adminHandler.GetSystemHealth)
 
-		// Admin Content Creation & Import
-		admin.POST("/users/create", adminHandler.AdminCreateUser)
-		admin.POST("/content/import", adminHandler.AdminImportContent)
+			// R2 Storage
+			adminOnly.GET("/storage/stats", adminHandler.GetStorageStats)
+			adminOnly.GET("/storage/objects", adminHandler.ListStorageObjects)
+			adminOnly.GET("/storage/object", adminHandler.GetStorageObject)
+			adminOnly.DELETE("/storage/object", adminHandler.DeleteStorageObject)
 
-		// Social Media Import
-		admin.POST("/social/fetch", adminHandler.FetchSocialContent)
-		admin.POST("/social/download", adminHandler.DownloadSocialMedia)
-		admin.GET("/social/cookies", adminHandler.ListSocialCookies)
-		admin.POST("/social/cookies/:platform", adminHandler.UploadSocialCookies)
-		admin.DELETE("/social/cookies/:platform", adminHandler.DeleteSocialCookies)
-		admin.POST("/social/cookies/:platform/test", adminHandler.TestSocialCookies)
+			// Reserved Usernames
+			adminOnly.GET("/usernames/reserved", adminHandler.ListReservedUsernames)
+			adminOnly.POST("/usernames/reserved", adminHandler.AddReservedUsername)
+			adminOnly.POST("/usernames/reserved/bulk", adminHandler.BulkAddReservedUsernames)
+			adminOnly.DELETE("/usernames/reserved/:id", adminHandler.RemoveReservedUsername)
 
-		// Official Accounts Management
-		admin.GET("/official-profiles", adminHandler.ListOfficialProfiles)
-		admin.GET("/official-accounts", adminHandler.ListOfficialAccounts)
-		admin.GET("/official-accounts/:id", adminHandler.GetOfficialAccount)
-		admin.POST("/official-accounts", adminHandler.UpsertOfficialAccount)
-		admin.DELETE("/official-accounts/:id", adminHandler.DeleteOfficialAccount)
-		admin.PATCH("/official-accounts/:id/toggle", adminHandler.ToggleOfficialAccount)
-		admin.POST("/official-accounts/:id/trigger", adminHandler.TriggerOfficialPost)
-		admin.POST("/official-accounts/:id/preview", adminHandler.PreviewOfficialPost)
-		admin.GET("/official-accounts/:id/articles", adminHandler.FetchNewsArticles)
-		admin.GET("/official-accounts/:id/posted", adminHandler.GetPostedArticles)
-		admin.POST("/official-accounts/:id/articles/cleanup", adminHandler.CleanupPendingArticles)
-		admin.POST("/official-accounts/articles/:article_id/skip", adminHandler.SkipArticle)
-		admin.POST("/official-accounts/articles/:article_id/post", adminHandler.PostSpecificArticle)
-		admin.DELETE("/official-accounts/articles/:article_id", adminHandler.DeleteArticle)
+			// Username Claim Requests
+			adminOnly.GET("/usernames/claims", adminHandler.ListClaimRequests)
+			adminOnly.PATCH("/usernames/claims/:id", adminHandler.ReviewClaimRequest)
 
-		// AI Engines Status
-		admin.GET("/ai-engines", adminHandler.GetAIEngines)
-		admin.POST("/upload-test-image", adminHandler.UploadTestImage)
+			// Ollama Model Management
+			adminOnly.GET("/ai/ollama/status", adminHandler.OllamaModelStatus)
+			adminOnly.POST("/ai/ollama/load/:name", adminHandler.OllamaLoadModel)
+			adminOnly.POST("/ai/ollama/unload/:name", adminHandler.OllamaUnloadModel)
+			adminOnly.DELETE("/ai/ollama/models/:name", adminHandler.OllamaDeleteModel)
+			adminOnly.POST("/ai/ollama/pull", adminHandler.OllamaPullModel)
 
-		// Safe Domains Management
-		admin.GET("/safe-domains", adminHandler.ListSafeDomains)
-		admin.POST("/safe-domains", adminHandler.UpsertSafeDomain)
-		admin.DELETE("/safe-domains/:id", adminHandler.DeleteSafeDomain)
-		admin.GET("/safe-domains/check", adminHandler.CheckURLSafety)
+			// AI Moderation Config
+			adminOnly.GET("/ai/models", adminHandler.ListModels)
+			adminOnly.GET("/ai/models/local", adminHandler.ListLocalModels)
+			adminOnly.GET("/ai/config", adminHandler.GetAIModerationConfigs)
+			adminOnly.PUT("/ai/config", adminHandler.SetAIModerationConfig)
+			adminOnly.POST("/ai/test", adminHandler.TestAIModeration)
 
-		// Email Templates
-		admin.GET("/email-templates", adminHandler.ListEmailTemplates)
-		admin.GET("/email-templates/:id", adminHandler.GetEmailTemplate)
-		admin.PATCH("/email-templates/:id", adminHandler.UpdateEmailTemplate)
-		admin.POST("/email-templates/test", adminHandler.SendTestEmail)
+			// AI Moderation Audit Log
+			adminOnly.GET("/ai/moderation-log", adminHandler.GetAIModerationLog)
+			adminOnly.POST("/ai/moderation-log/:id/feedback", adminHandler.SubmitAIModerationFeedback)
+			adminOnly.GET("/ai/training-data", adminHandler.ExportAITrainingData)
 
-		// Groups admin
-		admin.GET("/groups", adminHandler.AdminListGroups)
-		admin.GET("/groups/:id", adminHandler.AdminGetGroup)
-		admin.PATCH("/groups/:id", adminHandler.AdminUpdateGroup)
-		admin.DELETE("/groups/:id", adminHandler.AdminDeleteGroup)
-		admin.GET("/groups/:id/members", adminHandler.AdminListGroupMembers)
-		admin.DELETE("/groups/:id/members/:userId", adminHandler.AdminRemoveGroupMember)
-		admin.PATCH("/groups/:id/members/:userId", adminHandler.AdminUpdateMemberRole)
+			// Admin Content Creation & Import
+			adminOnly.POST("/content/import", adminHandler.AdminImportContent)
 
-		// Quip repair
-		admin.GET("/quips/broken", adminHandler.GetBrokenQuips)
-		admin.PATCH("/posts/:id/thumbnail", adminHandler.SetPostThumbnail)
-		admin.POST("/quips/:id/repair", adminHandler.RepairQuip)
+			// Social Media Import
+			adminOnly.POST("/social/fetch", adminHandler.FetchSocialContent)
+			adminOnly.POST("/social/download", adminHandler.DownloadSocialMedia)
+			adminOnly.GET("/social/cookies", adminHandler.ListSocialCookies)
+			adminOnly.POST("/social/cookies/:platform", adminHandler.UploadSocialCookies)
+			adminOnly.DELETE("/social/cookies/:platform", adminHandler.DeleteSocialCookies)
+			adminOnly.POST("/social/cookies/:platform/test", adminHandler.TestSocialCookies)
 
-		// Feed scores viewer
-		admin.GET("/feed-scores", adminHandler.AdminGetFeedScores)
+			// Official Accounts Management
+			adminOnly.GET("/official-profiles", adminHandler.ListOfficialProfiles)
+			adminOnly.GET("/official-accounts", adminHandler.ListOfficialAccounts)
+			adminOnly.GET("/official-accounts/:id", adminHandler.GetOfficialAccount)
+			adminOnly.POST("/official-accounts", adminHandler.UpsertOfficialAccount)
+			adminOnly.DELETE("/official-accounts/:id", adminHandler.DeleteOfficialAccount)
+			adminOnly.PATCH("/official-accounts/:id/toggle", adminHandler.ToggleOfficialAccount)
+			adminOnly.POST("/official-accounts/:id/trigger", adminHandler.TriggerOfficialPost)
+			adminOnly.POST("/official-accounts/:id/preview", adminHandler.PreviewOfficialPost)
+			adminOnly.GET("/official-accounts/:id/articles", adminHandler.FetchNewsArticles)
+			adminOnly.GET("/official-accounts/:id/posted", adminHandler.GetPostedArticles)
+			adminOnly.POST("/official-accounts/:id/articles/cleanup", adminHandler.CleanupPendingArticles)
+			adminOnly.POST("/official-accounts/articles/:article_id/skip", adminHandler.SkipArticle)
+			adminOnly.POST("/official-accounts/articles/:article_id/post", adminHandler.PostSpecificArticle)
+			adminOnly.DELETE("/official-accounts/articles/:article_id", adminHandler.DeleteArticle)
 
-		// Events admin
-		admin.GET("/events", adminHandler.AdminListEvents)
-		admin.PATCH("/events/:id", adminHandler.AdminUpdateEvent)
-		admin.DELETE("/events/:id", adminHandler.AdminDeleteEvent)
+			// AI Engines Status
+			adminOnly.GET("/ai-engines", adminHandler.GetAIEngines)
+			adminOnly.POST("/upload-test-image", adminHandler.UploadTestImage)
 
-		// Waitlist management
-		admin.GET("/waitlist", adminHandler.AdminListWaitlist)
-		admin.PATCH("/waitlist/:id", adminHandler.AdminUpdateWaitlist)
-		admin.DELETE("/waitlist/:id", adminHandler.AdminDeleteWaitlist)
+			// Safe Domains Management
+			adminOnly.GET("/safe-domains", adminHandler.ListSafeDomains)
+			adminOnly.POST("/safe-domains", adminHandler.UpsertSafeDomain)
+			adminOnly.DELETE("/safe-domains/:id", adminHandler.DeleteSafeDomain)
+			adminOnly.GET("/safe-domains/check", adminHandler.CheckURLSafety)
 
-		// Feed impression reset
-		admin.DELETE("/users/:id/feed-impressions", adminHandler.AdminResetFeedImpressions)
+			// Email Templates
+			adminOnly.GET("/email-templates", adminHandler.ListEmailTemplates)
+			adminOnly.GET("/email-templates/:id", adminHandler.GetEmailTemplate)
+			adminOnly.PATCH("/email-templates/:id", adminHandler.UpdateEmailTemplate)
+			adminOnly.POST("/email-templates/test", adminHandler.SendTestEmail)
 
-		// Beacon Alerts Admin
-		admin.GET("/beacon-alerts", adminHandler.ListBeaconAlerts)
-		admin.GET("/beacon-alerts/stats", adminHandler.GetBeaconAlertStats)
-		admin.POST("/beacon-alerts/bulk", adminHandler.BulkUpdateBeaconAlerts)
-		admin.POST("/beacon-alerts/expire-source", adminHandler.ExpireBeaconsBySource)
-		admin.POST("/beacon-alerts/purge-source", adminHandler.PurgeBeaconsBySource)
-		admin.GET("/beacon-alerts/feeds", adminHandler.GetBeaconFeedStatus)
-		admin.PATCH("/beacon-alerts/feeds", adminHandler.ToggleBeaconFeed)
-		admin.POST("/beacon-alerts/feeds/sync", adminHandler.TriggerBeaconSync)
+			// Groups admin
+			adminOnly.GET("/groups", adminHandler.AdminListGroups)
+			adminOnly.GET("/groups/:id", adminHandler.AdminGetGroup)
+			adminOnly.PATCH("/groups/:id", adminHandler.AdminUpdateGroup)
+			adminOnly.DELETE("/groups/:id", adminHandler.AdminDeleteGroup)
+			adminOnly.GET("/groups/:id/members", adminHandler.AdminListGroupMembers)
+			adminOnly.DELETE("/groups/:id/members/:userId", adminHandler.AdminRemoveGroupMember)
+			adminOnly.PATCH("/groups/:id/members/:userId", adminHandler.AdminUpdateMemberRole)
+
+			// Quip repair
+			adminOnly.GET("/quips/broken", adminHandler.GetBrokenQuips)
+			adminOnly.POST("/quips/:id/repair", adminHandler.RepairQuip)
+
+			// Events admin
+			adminOnly.GET("/events", adminHandler.AdminListEvents)
+			adminOnly.PATCH("/events/:id", adminHandler.AdminUpdateEvent)
+			adminOnly.DELETE("/events/:id", adminHandler.AdminDeleteEvent)
+
+			// Waitlist management
+			adminOnly.GET("/waitlist", adminHandler.AdminListWaitlist)
+			adminOnly.PATCH("/waitlist/:id", adminHandler.AdminUpdateWaitlist)
+			adminOnly.DELETE("/waitlist/:id", adminHandler.AdminDeleteWaitlist)
+
+			// Beacon Alerts Admin
+			adminOnly.GET("/beacon-alerts", adminHandler.ListBeaconAlerts)
+			adminOnly.GET("/beacon-alerts/stats", adminHandler.GetBeaconAlertStats)
+			adminOnly.POST("/beacon-alerts/bulk", adminHandler.BulkUpdateBeaconAlerts)
+			adminOnly.POST("/beacon-alerts/expire-source", adminHandler.ExpireBeaconsBySource)
+			adminOnly.POST("/beacon-alerts/purge-source", adminHandler.PurgeBeaconsBySource)
+			adminOnly.GET("/beacon-alerts/feeds", adminHandler.GetBeaconFeedStatus)
+			adminOnly.PATCH("/beacon-alerts/feeds", adminHandler.ToggleBeaconFeed)
+			adminOnly.POST("/beacon-alerts/feeds/sync", adminHandler.TriggerBeaconSync)
+		}
 	}
 
 	// Public claim request endpoint (no auth)

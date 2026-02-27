@@ -14,7 +14,7 @@ import {
   Sliders, FolderTree, HardDrive, AtSign, Brain, ScrollText, Wrench, Bot,
   UserCog, ShieldAlert, Cog, Mail, MapPinned, Users2, Video, ClipboardList, Clock, Calendar, Cpu, Radio,
 } from 'lucide-react';
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
 
 type NavItem = { href: string; label: string; icon: any };
 type NavGroup = { label: string; icon: any; items: NavItem[] };
@@ -22,6 +22,35 @@ type NavEntry = NavItem | NavGroup;
 
 function isGroup(entry: NavEntry): entry is NavGroup {
   return 'items' in entry;
+}
+
+// Pages accessible to moderators (safety-related subset)
+const MODERATOR_ALLOWED_PATHS = new Set([
+  '/',
+  '/users',
+  '/posts',
+  '/safety',
+  '/moderation',
+  '/appeals',
+  '/reports',
+  '/capsule-reports',
+  '/audit-log',
+]);
+
+function filterNavigationForRole(nav: NavEntry[], role?: string): NavEntry[] {
+  if (!role || role === 'admin') return nav;
+  if (role !== 'moderator') return nav;
+
+  return nav
+    .map((entry) => {
+      if (isGroup(entry)) {
+        const filtered = entry.items.filter((item) => MODERATOR_ALLOWED_PATHS.has(item.href));
+        if (filtered.length === 0) return null;
+        return { ...entry, items: filtered };
+      }
+      return MODERATOR_ALLOWED_PATHS.has(entry.href) ? entry : null;
+    })
+    .filter(Boolean) as NavEntry[];
 }
 
 const navigation: NavEntry[] = [
@@ -147,8 +176,14 @@ function NavGroupSection({
 
 export default function Sidebar() {
   const pathname = usePathname();
-  const { logout } = useAuth();
+  const { logout, user } = useAuth();
   const [collapsed, setCollapsed] = useState(false);
+
+  const filteredNav = useMemo(
+    () => filterNavigationForRole(navigation, user?.role),
+    [user?.role]
+  );
+
   const [openGroups, setOpenGroups] = useState<Record<string, boolean>>(() => {
     // All groups open by default
     const defaults: Record<string, boolean> = {};
@@ -179,7 +214,7 @@ export default function Sidebar() {
 
       {/* Navigation */}
       <nav className="flex-1 py-4 overflow-y-auto">
-        {navigation.map((entry) => {
+        {filteredNav.map((entry) => {
           if (isGroup(entry)) {
             return (
               <NavGroupSection

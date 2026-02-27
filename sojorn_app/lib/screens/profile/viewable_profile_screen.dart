@@ -38,6 +38,7 @@ import 'profile_settings_screen.dart';
 import 'followers_following_screen.dart';
 import '../../widgets/desktop/desktop_dialog_helper.dart';
 import '../../widgets/desktop/desktop_slide_panel.dart';
+import '../../models/dashboard_widgets.dart';
 import '../../models/profile_widgets.dart';
 import '../../widgets/harmony_explainer_modal.dart';
 import '../../widgets/media/sojorn_avatar.dart';
@@ -88,28 +89,31 @@ class _UnifiedProfileScreenState extends ConsumerState<UnifiedProfileScreen>
   bool _isCreatingProfile = false;
   ProfilePrivacySettings? _privacySettings;
   bool _isPrivacyLoading = false;
-  List<Map<String, dynamic>> _mutualFollowers = [];
+  List<Map<String, dynamic>> _followingList = [];
   List<String> _top8SelectedIds = [];
-  bool _isMutualFollowersLoading = false;
+  int _top8MaxCount = 8;
+  bool _isFollowingLoading = false;
+  List<DashboardWidget> _dashboardSidebarWidgets = [];
 
-  /// Returns Top 8 friends ordered by dashboard config (if curated), else first 8.
+  /// Returns Top N friends ordered by dashboard config (if curated), else first N.
+  /// Mirrors the exact logic from Top8FriendsGrid._resolvedFriends on the home page.
   List<Map<String, dynamic>> get _resolvedTop8 {
-    if (_top8SelectedIds.isEmpty) return _mutualFollowers.take(8).toList();
+    if (_top8SelectedIds.isEmpty) return _followingList.take(_top8MaxCount).toList();
     final ordered = _top8SelectedIds
-        .map((id) => _mutualFollowers.cast<Map<String, dynamic>?>().firstWhere(
+        .map((id) => _followingList.cast<Map<String, dynamic>?>().firstWhere(
               (f) => f?['id'] == id || f?['user_id'] == id,
               orElse: () => null,
             ))
         .whereType<Map<String, dynamic>>()
         .toList();
-    if (ordered.length < 8) {
+    if (ordered.length < _top8MaxCount) {
       final selectedSet = _top8SelectedIds.toSet();
-      final extras = _mutualFollowers
+      final extras = _followingList
           .where((f) => !selectedSet.contains(f['id'] as String? ?? f['user_id'] as String? ?? ''))
-          .take(8 - ordered.length);
+          .take(_top8MaxCount - ordered.length);
       ordered.addAll(extras);
     }
-    return ordered.take(8).toList();
+    return ordered.take(_top8MaxCount).toList();
   }
 
   bool _isBannerUploading = false;
@@ -224,7 +228,7 @@ class _UnifiedProfileScreenState extends ConsumerState<UnifiedProfileScreen>
         await _loadPrivacySettings();
       }
       // Load Top 8 friends in parallel with posts
-      _loadMutualFollowers(profile.id, isOwnProfile);
+      _loadFollowingAndTop8(profile.id, isOwnProfile);
       await _loadPosts(refresh: true);
     } catch (error) {
       debugPrint('[PROFILE] Load error: $error');
@@ -508,42 +512,51 @@ class _UnifiedProfileScreenState extends ConsumerState<UnifiedProfileScreen>
     }
   }
 
-  Future<void> _loadMutualFollowers(String userId, bool isOwn) async {
-    if (_isMutualFollowersLoading) return;
-    _isMutualFollowersLoading = true;
+  Future<void> _loadFollowingAndTop8(String userId, bool isOwn) async {
+    if (_isFollowingLoading) return;
+    _isFollowingLoading = true;
     try {
       final apiService = ref.read(apiServiceProvider);
-      final followers = await apiService.getMutualFollowers(userId);
+
+      // Load following list (same pool as home page Top 8)
+      final following = await apiService.getFollowing(userId);
       if (!mounted) return;
 
-      // For own profile, load dashboard config to get curated Top 8 order
+      // Load dashboard config to get curated Top 8 order + count + all widgets
       List<String> selectedIds = [];
-      if (isOwn) {
-        try {
-          final layout = await apiService.getDashboardLayout();
-          // Find top8 widget config in left or right sidebar
-          for (final slot in ['left_sidebar', 'right_sidebar']) {
-            final widgets = layout[slot] as List? ?? [];
-            for (final w in widgets) {
-              if (w is Map<String, dynamic> && w['type'] == 'top8') {
+      int maxCount = 8;
+      List<DashboardWidget> sidebarWidgets = [];
+      try {
+        final layout = isOwn
+            ? await apiService.getDashboardLayout()
+            : await apiService.getUserDashboardLayout(userId);
+        // Parse all sidebar widgets for profile mirroring
+        for (final slot in ['left_sidebar', 'right_sidebar']) {
+          final widgets = layout[slot] as List? ?? [];
+          for (final w in widgets) {
+            if (w is Map<String, dynamic>) {
+              sidebarWidgets.add(DashboardWidget.fromJson(w));
+              // Extract top8 config
+              if (w['type'] == 'top8_friends' || w['type'] == 'top8') {
                 final config = w['config'] as Map<String, dynamic>? ?? {};
                 selectedIds = (config['selected_friend_ids'] as List?)?.cast<String>() ?? [];
-                break;
+                maxCount = config['max_count'] as int? ?? 8;
               }
             }
-            if (selectedIds.isNotEmpty) break;
           }
-        } catch (_) {}
-      }
+        }
+      } catch (_) {}
 
       setState(() {
-        _mutualFollowers = followers;
+        _followingList = following;
         _top8SelectedIds = selectedIds;
+        _top8MaxCount = maxCount;
+        _dashboardSidebarWidgets = sidebarWidgets;
       });
     } catch (e) {
-      debugPrint('[PROFILE] Failed to load mutual followers: $e');
+      debugPrint('[PROFILE] Failed to load following/top8: $e');
     } finally {
-      _isMutualFollowersLoading = false;
+      _isFollowingLoading = false;
     }
   }
 
@@ -1631,48 +1644,342 @@ class _UnifiedProfileScreenState extends ConsumerState<UnifiedProfileScreen>
         ),
         const SizedBox(height: 16),
 
-        // ── Top 8 Card ──
+        // ── Top N Card (mirrors home page dashboard Top 8/4 exactly) ──
         _DesktopCard(
-          title: 'Top 8',
+          title: 'Top $_top8MaxCount',
           trailing: GestureDetector(
             onTap: () => _navigateToConnections(0),
             child: Text('See all friends', style: TextStyle(fontSize: 13, color: AppTheme.royalPurple, fontWeight: FontWeight.w600)),
           ),
           children: [
-            if (_mutualFollowers.isEmpty && !_isMutualFollowersLoading)
+            if (_followingList.isEmpty && !_isFollowingLoading)
               Center(
                 child: Padding(
                   padding: const EdgeInsets.symmetric(vertical: 8),
                   child: Text('No friends yet', style: TextStyle(fontSize: 13, color: AppTheme.navyText.withValues(alpha: 0.4))),
                 ),
               )
-            else if (_mutualFollowers.isNotEmpty)
-              Wrap(
-                spacing: 8,
-                runSpacing: 8,
-                children: _resolvedTop8.map((f) {
-                  final name = f['display_name'] ?? f['handle'] ?? '?';
+            else if (_followingList.isNotEmpty)
+              GridView.builder(
+                shrinkWrap: true,
+                physics: const NeverScrollableScrollPhysics(),
+                gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+                  crossAxisCount: 4,
+                  mainAxisSpacing: 10,
+                  crossAxisSpacing: 6,
+                  childAspectRatio: 0.68,
+                ),
+                itemCount: _resolvedTop8.length.clamp(0, _top8MaxCount),
+                itemBuilder: (context, index) {
+                  final f = _resolvedTop8[index];
+                  final name = f['display_name'] as String? ?? f['handle'] as String? ?? '?';
                   final avatar = _resolveAvatar(f['avatar_url'] as String?);
                   final handle = f['handle'] as String? ?? '';
                   return GestureDetector(
                     onTap: () => AppRoutes.navigateToProfile(context, handle),
-                    child: SizedBox(
-                      width: 68,
-                      child: Column(
-                        children: [
-                          SojornAvatar(displayName: name, avatarUrl: avatar.isNotEmpty ? avatar : null, size: 56, borderRadius: 28),
-                          const SizedBox(height: 4),
-                          Text(name, style: TextStyle(fontSize: 11, fontWeight: FontWeight.w600, color: AppTheme.navyText), maxLines: 1, overflow: TextOverflow.ellipsis, textAlign: TextAlign.center),
-                        ],
-                      ),
+                    child: LayoutBuilder(
+                      builder: (context, constraints) {
+                        final avatarSize = (constraints.maxWidth * 0.78).clamp(32.0, 52.0);
+                        return Column(
+                          mainAxisSize: MainAxisSize.max,
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          children: [
+                            Container(
+                              decoration: BoxDecoration(
+                                borderRadius: BorderRadius.circular(14),
+                                boxShadow: [
+                                  BoxShadow(
+                                    color: AppTheme.royalPurple.withValues(alpha: 0.15),
+                                    blurRadius: 8,
+                                    offset: const Offset(0, 2),
+                                  ),
+                                ],
+                              ),
+                              child: SojornAvatar(
+                                displayName: name,
+                                avatarUrl: avatar.isNotEmpty ? avatar : null,
+                                size: avatarSize,
+                              ),
+                            ),
+                            const SizedBox(height: 3),
+                            Text(
+                              name.split(' ').first,
+                              style: TextStyle(
+                                color: AppTheme.navyText.withValues(alpha: 0.7),
+                                fontSize: 10,
+                                fontWeight: FontWeight.w500,
+                              ),
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              textAlign: TextAlign.center,
+                            ),
+                          ],
+                        );
+                      },
                     ),
                   );
-                }).toList(),
+                },
               ),
           ],
         ),
+
+        // ── Mirrored Dashboard Widgets (read-only) ──
+        ..._dashboardSidebarWidgets
+            .where((dw) => dw.isEnabled && dw.type != DashboardWidgetType.top8Friends && dw.type != DashboardWidgetType.profileCard)
+            .map((dw) => _buildMirroredWidget(dw))
+            .whereType<Widget>()
+            .map((w) => Padding(padding: const EdgeInsets.only(top: 16), child: w)),
       ],
     );
+  }
+
+  /// Renders a dashboard widget in read-only mode (no settings gear) for the profile sidebar.
+  /// Builds a unified sidebar card for mirrored dashboard widgets.
+  Widget _mirroredCard({required List<Widget> children}) {
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: AppTheme.cardSurface,
+        borderRadius: BorderRadius.circular(SojornRadii.card),
+        boxShadow: [BoxShadow(color: AppTheme.royalPurple.withValues(alpha: 0.08), blurRadius: 12, offset: const Offset(0, 2))],
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: children,
+      ),
+    );
+  }
+
+  Widget? _buildMirroredWidget(DashboardWidget dw) {
+    switch (dw.type) {
+      case DashboardWidgetType.moodStatus:
+        final emoji = dw.config['emoji'] as String? ?? '';
+        final text = dw.config['text'] as String? ?? '';
+        if (emoji.isEmpty && text.isEmpty) return null;
+        return _mirroredCard(
+          children: [
+            Text('MOOD', style: TextStyle(color: AppTheme.royalPurple, fontSize: 10, fontWeight: FontWeight.w700, letterSpacing: 0.8)),
+            const SizedBox(height: 10),
+            Row(
+              children: [
+                if (emoji.isNotEmpty) ...[
+                  Container(
+                    width: 44, height: 44,
+                    decoration: BoxDecoration(
+                      gradient: LinearGradient(colors: [AppTheme.brightNavy.withValues(alpha: 0.08), AppTheme.royalPurple.withValues(alpha: 0.12)]),
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                    alignment: Alignment.center,
+                    child: Text(emoji, style: const TextStyle(fontSize: 24)),
+                  ),
+                  const SizedBox(width: 12),
+                ],
+                if (text.isNotEmpty)
+                  Expanded(
+                    child: Text(text, style: TextStyle(color: AppTheme.navyText, fontSize: 13, fontStyle: FontStyle.italic, height: 1.4), maxLines: 2, overflow: TextOverflow.ellipsis),
+                  ),
+              ],
+            ),
+          ],
+        );
+
+      case DashboardWidgetType.favoriteMedia:
+        final items = (dw.config['items'] as List? ?? []).cast<Map<String, dynamic>>();
+        if (items.isEmpty) return null;
+        return _mirroredCard(
+          children: [
+            Text('FAVORITES', style: TextStyle(color: AppTheme.royalPurple, fontSize: 10, fontWeight: FontWeight.w700, letterSpacing: 0.8)),
+            const SizedBox(height: 10),
+            GridView.builder(
+              shrinkWrap: true,
+              physics: const NeverScrollableScrollPhysics(),
+              gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(crossAxisCount: 2, mainAxisSpacing: 8, crossAxisSpacing: 8, childAspectRatio: 2.0),
+              itemCount: items.length.clamp(0, 4),
+              itemBuilder: (context, i) {
+                final item = items[i];
+                final cat = item['category']?.toString() ?? 'music';
+                IconData icon;
+                switch (cat) {
+                  case 'music': icon = Icons.album; break;
+                  case 'movie': icon = Icons.movie; break;
+                  case 'book': icon = Icons.menu_book; break;
+                  case 'game': icon = Icons.sports_esports; break;
+                  case 'show': icon = Icons.tv; break;
+                  default: icon = Icons.star;
+                }
+                return Container(
+                  padding: const EdgeInsets.all(10),
+                  decoration: BoxDecoration(
+                    gradient: LinearGradient(
+                      colors: [AppTheme.royalPurple.withValues(alpha: 0.06), AppTheme.brightNavy.withValues(alpha: 0.04)],
+                      begin: Alignment.topLeft, end: Alignment.bottomRight,
+                    ),
+                    borderRadius: BorderRadius.circular(12),
+                    border: Border.all(color: AppTheme.royalPurple.withValues(alpha: 0.08)),
+                  ),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      Icon(icon, size: 18, color: AppTheme.royalPurple.withValues(alpha: 0.6)),
+                      const SizedBox(height: 4),
+                      Text(item['title']?.toString() ?? '', style: TextStyle(fontSize: 11, fontWeight: FontWeight.w700, color: AppTheme.navyText), maxLines: 1, overflow: TextOverflow.ellipsis),
+                      if ((item['subtitle']?.toString() ?? '').isNotEmpty)
+                        Text(item['subtitle'].toString(), style: TextStyle(fontSize: 9, color: AppTheme.navyText.withValues(alpha: 0.5)), maxLines: 1, overflow: TextOverflow.ellipsis),
+                    ],
+                  ),
+                );
+              },
+            ),
+          ],
+        );
+
+      case DashboardWidgetType.countdown:
+        final label = dw.config['label'] as String? ?? '';
+        final dateStr = dw.config['target_date'] as String?;
+        final targetDate = dateStr != null ? DateTime.tryParse(dateStr) : null;
+        if (targetDate == null) return null;
+        final diff = targetDate.difference(DateTime.now()).inDays;
+        final days = diff < 0 ? 0 : diff;
+        final isUrgent = days <= 7;
+        final accentColor = isUrgent ? const Color(0xFFFF6B6B) : AppTheme.brightNavy;
+        return _mirroredCard(
+          children: [
+            Text('COUNTDOWN', style: TextStyle(color: accentColor, fontSize: 10, fontWeight: FontWeight.w700, letterSpacing: 0.8)),
+            const SizedBox(height: 10),
+            Row(
+              crossAxisAlignment: CrossAxisAlignment.end,
+              children: [
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                  decoration: BoxDecoration(
+                    gradient: LinearGradient(
+                      colors: isUrgent
+                        ? [const Color(0xFFFF6B6B).withValues(alpha: 0.15), const Color(0xFFFF8E53).withValues(alpha: 0.10)]
+                        : [AppTheme.brightNavy.withValues(alpha: 0.10), AppTheme.royalPurple.withValues(alpha: 0.08)],
+                    ),
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  child: Text('$days', style: TextStyle(fontSize: 32, fontWeight: FontWeight.w900, color: accentColor, height: 1)),
+                ),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(days == 1 ? 'day remaining' : 'days remaining', style: TextStyle(fontSize: 11, color: AppTheme.navyText.withValues(alpha: 0.5), fontWeight: FontWeight.w500)),
+                      if (label.isNotEmpty)
+                        Text(label, style: TextStyle(fontSize: 13, color: AppTheme.navyText, fontWeight: FontWeight.w700), maxLines: 1, overflow: TextOverflow.ellipsis),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+          ],
+        );
+
+      case DashboardWidgetType.socialLinks:
+        final links = (dw.config['links'] as List? ?? []).cast<Map<String, dynamic>>();
+        if (links.isEmpty) return null;
+        return _mirroredCard(
+          children: [
+            Text('LINKS', style: TextStyle(color: AppTheme.royalPurple, fontSize: 10, fontWeight: FontWeight.w700, letterSpacing: 0.8)),
+            const SizedBox(height: 10),
+            Wrap(
+              spacing: 6,
+              runSpacing: 6,
+              children: links.map((link) {
+                final platform = link['platform']?.toString() ?? 'website';
+                final label = link['label']?.toString() ?? platform;
+                final url = link['url']?.toString() ?? '';
+                Color color;
+                IconData icon;
+                switch (platform) {
+                  case 'twitter': color = const Color(0xFF1DA1F2); icon = Icons.alternate_email; break;
+                  case 'bluesky': color = const Color(0xFF0085FF); icon = Icons.cloud; break;
+                  case 'instagram': color = const Color(0xFFE1306C); icon = Icons.camera_alt; break;
+                  case 'github': color = const Color(0xFF333333); icon = Icons.code; break;
+                  case 'linkedin': color = const Color(0xFF0077B5); icon = Icons.work; break;
+                  case 'youtube': color = const Color(0xFFFF0000); icon = Icons.play_circle; break;
+                  case 'tiktok': color = const Color(0xFF010101); icon = Icons.music_video; break;
+                  default: color = const Color(0xFF6366F1); icon = Icons.language;
+                }
+                return GestureDetector(
+                  onTap: url.isNotEmpty ? () => UrlLauncherHelper.launchUrlSafely(context, url) : null,
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                    decoration: BoxDecoration(
+                      color: color.withValues(alpha: 0.12),
+                      borderRadius: BorderRadius.circular(10),
+                      border: Border.all(color: color.withValues(alpha: 0.2)),
+                    ),
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Icon(icon, color: color, size: 14),
+                        const SizedBox(width: 5),
+                        Text(label.isNotEmpty ? label : platform, style: TextStyle(color: color, fontSize: 11, fontWeight: FontWeight.w600)),
+                      ],
+                    ),
+                  ),
+                );
+              }).toList(),
+            ),
+          ],
+        );
+
+      case DashboardWidgetType.quote:
+        final quote = dw.config['quote'] as String? ?? '';
+        final author = dw.config['author'] as String? ?? '';
+        if (quote.isEmpty) return null;
+        return _mirroredCard(
+          children: [
+            Icon(Icons.format_quote, color: AppTheme.royalPurple.withValues(alpha: 0.3), size: 24),
+            const SizedBox(height: 8),
+            Text(quote, style: TextStyle(color: AppTheme.navyText, fontSize: 13, fontStyle: FontStyle.italic, height: 1.5)),
+            if (author.isNotEmpty) ...[
+              const SizedBox(height: 8),
+              Align(alignment: Alignment.centerRight, child: Text('\u2014 $author', style: TextStyle(color: AppTheme.royalPurple.withValues(alpha: 0.7), fontSize: 11, fontWeight: FontWeight.w600))),
+            ],
+          ],
+        );
+
+      case DashboardWidgetType.customText:
+        final title = dw.config['title'] as String? ?? '';
+        final text = dw.config['text'] as String? ?? '';
+        if (text.isEmpty) return null;
+        return _mirroredCard(
+          children: [
+            if (title.isNotEmpty) ...[
+              Text(title, style: TextStyle(color: AppTheme.navyText, fontSize: 14, fontWeight: FontWeight.w800)),
+              const SizedBox(height: 8),
+            ],
+            Text(text, style: TextStyle(color: AppTheme.navyText.withValues(alpha: 0.75), fontSize: 13, height: 1.5)),
+          ],
+        );
+
+      case DashboardWidgetType.photoFrame:
+        final url = dw.config['url'] as String? ?? '';
+        final caption = dw.config['caption'] as String? ?? '';
+        if (url.isEmpty) return null;
+        return _mirroredCard(
+          children: [
+            ClipRRect(
+              borderRadius: BorderRadius.circular(10),
+              child: Image.network(url, fit: BoxFit.cover, errorBuilder: (_, __, ___) => const SizedBox.shrink()),
+            ),
+            if (caption.isNotEmpty) ...[
+              const SizedBox(height: 8),
+              Text(caption, style: TextStyle(color: AppTheme.navyText.withValues(alpha: 0.6), fontSize: 12, fontStyle: FontStyle.italic)),
+            ],
+          ],
+        );
+
+      // Dynamic/live widgets — skip on profile (they show live data, not user config)
+      default:
+        return null;
+    }
   }
 
   String _formatJoinDate(DateTime date) {

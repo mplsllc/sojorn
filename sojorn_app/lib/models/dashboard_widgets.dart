@@ -17,7 +17,11 @@ enum DashboardWidgetType {
   quote('quote', 'Quote', Icons.format_quote),
   customText('custom_text', 'Custom Text', Icons.text_fields),
   photoFrame('photo_frame', 'Photo Frame', Icons.photo),
-  musicPlayer('music_player', 'Music Player', Icons.headphones);
+  musicPlayer('music_player', 'Music Player', Icons.headphones),
+  moodStatus('mood_status', 'Mood / Status', Icons.mood),
+  favoriteMedia('favorite_media', 'Favorites', Icons.favorite),
+  countdown('countdown', 'Countdown', Icons.timer),
+  socialLinks('social_links', 'Social Links', Icons.link);
 
   const DashboardWidgetType(this.value, this.displayName, this.icon);
   final String value;

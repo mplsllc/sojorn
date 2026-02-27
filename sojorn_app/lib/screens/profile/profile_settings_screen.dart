@@ -34,6 +34,8 @@ import '../../models/sojorn_media_result.dart';
 import '../security/encryption_hub_screen.dart';
 import '../settings/accessibility_settings_screen.dart';
 import '../settings/mfa_setup_screen.dart';
+import '../settings/violations_screen.dart';
+import '../settings/report_history_screen.dart';
 import '../../widgets/neighborhood/neighborhood_picker_sheet.dart';
 import '../../widgets/desktop/desktop_dialog_helper.dart';
 import '../../widgets/desktop/desktop_slide_panel.dart';
@@ -298,6 +300,38 @@ class _ProfileSettingsScreenState extends ConsumerState<ProfileSettingsScreen> {
                          title: 'Connected Accounts',
                          subtitle: 'Linked services and sign-in methods',
                          onTap: () => context.showInfo('Connected accounts coming soon'),
+                       ),
+                     ],
+                   ),
+
+                   const SizedBox(height: AppTheme.spacingLg),
+                   _buildSection(
+                     title: 'Safety & Reports',
+                     subtitle: 'Violations, appeals, and report history',
+                     children: [
+                       _buildEditTile(
+                         icon: Icons.gavel_outlined,
+                         title: 'Violations & Appeals',
+                         subtitle: 'View violations and submit appeals',
+                         onTap: () {
+                           if (isDesktop) {
+                             openDesktopSlidePanel(context, width: 480, child: const ViolationsScreen());
+                           } else {
+                             Navigator.of(context).push(MaterialPageRoute(builder: (_) => const ViolationsScreen()));
+                           }
+                         },
+                       ),
+                       _buildEditTile(
+                         icon: Icons.flag_outlined,
+                         title: 'Report History',
+                         subtitle: 'Track reports you have submitted',
+                         onTap: () {
+                           if (isDesktop) {
+                             openDesktopSlidePanel(context, width: 480, child: const ReportHistoryScreen());
+                           } else {
+                             Navigator.of(context).push(MaterialPageRoute(builder: (_) => const ReportHistoryScreen()));
+                           }
+                         },
                        ),
                      ],
                    ),

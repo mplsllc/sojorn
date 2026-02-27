@@ -5,6 +5,7 @@
 'use client';
 
 import AdminShell from '@/components/AdminShell';
+import AdminOnlyGuard from '@/components/AdminOnlyGuard';
 import { api } from '@/lib/api';
 import { formatDateTime } from '@/lib/utils';
 import { useEffect, useState } from 'react';
@@ -26,6 +27,7 @@ export default function SystemPage() {
   useEffect(() => { fetchData(); }, []);
 
   return (
+    <AdminOnlyGuard>
     <AdminShell>
       <div className="mb-6 flex items-center justify-between">
         <div>
@@ -149,5 +151,6 @@ export default function SystemPage() {
         <div className="card p-8 text-center text-gray-500">Failed to load system health data.</div>
       )}
     </AdminShell>
+    </AdminOnlyGuard>
   );
 }

@@ -5,6 +5,7 @@
 'use client';
 
 import AdminShell from '@/components/AdminShell';
+import AdminOnlyGuard from '@/components/AdminOnlyGuard';
 import { api } from '@/lib/api';
 import { formatDate } from '@/lib/utils';
 import { useEffect, useState } from 'react';
@@ -104,6 +105,7 @@ export default function GroupsPage() {
   };
 
   return (
+    <AdminOnlyGuard>
     <AdminShell>
       <div className="mb-6 flex items-center justify-between">
         <div>
@@ -298,5 +300,6 @@ export default function GroupsPage() {
         </div>
       )}
     </AdminShell>
+    </AdminOnlyGuard>
   );
 }

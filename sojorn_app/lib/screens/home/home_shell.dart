@@ -64,6 +64,7 @@ class _HomeShellState extends ConsumerState<HomeShell> with WidgetsBindingObserv
   List<Map<String, dynamic>> _desktopOnlineUsers = [];
   DashboardLayout _dashboardLayout = DashboardLayout.defaultLayout;
   bool _isDashboardEditing = false;
+  DashboardWidget? _editingWidget;
   bool _isCommandPaletteOpen = false;
   int _logoTapCount = 0;
   Timer? _logoTapTimer;
@@ -831,20 +832,29 @@ class _HomeShellState extends ConsumerState<HomeShell> with WidgetsBindingObserv
           child: Center(
             child: ConstrainedBox(
               constraints: const BoxConstraints(maxWidth: 660),
-              child: isEditing
-                  ? DashboardEditorPanel(
-                      layout: _dashboardLayout,
-                      onLayoutChanged: (layout) {
-                        setState(() => _dashboardLayout = layout);
+              child: _editingWidget != null
+                  ? WidgetSettingsPanel(
+                      widgetData: _editingWidget!,
+                      onSave: (cfg) {
+                        _updateWidgetConfig(_editingWidget!, cfg);
+                        setState(() => _editingWidget = null);
                       },
-                      onClose: () {
-                        setState(() => _isDashboardEditing = false);
-                      },
+                      onCancel: () => setState(() => _editingWidget = null),
                     )
-                  : NavigationShellScope(
-                      currentIndex: currentIndex,
-                      child: widget.navigationShell,
-                    ),
+                  : isEditing
+                      ? DashboardEditorPanel(
+                          layout: _dashboardLayout,
+                          onLayoutChanged: (layout) {
+                            setState(() => _dashboardLayout = layout);
+                          },
+                          onClose: () {
+                            setState(() => _isDashboardEditing = false);
+                          },
+                        )
+                      : NavigationShellScope(
+                          currentIndex: currentIndex,
+                          child: widget.navigationShell,
+                        ),
             ),
           ),
         ),
@@ -1129,17 +1139,17 @@ class _HomeShellState extends ConsumerState<HomeShell> with WidgetsBindingObserv
       case DashboardWidgetType.quote:
         return QuoteWidget(
           config: dw.config,
-          onConfigChange: (cfg) => save(cfg),
+          onSettingsTap: () => setState(() => _editingWidget = dw),
         );
       case DashboardWidgetType.customText:
         return CustomTextWidget(
           config: dw.config,
-          onConfigChange: (cfg) => save(cfg),
+          onSettingsTap: () => setState(() => _editingWidget = dw),
         );
       case DashboardWidgetType.photoFrame:
         return PhotoFrameWidget(
           config: dw.config,
-          onConfigChange: (cfg) => save(cfg),
+          onSettingsTap: () => setState(() => _editingWidget = dw),
         );
       case DashboardWidgetType.groupEvents:
         return GroupEventsWidget(
@@ -1154,6 +1164,26 @@ class _HomeShellState extends ConsumerState<HomeShell> with WidgetsBindingObserv
         );
       case DashboardWidgetType.pinnedPost:
         return null; // requires API support — skip for now
+      case DashboardWidgetType.moodStatus:
+        return MoodStatusWidget(
+          config: dw.config,
+          onSettingsTap: () => setState(() => _editingWidget = dw),
+        );
+      case DashboardWidgetType.favoriteMedia:
+        return FavoriteMediaWidget(
+          config: dw.config,
+          onSettingsTap: () => setState(() => _editingWidget = dw),
+        );
+      case DashboardWidgetType.countdown:
+        return CountdownWidget(
+          config: dw.config,
+          onSettingsTap: () => setState(() => _editingWidget = dw),
+        );
+      case DashboardWidgetType.socialLinks:
+        return SocialLinksWidget(
+          config: dw.config,
+          onSettingsTap: () => setState(() => _editingWidget = dw),
+        );
     }
   }
 

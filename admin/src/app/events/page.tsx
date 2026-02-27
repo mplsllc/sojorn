@@ -5,6 +5,7 @@
 'use client';
 
 import AdminShell from '@/components/AdminShell';
+import AdminOnlyGuard from '@/components/AdminOnlyGuard';
 import { api } from '@/lib/api';
 import { formatDateTime } from '@/lib/utils';
 import { useEffect, useState } from 'react';
@@ -75,6 +76,7 @@ export default function EventsPage() {
   };
 
   return (
+    <AdminOnlyGuard>
     <AdminShell>
       <div className="mb-6">
         <h1 className="text-2xl font-bold text-gray-900">Events</h1>
@@ -210,5 +212,6 @@ export default function EventsPage() {
         </div>
       )}
     </AdminShell>
+    </AdminOnlyGuard>
   );
 }

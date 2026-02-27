@@ -6,6 +6,7 @@
 
 import { useEffect, useState, useCallback } from 'react';
 import AdminShell from '@/components/AdminShell';
+import AdminOnlyGuard from '@/components/AdminOnlyGuard';
 import SelectionBar from '@/components/SelectionBar';
 import { api } from '@/lib/api';
 import { formatDateTime } from '@/lib/utils';
@@ -156,6 +157,7 @@ export default function BeaconAlertsPage() {
   };
 
   return (
+    <AdminOnlyGuard>
     <AdminShell>
       <div className="flex items-center justify-between mb-6">
         <div>
@@ -394,6 +396,7 @@ export default function BeaconAlertsPage() {
         </div>
       </div>
     </AdminShell>
+    </AdminOnlyGuard>
   );
 }
 

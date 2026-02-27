@@ -5,6 +5,7 @@
 'use client';
 
 import AdminShell from '@/components/AdminShell';
+import AdminOnlyGuard from '@/components/AdminOnlyGuard';
 import { api } from '@/lib/api';
 import { useEffect, useState, useCallback } from 'react';
 import { Brain, Play, Loader2, Eye, MessageSquare, Video, Shield, MapPin, Users, AlertTriangle, Cpu, Terminal, Upload, Sliders, ChevronDown, ChevronRight } from 'lucide-react';
@@ -292,6 +293,7 @@ export default function AIModerationPage() {
   const enabledTextCount = SE_TEXT_MODELS.filter(m => seConfig.text_models?.[m.key]?.enabled).length;
 
   return (
+    <AdminOnlyGuard>
     <AdminShell>
       <div className="mb-6">
         <h1 className="text-2xl font-bold text-gray-900 flex items-center gap-2">
@@ -716,5 +718,6 @@ export default function AIModerationPage() {
         </div>
       </div>
     </AdminShell>
+    </AdminOnlyGuard>
   );
 }

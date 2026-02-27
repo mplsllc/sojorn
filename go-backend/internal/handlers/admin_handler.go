@@ -40,6 +40,7 @@ type AdminHandler struct {
 	beaconAlertRepo         *repository.BeaconAlertRepository
 	beaconIngestion         *services.BeaconIngestionService
 	jwtSecret               string
+	isProduction            bool
 	s3Client                *s3.Client
 	mediaBucket             string
 	videoBucket             string
@@ -47,7 +48,7 @@ type AdminHandler struct {
 	vidDomain               string
 }
 
-func NewAdminHandler(pool *pgxpool.Pool, moderationService *services.ModerationService, appealService *services.AppealService, emailService *services.EmailService, sightEngineService *services.SightEngineService, officialAccountsService *services.OfficialAccountsService, linkPreviewService *services.LinkPreviewService, localAIService *services.LocalAIService, beaconAlertRepo *repository.BeaconAlertRepository, beaconIngestion *services.BeaconIngestionService, jwtSecret string, s3Client *s3.Client, mediaBucket string, videoBucket string, imgDomain string, vidDomain string) *AdminHandler {
+func NewAdminHandler(pool *pgxpool.Pool, moderationService *services.ModerationService, appealService *services.AppealService, emailService *services.EmailService, sightEngineService *services.SightEngineService, officialAccountsService *services.OfficialAccountsService, linkPreviewService *services.LinkPreviewService, localAIService *services.LocalAIService, beaconAlertRepo *repository.BeaconAlertRepository, beaconIngestion *services.BeaconIngestionService, jwtSecret string, isProduction bool, s3Client *s3.Client, mediaBucket string, videoBucket string, imgDomain string, vidDomain string) *AdminHandler {
 	return &AdminHandler{
 		pool:                    pool,
 		moderationService:       moderationService,
@@ -60,12 +61,33 @@ func NewAdminHandler(pool *pgxpool.Pool, moderationService *services.ModerationS
 		beaconAlertRepo:         beaconAlertRepo,
 		beaconIngestion:         beaconIngestion,
 		jwtSecret:               jwtSecret,
+		isProduction:            isProduction,
 		s3Client:                s3Client,
 		mediaBucket:             mediaBucket,
 		videoBucket:             videoBucket,
 		imgDomain:               imgDomain,
 		vidDomain:               vidDomain,
 	}
+}
+
+// setAdminCookie sets or clears the admin JWT cookie with environment-aware settings.
+func (h *AdminHandler) setAdminCookie(c *gin.Context, token string, maxAge int) {
+	cookie := &http.Cookie{
+		Name:     "admin_token",
+		Value:    token,
+		MaxAge:   maxAge,
+		HttpOnly: true,
+	}
+	if h.isProduction {
+		cookie.Domain = ".sojorn.net"
+		cookie.Secure = true
+		cookie.SameSite = http.SameSiteNoneMode
+		cookie.Path = "/api"
+	} else {
+		cookie.SameSite = http.SameSiteLaxMode
+		cookie.Path = "/"
+	}
+	http.SetCookie(c.Writer, cookie)
 }
 
 // ──────────────────────────────────────────────
@@ -130,7 +152,7 @@ func (h *AdminHandler) AdminLogin(c *gin.Context) {
 	var role string
 	err = h.pool.QueryRow(ctx,
 		`SELECT COALESCE(role, 'user') FROM profiles WHERE id = $1`, userID).Scan(&role)
-	if err != nil || role != "admin" {
+	if err != nil || (role != "admin" && role != "moderator") {
 		c.JSON(http.StatusForbidden, gin.H{"error": "Admin access required"})
 		return
 	}
@@ -153,6 +175,11 @@ func (h *AdminHandler) AdminLogin(c *gin.Context) {
 	h.pool.QueryRow(ctx,
 		`SELECT handle, display_name, avatar_url FROM profiles WHERE id = $1`, userID).Scan(&handle, &displayName, &avatarURL)
 
+	// Set HttpOnly cookie for admin panel auth
+	h.setAdminCookie(c, tokenString, 86400)
+
+	// DEPRECATED: Remove access_token from response after admin panel cookie migration
+	// is confirmed working. Target removal: next deploy after cookie migration ships.
 	c.JSON(http.StatusOK, gin.H{
 		"access_token": tokenString,
 		"user": gin.H{
@@ -164,6 +191,12 @@ func (h *AdminHandler) AdminLogin(c *gin.Context) {
 			"role":         role,
 		},
 	})
+}
+
+// AdminLogout clears the admin authentication cookie.
+func (h *AdminHandler) AdminLogout(c *gin.Context) {
+	h.setAdminCookie(c, "", -1)
+	c.JSON(http.StatusOK, gin.H{"message": "Logged out"})
 }
 
 // ──────────────────────────────────────────────
@@ -1152,6 +1185,10 @@ func (h *AdminHandler) BulkUpdatePosts(c *gin.Context) {
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
 	}
+	if len(req.IDs) > 50 {
+		c.JSON(http.StatusBadRequest, gin.H{"error": fmt.Sprintf("Batch size %d exceeds maximum of 50 for post operations", len(req.IDs))})
+		return
+	}
 
 	var affected int64
 	for _, id := range req.IDs {
@@ -1196,6 +1233,10 @@ func (h *AdminHandler) BulkUpdateUsers(c *gin.Context) {
 	}
 	if err := c.ShouldBindJSON(&req); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+	if len(req.IDs) > 50 {
+		c.JSON(http.StatusBadRequest, gin.H{"error": fmt.Sprintf("Batch size %d exceeds maximum of 50 for user operations", len(req.IDs))})
 		return
 	}
 
@@ -1244,6 +1285,10 @@ func (h *AdminHandler) BulkReviewModeration(c *gin.Context) {
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
 	}
+	if len(req.IDs) > 50 {
+		c.JSON(http.StatusBadRequest, gin.H{"error": fmt.Sprintf("Batch size %d exceeds maximum of 50 for moderation operations", len(req.IDs))})
+		return
+	}
 
 	adminUUID, _ := uuid.Parse(adminID.(string))
 	var affected int64
@@ -1289,6 +1334,10 @@ func (h *AdminHandler) BulkUpdateReports(c *gin.Context) {
 	}
 	if err := c.ShouldBindJSON(&req); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+	if len(req.IDs) > 200 {
+		c.JSON(http.StatusBadRequest, gin.H{"error": fmt.Sprintf("Batch size %d exceeds maximum of 200 for report operations", len(req.IDs))})
 		return
 	}
 
@@ -2510,6 +2559,10 @@ func (h *AdminHandler) BulkAddReservedUsernames(c *gin.Context) {
 	}
 	if err := c.ShouldBindJSON(&req); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+	if len(req.Usernames) > 200 {
+		c.JSON(http.StatusBadRequest, gin.H{"error": fmt.Sprintf("Batch size %d exceeds maximum of 200 for username operations", len(req.Usernames))})
 		return
 	}
 	if req.Category == "" {
@@ -5704,7 +5757,12 @@ func (h *AdminHandler) BulkUpdateBeaconAlerts(c *gin.Context) {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "ids and action required"})
 		return
 	}
+	if len(req.IDs) > 200 {
+		c.JSON(http.StatusBadRequest, gin.H{"error": fmt.Sprintf("Batch size %d exceeds maximum of 200 for beacon alert operations", len(req.IDs))})
+		return
+	}
 
+	ctx := c.Request.Context()
 	var affected int64
 	var err error
 	switch req.Action {
@@ -5724,6 +5782,13 @@ func (h *AdminHandler) BulkUpdateBeaconAlerts(c *gin.Context) {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Bulk update failed"})
 		return
 	}
+
+	adminID, _ := c.Get("user_id")
+	if adminUUID, err := uuid.Parse(adminID.(string)); err == nil {
+		h.pool.Exec(ctx, `INSERT INTO audit_log (actor_id, action, target_type, details) VALUES ($1, $2, 'beacon_alert', $3)`,
+			adminUUID, "bulk_"+req.Action+"_beacon_alerts", fmt.Sprintf(`{"count":%d,"requested":%d}`, affected, len(req.IDs)))
+	}
+
 	c.JSON(http.StatusOK, gin.H{"affected": affected})
 }
 

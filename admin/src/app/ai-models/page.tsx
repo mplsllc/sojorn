@@ -5,6 +5,7 @@
 'use client';
 
 import AdminShell from '@/components/AdminShell';
+import AdminOnlyGuard from '@/components/AdminOnlyGuard';
 import { api } from '@/lib/api';
 import { useEffect, useState, useCallback } from 'react';
 import { Cpu, Play, Square, Trash2, Download, RefreshCw, HardDrive, Zap, AlertTriangle } from 'lucide-react';
@@ -199,6 +200,7 @@ export default function AIModelsPage() {
   const totalSizeMB = models.reduce((acc, m) => acc + m.size_mb, 0);
 
   return (
+    <AdminOnlyGuard>
     <AdminShell>
       <div className="mb-6 flex items-center justify-between">
         <div>
@@ -299,5 +301,6 @@ export default function AIModelsPage() {
         </div>
       )}
     </AdminShell>
+    </AdminOnlyGuard>
   );
 }

@@ -5,6 +5,7 @@
 'use client';
 
 import AdminShell from '@/components/AdminShell';
+import AdminOnlyGuard from '@/components/AdminOnlyGuard';
 import { api } from '@/lib/api';
 import { useEffect, useState } from 'react';
 import { Settings, Globe, Key, Activity, Users, RefreshCw } from 'lucide-react';
@@ -52,6 +53,7 @@ export default function SettingsPage() {
   }, []);
 
   return (
+    <AdminOnlyGuard>
     <AdminShell>
       <div className="mb-6">
         <h1 className="text-2xl font-bold text-gray-900">Settings</h1>
@@ -202,9 +204,9 @@ export default function SettingsPage() {
           </div>
           <div className="space-y-2 text-sm">
             <div className="flex justify-between">
-              <span className="text-gray-500">Token stored</span>
+              <span className="text-gray-500">Auth method</span>
               <span className="text-gray-900 font-medium">
-                {typeof window !== 'undefined' && localStorage.getItem('admin_token') ? 'Yes' : 'No'}
+                HttpOnly Cookie
               </span>
             </div>
             <div className="flex justify-between">
@@ -230,5 +232,6 @@ export default function SettingsPage() {
         </div>
       </div>
     </AdminShell>
+    </AdminOnlyGuard>
   );
 }

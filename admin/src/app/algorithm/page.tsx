@@ -5,6 +5,7 @@
 'use client';
 
 import AdminShell from '@/components/AdminShell';
+import AdminOnlyGuard from '@/components/AdminOnlyGuard';
 import { api } from '@/lib/api';
 import { useEffect, useState } from 'react';
 import { Sliders, Save, RefreshCw, BarChart2 } from 'lucide-react';
@@ -58,6 +59,7 @@ export default function AlgorithmPage() {
   };
 
   return (
+    <AdminOnlyGuard>
     <AdminShell>
       <div className="mb-6 flex items-center justify-between">
         <div>
@@ -247,5 +249,6 @@ export default function AlgorithmPage() {
         )}
       </div>
     </AdminShell>
+    </AdminOnlyGuard>
   );
 }

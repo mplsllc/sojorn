@@ -5,6 +5,7 @@
 'use client';
 
 import AdminShell from '@/components/AdminShell';
+import AdminOnlyGuard from '@/components/AdminOnlyGuard';
 import { api } from '@/lib/api';
 import { formatDateTime } from '@/lib/utils';
 import { useEffect, useState, useCallback } from 'react';
@@ -152,6 +153,7 @@ export default function AIAuditLogPage() {
   ];
 
   return (
+    <AdminOnlyGuard>
     <AdminShell>
       {/* Header */}
       <div className="mb-6 flex items-center justify-between">
@@ -463,5 +465,6 @@ export default function AIAuditLogPage() {
         </>
       )}
     </AdminShell>
+    </AdminOnlyGuard>
   );
 }

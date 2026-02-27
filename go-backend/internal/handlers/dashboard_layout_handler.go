@@ -74,6 +74,44 @@ func (h *DashboardLayoutHandler) GetDashboardLayout(c *gin.Context) {
 	})
 }
 
+// GetUserDashboardLayout — GET /users/:userId/dashboard-layout
+// Returns another user's dashboard layout (read-only, for profile mirroring).
+func (h *DashboardLayoutHandler) GetUserDashboardLayout(c *gin.Context) {
+	targetID := c.Param("id")
+
+	var leftJSON, rightJSON, topbarJSON []byte
+	var updatedAt time.Time
+
+	err := h.db.QueryRow(c.Request.Context(), `
+		SELECT left_sidebar, right_sidebar, feed_topbar, updated_at
+		FROM dashboard_layouts
+		WHERE user_id = $1
+	`, targetID).Scan(&leftJSON, &rightJSON, &topbarJSON, &updatedAt)
+
+	if err != nil {
+		c.JSON(http.StatusOK, defaultDashboardLayout)
+		return
+	}
+
+	var left, right, topbar interface{}
+	if err := json.Unmarshal(leftJSON, &left); err != nil {
+		left = []interface{}{}
+	}
+	if err := json.Unmarshal(rightJSON, &right); err != nil {
+		right = []interface{}{}
+	}
+	if err := json.Unmarshal(topbarJSON, &topbar); err != nil {
+		topbar = []interface{}{}
+	}
+
+	c.JSON(http.StatusOK, gin.H{
+		"left_sidebar":  left,
+		"right_sidebar": right,
+		"feed_topbar":   topbar,
+		"updated_at":    updatedAt.Format(time.RFC3339),
+	})
+}
+
 // SaveDashboardLayout — PUT /dashboard/layout
 func (h *DashboardLayoutHandler) SaveDashboardLayout(c *gin.Context) {
 	userID, _ := c.Get("user_id")

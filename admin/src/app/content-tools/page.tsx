@@ -5,6 +5,7 @@
 'use client';
 
 import AdminShell from '@/components/AdminShell';
+import AdminOnlyGuard from '@/components/AdminOnlyGuard';
 import { api } from '@/lib/api';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { UserPlus, Upload, AlertCircle, CheckCircle, Copy, FileText, Link2, Search, Globe, Download, Check, X, Loader2, ExternalLink, Play, Image as ImageIcon, Cookie, Trash2, TestTube, ChevronDown, ChevronRight, Shield } from 'lucide-react';
@@ -142,6 +143,7 @@ export default function ContentToolsPage() {
   const [activeTab, setActiveTab] = useState<'create-user' | 'import' | 'social'>('create-user');
 
   return (
+    <AdminOnlyGuard>
     <AdminShell>
       <div className="mb-6">
         <h1 className="text-2xl font-bold text-gray-900">Content Tools</h1>
@@ -187,6 +189,7 @@ export default function ContentToolsPage() {
 
       {activeTab === 'create-user' ? <CreateUserPanel /> : activeTab === 'import' ? <ImportContentPanel /> : <SocialImportPanel />}
     </AdminShell>
+    </AdminOnlyGuard>
   );
 }
 

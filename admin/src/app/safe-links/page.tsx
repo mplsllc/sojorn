@@ -7,6 +7,7 @@
 import { useState, useEffect } from 'react';
 import { api } from '@/lib/api';
 import AdminShell from '@/components/AdminShell';
+import AdminOnlyGuard from '@/components/AdminOnlyGuard';
 import { Shield, ShieldCheck, ShieldX, Plus, Trash2, Search, Globe, AlertCircle, RefreshCw, ExternalLink } from 'lucide-react';
 
 interface SafeDomain {
@@ -73,6 +74,7 @@ export default function SafeLinksPage() {
   };
 
   return (
+    <AdminOnlyGuard>
     <AdminShell>
       <div className="max-w-6xl mx-auto">
         {/* Header */}
@@ -194,6 +196,7 @@ export default function SafeLinksPage() {
         )}
       </div>
     </AdminShell>
+    </AdminOnlyGuard>
   );
 }
 

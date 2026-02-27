@@ -6,6 +6,7 @@ import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import 'package:video_player/video_player.dart';
 import '../../config/api_config.dart';
+import '../../models/dashboard_widgets.dart';
 import '../../models/event.dart';
 import '../../models/profile.dart';
 import '../../screens/events/event_detail_screen.dart';
@@ -124,6 +125,7 @@ Widget _settingsBackPanel({
   required List<Widget> children,
 }) {
   return Container(
+    width: double.infinity,
     decoration: BoxDecoration(
       color: AppTheme.cardSurface,
       borderRadius: BorderRadius.circular(SojornRadii.card),
@@ -2062,191 +2064,41 @@ class _AnimatedWaveformPainter extends CustomPainter {
   bool shouldRepaint(_AnimatedWaveformPainter old) => old.progress != progress;
 }
 
+// ─── Shared gear button builder ─────────────────────────────────────────────
+
+Widget _gearButton(VoidCallback? onTap) {
+  if (onTap == null) return const SizedBox.shrink();
+  return Positioned(
+    top: 0, right: 0,
+    child: GestureDetector(
+      onTap: onTap,
+      child: Container(
+        width: 28, height: 28,
+        decoration: BoxDecoration(
+          color: AppTheme.royalPurple.withValues(alpha: 0.12),
+          shape: BoxShape.circle,
+          border: Border.all(color: AppTheme.royalPurple.withValues(alpha: 0.2)),
+        ),
+        child: Icon(Icons.tune, size: 14, color: AppTheme.royalPurple.withValues(alpha: 0.7)),
+      ),
+    ),
+  );
+}
+
 // ─── Quote Widget ────────────────────────────────────────────────────────────
 
-class QuoteWidget extends StatefulWidget {
+class QuoteWidget extends StatelessWidget {
   final Map<String, dynamic> config;
-  final void Function(Map<String, dynamic>)? onConfigChange;
+  final VoidCallback? onSettingsTap;
 
-  const QuoteWidget({super.key, this.config = const {}, this.onConfigChange});
-
-  @override
-  State<QuoteWidget> createState() => _QuoteWidgetState();
-}
-
-class _QuoteWidgetState extends State<QuoteWidget> {
-  late String _quote;
-  late String _author;
-  late final TextEditingController _quoteCtrl;
-  late final TextEditingController _authorCtrl;
+  const QuoteWidget({super.key, this.config = const {}, this.onSettingsTap});
 
   @override
-  void initState() {
-    super.initState();
-    _quote = widget.config['quote'] as String? ?? '';
-    _author = widget.config['author'] as String? ?? '';
-    _quoteCtrl = TextEditingController(text: _quote);
-    _authorCtrl = TextEditingController(text: _author);
-  }
-
-  @override
-  void dispose() {
-    _quoteCtrl.dispose();
-    _authorCtrl.dispose();
-    super.dispose();
-  }
-
-  void _save(VoidCallback flipBack) {
-    setState(() {
-      _quote = _quoteCtrl.text.trim();
-      _author = _authorCtrl.text.trim();
-    });
-    widget.onConfigChange?.call({'quote': _quote, 'author': _author});
-    flipBack();
-  }
-
-  Widget _buildFront(VoidCallback onFlip) {
+  Widget build(BuildContext context) {
+    final quote = config['quote'] as String? ?? '';
+    final author = config['author'] as String? ?? '';
     return Container(
-      decoration: BoxDecoration(
-        gradient: LinearGradient(
-          colors: [AppTheme.royalPurple.withValues(alpha: 0.08), AppTheme.brightNavy.withValues(alpha: 0.04)],
-          begin: Alignment.topLeft, end: Alignment.bottomRight,
-        ),
-        borderRadius: BorderRadius.circular(SojornRadii.card),
-        border: Border.all(color: AppTheme.royalPurple.withValues(alpha: 0.12)),
-      ),
-      padding: const EdgeInsets.all(16),
-      child: Stack(
-        children: [
-          Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Icon(Icons.format_quote, color: AppTheme.royalPurple.withValues(alpha: 0.4), size: 28),
-              const SizedBox(height: 6),
-              Text(
-                _quote.isNotEmpty ? _quote : 'Tap ⚙ to add your quote',
-                style: TextStyle(
-                  color: _quote.isNotEmpty ? AppTheme.navyText : AppTheme.navyText.withValues(alpha: 0.35),
-                  fontSize: 13,
-                  fontStyle: _quote.isEmpty ? FontStyle.italic : FontStyle.normal,
-                  height: 1.5,
-                ),
-              ),
-              if (_author.isNotEmpty) ...[
-                const SizedBox(height: 8),
-                Text(
-                  '— $_author',
-                  style: TextStyle(
-                    color: AppTheme.royalPurple.withValues(alpha: 0.7),
-                    fontSize: 11,
-                    fontWeight: FontWeight.w600,
-                  ),
-                ),
-              ],
-            ],
-          ),
-          Positioned(
-            top: 0, right: 0,
-            child: GestureDetector(
-              onTap: onFlip,
-              child: Container(
-                width: 28, height: 28,
-                decoration: BoxDecoration(
-                  color: AppTheme.royalPurple.withValues(alpha: 0.12),
-                  shape: BoxShape.circle,
-                  border: Border.all(color: AppTheme.royalPurple.withValues(alpha: 0.2)),
-                ),
-                child: Icon(Icons.tune, size: 14, color: AppTheme.royalPurple.withValues(alpha: 0.7)),
-              ),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildSettings(VoidCallback flipBack) {
-    return _settingsBackPanel(
-      onDone: () => _save(flipBack),
-      title: 'Edit Quote',
-      children: [
-        TextField(
-          controller: _quoteCtrl,
-          maxLines: 3,
-          style: TextStyle(fontSize: 13, color: AppTheme.navyText),
-          decoration: InputDecoration(
-            labelText: 'Quote text',
-            labelStyle: TextStyle(fontSize: 12, color: AppTheme.navyText.withValues(alpha: 0.5)),
-            border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
-            contentPadding: const EdgeInsets.all(10),
-            isDense: true,
-          ),
-        ),
-        const SizedBox(height: 10),
-        TextField(
-          controller: _authorCtrl,
-          style: TextStyle(fontSize: 13, color: AppTheme.navyText),
-          decoration: InputDecoration(
-            labelText: 'Author (optional)',
-            labelStyle: TextStyle(fontSize: 12, color: AppTheme.navyText.withValues(alpha: 0.5)),
-            border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
-            contentPadding: const EdgeInsets.symmetric(vertical: 8, horizontal: 10),
-            isDense: true,
-          ),
-        ),
-      ],
-    );
-  }
-
-  @override
-  Widget build(BuildContext context) => _FlipCard(frontBuilder: _buildFront, back: _buildSettings, front: const SizedBox.shrink());
-}
-
-// ─── Custom Text Widget ──────────────────────────────────────────────────────
-
-class CustomTextWidget extends StatefulWidget {
-  final Map<String, dynamic> config;
-  final void Function(Map<String, dynamic>)? onConfigChange;
-
-  const CustomTextWidget({super.key, this.config = const {}, this.onConfigChange});
-
-  @override
-  State<CustomTextWidget> createState() => _CustomTextWidgetState();
-}
-
-class _CustomTextWidgetState extends State<CustomTextWidget> {
-  late String _title;
-  late String _text;
-  late final TextEditingController _titleCtrl;
-  late final TextEditingController _textCtrl;
-
-  @override
-  void initState() {
-    super.initState();
-    _title = widget.config['title'] as String? ?? '';
-    _text = widget.config['text'] as String? ?? '';
-    _titleCtrl = TextEditingController(text: _title);
-    _textCtrl = TextEditingController(text: _text);
-  }
-
-  @override
-  void dispose() {
-    _titleCtrl.dispose();
-    _textCtrl.dispose();
-    super.dispose();
-  }
-
-  void _save(VoidCallback flipBack) {
-    setState(() {
-      _title = _titleCtrl.text.trim();
-      _text = _textCtrl.text.trim();
-    });
-    widget.onConfigChange?.call({'title': _title, 'text': _text});
-    flipBack();
-  }
-
-  Widget _buildFront(VoidCallback onFlip) {
-    return Container(
+      width: double.infinity,
       decoration: BoxDecoration(
         color: AppTheme.cardSurface,
         borderRadius: BorderRadius.circular(SojornRadii.card),
@@ -2258,123 +2110,101 @@ class _CustomTextWidgetState extends State<CustomTextWidget> {
           Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              if (_title.isNotEmpty) ...[
-                Text(_title, style: TextStyle(color: AppTheme.navyText, fontSize: 14, fontWeight: FontWeight.w800)),
+              Icon(Icons.format_quote, color: AppTheme.royalPurple.withValues(alpha: 0.3), size: 24),
+              const SizedBox(height: 8),
+              Text(
+                quote.isNotEmpty ? quote : 'Tap \u2699 to add your quote',
+                style: TextStyle(
+                  color: quote.isNotEmpty ? AppTheme.navyText : AppTheme.navyText.withValues(alpha: 0.35),
+                  fontSize: 13,
+                  fontStyle: FontStyle.italic,
+                  height: 1.5,
+                ),
+              ),
+              if (author.isNotEmpty) ...[
+                const SizedBox(height: 8),
+                Align(
+                  alignment: Alignment.centerRight,
+                  child: Text(
+                    '\u2014 $author',
+                    style: TextStyle(
+                      color: AppTheme.royalPurple.withValues(alpha: 0.7),
+                      fontSize: 11,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                ),
+              ],
+            ],
+          ),
+          _gearButton(onSettingsTap),
+        ],
+      ),
+    );
+  }
+}
+
+// ─── Custom Text Widget ──────────────────────────────────────────────────────
+
+class CustomTextWidget extends StatelessWidget {
+  final Map<String, dynamic> config;
+  final VoidCallback? onSettingsTap;
+
+  const CustomTextWidget({super.key, this.config = const {}, this.onSettingsTap});
+
+  @override
+  Widget build(BuildContext context) {
+    final title = config['title'] as String? ?? '';
+    final text = config['text'] as String? ?? '';
+    return Container(
+      width: double.infinity,
+      decoration: BoxDecoration(
+        color: AppTheme.cardSurface,
+        borderRadius: BorderRadius.circular(SojornRadii.card),
+        boxShadow: [BoxShadow(color: AppTheme.royalPurple.withValues(alpha: 0.08), blurRadius: 12, offset: const Offset(0, 2))],
+      ),
+      padding: const EdgeInsets.all(16),
+      child: Stack(
+        children: [
+          Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              if (title.isNotEmpty) ...[
+                Text(title, style: TextStyle(color: AppTheme.navyText, fontSize: 14, fontWeight: FontWeight.w800)),
                 const SizedBox(height: 8),
               ],
               Text(
-                _text.isNotEmpty ? _text : 'Tap ⚙ to add your content',
+                text.isNotEmpty ? text : 'Tap \u2699 to add your content',
                 style: TextStyle(
-                  color: _text.isNotEmpty ? AppTheme.navyText.withValues(alpha: 0.75) : AppTheme.navyText.withValues(alpha: 0.35),
+                  color: text.isNotEmpty ? AppTheme.navyText.withValues(alpha: 0.75) : AppTheme.navyText.withValues(alpha: 0.35),
                   fontSize: 12,
-                  fontStyle: _text.isEmpty ? FontStyle.italic : FontStyle.normal,
+                  fontStyle: text.isEmpty ? FontStyle.italic : FontStyle.normal,
                   height: 1.5,
                 ),
               ),
             ],
           ),
-          Positioned(
-            top: 0, right: 0,
-            child: GestureDetector(
-              onTap: onFlip,
-              child: Container(
-                width: 28, height: 28,
-                decoration: BoxDecoration(
-                  color: AppTheme.royalPurple.withValues(alpha: 0.12),
-                  shape: BoxShape.circle,
-                  border: Border.all(color: AppTheme.royalPurple.withValues(alpha: 0.2)),
-                ),
-                child: Icon(Icons.tune, size: 14, color: AppTheme.royalPurple.withValues(alpha: 0.7)),
-              ),
-            ),
-          ),
+          _gearButton(onSettingsTap),
         ],
       ),
     );
   }
-
-  Widget _buildSettings(VoidCallback flipBack) {
-    return _settingsBackPanel(
-      onDone: () => _save(flipBack),
-      title: 'Edit Content',
-      children: [
-        TextField(
-          controller: _titleCtrl,
-          style: TextStyle(fontSize: 13, color: AppTheme.navyText),
-          decoration: InputDecoration(
-            labelText: 'Title (optional)',
-            labelStyle: TextStyle(fontSize: 12, color: AppTheme.navyText.withValues(alpha: 0.5)),
-            border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
-            contentPadding: const EdgeInsets.symmetric(vertical: 8, horizontal: 10),
-            isDense: true,
-          ),
-        ),
-        const SizedBox(height: 10),
-        TextField(
-          controller: _textCtrl,
-          maxLines: 5,
-          style: TextStyle(fontSize: 13, color: AppTheme.navyText),
-          decoration: InputDecoration(
-            labelText: 'Content',
-            labelStyle: TextStyle(fontSize: 12, color: AppTheme.navyText.withValues(alpha: 0.5)),
-            border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
-            contentPadding: const EdgeInsets.all(10),
-            isDense: true,
-          ),
-        ),
-      ],
-    );
-  }
-
-  @override
-  Widget build(BuildContext context) => _FlipCard(frontBuilder: _buildFront, back: _buildSettings, front: const SizedBox.shrink());
 }
 
 // ─── Photo Frame Widget ──────────────────────────────────────────────────────
 
-class PhotoFrameWidget extends StatefulWidget {
+class PhotoFrameWidget extends StatelessWidget {
   final Map<String, dynamic> config;
-  final void Function(Map<String, dynamic>)? onConfigChange;
+  final VoidCallback? onSettingsTap;
 
-  const PhotoFrameWidget({super.key, this.config = const {}, this.onConfigChange});
-
-  @override
-  State<PhotoFrameWidget> createState() => _PhotoFrameWidgetState();
-}
-
-class _PhotoFrameWidgetState extends State<PhotoFrameWidget> {
-  late String _url;
-  late String _caption;
-  late final TextEditingController _urlCtrl;
-  late final TextEditingController _captionCtrl;
+  const PhotoFrameWidget({super.key, this.config = const {}, this.onSettingsTap});
 
   @override
-  void initState() {
-    super.initState();
-    _url = widget.config['url'] as String? ?? '';
-    _caption = widget.config['caption'] as String? ?? '';
-    _urlCtrl = TextEditingController(text: _url);
-    _captionCtrl = TextEditingController(text: _caption);
-  }
-
-  @override
-  void dispose() {
-    _urlCtrl.dispose();
-    _captionCtrl.dispose();
-    super.dispose();
-  }
-
-  void _save(VoidCallback flipBack) {
-    setState(() {
-      _url = _urlCtrl.text.trim();
-      _caption = _captionCtrl.text.trim();
-    });
-    widget.onConfigChange?.call({'url': _url, 'caption': _caption});
-    flipBack();
-  }
-
-  Widget _buildFront(VoidCallback onFlip) {
+  Widget build(BuildContext context) {
+    final url = config['url'] as String? ?? '';
+    final caption = config['caption'] as String? ?? '';
     return Container(
+      width: double.infinity,
       decoration: BoxDecoration(
         color: AppTheme.cardSurface,
         borderRadius: BorderRadius.circular(SojornRadii.card),
@@ -2383,43 +2213,44 @@ class _PhotoFrameWidgetState extends State<PhotoFrameWidget> {
       clipBehavior: Clip.antiAlias,
       child: Stack(
         children: [
-          if (_url.isNotEmpty)
+          if (url.isNotEmpty)
             Column(
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
                 AspectRatio(
                   aspectRatio: 4 / 3,
-                  child: Image.network(_url, fit: BoxFit.cover, errorBuilder: (_, __, ___) => _placeholder()),
+                  child: Image.network(url, fit: BoxFit.cover, errorBuilder: (_, __, ___) => _photoPlaceholder()),
                 ),
-                if (_caption.isNotEmpty)
+                if (caption.isNotEmpty)
                   Padding(
                     padding: const EdgeInsets.all(10),
-                    child: Text(_caption, style: TextStyle(color: AppTheme.navyText.withValues(alpha: 0.65), fontSize: 12, fontStyle: FontStyle.italic), textAlign: TextAlign.center),
+                    child: Text(caption, style: TextStyle(color: AppTheme.navyText.withValues(alpha: 0.65), fontSize: 12, fontStyle: FontStyle.italic), textAlign: TextAlign.center),
                   ),
               ],
             )
           else
-            _placeholder(),
-          Positioned(
-            top: 10, right: 10,
-            child: GestureDetector(
-              onTap: onFlip,
-              child: Container(
-                width: 28, height: 28,
-                decoration: BoxDecoration(
-                  color: SojornColors.basicBlack.withValues(alpha: 0.35),
-                  shape: BoxShape.circle,
+            _photoPlaceholder(),
+          if (onSettingsTap != null)
+            Positioned(
+              top: 10, right: 10,
+              child: GestureDetector(
+                onTap: onSettingsTap,
+                child: Container(
+                  width: 28, height: 28,
+                  decoration: BoxDecoration(
+                    color: SojornColors.basicBlack.withValues(alpha: 0.35),
+                    shape: BoxShape.circle,
+                  ),
+                  child: const Icon(Icons.tune, size: 14, color: SojornColors.basicWhite),
                 ),
-                child: const Icon(Icons.tune, size: 14, color: SojornColors.basicWhite),
               ),
             ),
-          ),
         ],
       ),
     );
   }
 
-  Widget _placeholder() {
+  static Widget _photoPlaceholder() {
     return Container(
       height: 120,
       color: AppTheme.royalPurple.withValues(alpha: 0.06),
@@ -2428,48 +2259,11 @@ class _PhotoFrameWidgetState extends State<PhotoFrameWidget> {
         children: [
           Icon(Icons.add_photo_alternate_outlined, size: 36, color: AppTheme.royalPurple.withValues(alpha: 0.35)),
           const SizedBox(height: 6),
-          Text('Tap ⚙ to add a photo URL', style: TextStyle(fontSize: 11, color: AppTheme.navyText.withValues(alpha: 0.35))),
+          Text('Tap \u2699 to add a photo URL', style: TextStyle(fontSize: 11, color: AppTheme.navyText.withValues(alpha: 0.35))),
         ],
       ),
     );
   }
-
-  Widget _buildSettings(VoidCallback flipBack) {
-    return _settingsBackPanel(
-      onDone: () => _save(flipBack),
-      title: 'Photo Frame',
-      children: [
-        TextField(
-          controller: _urlCtrl,
-          style: TextStyle(fontSize: 12, color: AppTheme.navyText),
-          decoration: InputDecoration(
-            labelText: 'Image URL',
-            labelStyle: TextStyle(fontSize: 12, color: AppTheme.navyText.withValues(alpha: 0.5)),
-            hintText: 'https://...',
-            hintStyle: TextStyle(fontSize: 11, color: AppTheme.navyText.withValues(alpha: 0.3)),
-            border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
-            contentPadding: const EdgeInsets.symmetric(vertical: 8, horizontal: 10),
-            isDense: true,
-          ),
-        ),
-        const SizedBox(height: 10),
-        TextField(
-          controller: _captionCtrl,
-          style: TextStyle(fontSize: 13, color: AppTheme.navyText),
-          decoration: InputDecoration(
-            labelText: 'Caption (optional)',
-            labelStyle: TextStyle(fontSize: 12, color: AppTheme.navyText.withValues(alpha: 0.5)),
-            border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
-            contentPadding: const EdgeInsets.symmetric(vertical: 8, horizontal: 10),
-            isDense: true,
-          ),
-        ),
-      ],
-    );
-  }
-
-  @override
-  Widget build(BuildContext context) => _FlipCard(frontBuilder: _buildFront, back: _buildSettings, front: const SizedBox.shrink());
 }
 
 // ─── Group Events Widget (compact list, no calendar) ─────────────────────────
@@ -3314,6 +3108,1023 @@ class _DesktopPopularGroupsCardState extends State<DesktopPopularGroupsCard> {
     );
   }
 }
+
+// ─── Mood / Status Widget ──────────────────────────────────────────────────
+
+class MoodStatusWidget extends StatelessWidget {
+  final Map<String, dynamic> config;
+  final VoidCallback? onSettingsTap;
+
+  const MoodStatusWidget({super.key, this.config = const {}, this.onSettingsTap});
+
+  @override
+  Widget build(BuildContext context) {
+    final emoji = config['emoji'] as String? ?? '';
+    final text = config['text'] as String? ?? '';
+    final hasContent = emoji.isNotEmpty || text.isNotEmpty;
+
+    return Container(
+      width: double.infinity,
+      decoration: BoxDecoration(
+        color: AppTheme.cardSurface,
+        borderRadius: BorderRadius.circular(SojornRadii.card),
+        boxShadow: [BoxShadow(color: AppTheme.royalPurple.withValues(alpha: 0.08), blurRadius: 12, offset: const Offset(0, 2))],
+      ),
+      padding: const EdgeInsets.all(16),
+      child: Stack(
+        children: [
+          Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                'MOOD',
+                style: TextStyle(
+                  color: AppTheme.royalPurple,
+                  fontSize: 10,
+                  fontWeight: FontWeight.w700,
+                  letterSpacing: 0.8,
+                ),
+              ),
+              const SizedBox(height: 10),
+              if (hasContent) ...[
+                Row(
+                  children: [
+                    if (emoji.isNotEmpty) ...[
+                      Container(
+                        width: 44, height: 44,
+                        decoration: BoxDecoration(
+                          gradient: LinearGradient(colors: [AppTheme.brightNavy.withValues(alpha: 0.08), AppTheme.royalPurple.withValues(alpha: 0.12)]),
+                          borderRadius: BorderRadius.circular(12),
+                        ),
+                        alignment: Alignment.center,
+                        child: Text(emoji, style: const TextStyle(fontSize: 24)),
+                      ),
+                      const SizedBox(width: 12),
+                    ],
+                    if (text.isNotEmpty)
+                      Expanded(
+                        child: Text(
+                          text,
+                          style: TextStyle(
+                            color: AppTheme.navyText,
+                            fontSize: 13,
+                            fontStyle: FontStyle.italic,
+                            height: 1.4,
+                          ),
+                          maxLines: 2,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      ),
+                  ],
+                ),
+              ] else
+                Text(
+                  'Tap \u2699 to set your mood',
+                  style: TextStyle(color: AppTheme.navyText.withValues(alpha: 0.35), fontSize: 13, fontStyle: FontStyle.italic),
+                ),
+            ],
+          ),
+          _gearButton(onSettingsTap),
+        ],
+      ),
+    );
+  }
+}
+
+
+// ─── Favorite Media Widget ─────────────────────────────────────────────────
+
+IconData favoriteCategoryIcon(String cat) {
+  switch (cat) {
+    case 'music': return Icons.album;
+    case 'movie': return Icons.movie;
+    case 'book': return Icons.menu_book;
+    case 'game': return Icons.sports_esports;
+    case 'show': return Icons.tv;
+    default: return Icons.star;
+  }
+}
+
+class FavoriteMediaWidget extends StatelessWidget {
+  final Map<String, dynamic> config;
+  final VoidCallback? onSettingsTap;
+
+  const FavoriteMediaWidget({super.key, this.config = const {}, this.onSettingsTap});
+
+  @override
+  Widget build(BuildContext context) {
+    final raw = config['items'] as List? ?? [];
+    final items = raw.map((e) {
+      final m = e as Map<String, dynamic>;
+      return {
+        'title': m['title']?.toString() ?? '',
+        'subtitle': m['subtitle']?.toString() ?? '',
+        'category': m['category']?.toString() ?? 'music',
+      };
+    }).toList();
+
+    return Container(
+      width: double.infinity,
+      decoration: BoxDecoration(
+        color: AppTheme.cardSurface,
+        borderRadius: BorderRadius.circular(SojornRadii.card),
+        boxShadow: [BoxShadow(color: AppTheme.royalPurple.withValues(alpha: 0.08), blurRadius: 12, offset: const Offset(0, 2))],
+      ),
+      padding: const EdgeInsets.all(16),
+      child: Stack(
+        children: [
+          Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                'FAVORITES',
+                style: TextStyle(
+                  color: AppTheme.royalPurple,
+                  fontSize: 10,
+                  fontWeight: FontWeight.w700,
+                  letterSpacing: 0.8,
+                ),
+              ),
+              const SizedBox(height: 10),
+              if (items.isEmpty)
+                Text('Tap \u2699 to add your favorites', style: TextStyle(color: AppTheme.navyText.withValues(alpha: 0.35), fontSize: 13, fontStyle: FontStyle.italic))
+              else
+                GridView.builder(
+                  shrinkWrap: true,
+                  physics: const NeverScrollableScrollPhysics(),
+                  gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+                    crossAxisCount: 2, mainAxisSpacing: 8, crossAxisSpacing: 8, childAspectRatio: 2.0,
+                  ),
+                  itemCount: items.length.clamp(0, 4),
+                  itemBuilder: (context, i) {
+                    final item = items[i];
+                    final cat = item['category'] ?? 'music';
+                    return Container(
+                      padding: const EdgeInsets.all(10),
+                      decoration: BoxDecoration(
+                        gradient: LinearGradient(
+                          colors: [AppTheme.royalPurple.withValues(alpha: 0.06), AppTheme.brightNavy.withValues(alpha: 0.04)],
+                          begin: Alignment.topLeft, end: Alignment.bottomRight,
+                        ),
+                        borderRadius: BorderRadius.circular(12),
+                        border: Border.all(color: AppTheme.royalPurple.withValues(alpha: 0.08)),
+                      ),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          Icon(favoriteCategoryIcon(cat), size: 18, color: AppTheme.royalPurple.withValues(alpha: 0.6)),
+                          const SizedBox(height: 4),
+                          Text(
+                            item['title'] ?? '',
+                            style: TextStyle(fontSize: 11, fontWeight: FontWeight.w700, color: AppTheme.navyText),
+                            maxLines: 1, overflow: TextOverflow.ellipsis,
+                          ),
+                          if ((item['subtitle'] ?? '').isNotEmpty)
+                            Text(
+                              item['subtitle']!,
+                              style: TextStyle(fontSize: 9, color: AppTheme.navyText.withValues(alpha: 0.5)),
+                              maxLines: 1, overflow: TextOverflow.ellipsis,
+                            ),
+                        ],
+                      ),
+                    );
+                  },
+                ),
+            ],
+          ),
+          _gearButton(onSettingsTap),
+        ],
+      ),
+    );
+  }
+}
+
+
+// ─── Countdown Widget ──────────────────────────────────────────────────────
+
+class CountdownWidget extends StatelessWidget {
+  final Map<String, dynamic> config;
+  final VoidCallback? onSettingsTap;
+
+  const CountdownWidget({super.key, this.config = const {}, this.onSettingsTap});
+
+  @override
+  Widget build(BuildContext context) {
+    final label = config['label'] as String? ?? '';
+    final dateStr = config['target_date'] as String?;
+    final targetDate = dateStr != null ? DateTime.tryParse(dateStr) : null;
+    final hasContent = targetDate != null;
+    int days = 0;
+    if (targetDate != null) {
+      final diff = targetDate.difference(DateTime.now()).inDays;
+      days = diff < 0 ? 0 : diff;
+    }
+    final isUrgent = days <= 7 && hasContent;
+    final accentColor = isUrgent ? const Color(0xFFFF6B6B) : AppTheme.brightNavy;
+
+    return Container(
+      width: double.infinity,
+      decoration: BoxDecoration(
+        color: AppTheme.cardSurface,
+        borderRadius: BorderRadius.circular(SojornRadii.card),
+        boxShadow: [BoxShadow(color: AppTheme.royalPurple.withValues(alpha: 0.08), blurRadius: 12, offset: const Offset(0, 2))],
+      ),
+      padding: const EdgeInsets.all(16),
+      child: Stack(
+        children: [
+          Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                'COUNTDOWN',
+                style: TextStyle(
+                  color: accentColor,
+                  fontSize: 10,
+                  fontWeight: FontWeight.w700,
+                  letterSpacing: 0.8,
+                ),
+              ),
+              const SizedBox(height: 10),
+              if (hasContent) ...[
+                Row(
+                  crossAxisAlignment: CrossAxisAlignment.end,
+                  children: [
+                    Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                      decoration: BoxDecoration(
+                        gradient: LinearGradient(
+                          colors: isUrgent
+                            ? [const Color(0xFFFF6B6B).withValues(alpha: 0.15), const Color(0xFFFF8E53).withValues(alpha: 0.10)]
+                            : [AppTheme.brightNavy.withValues(alpha: 0.10), AppTheme.royalPurple.withValues(alpha: 0.08)],
+                        ),
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                      child: Text(
+                        '$days',
+                        style: TextStyle(
+                          fontSize: 32,
+                          fontWeight: FontWeight.w900,
+                          color: accentColor,
+                          height: 1,
+                        ),
+                      ),
+                    ),
+                    const SizedBox(width: 10),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            days == 1 ? 'day remaining' : 'days remaining',
+                            style: TextStyle(fontSize: 11, color: AppTheme.navyText.withValues(alpha: 0.5), fontWeight: FontWeight.w500),
+                          ),
+                          if (label.isNotEmpty)
+                            Text(
+                              label,
+                              style: TextStyle(fontSize: 13, color: AppTheme.navyText, fontWeight: FontWeight.w700),
+                              maxLines: 1, overflow: TextOverflow.ellipsis,
+                            ),
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
+              ] else
+                Text(
+                  'Tap \u2699 to set a countdown',
+                  style: TextStyle(color: AppTheme.navyText.withValues(alpha: 0.35), fontSize: 13, fontStyle: FontStyle.italic),
+                ),
+            ],
+          ),
+          _gearButton(onSettingsTap),
+        ],
+      ),
+    );
+  }
+}
+
+
+// ─── Social Links Widget ───────────────────────────────────────────────────
+
+Color socialPlatformColor(String p) {
+  switch (p) {
+    case 'twitter': return const Color(0xFF1DA1F2);
+    case 'bluesky': return const Color(0xFF0085FF);
+    case 'instagram': return const Color(0xFFE1306C);
+    case 'github': return const Color(0xFF333333);
+    case 'linkedin': return const Color(0xFF0077B5);
+    case 'youtube': return const Color(0xFFFF0000);
+    case 'tiktok': return const Color(0xFF010101);
+    case 'website': return const Color(0xFF6366F1);
+    default: return Colors.grey;
+  }
+}
+
+IconData socialPlatformIcon(String p) {
+  switch (p) {
+    case 'twitter': return Icons.alternate_email;
+    case 'bluesky': return Icons.cloud;
+    case 'instagram': return Icons.camera_alt;
+    case 'github': return Icons.code;
+    case 'linkedin': return Icons.work;
+    case 'youtube': return Icons.play_circle;
+    case 'tiktok': return Icons.music_video;
+    case 'website': return Icons.language;
+    default: return Icons.link;
+  }
+}
+
+const socialPlatforms = ['twitter', 'bluesky', 'instagram', 'github', 'linkedin', 'youtube', 'tiktok', 'website'];
+const favoriteCategories = ['music', 'movie', 'book', 'game', 'show'];
+const moodEmojis = [
+  '😊', '😎', '🔥', '💭', '🎨', '🎵', '📚', '💻', '🌙', '☕',
+  '😴', '🤔', '🥳', '💪', '🌈', '❤️', '✨', '🎯', '🧠', '🍕',
+];
+
+class SocialLinksWidget extends StatelessWidget {
+  final Map<String, dynamic> config;
+  final VoidCallback? onSettingsTap;
+
+  const SocialLinksWidget({super.key, this.config = const {}, this.onSettingsTap});
+
+  @override
+  Widget build(BuildContext context) {
+    final raw = config['links'] as List? ?? [];
+    final links = raw.map((e) {
+      final m = e as Map<String, dynamic>;
+      return {
+        'platform': m['platform']?.toString() ?? 'website',
+        'url': m['url']?.toString() ?? '',
+        'label': m['label']?.toString() ?? '',
+      };
+    }).toList();
+
+    return Container(
+      width: double.infinity,
+      decoration: BoxDecoration(
+        color: AppTheme.cardSurface,
+        borderRadius: BorderRadius.circular(SojornRadii.card),
+        boxShadow: [BoxShadow(color: AppTheme.royalPurple.withValues(alpha: 0.08), blurRadius: 12, offset: const Offset(0, 2))],
+      ),
+      padding: const EdgeInsets.all(16),
+      child: Stack(
+        children: [
+          Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                'LINKS',
+                style: TextStyle(
+                  color: AppTheme.royalPurple,
+                  fontSize: 10,
+                  fontWeight: FontWeight.w700,
+                  letterSpacing: 0.8,
+                ),
+              ),
+              const SizedBox(height: 10),
+              if (links.isEmpty)
+                Text('Tap \u2699 to add your links', style: TextStyle(color: AppTheme.navyText.withValues(alpha: 0.35), fontSize: 13, fontStyle: FontStyle.italic))
+              else
+                Wrap(
+                  spacing: 6,
+                  runSpacing: 6,
+                  children: links.map((link) {
+                    final platform = link['platform'] ?? 'website';
+                    final label = link['label'] ?? platform;
+                    return Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                      decoration: BoxDecoration(
+                        color: socialPlatformColor(platform).withValues(alpha: 0.12),
+                        borderRadius: BorderRadius.circular(10),
+                        border: Border.all(color: socialPlatformColor(platform).withValues(alpha: 0.2)),
+                      ),
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Icon(socialPlatformIcon(platform), color: socialPlatformColor(platform), size: 14),
+                          const SizedBox(width: 5),
+                          Text(label.isNotEmpty ? label : platform, style: TextStyle(color: socialPlatformColor(platform), fontSize: 11, fontWeight: FontWeight.w600)),
+                        ],
+                      ),
+                    );
+                  }).toList(),
+                ),
+            ],
+          ),
+          _gearButton(onSettingsTap),
+        ],
+      ),
+    );
+  }
+}
+
+
+// ─── Widget Settings Panel (center column) ─────────────────────────────────
+
+class WidgetSettingsPanel extends StatefulWidget {
+  final DashboardWidget widgetData;
+  final void Function(Map<String, dynamic>) onSave;
+  final VoidCallback onCancel;
+
+  const WidgetSettingsPanel({
+    super.key,
+    required this.widgetData,
+    required this.onSave,
+    required this.onCancel,
+  });
+
+  @override
+  State<WidgetSettingsPanel> createState() => _WidgetSettingsPanelState();
+}
+
+class _WidgetSettingsPanelState extends State<WidgetSettingsPanel> {
+  // Quote / Custom Text
+  late TextEditingController _titleCtrl;
+  late TextEditingController _bodyCtrl;
+
+  // Mood
+  String _moodEmoji = '';
+  late TextEditingController _moodTextCtrl;
+
+  // Countdown
+  late TextEditingController _countdownLabelCtrl;
+  DateTime? _countdownDate;
+
+  // Photo Frame
+  late TextEditingController _photoUrlCtrl;
+  late TextEditingController _photoCaptionCtrl;
+
+  // Favorites
+  List<Map<String, String>> _favItems = [];
+  List<TextEditingController> _favTitleCtrls = [];
+  List<TextEditingController> _favSubCtrls = [];
+
+  // Social Links
+  List<Map<String, String>> _socialLinks = [];
+  List<TextEditingController> _socialLabelCtrls = [];
+  List<TextEditingController> _socialUrlCtrls = [];
+
+  @override
+  void initState() {
+    super.initState();
+    final cfg = widget.widgetData.config;
+    switch (widget.widgetData.type) {
+      case DashboardWidgetType.quote:
+        _titleCtrl = TextEditingController(text: cfg['author'] as String? ?? '');
+        _bodyCtrl = TextEditingController(text: cfg['quote'] as String? ?? '');
+      case DashboardWidgetType.customText:
+        _titleCtrl = TextEditingController(text: cfg['title'] as String? ?? '');
+        _bodyCtrl = TextEditingController(text: cfg['text'] as String? ?? '');
+      case DashboardWidgetType.moodStatus:
+        _moodEmoji = cfg['emoji'] as String? ?? '';
+        _moodTextCtrl = TextEditingController(text: cfg['text'] as String? ?? '');
+        _titleCtrl = TextEditingController();
+        _bodyCtrl = TextEditingController();
+      case DashboardWidgetType.countdown:
+        _countdownLabelCtrl = TextEditingController(text: cfg['label'] as String? ?? '');
+        final dateStr = cfg['target_date'] as String?;
+        _countdownDate = dateStr != null ? DateTime.tryParse(dateStr) : null;
+        _titleCtrl = TextEditingController();
+        _bodyCtrl = TextEditingController();
+      case DashboardWidgetType.photoFrame:
+        _photoUrlCtrl = TextEditingController(text: cfg['url'] as String? ?? '');
+        _photoCaptionCtrl = TextEditingController(text: cfg['caption'] as String? ?? '');
+        _titleCtrl = TextEditingController();
+        _bodyCtrl = TextEditingController();
+      case DashboardWidgetType.favoriteMedia:
+        final raw = cfg['items'] as List? ?? [];
+        _favItems = raw.map((e) {
+          final m = e as Map<String, dynamic>;
+          return {'title': m['title']?.toString() ?? '', 'subtitle': m['subtitle']?.toString() ?? '', 'category': m['category']?.toString() ?? 'music'};
+        }).toList();
+        _favTitleCtrls = _favItems.map((e) => TextEditingController(text: e['title'])).toList();
+        _favSubCtrls = _favItems.map((e) => TextEditingController(text: e['subtitle'])).toList();
+        _titleCtrl = TextEditingController();
+        _bodyCtrl = TextEditingController();
+      case DashboardWidgetType.socialLinks:
+        final raw = cfg['links'] as List? ?? [];
+        _socialLinks = raw.map((e) {
+          final m = e as Map<String, dynamic>;
+          return {'platform': m['platform']?.toString() ?? 'website', 'url': m['url']?.toString() ?? '', 'label': m['label']?.toString() ?? ''};
+        }).toList();
+        _socialLabelCtrls = _socialLinks.map((e) => TextEditingController(text: e['label'])).toList();
+        _socialUrlCtrls = _socialLinks.map((e) => TextEditingController(text: e['url'])).toList();
+        _titleCtrl = TextEditingController();
+        _bodyCtrl = TextEditingController();
+      default:
+        _titleCtrl = TextEditingController();
+        _bodyCtrl = TextEditingController();
+    }
+  }
+
+  @override
+  void dispose() {
+    _titleCtrl.dispose();
+    _bodyCtrl.dispose();
+    if (widget.widgetData.type == DashboardWidgetType.moodStatus) _moodTextCtrl.dispose();
+    if (widget.widgetData.type == DashboardWidgetType.countdown) _countdownLabelCtrl.dispose();
+    if (widget.widgetData.type == DashboardWidgetType.photoFrame) {
+      _photoUrlCtrl.dispose();
+      _photoCaptionCtrl.dispose();
+    }
+    for (final c in _favTitleCtrls) { c.dispose(); }
+    for (final c in _favSubCtrls) { c.dispose(); }
+    for (final c in _socialLabelCtrls) { c.dispose(); }
+    for (final c in _socialUrlCtrls) { c.dispose(); }
+    super.dispose();
+  }
+
+  void _handleSave() {
+    switch (widget.widgetData.type) {
+      case DashboardWidgetType.quote:
+        widget.onSave({'quote': _bodyCtrl.text.trim(), 'author': _titleCtrl.text.trim()});
+      case DashboardWidgetType.customText:
+        widget.onSave({'title': _titleCtrl.text.trim(), 'text': _bodyCtrl.text.trim()});
+      case DashboardWidgetType.moodStatus:
+        widget.onSave({'emoji': _moodEmoji, 'text': _moodTextCtrl.text.trim()});
+      case DashboardWidgetType.countdown:
+        widget.onSave({'label': _countdownLabelCtrl.text.trim(), 'target_date': _countdownDate?.toIso8601String()});
+      case DashboardWidgetType.photoFrame:
+        widget.onSave({'url': _photoUrlCtrl.text.trim(), 'caption': _photoCaptionCtrl.text.trim()});
+      case DashboardWidgetType.favoriteMedia:
+        for (int i = 0; i < _favItems.length; i++) {
+          _favItems[i] = {..._favItems[i], 'title': _favTitleCtrls[i].text, 'subtitle': _favSubCtrls[i].text};
+        }
+        widget.onSave({'items': _favItems, 'maxItems': 4});
+      case DashboardWidgetType.socialLinks:
+        for (int i = 0; i < _socialLinks.length; i++) {
+          _socialLinks[i] = {..._socialLinks[i], 'label': _socialLabelCtrls[i].text, 'url': _socialUrlCtrls[i].text};
+        }
+        widget.onSave({'links': _socialLinks});
+      default:
+        widget.onCancel();
+    }
+  }
+
+  String get _panelTitle {
+    switch (widget.widgetData.type) {
+      case DashboardWidgetType.quote: return 'Edit Quote';
+      case DashboardWidgetType.customText: return 'Edit Custom Text';
+      case DashboardWidgetType.moodStatus: return 'Set Mood';
+      case DashboardWidgetType.countdown: return 'Set Countdown';
+      case DashboardWidgetType.photoFrame: return 'Edit Photo Frame';
+      case DashboardWidgetType.favoriteMedia: return 'Edit Favorites';
+      case DashboardWidgetType.socialLinks: return 'Edit Links';
+      default: return 'Settings';
+    }
+  }
+
+  IconData get _panelIcon {
+    switch (widget.widgetData.type) {
+      case DashboardWidgetType.quote: return Icons.format_quote;
+      case DashboardWidgetType.customText: return Icons.text_fields;
+      case DashboardWidgetType.moodStatus: return Icons.emoji_emotions;
+      case DashboardWidgetType.countdown: return Icons.timer;
+      case DashboardWidgetType.photoFrame: return Icons.photo;
+      case DashboardWidgetType.favoriteMedia: return Icons.star;
+      case DashboardWidgetType.socialLinks: return Icons.link;
+      default: return Icons.settings;
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Center(
+      child: Container(
+        constraints: const BoxConstraints(maxWidth: 500),
+        margin: const EdgeInsets.symmetric(vertical: 40),
+        decoration: BoxDecoration(
+          color: AppTheme.cardSurface,
+          borderRadius: BorderRadius.circular(SojornRadii.card),
+          boxShadow: [BoxShadow(color: AppTheme.royalPurple.withValues(alpha: 0.12), blurRadius: 24, offset: const Offset(0, 4))],
+        ),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            // Header
+            Container(
+              padding: const EdgeInsets.fromLTRB(20, 16, 12, 12),
+              decoration: BoxDecoration(
+                border: Border(bottom: BorderSide(color: AppTheme.royalPurple.withValues(alpha: 0.08))),
+              ),
+              child: Row(
+                children: [
+                  Icon(_panelIcon, size: 20, color: AppTheme.royalPurple),
+                  const SizedBox(width: 10),
+                  Expanded(
+                    child: Text(
+                      _panelTitle,
+                      style: TextStyle(fontSize: 16, fontWeight: FontWeight.w700, color: AppTheme.navyText),
+                    ),
+                  ),
+                  TextButton(
+                    onPressed: widget.onCancel,
+                    child: Text('Cancel', style: TextStyle(color: AppTheme.navyText.withValues(alpha: 0.5), fontSize: 13)),
+                  ),
+                  const SizedBox(width: 4),
+                  GestureDetector(
+                    onTap: _handleSave,
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 8),
+                      decoration: BoxDecoration(
+                        gradient: LinearGradient(colors: [AppTheme.brightNavy, AppTheme.royalPurple]),
+                        borderRadius: BorderRadius.circular(20),
+                      ),
+                      child: const Text('Save', style: TextStyle(color: Colors.white, fontSize: 13, fontWeight: FontWeight.w600)),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            // Body
+            Padding(
+              padding: const EdgeInsets.all(20),
+              child: _buildForm(),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildForm() {
+    switch (widget.widgetData.type) {
+      case DashboardWidgetType.quote:
+        return _buildQuoteForm();
+      case DashboardWidgetType.customText:
+        return _buildCustomTextForm();
+      case DashboardWidgetType.moodStatus:
+        return _buildMoodForm();
+      case DashboardWidgetType.countdown:
+        return _buildCountdownForm();
+      case DashboardWidgetType.photoFrame:
+        return _buildPhotoForm();
+      case DashboardWidgetType.favoriteMedia:
+        return _buildFavoritesForm();
+      case DashboardWidgetType.socialLinks:
+        return _buildLinksForm();
+      default:
+        return const Text('No settings available for this widget.');
+    }
+  }
+
+  InputDecoration _fieldDecoration(String label, {String? hint}) {
+    return InputDecoration(
+      labelText: label,
+      hintText: hint,
+      labelStyle: TextStyle(fontSize: 13, color: AppTheme.navyText.withValues(alpha: 0.5)),
+      hintStyle: TextStyle(fontSize: 13, color: AppTheme.navyText.withValues(alpha: 0.3)),
+      border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
+      contentPadding: const EdgeInsets.symmetric(vertical: 12, horizontal: 14),
+      isDense: true,
+    );
+  }
+
+  TextStyle get _fieldStyle => TextStyle(fontSize: 14, color: AppTheme.navyText);
+
+  Widget _buildQuoteForm() {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        TextField(
+          controller: _bodyCtrl,
+          maxLines: 4,
+          maxLength: 300,
+          style: _fieldStyle,
+          decoration: _fieldDecoration('Quote text', hint: 'Enter your quote...'),
+        ),
+        const SizedBox(height: 14),
+        TextField(
+          controller: _titleCtrl,
+          maxLength: 80,
+          style: _fieldStyle,
+          decoration: _fieldDecoration('Author', hint: '— Someone wise'),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildCustomTextForm() {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        TextField(
+          controller: _titleCtrl,
+          maxLength: 80,
+          style: _fieldStyle,
+          decoration: _fieldDecoration('Title', hint: 'Widget title...'),
+        ),
+        const SizedBox(height: 14),
+        TextField(
+          controller: _bodyCtrl,
+          maxLines: 5,
+          maxLength: 500,
+          style: _fieldStyle,
+          decoration: _fieldDecoration('Body', hint: 'Write something...'),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildMoodForm() {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text('Pick an emoji:', style: TextStyle(color: AppTheme.navyText.withValues(alpha: 0.6), fontSize: 13, fontWeight: FontWeight.w500)),
+        const SizedBox(height: 10),
+        Wrap(
+          spacing: 8,
+          runSpacing: 8,
+          children: moodEmojis.map((e) {
+            final isSelected = _moodEmoji == e;
+            return GestureDetector(
+              onTap: () => setState(() => _moodEmoji = isSelected ? '' : e),
+              child: Container(
+                width: 42, height: 42,
+                decoration: BoxDecoration(
+                  color: isSelected ? AppTheme.royalPurple.withValues(alpha: 0.15) : Colors.transparent,
+                  borderRadius: BorderRadius.circular(10),
+                  border: isSelected ? Border.all(color: AppTheme.royalPurple, width: 2) : Border.all(color: AppTheme.navyText.withValues(alpha: 0.08)),
+                ),
+                alignment: Alignment.center,
+                child: Text(e, style: const TextStyle(fontSize: 22)),
+              ),
+            );
+          }).toList(),
+        ),
+        const SizedBox(height: 16),
+        TextField(
+          controller: _moodTextCtrl,
+          maxLength: 80,
+          style: _fieldStyle,
+          decoration: _fieldDecoration('Status text', hint: 'feeling creative...'),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildCountdownForm() {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        TextField(
+          controller: _countdownLabelCtrl,
+          maxLength: 60,
+          style: _fieldStyle,
+          decoration: _fieldDecoration('Event name', hint: 'Album Drop, Birthday, Launch...'),
+        ),
+        const SizedBox(height: 14),
+        GestureDetector(
+          onTap: () async {
+            final picked = await showDatePicker(
+              context: context,
+              initialDate: _countdownDate ?? DateTime.now().add(const Duration(days: 7)),
+              firstDate: DateTime.now(),
+              lastDate: DateTime.now().add(const Duration(days: 365 * 5)),
+            );
+            if (picked != null) setState(() => _countdownDate = picked);
+          },
+          child: Container(
+            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+            decoration: BoxDecoration(
+              borderRadius: BorderRadius.circular(8),
+              border: Border.all(color: AppTheme.navyText.withValues(alpha: 0.2)),
+            ),
+            child: Row(
+              children: [
+                Icon(Icons.calendar_today, size: 18, color: AppTheme.royalPurple),
+                const SizedBox(width: 10),
+                Text(
+                  _countdownDate != null
+                    ? '${_countdownDate!.month}/${_countdownDate!.day}/${_countdownDate!.year}'
+                    : 'Pick a date',
+                  style: TextStyle(fontSize: 14, color: _countdownDate != null ? AppTheme.navyText : AppTheme.navyText.withValues(alpha: 0.4)),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildPhotoForm() {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        TextField(
+          controller: _photoUrlCtrl,
+          style: _fieldStyle,
+          decoration: _fieldDecoration('Image URL', hint: 'https://example.com/photo.jpg'),
+        ),
+        const SizedBox(height: 14),
+        TextField(
+          controller: _photoCaptionCtrl,
+          maxLength: 120,
+          style: _fieldStyle,
+          decoration: _fieldDecoration('Caption', hint: 'A lovely day...'),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildFavoritesForm() {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        ..._favItems.asMap().entries.map((entry) {
+          final i = entry.key;
+          final item = entry.value;
+          return Padding(
+            padding: const EdgeInsets.only(bottom: 12),
+            child: Container(
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                color: AppTheme.royalPurple.withValues(alpha: 0.03),
+                borderRadius: BorderRadius.circular(10),
+                border: Border.all(color: AppTheme.royalPurple.withValues(alpha: 0.08)),
+              ),
+              child: Column(
+                children: [
+                  Row(
+                    children: [
+                      // Category dropdown
+                      Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                        decoration: BoxDecoration(
+                          borderRadius: BorderRadius.circular(8),
+                          border: Border.all(color: AppTheme.navyText.withValues(alpha: 0.15)),
+                        ),
+                        child: DropdownButtonHideUnderline(
+                          child: DropdownButton<String>(
+                            value: item['category'] ?? 'music',
+                            isDense: true,
+                            style: TextStyle(fontSize: 12, color: AppTheme.navyText),
+                            items: favoriteCategories.map((c) => DropdownMenuItem(
+                              value: c,
+                              child: Row(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  Icon(favoriteCategoryIcon(c), size: 16, color: AppTheme.royalPurple.withValues(alpha: 0.6)),
+                                  const SizedBox(width: 6),
+                                  Text(c[0].toUpperCase() + c.substring(1), style: TextStyle(fontSize: 12, color: AppTheme.navyText)),
+                                ],
+                              ),
+                            )).toList(),
+                            onChanged: (v) => setState(() => _favItems[i] = {..._favItems[i], 'category': v ?? 'music'}),
+                          ),
+                        ),
+                      ),
+                      const Spacer(),
+                      GestureDetector(
+                        onTap: () => setState(() {
+                          _favItems.removeAt(i);
+                          _favTitleCtrls[i].dispose();
+                          _favSubCtrls[i].dispose();
+                          _favTitleCtrls.removeAt(i);
+                          _favSubCtrls.removeAt(i);
+                        }),
+                        child: Icon(Icons.close, size: 18, color: AppTheme.navyText.withValues(alpha: 0.4)),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 10),
+                  TextField(
+                    controller: _favTitleCtrls[i],
+                    style: _fieldStyle,
+                    decoration: _fieldDecoration('Title', hint: 'e.g. Dark Side of the Moon'),
+                  ),
+                  const SizedBox(height: 8),
+                  TextField(
+                    controller: _favSubCtrls[i],
+                    style: _fieldStyle,
+                    decoration: _fieldDecoration('Artist / Author', hint: 'e.g. Pink Floyd'),
+                  ),
+                ],
+              ),
+            ),
+          );
+        }),
+        if (_favItems.length < 4)
+          GestureDetector(
+            onTap: () => setState(() {
+              _favItems.add({'title': '', 'subtitle': '', 'category': 'music'});
+              _favTitleCtrls.add(TextEditingController());
+              _favSubCtrls.add(TextEditingController());
+            }),
+            child: Container(
+              padding: const EdgeInsets.symmetric(vertical: 10),
+              alignment: Alignment.center,
+              decoration: BoxDecoration(
+                borderRadius: BorderRadius.circular(10),
+                border: Border.all(color: AppTheme.royalPurple.withValues(alpha: 0.15), style: BorderStyle.solid),
+              ),
+              child: Text('+ Add favorite', style: TextStyle(color: AppTheme.royalPurple, fontSize: 13, fontWeight: FontWeight.w600)),
+            ),
+          ),
+      ],
+    );
+  }
+
+  Widget _buildLinksForm() {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        ..._socialLinks.asMap().entries.map((entry) {
+          final i = entry.key;
+          final link = entry.value;
+          return Padding(
+            padding: const EdgeInsets.only(bottom: 12),
+            child: Container(
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                color: AppTheme.royalPurple.withValues(alpha: 0.03),
+                borderRadius: BorderRadius.circular(10),
+                border: Border.all(color: AppTheme.royalPurple.withValues(alpha: 0.08)),
+              ),
+              child: Column(
+                children: [
+                  Row(
+                    children: [
+                      Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                        decoration: BoxDecoration(
+                          borderRadius: BorderRadius.circular(8),
+                          border: Border.all(color: AppTheme.navyText.withValues(alpha: 0.15)),
+                        ),
+                        child: DropdownButtonHideUnderline(
+                          child: DropdownButton<String>(
+                            value: link['platform'] ?? 'website',
+                            isDense: true,
+                            style: TextStyle(fontSize: 12, color: AppTheme.navyText),
+                            items: socialPlatforms.map((p) => DropdownMenuItem(
+                              value: p,
+                              child: Row(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  Icon(socialPlatformIcon(p), size: 16, color: socialPlatformColor(p)),
+                                  const SizedBox(width: 6),
+                                  Text(p[0].toUpperCase() + p.substring(1), style: TextStyle(fontSize: 12, color: AppTheme.navyText)),
+                                ],
+                              ),
+                            )).toList(),
+                            onChanged: (v) => setState(() => _socialLinks[i] = {..._socialLinks[i], 'platform': v ?? 'website'}),
+                          ),
+                        ),
+                      ),
+                      const Spacer(),
+                      GestureDetector(
+                        onTap: () => setState(() {
+                          _socialLinks.removeAt(i);
+                          _socialLabelCtrls[i].dispose();
+                          _socialUrlCtrls[i].dispose();
+                          _socialLabelCtrls.removeAt(i);
+                          _socialUrlCtrls.removeAt(i);
+                        }),
+                        child: Icon(Icons.close, size: 18, color: AppTheme.navyText.withValues(alpha: 0.4)),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 10),
+                  TextField(
+                    controller: _socialLabelCtrls[i],
+                    style: _fieldStyle,
+                    decoration: _fieldDecoration('@handle / Label', hint: '@yourname'),
+                  ),
+                  const SizedBox(height: 8),
+                  TextField(
+                    controller: _socialUrlCtrls[i],
+                    style: _fieldStyle,
+                    decoration: _fieldDecoration('URL', hint: 'https://twitter.com/yourname'),
+                  ),
+                ],
+              ),
+            ),
+          );
+        }),
+        if (_socialLinks.length < 8)
+          GestureDetector(
+            onTap: () => setState(() {
+              _socialLinks.add({'platform': 'website', 'url': '', 'label': ''});
+              _socialLabelCtrls.add(TextEditingController());
+              _socialUrlCtrls.add(TextEditingController());
+            }),
+            child: Container(
+              padding: const EdgeInsets.symmetric(vertical: 10),
+              alignment: Alignment.center,
+              decoration: BoxDecoration(
+                borderRadius: BorderRadius.circular(10),
+                border: Border.all(color: AppTheme.royalPurple.withValues(alpha: 0.15), style: BorderStyle.solid),
+              ),
+              child: Text('+ Add link', style: TextStyle(color: AppTheme.royalPurple, fontSize: 13, fontWeight: FontWeight.w600)),
+            ),
+          ),
+      ],
+    );
+  }
+}
+
 
 /// Shared card decoration for discover sidebar widgets.
 BoxDecoration _cardDecoration() {
