@@ -55,6 +55,16 @@ class AuthException implements Exception {
   String toString() => message;
 }
 
+/// Thrown when account is banned or suspended.
+class AccountBannedException implements Exception {
+  final String message;
+  final String code; // 'banned' or 'suspended'
+  AccountBannedException(this.message, {this.code = 'banned'});
+
+  @override
+  String toString() => message;
+}
+
 /// Thrown when login succeeds but MFA verification is required.
 class MFARequiredException implements Exception {
   final String tempToken;
@@ -207,6 +217,20 @@ class AuthService {
         await _saveTokens(data['access_token'], data['refresh_token']);
         if (kDebugMode) debugPrint('[AUTH] Token refresh successful');
         return true;
+      } else if (response.statusCode == 403) {
+        // Account banned or suspended — store reason for UI display
+        try {
+          final data = jsonDecode(response.body);
+          final code = data['code'] as String? ?? '';
+          final errorMsg = data['error'] as String? ?? '';
+          if (code == 'banned' || code == 'suspended') {
+            if (kDebugMode) debugPrint('[AUTH] Account $code — signing out');
+            await _storage.write(key: 'account_banned_reason', value: errorMsg);
+            await _storage.write(key: 'account_banned_code', value: code);
+          }
+        } catch (_) {}
+        await signOut();
+        return false;
       } else {
         if (kDebugMode) debugPrint('[AUTH] Token refresh failed (${response.statusCode}) — signing out');
         await signOut();
@@ -357,13 +381,19 @@ class AuthService {
 
         _notifyGoAuthChange();
         return data;
+      } else if (response.statusCode == 403) {
+        final code = data['code'] as String? ?? '';
+        final errorMsg = data['error'] as String? ?? 'Account access denied';
+        if (code == 'banned' || code == 'suspended') {
+          throw AccountBannedException(errorMsg, code: code);
+        }
+        throw AuthException(errorMsg);
       } else {
-        throw AuthException(
-          'Login failed: ${response.statusCode} - ${response.body}',
-        );
+        final errorMsg = data['error'] as String? ?? 'Login failed';
+        throw AuthException(errorMsg);
       }
     } catch (e) {
-      if (e is AuthException) rethrow;
+      if (e is AuthException || e is AccountBannedException || e is MFARequiredException) rethrow;
       throw AuthException('Connection failed: $e');
     }
   }

@@ -88,6 +88,24 @@ class ApiService {
         }
       }
 
+      // INTERCEPTOR: Handle 403 ban/suspension mid-session
+      if (response.statusCode == 403) {
+        try {
+          final errData = jsonDecode(response.body);
+          final code = errData['code'] as String? ?? '';
+          if (code == 'banned' || code == 'suspended') {
+            if (kDebugMode) debugPrint('[API] Account $code — forcing sign out');
+            await _authService.refreshSession(); // Will detect 403 and sign out
+            throw AccountBannedException(
+              errData['error'] as String? ?? 'Account access denied',
+              code: code,
+            );
+          }
+        } catch (e) {
+          if (e is AccountBannedException) rethrow;
+        }
+      }
+
       if (response.statusCode >= 400) {
         if (kDebugMode) debugPrint('[API] ✗ ${response.statusCode} $sanitized  body=${response.body.length > 200 ? response.body.substring(0, 200) : response.body}');
         throw Exception(

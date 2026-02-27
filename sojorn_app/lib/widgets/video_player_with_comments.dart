@@ -10,6 +10,7 @@ import '../../theme/app_theme.dart';
 import '../../theme/tokens.dart';
 import 'video_comments_sheet.dart';
 import 'media/signed_media_image.dart';
+import 'modals/sanctuary_sheet.dart';
 
 /// Enhanced video player with integrated comments (TikTok-style)
 class VideoPlayerWithComments extends StatefulWidget {
@@ -511,29 +512,6 @@ class _VideoPlayerWithCommentsState extends State<VideoPlayerWithComments> {
   }
 
   void _showReportDialog(BuildContext context) {
-    showDialog(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('Report Video'),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            const Text('Why are you reporting this video?'),
-            const SizedBox(height: 16),
-            ...['Inappropriate content', 'Spam', 'Copyright violation', 'Other'].map((reason) {
-              return ListTile(
-                title: Text(reason),
-                onTap: () {
-                  Navigator.pop(context);
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    const SnackBar(content: Text('Video reported successfully')),
-                  );
-                },
-              );
-            }).toList(),
-          ],
-        ),
-      ),
-    );
+    SanctuarySheet.show(context, widget.post);
   }
 }

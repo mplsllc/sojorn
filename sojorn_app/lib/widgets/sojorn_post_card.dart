@@ -147,6 +147,45 @@ class _sojornPostCardState extends ConsumerState<sojornPostCard> {
     // Completely hide NSFW posts when user hasn't enabled NSFW
     if (_shouldHideNsfw) return const SizedBox.shrink();
 
+    // Show a placeholder for removed/jailed/pending_moderation posts
+    if (post.status.isHidden) {
+      return Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 2),
+        child: Container(
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+          decoration: BoxDecoration(
+            color: AppTheme.navyBlue.withValues(alpha: 0.03),
+            borderRadius: BorderRadius.circular(20),
+            border: Border.all(
+              color: AppTheme.egyptianBlue.withValues(alpha: 0.08),
+            ),
+          ),
+          child: Row(
+            children: [
+              Icon(
+                post.status == PostStatus.pendingModeration
+                    ? Icons.hourglass_top_rounded
+                    : Icons.visibility_off_outlined,
+                size: 18,
+                color: AppTheme.textSecondary.withValues(alpha: 0.4),
+              ),
+              const SizedBox(width: 10),
+              Text(
+                post.status == PostStatus.pendingModeration
+                    ? 'This post is under review'
+                    : 'This post has been removed',
+                style: TextStyle(
+                  color: AppTheme.textSecondary.withValues(alpha: 0.5),
+                  fontSize: 13,
+                  fontStyle: FontStyle.italic,
+                ),
+              ),
+            ],
+          ),
+        ),
+      );
+    }
+
     final isDesktop = MediaQuery.of(context).size.width >= 900;
 
     // Build an accessible label: "author: body preview"

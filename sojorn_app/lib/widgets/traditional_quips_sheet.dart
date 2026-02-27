@@ -587,9 +587,34 @@ class _CommentTile extends StatelessWidget {
     final currentUserId = AuthService.instance.currentUser?.id;
     final isMyComment = node.post.authorId == currentUserId;
     final isVideoAuthor = videoAuthorId == currentUserId;
-    
+
     final double indent = (node.depth - 1) * 24.0;
-    
+
+    // Show placeholder for removed/jailed/pending comments
+    if (node.post.status.isHidden) {
+      return Padding(
+        padding: EdgeInsets.only(left: 16 + indent, right: 16, bottom: 16),
+        child: Container(
+          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+          decoration: BoxDecoration(
+            color: AppTheme.navyBlue.withValues(alpha: 0.03),
+            borderRadius: BorderRadius.circular(20),
+            border: Border.all(color: AppTheme.egyptianBlue.withValues(alpha: 0.08)),
+          ),
+          child: Text(
+            node.post.status == PostStatus.pendingModeration
+                ? 'Comment under review'
+                : 'Comment removed',
+            style: TextStyle(
+              color: AppTheme.textSecondary.withValues(alpha: 0.4),
+              fontSize: 13,
+              fontStyle: FontStyle.italic,
+            ),
+          ),
+        ),
+      );
+    }
+
     return Padding(
       padding: EdgeInsets.only(left: 16 + indent, right: 16, bottom: 16),
       child: GestureDetector(

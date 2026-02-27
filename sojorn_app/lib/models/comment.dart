@@ -8,10 +8,15 @@ import 'profile.dart';
 enum CommentStatus {
   active('active'),
   flagged('flagged'),
-  removed('removed');
+  removed('removed'),
+  pendingModeration('pending_moderation'),
+  jailed('jailed');
 
   final String value;
   const CommentStatus(this.value);
+
+  bool get isHidden =>
+      this == removed || this == jailed || this == pendingModeration;
 
   static CommentStatus fromString(String value) {
     return CommentStatus.values.firstWhere(

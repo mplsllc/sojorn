@@ -8,10 +8,16 @@ import 'beacon.dart';
 enum PostStatus {
   active('active'),
   flagged('flagged'),
-  removed('removed');
+  removed('removed'),
+  pendingModeration('pending_moderation'),
+  jailed('jailed');
 
   final String value;
   const PostStatus(this.value);
+
+  /// Whether this post should be hidden or shown with an overlay in the feed.
+  bool get isHidden =>
+      this == removed || this == jailed || this == pendingModeration;
 
   static PostStatus fromString(String value) {
     return PostStatus.values.firstWhere(

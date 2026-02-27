@@ -54,6 +54,16 @@ class _SignInScreenState extends ConsumerState<SignInScreen> {
   void initState() {
     super.initState();
     _prepareBiometric();
+    _checkBanReason();
+  }
+
+  Future<void> _checkBanReason() async {
+    final reason = await _secureStorage.read(key: 'account_banned_reason');
+    if (reason != null && reason.isNotEmpty && mounted) {
+      setState(() => _errorMessage = reason);
+      await _secureStorage.delete(key: 'account_banned_reason');
+      await _secureStorage.delete(key: 'account_banned_code');
+    }
   }
 
   Future<void> _prepareBiometric() async {
