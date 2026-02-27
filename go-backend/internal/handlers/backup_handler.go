@@ -8,11 +8,13 @@ import (
 	"crypto/rand"
 	"encoding/base64"
 	"math/big"
+	"net/http"
 	"strings"
 	"time"
 
 	"github.com/gin-gonic/gin"
 	"github.com/google/uuid"
+	"github.com/rs/zerolog/log"
 	"gitlab.com/patrickbritton3/sojorn/go-backend/internal/models"
 	"gitlab.com/patrickbritton3/sojorn/go-backend/internal/repository"
 )
@@ -32,18 +34,18 @@ func (h *BackupHandler) GenerateSyncCode(c *gin.Context) {
 
 	var req models.GenerateSyncCodeRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
-		c.JSON(400, gin.H{"error": err.Error()})
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
 	}
 
 	// Generate 6-digit code
 	code, err := h.repo.GenerateSyncCode(c.Request.Context(), userID, req.DeviceName, req.DeviceFingerprint)
 	if err != nil {
-		c.JSON(500, gin.H{"error": "Failed to generate sync code"})
+		internalError(c, "Failed to generate sync code", err)
 		return
 	}
 
-	c.JSON(200, models.GenerateSyncCodeResponse{
+	c.JSON(http.StatusOK, models.GenerateSyncCodeResponse{
 		Code:      code.Code,
 		ExpiresAt: code.ExpiresAt,
 		ExpiresIn: int(code.ExpiresAt.Sub(time.Now()).Seconds()),
@@ -57,7 +59,7 @@ func (h *BackupHandler) VerifySyncCode(c *gin.Context) {
 
 	var req models.VerifySyncCodeRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
-		c.JSON(400, gin.H{"error": err.Error()})
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
 	}
 
@@ -72,22 +74,22 @@ func (h *BackupHandler) VerifySyncCode(c *gin.Context) {
 	)
 	if err != nil {
 		if strings.Contains(err.Error(), "expired") {
-			c.JSON(400, models.VerifySyncCodeResponse{
+			c.JSON(http.StatusBadRequest, models.VerifySyncCodeResponse{
 				Valid:       false,
 				ErrorMessage: "Sync code has expired",
 			})
 		} else if strings.Contains(err.Error(), "invalid") {
-			c.JSON(400, models.VerifySyncCodeResponse{
+			c.JSON(http.StatusBadRequest, models.VerifySyncCodeResponse{
 				Valid:       false,
 				ErrorMessage: "Invalid sync code",
 			})
 		} else if strings.Contains(err.Error(), "attempts") {
-			c.JSON(429, models.VerifySyncCodeResponse{
+			c.JSON(http.StatusTooManyRequests, models.VerifySyncCodeResponse{
 				Valid:       false,
 				ErrorMessage: "Too many attempts. Please generate a new code.",
 			})
 		} else {
-			c.JSON(500, gin.H{"error": "Failed to verify sync code"})
+			internalError(c, "Failed to verify sync code", err)
 		}
 		return
 	}
@@ -95,11 +97,11 @@ func (h *BackupHandler) VerifySyncCode(c *gin.Context) {
 	// Register the new device
 	_, err = h.repo.RegisterDevice(c.Request.Context(), userID, req.DeviceName, req.DeviceFingerprint, "web")
 	if err != nil {
-		c.JSON(500, gin.H{"error": "Failed to register device"})
+		internalError(c, "Failed to register device", err)
 		return
 	}
 
-	c.JSON(200, models.VerifySyncCodeResponse{
+	c.JSON(http.StatusOK, models.VerifySyncCodeResponse{
 		Valid:       true,
 		DeviceAID:   syncCode.UserID.String(),
 		DeviceAName: syncCode.DeviceName,
@@ -114,32 +116,32 @@ func (h *BackupHandler) UploadBackup(c *gin.Context) {
 
 	var req models.UploadBackupRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
-		c.JSON(400, gin.H{"error": err.Error()})
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
 	}
 
 	// Decode base64 data
 	encryptedBlob, err := base64.StdEncoding.DecodeString(req.EncryptedBlob)
 	if err != nil {
-		c.JSON(400, gin.H{"error": "Invalid encrypted blob encoding"})
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid encrypted blob encoding"})
 		return
 	}
 
 	salt, err := base64.StdEncoding.DecodeString(req.Salt)
 	if err != nil {
-		c.JSON(400, gin.H{"error": "Invalid salt encoding"})
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid salt encoding"})
 		return
 	}
 
 	nonce, err := base64.StdEncoding.DecodeString(req.Nonce)
 	if err != nil {
-		c.JSON(400, gin.H{"error": "Invalid nonce encoding"})
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid nonce encoding"})
 		return
 	}
 
 	mac, err := base64.StdEncoding.DecodeString(req.Mac)
 	if err != nil {
-		c.JSON(400, gin.H{"error": "Invalid MAC encoding"})
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid MAC encoding"})
 		return
 	}
 
@@ -157,14 +159,14 @@ func (h *BackupHandler) UploadBackup(c *gin.Context) {
 
 	backupID, err := h.repo.UploadBackup(c.Request.Context(), backup)
 	if err != nil {
-		c.JSON(500, gin.H{"error": "Failed to upload backup"})
+		internalError(c, "Failed to upload backup", err)
 		return
 	}
 
 	// Update last backup time
 	h.repo.UpdateLastBackupTime(c.Request.Context(), userID)
 
-	c.JSON(200, models.UploadBackupResponse{
+	c.JSON(http.StatusOK, models.UploadBackupResponse{
 		BackupID:   backupID.String(),
 		UploadedAt: time.Now(),
 		Size:       backup.SizeBytes,
@@ -181,11 +183,11 @@ func (h *BackupHandler) DownloadBackup(c *gin.Context) {
 		// If no specific backup ID, get the latest
 		backup, err := h.repo.GetLatestBackup(c.Request.Context(), userID)
 		if err != nil {
-			c.JSON(404, gin.H{"error": "No backup found"})
+			c.JSON(http.StatusNotFound, gin.H{"error": "No backup found"})
 			return
 		}
 
-		c.JSON(200, models.DownloadBackupResponse{
+		c.JSON(http.StatusOK, models.DownloadBackupResponse{
 			EncryptedBlob: base64.StdEncoding.EncodeToString(backup.EncryptedBlob),
 			Salt:          base64.StdEncoding.EncodeToString(backup.Salt),
 			Nonce:         base64.StdEncoding.EncodeToString(backup.Nonce),
@@ -200,17 +202,17 @@ func (h *BackupHandler) DownloadBackup(c *gin.Context) {
 	// Get specific backup
 	backupUUID, err := uuid.Parse(backupID)
 	if err != nil {
-		c.JSON(400, gin.H{"error": "Invalid backup ID"})
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid backup ID"})
 		return
 	}
 
 	backup, err := h.repo.GetBackup(c.Request.Context(), backupUUID, userID)
 	if err != nil {
-		c.JSON(404, gin.H{"error": "Backup not found"})
+		c.JSON(http.StatusNotFound, gin.H{"error": "Backup not found"})
 		return
 	}
 
-	c.JSON(200, models.DownloadBackupResponse{
+	c.JSON(http.StatusOK, models.DownloadBackupResponse{
 		EncryptedBlob: base64.StdEncoding.EncodeToString(backup.EncryptedBlob),
 		Salt:          base64.StdEncoding.EncodeToString(backup.Salt),
 		Nonce:         base64.StdEncoding.EncodeToString(backup.Nonce),
@@ -228,11 +230,11 @@ func (h *BackupHandler) ListBackups(c *gin.Context) {
 
 	backups, err := h.repo.ListBackups(c.Request.Context(), userID)
 	if err != nil {
-		c.JSON(500, gin.H{"error": "Failed to list backups"})
+		internalError(c, "Failed to list backups", err)
 		return
 	}
 
-	c.JSON(200, models.ListBackupsResponse{
+	c.JSON(http.StatusOK, models.ListBackupsResponse{
 		Backups: backups,
 	})
 }
@@ -245,17 +247,17 @@ func (h *BackupHandler) DeleteBackup(c *gin.Context) {
 	backupID := c.Param("backup_id")
 	backupUUID, err := uuid.Parse(backupID)
 	if err != nil {
-		c.JSON(400, gin.H{"error": "Invalid backup ID"})
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid backup ID"})
 		return
 	}
 
 	err = h.repo.DeleteBackup(c.Request.Context(), backupUUID, userID)
 	if err != nil {
-		c.JSON(500, gin.H{"error": "Failed to delete backup"})
+		internalError(c, "Failed to delete backup", err)
 		return
 	}
 
-	c.JSON(200, gin.H{"message": "Backup deleted successfully"})
+	c.JSON(http.StatusOK, gin.H{"message": "Backup deleted successfully"})
 }
 
 // SetupSocialRecovery sets up social recovery with trusted guardians
@@ -265,13 +267,13 @@ func (h *BackupHandler) SetupSocialRecovery(c *gin.Context) {
 
 	var req models.SetupSocialRecoveryRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
-		c.JSON(400, gin.H{"error": err.Error()})
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
 	}
 
 	// Validate guardian count
 	if len(req.GuardianUserIDs) < 3 || len(req.GuardianUserIDs) > 5 {
-		c.JSON(400, gin.H{"error": "Must have between 3 and 5 guardians"})
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Must have between 3 and 5 guardians"})
 		return
 	}
 
@@ -280,7 +282,7 @@ func (h *BackupHandler) SetupSocialRecovery(c *gin.Context) {
 	for i, idStr := range req.GuardianUserIDs {
 		id, err := uuid.Parse(idStr)
 		if err != nil {
-			c.JSON(400, gin.H{"error": "Invalid guardian user ID"})
+			c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid guardian user ID"})
 			return
 		}
 		guardianIDs[i] = id
@@ -289,7 +291,7 @@ func (h *BackupHandler) SetupSocialRecovery(c *gin.Context) {
 	// Generate master secret and split into shards
 	masterSecret := make([]byte, 32)
 	if _, err := rand.Read(masterSecret); err != nil {
-		c.JSON(500, gin.H{"error": "Failed to generate master secret"})
+		internalError(c, "Failed to generate master secret", err)
 		return
 	}
 
@@ -297,11 +299,11 @@ func (h *BackupHandler) SetupSocialRecovery(c *gin.Context) {
 	// In a real implementation, you'd use Shamir's Secret Sharing
 	err := h.repo.SetupSocialRecovery(c.Request.Context(), userID, guardianIDs, masterSecret)
 	if err != nil {
-		c.JSON(500, gin.H{"error": "Failed to setup social recovery"})
+		internalError(c, "Failed to setup social recovery", err)
 		return
 	}
 
-	c.JSON(200, gin.H{"message": "Social recovery setup complete"})
+	c.JSON(http.StatusOK, gin.H{"message": "Social recovery setup complete"})
 }
 
 // InitiateRecovery starts a recovery session
@@ -311,17 +313,17 @@ func (h *BackupHandler) InitiateRecovery(c *gin.Context) {
 
 	var req models.InitiateRecoveryRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
-		c.JSON(400, gin.H{"error": err.Error()})
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
 	}
 
 	session, err := h.repo.InitiateRecovery(c.Request.Context(), userID, req.Method)
 	if err != nil {
-		c.JSON(500, gin.H{"error": "Failed to initiate recovery"})
+		internalError(c, "Failed to initiate recovery", err)
 		return
 	}
 
-	c.JSON(200, session)
+	c.JSON(http.StatusOK, session)
 }
 
 // SubmitShard submits a recovery shard from a guardian
@@ -331,30 +333,30 @@ func (h *BackupHandler) SubmitShard(c *gin.Context) {
 
 	var req models.SubmitShardRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
-		c.JSON(400, gin.H{"error": err.Error()})
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
 	}
 
 	sessionUUID, err := uuid.Parse(req.SessionID)
 	if err != nil {
-		c.JSON(400, gin.H{"error": "Invalid session ID"})
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid session ID"})
 		return
 	}
 
 	// Decode base64 shard
 	shardEncrypted, err := base64.StdEncoding.DecodeString(req.ShardEncrypted)
 	if err != nil {
-		c.JSON(400, gin.H{"error": "Invalid shard encoding"})
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid shard encoding"})
 		return
 	}
 
 	submission, err := h.repo.SubmitShard(c.Request.Context(), sessionUUID, userID, shardEncrypted)
 	if err != nil {
-		c.JSON(500, gin.H{"error": "Failed to submit shard"})
+		internalError(c, "Failed to submit shard", err)
 		return
 	}
 
-	c.JSON(200, models.SubmitShardResponse{
+	c.JSON(http.StatusOK, models.SubmitShardResponse{
 		ShardsReceived: submission.ShardsReceived,
 		ShardsNeeded:   submission.ShardsNeeded,
 		CanComplete:    submission.ShardsReceived >= submission.ShardsNeeded,
@@ -369,19 +371,20 @@ func (h *BackupHandler) CompleteRecovery(c *gin.Context) {
 	sessionID := c.Param("session_id")
 	sessionUUID, err := uuid.Parse(sessionID)
 	if err != nil {
-		c.JSON(400, gin.H{"error": "Invalid session ID"})
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid session ID"})
 		return
 	}
 
 	masterKey, err := h.repo.CompleteRecovery(c.Request.Context(), sessionUUID, userID)
 	if err != nil {
 		if strings.Contains(err.Error(), "insufficient") {
-			c.JSON(400, models.CompleteRecoveryResponse{
+			c.JSON(http.StatusBadRequest, models.CompleteRecoveryResponse{
 				Success:      false,
 				ErrorMessage: "Insufficient shards to complete recovery",
 			})
 		} else {
-			c.JSON(500, models.CompleteRecoveryResponse{
+			log.Error().Err(err).Str("path", c.Request.URL.Path).Msg("Failed to complete recovery")
+			c.JSON(http.StatusInternalServerError, models.CompleteRecoveryResponse{
 				Success:      false,
 				ErrorMessage: "Failed to complete recovery",
 			})
@@ -389,7 +392,7 @@ func (h *BackupHandler) CompleteRecovery(c *gin.Context) {
 		return
 	}
 
-	c.JSON(200, models.CompleteRecoveryResponse{
+	c.JSON(http.StatusOK, models.CompleteRecoveryResponse{
 		Success:   true,
 		MasterKey: base64.StdEncoding.EncodeToString(masterKey),
 	})
@@ -402,11 +405,11 @@ func (h *BackupHandler) GetBackupPreferences(c *gin.Context) {
 
 	preferences, err := h.repo.GetBackupPreferences(c.Request.Context(), userID)
 	if err != nil {
-		c.JSON(500, gin.H{"error": "Failed to get backup preferences"})
+		internalError(c, "Failed to get backup preferences", err)
 		return
 	}
 
-	c.JSON(200, preferences)
+	c.JSON(http.StatusOK, preferences)
 }
 
 // UpdateBackupPreferences updates user's backup preferences
@@ -416,17 +419,17 @@ func (h *BackupHandler) UpdateBackupPreferences(c *gin.Context) {
 
 	var req models.UpdateBackupPreferencesRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
-		c.JSON(400, gin.H{"error": err.Error()})
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
 	}
 
 	err := h.repo.UpdateBackupPreferences(c.Request.Context(), userID, req)
 	if err != nil {
-		c.JSON(500, gin.H{"error": "Failed to update backup preferences"})
+		internalError(c, "Failed to update backup preferences", err)
 		return
 	}
 
-	c.JSON(200, gin.H{"message": "Backup preferences updated"})
+	c.JSON(http.StatusOK, gin.H{"message": "Backup preferences updated"})
 }
 
 // GetUserDevices gets all registered devices for a user
@@ -436,11 +439,11 @@ func (h *BackupHandler) GetUserDevices(c *gin.Context) {
 
 	devices, err := h.repo.GetUserDevices(c.Request.Context(), userID)
 	if err != nil {
-		c.JSON(500, gin.H{"error": "Failed to get user devices"})
+		internalError(c, "Failed to get user devices", err)
 		return
 	}
 
-	c.JSON(200, gin.H{"devices": devices})
+	c.JSON(http.StatusOK, gin.H{"devices": devices})
 }
 
 // Helper function to generate random 6-digit code

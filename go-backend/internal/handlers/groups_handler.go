@@ -923,7 +923,7 @@ func (h *GroupsHandler) UpdateGroupSettings(c *gin.Context) {
 	args = append(args, groupID)
 
 	if _, err := h.db.Exec(c.Request.Context(), query, args...); err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to update settings: " + err.Error()})
+		internalError(c, "Failed to update settings", err)
 		return
 	}
 

@@ -224,7 +224,7 @@ func (h *AuthHandler) Register(c *gin.Context) {
 	log.Printf("[Auth] Registering user: %s", req.Email)
 	if err := h.repo.CreateUser(c.Request.Context(), user); err != nil {
 		log.Printf("[Auth] Failed to create user %s: %v", req.Email, err)
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to create user: " + err.Error()})
+		internalError(c, "Failed to create user", err)
 		return
 	}
 
@@ -243,7 +243,7 @@ func (h *AuthHandler) Register(c *gin.Context) {
 			c.JSON(http.StatusConflict, gin.H{"error": "Handle already taken"})
 			return
 		}
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to create profile", "details": err.Error()})
+		internalError(c, "Failed to create profile", err)
 		return
 	}
 
@@ -254,7 +254,7 @@ func (h *AuthHandler) Register(c *gin.Context) {
 	if err := h.repo.CreateVerificationToken(c.Request.Context(), hashString, userID.String(), 24*time.Hour); err != nil {
 		log.Printf("[Auth] Failed to store verification token: %v. Rolling back user.", err)
 		_ = h.repo.DeleteUser(c.Request.Context(), user.ID)
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to prepare verification", "details": err.Error()})
+		internalError(c, "Failed to prepare verification", err)
 		return
 	}
 
@@ -394,7 +394,7 @@ func (h *AuthHandler) Login(c *gin.Context) {
 
 	token, err := h.generateToken(user.ID)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to generate token", "details": err.Error()})
+		internalError(c, "Failed to generate token", err)
 		return
 	}
 
@@ -430,7 +430,7 @@ func (h *AuthHandler) CompleteOnboarding(c *gin.Context) {
 
 	if err := h.repo.MarkOnboardingComplete(c.Request.Context(), userId); err != nil {
 		log.Printf("[Auth] Failed to complete onboarding for %s: %v", userId, err)
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to update onboarding status", "details": err.Error()})
+		internalError(c, "Failed to update onboarding status", err)
 		return
 	}
 
@@ -509,7 +509,7 @@ func (h *AuthHandler) ResendVerificationEmail(c *gin.Context) {
 	hashString := hex.EncodeToString(tokenHash[:])
 
 	if err := h.repo.CreateVerificationToken(c.Request.Context(), hashString, user.ID.String(), 24*time.Hour); err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to prepare verification", "details": err.Error()})
+		internalError(c, "Failed to prepare verification", err)
 		return
 	}
 
@@ -567,14 +567,14 @@ func (h *AuthHandler) RefreshSession(c *gin.Context) {
 	// lockout if generation or storage fails after revocation.
 	newAccessToken, err := h.generateToken(rt.UserID)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to generate token", "details": err.Error()})
+		internalError(c, "Failed to generate token", err)
 		return
 	}
 
 	newRefreshToken, _ := generateRandomString(32)
 	err = h.repo.StoreRefreshToken(c.Request.Context(), rt.UserID.String(), newRefreshToken, 30*24*time.Hour)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to save session", "details": err.Error()})
+		internalError(c, "Failed to save session", err)
 		return
 	}
 
@@ -626,7 +626,7 @@ func (h *AuthHandler) ForgotPassword(c *gin.Context) {
 
 	if err := h.repo.CreatePasswordResetToken(c.Request.Context(), hashString, user.ID.String(), 1*time.Hour); err != nil {
 		log.Printf("[Auth] Failed to create reset token: %v", err)
-		c.JSON(http.StatusInternalServerError, gin.H{"message": "Internal error", "details": err.Error()})
+		internalError(c, "Internal error", err)
 		return
 	}
 
@@ -676,7 +676,7 @@ func (h *AuthHandler) ResetPassword(c *gin.Context) {
 	}
 
 	if err := h.repo.UpdateUserPassword(c.Request.Context(), userID, string(hashedBytes)); err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to update password", "details": err.Error()})
+		internalError(c, "Failed to update password", err)
 		return
 	}
 

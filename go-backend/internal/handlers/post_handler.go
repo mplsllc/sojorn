@@ -177,7 +177,7 @@ func (h *PostHandler) CreateComment(c *gin.Context) {
 	}
 
 	if err := h.postRepo.CreatePost(c.Request.Context(), post); err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to create comment", "details": err.Error()})
+		internalError(c, "Failed to create comment", err)
 		return
 	}
 
@@ -258,7 +258,7 @@ func (h *PostHandler) GetNearbyBeacons(c *gin.Context) {
 
 	beacons, err := h.postRepo.GetNearbyBeacons(c.Request.Context(), lat, long, radius, userID)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to fetch nearby beacons", "details": err.Error()})
+		internalError(c, "Failed to fetch nearby beacons", err)
 		return
 	}
 
@@ -323,7 +323,8 @@ func (h *PostHandler) CreateBeacon(c *gin.Context) {
 	}
 
 	if err := c.ShouldBindJSON(&req); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid request", "details": err.Error()})
+		log.Error().Err(err).Msg("Invalid beacon request")
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid request"})
 		return
 	}
 
@@ -397,7 +398,7 @@ func (h *PostHandler) CreateBeacon(c *gin.Context) {
 	}
 
 	if err := h.postRepo.CreatePost(c.Request.Context(), post); err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to create beacon", "details": err.Error()})
+		internalError(c, "Failed to create beacon", err)
 		return
 	}
 
@@ -631,7 +632,7 @@ func (h *PostHandler) CreatePost(c *gin.Context) {
 	// Create post
 	err = h.postRepo.CreatePost(c.Request.Context(), post)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to create post", "details": err.Error()})
+		internalError(c, "Failed to create post", err)
 		return
 	}
 
@@ -773,7 +774,7 @@ func (h *PostHandler) GetFeed(c *gin.Context) {
 
 	posts, err := h.feedService.GetFeed(c.Request.Context(), userIDStr.(string), category, hasVideo, limit, offset, showNSFW)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to fetch feed", "details": err.Error()})
+		internalError(c, "Failed to fetch feed", err)
 		return
 	}
 
@@ -807,7 +808,7 @@ func (h *PostHandler) GetProfilePosts(c *gin.Context) {
 
 	posts, err := h.postRepo.GetPostsByAuthor(c.Request.Context(), authorID, viewerID, limit, offset, onlyChains, showNSFW)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to fetch profile posts", "details": err.Error()})
+		internalError(c, "Failed to fetch profile posts", err)
 		return
 	}
 
@@ -864,7 +865,7 @@ func (h *PostHandler) UpdatePost(c *gin.Context) {
 
 	err := h.postRepo.UpdatePost(c.Request.Context(), postID, userIDStr.(string), req.Body)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to update post", "details": err.Error()})
+		internalError(c, "Failed to update post", err)
 		return
 	}
 
@@ -877,7 +878,7 @@ func (h *PostHandler) DeletePost(c *gin.Context) {
 
 	err := h.postRepo.DeletePost(c.Request.Context(), postID, userIDStr.(string))
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to delete post", "details": err.Error()})
+		internalError(c, "Failed to delete post", err)
 		return
 	}
 
@@ -898,7 +899,7 @@ func (h *PostHandler) PinPost(c *gin.Context) {
 
 	err := h.postRepo.PinPost(c.Request.Context(), postID, userIDStr.(string), req.Pinned)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to pin/unpin post", "details": err.Error()})
+		internalError(c, "Failed to pin/unpin post", err)
 		return
 	}
 
@@ -919,7 +920,7 @@ func (h *PostHandler) UpdateVisibility(c *gin.Context) {
 
 	err := h.postRepo.UpdateVisibility(c.Request.Context(), postID, userIDStr.(string), req.Visibility)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to update visibility", "details": err.Error()})
+		internalError(c, "Failed to update visibility", err)
 		return
 	}
 
@@ -932,7 +933,7 @@ func (h *PostHandler) LikePost(c *gin.Context) {
 
 	err := h.postRepo.LikePost(c.Request.Context(), postID, userIDStr.(string))
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to like post", "details": err.Error()})
+		internalError(c, "Failed to like post", err)
 		return
 	}
 
@@ -973,7 +974,7 @@ func (h *PostHandler) UnlikePost(c *gin.Context) {
 
 	err := h.postRepo.UnlikePost(c.Request.Context(), postID, userIDStr.(string))
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to unlike post", "details": err.Error()})
+		internalError(c, "Failed to unlike post", err)
 		return
 	}
 
@@ -989,7 +990,7 @@ func (h *PostHandler) HidePost(c *gin.Context) {
 
 	err := h.postRepo.HidePost(c.Request.Context(), postID, userIDStr.(string))
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to hide post", "details": err.Error()})
+		internalError(c, "Failed to hide post", err)
 		return
 	}
 
@@ -1002,7 +1003,7 @@ func (h *PostHandler) SavePost(c *gin.Context) {
 
 	err := h.postRepo.SavePost(c.Request.Context(), postID, userIDStr.(string))
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to save post", "details": err.Error()})
+		internalError(c, "Failed to save post", err)
 		return
 	}
 
@@ -1052,7 +1053,7 @@ func (h *PostHandler) UnsavePost(c *gin.Context) {
 
 	err := h.postRepo.UnsavePost(c.Request.Context(), postID, userIDStr.(string))
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to unsave post", "details": err.Error()})
+		internalError(c, "Failed to unsave post", err)
 		return
 	}
 
@@ -1086,7 +1087,7 @@ func (h *PostHandler) GetSavedPosts(c *gin.Context) {
 
 	posts, err := h.postRepo.GetSavedPosts(c.Request.Context(), userID, limit, offset, showNSFW)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to fetch saved posts", "details": err.Error()})
+		internalError(c, "Failed to fetch saved posts", err)
 		return
 	}
 
@@ -1121,7 +1122,7 @@ func (h *PostHandler) GetLikedPosts(c *gin.Context) {
 
 	posts, err := h.postRepo.GetLikedPosts(c.Request.Context(), userID, limit, offset, showNSFW)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to fetch liked posts", "details": err.Error()})
+		internalError(c, "Failed to fetch liked posts", err)
 		return
 	}
 
@@ -1142,7 +1143,7 @@ func (h *PostHandler) GetPostChain(c *gin.Context) {
 
 	posts, err := h.postRepo.GetPostChain(c.Request.Context(), postID, showNSFW)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to fetch post chain", "details": err.Error()})
+		internalError(c, "Failed to fetch post chain", err)
 		return
 	}
 
@@ -1178,7 +1179,7 @@ func (h *PostHandler) GetPostFocusContext(c *gin.Context) {
 
 	focusContext, err := h.postRepo.GetPostFocusContext(c.Request.Context(), postID, userIDStr.(string), showNSFW)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to fetch focus context", "details": err.Error()})
+		internalError(c, "Failed to fetch focus context", err)
 		return
 	}
 
@@ -1223,10 +1224,10 @@ func (h *PostHandler) VouchBeacon(c *gin.Context) {
 	err := h.postRepo.VouchBeacon(c.Request.Context(), beaconID, userIDStr.(string))
 	if err != nil {
 		if err.Error() == "post is not a beacon" {
-			c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+			c.JSON(http.StatusBadRequest, gin.H{"error": "Post is not a beacon"})
 			return
 		}
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to vouch for beacon", "details": err.Error()})
+		internalError(c, "Failed to vouch for beacon", err)
 		return
 	}
 
@@ -1242,10 +1243,10 @@ func (h *PostHandler) ReportBeacon(c *gin.Context) {
 	err := h.postRepo.ReportBeacon(c.Request.Context(), beaconID, userIDStr.(string))
 	if err != nil {
 		if err.Error() == "post is not a beacon" {
-			c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+			c.JSON(http.StatusBadRequest, gin.H{"error": "Post is not a beacon"})
 			return
 		}
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to report beacon", "details": err.Error()})
+		internalError(c, "Failed to report beacon", err)
 		return
 	}
 
@@ -1260,7 +1261,7 @@ func (h *PostHandler) RemoveBeaconVote(c *gin.Context) {
 
 	err := h.postRepo.RemoveBeaconVote(c.Request.Context(), beaconID, userIDStr.(string))
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to remove beacon vote", "details": err.Error()})
+		internalError(c, "Failed to remove beacon vote", err)
 		return
 	}
 
@@ -1283,10 +1284,10 @@ func (h *PostHandler) ResolveBeacon(c *gin.Context) {
 	err := h.postRepo.ResolveBeacon(c.Request.Context(), beaconID, req.Status)
 	if err != nil {
 		if err.Error() == "post is not a beacon" {
-			c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+			c.JSON(http.StatusBadRequest, gin.H{"error": "Post is not a beacon"})
 			return
 		}
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to resolve beacon", "details": err.Error()})
+		internalError(c, "Failed to resolve beacon", err)
 		return
 	}
 
@@ -1313,7 +1314,7 @@ func (h *PostHandler) ToggleReaction(c *gin.Context) {
 
 	counts, myReactions, err := h.postRepo.ToggleReaction(c.Request.Context(), postID, userIDStr.(string), emoji)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to toggle reaction", "details": err.Error()})
+		internalError(c, "Failed to toggle reaction", err)
 		return
 	}
 
@@ -1383,7 +1384,7 @@ func (h *PostHandler) GetSafeDomains(c *gin.Context) {
 	}
 	domains, err := h.linkPreviewService.ListSafeDomains(c.Request.Context(), "", true)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		internalError(c, "Failed to fetch safe domains", err)
 		return
 	}
 	c.JSON(http.StatusOK, gin.H{"domains": domains})

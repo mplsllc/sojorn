@@ -12,7 +12,6 @@ import (
 	"github.com/google/uuid"
 	"gitlab.com/patrickbritton3/sojorn/go-backend/internal/models"
 	"gitlab.com/patrickbritton3/sojorn/go-backend/internal/repository"
-	"github.com/rs/zerolog/log"
 )
 
 type SettingsHandler struct {
@@ -52,8 +51,7 @@ func (h *SettingsHandler) UpdatePrivacySettings(c *gin.Context) {
 	ps.UserID = userID // Ensure ID matches authenticated user
 
 	if err := h.userRepo.UpdatePrivacySettings(c.Request.Context(), &ps); err != nil {
-		log.Error().Err(err).Msg("Failed to update privacy settings")
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to update settings", "details": err.Error()})
+		internalError(c, "Failed to update settings", err)
 		return
 	}
 
@@ -107,8 +105,7 @@ func (h *SettingsHandler) UpdateUserSettings(c *gin.Context) {
 	}
 
 	if err := h.userRepo.UpdateUserSettings(c.Request.Context(), &us); err != nil {
-		log.Error().Err(err).Msg("Failed to update user settings")
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to update settings", "details": err.Error()})
+		internalError(c, "Failed to update settings", err)
 		return
 	}
 
@@ -131,8 +128,7 @@ func (h *SettingsHandler) RegisterDevice(c *gin.Context) {
 	req.UserID = userID
 
 	if err := h.notifRepo.UpsertFCMToken(c.Request.Context(), &req); err != nil {
-		log.Error().Err(err).Msg("Failed to register device")
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to register device", "details": err.Error()})
+		internalError(c, "Failed to register device", err)
 		return
 	}
 
@@ -156,8 +152,7 @@ func (h *SettingsHandler) UnregisterDevice(c *gin.Context) {
 	}
 
 	if err := h.notifRepo.DeleteFCMToken(c.Request.Context(), userID.String(), req.FCMToken); err != nil {
-		log.Error().Err(err).Msg("Failed to unregister device")
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to unregister device", "details": err.Error()})
+		internalError(c, "Failed to unregister device", err)
 		return
 	}
 

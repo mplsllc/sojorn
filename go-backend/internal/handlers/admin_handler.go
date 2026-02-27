@@ -160,7 +160,7 @@ func (h *AdminHandler) AdminLogin(c *gin.Context) {
 	// Generate JWT
 	token := jwt.NewWithClaims(jwt.SigningMethodHS256, jwt.MapClaims{
 		"sub":  userID.String(),
-		"exp":  time.Now().Add(24 * time.Hour).Unix(),
+		"exp":  time.Now().Add(4 * time.Hour).Unix(), // 4h session — refresh token rotation is a future improvement
 		"role": "authenticated",
 	})
 	tokenString, err := token.SignedString([]byte(h.jwtSecret))
@@ -176,7 +176,7 @@ func (h *AdminHandler) AdminLogin(c *gin.Context) {
 		`SELECT handle, display_name, avatar_url FROM profiles WHERE id = $1`, userID).Scan(&handle, &displayName, &avatarURL)
 
 	// Set HttpOnly cookie for admin panel auth
-	h.setAdminCookie(c, tokenString, 86400)
+	h.setAdminCookie(c, tokenString, 14400) // 4h — must match JWT exp above
 
 	// DEPRECATED: Remove access_token from response after admin panel cookie migration
 	// is confirmed working. Target removal: next deploy after cookie migration ships.
@@ -729,7 +729,7 @@ func (h *AdminHandler) AdminUpdateProfile(c *gin.Context) {
 	_, err := h.pool.Exec(ctx, query, args...)
 	if err != nil {
 		log.Error().Err(err).Str("user_id", targetUserID).Msg("Failed to update profile")
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to update profile: " + err.Error()})
+		internalError(c, "Failed to update profile", err)
 		return
 	}
 
@@ -779,7 +779,8 @@ func (h *AdminHandler) AdminManageFollow(c *gin.Context) {
 	// Resolve handle or UUID to a UUID
 	resolvedID, err := h.resolveUserID(ctx, req.UserID)
 	if err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		log.Error().Err(err).Str("user_id", req.UserID).Msg("Failed to resolve user ID")
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid user ID"})
 		return
 	}
 
@@ -799,14 +800,14 @@ func (h *AdminHandler) AdminManageFollow(c *gin.Context) {
 			ON CONFLICT (follower_id, following_id) DO UPDATE SET status = 'accepted'
 		`, followerID, followingID)
 		if err != nil {
-			c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to add follow: " + err.Error()})
+			internalError(c, "Failed to add follow", err)
 			return
 		}
 		c.JSON(http.StatusOK, gin.H{"message": "Follow added"})
 	} else {
 		_, err := h.pool.Exec(ctx, `DELETE FROM follows WHERE follower_id = $1::uuid AND following_id = $2::uuid`, followerID, followingID)
 		if err != nil {
-			c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to remove follow: " + err.Error()})
+			internalError(c, "Failed to remove follow", err)
 			return
 		}
 		c.JSON(http.StatusOK, gin.H{"message": "Follow removed"})
@@ -2106,7 +2107,7 @@ func (h *AdminHandler) GetSystemHealth(c *gin.Context) {
 	err := h.pool.Ping(ctx)
 	dbLatency := time.Since(start).Milliseconds()
 	if err != nil {
-		health["database"] = gin.H{"status": "unhealthy", "error": err.Error()}
+		health["database"] = gin.H{"status": "unhealthy", "error": "database check failed"}
 	} else {
 		health["database"] = gin.H{"status": "healthy", "latency_ms": dbLatency}
 	}
@@ -2806,7 +2807,7 @@ func (h *AdminHandler) ListLocalModels(c *gin.Context) {
 func (h *AdminHandler) GetAIModerationConfigs(c *gin.Context) {
 	configs, err := h.moderationService.GetModerationConfigs(c.Request.Context())
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": fmt.Sprintf("Failed to fetch configs: %v", err)})
+		internalError(c, "Failed to fetch configs", err)
 		return
 	}
 
@@ -2837,7 +2838,7 @@ func (h *AdminHandler) SetAIModerationConfig(c *gin.Context) {
 	adminID := c.GetString("user_id")
 	err := h.moderationService.SetModerationConfig(c.Request.Context(), req.ModerationType, req.ModelID, req.ModelName, req.SystemPrompt, req.Enabled, req.Engines, adminID, req.SightEngineConfig)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": fmt.Sprintf("Failed to save config: %v", err)})
+		internalError(c, "Failed to save config", err)
 		return
 	}
 
@@ -2894,7 +2895,8 @@ func (h *AdminHandler) TestAIModeration(c *gin.Context) {
 		}
 		localResult, err := h.localAIService.ModerateText(ctx, content)
 		if err != nil {
-			response["error"] = err.Error()
+			log.Error().Err(err).Msg("Local AI moderation test failed")
+			response["error"] = "Local AI moderation failed"
 			c.JSON(http.StatusOK, response)
 			return
 		}
@@ -2926,7 +2928,8 @@ func (h *AdminHandler) TestAIModeration(c *gin.Context) {
 		if isImage && req.ImageURL != "" {
 			result, err := h.sightEngineService.ModerateImage(ctx, req.ImageURL)
 			if err != nil {
-				response["error"] = err.Error()
+				log.Error().Err(err).Msg("SightEngine image moderation test failed")
+				response["error"] = "SightEngine image moderation failed"
 				c.JSON(http.StatusOK, response)
 				return
 			}
@@ -2947,7 +2950,8 @@ func (h *AdminHandler) TestAIModeration(c *gin.Context) {
 			}
 			result, err := h.sightEngineService.ModerateText(ctx, content)
 			if err != nil {
-				response["error"] = err.Error()
+				log.Error().Err(err).Msg("SightEngine text moderation test failed")
+				response["error"] = "SightEngine text moderation failed"
 				c.JSON(http.StatusOK, response)
 				return
 			}
@@ -3111,7 +3115,7 @@ func (h *AdminHandler) AdminCreateUser(c *gin.Context) {
 		VALUES ($1, $2, $3, 'active', false, $4, $4)
 	`, userID, req.Email, string(hashedBytes), now)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to create user: " + err.Error()})
+		internalError(c, "Failed to create user", err)
 		return
 	}
 
@@ -3126,7 +3130,7 @@ func (h *AdminHandler) AdminCreateUser(c *gin.Context) {
 		VALUES ($1, $2, $3, $4, $5, $6, $7, true)
 	`, userID, req.Handle, req.DisplayName, req.Bio, req.Verified, req.Official, role)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to create profile: " + err.Error()})
+		internalError(c, "Failed to create profile", err)
 		return
 	}
 
@@ -3136,12 +3140,12 @@ func (h *AdminHandler) AdminCreateUser(c *gin.Context) {
 		VALUES ($1, 50, 'new')
 	`, userID)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to init trust state: " + err.Error()})
+		internalError(c, "Failed to init trust state", err)
 		return
 	}
 
 	if err := tx.Commit(ctx); err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to commit: " + err.Error()})
+		internalError(c, "Failed to commit", err)
 		return
 	}
 
@@ -3315,7 +3319,8 @@ func (h *AdminHandler) AdminImportContent(c *gin.Context) {
 				imageURL, videoURL, thumbnailURL, durationMS, visibility)
 			if err != nil {
 				tx.Rollback(ctx)
-				errors = append(errors, fmt.Sprintf("item %d: update failed: %s", i, err.Error()))
+				log.Error().Err(err).Int("item", i).Msg("Failed to update imported post")
+				errors = append(errors, fmt.Sprintf("item %d: update failed", i))
 				continue
 			}
 
@@ -3385,7 +3390,8 @@ func (h *AdminHandler) AdminImportContent(c *gin.Context) {
 		}
 		if err != nil {
 			tx.Rollback(ctx)
-			errors = append(errors, fmt.Sprintf("item %d: %s", i, err.Error()))
+			log.Error().Err(err).Int("item", i).Msg("Failed to import post")
+			errors = append(errors, fmt.Sprintf("item %d: import failed", i))
 			continue
 		}
 
@@ -3447,7 +3453,7 @@ func (h *AdminHandler) AdminImportContent(c *gin.Context) {
 func (h *AdminHandler) ListOfficialAccounts(c *gin.Context) {
 	configs, err := h.officialAccountsService.ListConfigs(c.Request.Context())
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		internalError(c, "Failed to list official accounts", err)
 		return
 	}
 	if configs == nil {
@@ -3459,7 +3465,7 @@ func (h *AdminHandler) ListOfficialAccounts(c *gin.Context) {
 func (h *AdminHandler) ListOfficialProfiles(c *gin.Context) {
 	profiles, err := h.officialAccountsService.ListOfficialProfiles(c.Request.Context())
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		internalError(c, "Failed to list official profiles", err)
 		return
 	}
 	if profiles == nil {
@@ -3504,7 +3510,8 @@ func (h *AdminHandler) UpsertOfficialAccount(c *gin.Context) {
 	if profileID == "" && req.Handle != "" {
 		pid, err := h.officialAccountsService.LookupProfileID(ctx, req.Handle)
 		if err != nil {
-			c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+			log.Error().Err(err).Str("handle", req.Handle).Msg("Failed to look up profile ID")
+			c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid handle"})
 			return
 		}
 		profileID = pid
@@ -3548,7 +3555,7 @@ func (h *AdminHandler) UpsertOfficialAccount(c *gin.Context) {
 
 	result, err := h.officialAccountsService.UpsertConfig(ctx, cfg)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		internalError(c, "Failed to save official account config", err)
 		return
 	}
 
@@ -3564,7 +3571,7 @@ func (h *AdminHandler) DeleteOfficialAccount(c *gin.Context) {
 	ctx := c.Request.Context()
 
 	if err := h.officialAccountsService.DeleteConfig(ctx, id); err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		internalError(c, "Failed to delete official account", err)
 		return
 	}
 
@@ -3585,7 +3592,7 @@ func (h *AdminHandler) ToggleOfficialAccount(c *gin.Context) {
 	}
 
 	if err := h.officialAccountsService.ToggleEnabled(c.Request.Context(), id, req.Enabled); err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		internalError(c, "Failed to toggle official account", err)
 		return
 	}
 	c.JSON(http.StatusOK, gin.H{"enabled": req.Enabled})
@@ -3637,7 +3644,8 @@ func (h *AdminHandler) TriggerOfficialPost(c *gin.Context) {
 		for i := 0; i < count; i++ {
 			article, postID, err := h.officialAccountsService.PostNextArticle(ctx, id)
 			if err != nil {
-				errors = append(errors, err.Error())
+				log.Error().Err(err).Str("config_id", id).Msg("Failed to post next article")
+				errors = append(errors, "failed to post article")
 				continue
 			}
 			if article == nil {
@@ -3672,7 +3680,7 @@ func (h *AdminHandler) TriggerOfficialPost(c *gin.Context) {
 	default:
 		postID, body, err := h.officialAccountsService.GenerateAndPost(ctx, id, nil, "")
 		if err != nil {
-			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+			internalError(c, "Failed to generate and post", err)
 			return
 		}
 		c.JSON(http.StatusOK, gin.H{
@@ -3701,7 +3709,7 @@ func (h *AdminHandler) PreviewOfficialPost(c *gin.Context) {
 
 		pending, err := h.officialAccountsService.GetArticleQueue(ctx, id, "discovered", 10)
 		if err != nil {
-			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+			internalError(c, "Failed to get article queue", err)
 			return
 		}
 		if len(pending) == 0 {
@@ -3723,7 +3731,7 @@ func (h *AdminHandler) PreviewOfficialPost(c *gin.Context) {
 	default:
 		body, err := h.officialAccountsService.GeneratePost(ctx, id, nil, "")
 		if err != nil {
-			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+			internalError(c, "Failed to generate post preview", err)
 			return
 		}
 		c.JSON(http.StatusOK, gin.H{"preview": body})
@@ -3741,7 +3749,7 @@ func (h *AdminHandler) FetchNewsArticles(c *gin.Context) {
 	// Return the full CachedArticle objects so frontend has IDs for per-article actions
 	articles, err := h.officialAccountsService.GetArticleQueue(ctx, id, "discovered", 100)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		internalError(c, "Failed to fetch news articles", err)
 		return
 	}
 	if articles == nil {
@@ -3764,7 +3772,7 @@ func (h *AdminHandler) GetPostedArticles(c *gin.Context) {
 
 	articles, err := h.officialAccountsService.GetArticleQueue(c.Request.Context(), id, status, limit)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		internalError(c, "Failed to get posted articles", err)
 		return
 	}
 	if articles == nil {
@@ -3780,7 +3788,8 @@ func (h *AdminHandler) GetPostedArticles(c *gin.Context) {
 func (h *AdminHandler) SkipArticle(c *gin.Context) {
 	articleID := c.Param("article_id")
 	if err := h.officialAccountsService.SkipArticle(c.Request.Context(), articleID); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		log.Error().Err(err).Str("article_id", articleID).Msg("Failed to skip article")
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Failed to skip article"})
 		return
 	}
 	c.JSON(http.StatusOK, gin.H{"message": "Article skipped"})
@@ -3790,7 +3799,8 @@ func (h *AdminHandler) SkipArticle(c *gin.Context) {
 func (h *AdminHandler) DeleteArticle(c *gin.Context) {
 	articleID := c.Param("article_id")
 	if err := h.officialAccountsService.DeleteArticle(c.Request.Context(), articleID); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		log.Error().Err(err).Str("article_id", articleID).Msg("Failed to delete article")
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Failed to delete article"})
 		return
 	}
 	c.JSON(http.StatusOK, gin.H{"message": "Article deleted"})
@@ -3801,7 +3811,8 @@ func (h *AdminHandler) PostSpecificArticle(c *gin.Context) {
 	articleID := c.Param("article_id")
 	article, postID, err := h.officialAccountsService.PostSpecificArticle(c.Request.Context(), articleID)
 	if err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		log.Error().Err(err).Str("article_id", articleID).Msg("Failed to post article")
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Failed to post article"})
 		return
 	}
 	c.JSON(http.StatusOK, gin.H{
@@ -3835,7 +3846,8 @@ func (h *AdminHandler) CleanupPendingArticles(c *gin.Context) {
 
 	affected, err := h.officialAccountsService.CleanupPendingByDate(c.Request.Context(), configID, before, req.Action)
 	if err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		log.Error().Err(err).Str("config_id", configID).Msg("Failed to cleanup pending articles")
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Failed to cleanup pending articles"})
 		return
 	}
 
@@ -3855,7 +3867,7 @@ func (h *AdminHandler) ListSafeDomains(c *gin.Context) {
 
 	domains, err := h.linkPreviewService.ListSafeDomains(c.Request.Context(), category, approvedOnly)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		internalError(c, "Failed to list safe domains", err)
 		return
 	}
 	c.JSON(http.StatusOK, gin.H{"domains": domains})
@@ -3884,7 +3896,7 @@ func (h *AdminHandler) UpsertSafeDomain(c *gin.Context) {
 
 	domain, err := h.linkPreviewService.UpsertSafeDomain(c.Request.Context(), req.Domain, cat, approved, req.Notes)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		internalError(c, "Failed to upsert safe domain", err)
 		return
 	}
 	c.JSON(http.StatusOK, gin.H{"domain": domain})
@@ -3893,7 +3905,7 @@ func (h *AdminHandler) UpsertSafeDomain(c *gin.Context) {
 func (h *AdminHandler) DeleteSafeDomain(c *gin.Context) {
 	id := c.Param("id")
 	if err := h.linkPreviewService.DeleteSafeDomain(c.Request.Context(), id); err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		internalError(c, "Failed to delete safe domain", err)
 		return
 	}
 	c.JSON(http.StatusOK, gin.H{"deleted": true})
@@ -3922,8 +3934,9 @@ func (h *AdminHandler) GetAIEngines(c *gin.Context) {
 	if h.localAIService != nil {
 		health, err := h.localAIService.Healthz(c.Request.Context())
 		if err != nil {
+			log.Error().Err(err).Msg("Local AI health check failed")
 			localEngine.Status = "down"
-			localEngine.Details = map[string]string{"error": err.Error()}
+			localEngine.Details = map[string]string{"error": "health check failed"}
 		} else {
 			localEngine.Status = health.Status
 			localEngine.Details = health
@@ -3943,8 +3956,9 @@ func (h *AdminHandler) GetAIEngines(c *gin.Context) {
 	if h.sightEngineService != nil {
 		status, err := h.sightEngineService.Healthz(c.Request.Context())
 		if err != nil {
+			log.Error().Err(err).Msg("SightEngine health check failed")
 			sightEngine.Status = "down"
-			sightEngine.Details = map[string]string{"error": err.Error()}
+			sightEngine.Details = map[string]string{"error": "health check failed"}
 		} else {
 			sightEngine.Status = status
 		}
@@ -4254,7 +4268,7 @@ func (h *AdminHandler) SendTestEmail(c *gin.Context) {
 
 	if err := h.emailService.SendGenericEmail(req.ToEmail, "Test User", subject, htmlBody, textBody); err != nil {
 		log.Error().Err(err).Msg("Failed to send test email")
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to send test email: " + err.Error()})
+		internalError(c, "Failed to send test email", err)
 		return
 	}
 
@@ -4308,7 +4322,7 @@ func (h *AdminHandler) AdminListGroups(c *gin.Context) {
 
 	rows, err := h.pool.Query(c.Request.Context(), query, args...)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		internalError(c, "Failed to list groups", err)
 		return
 	}
 	defer rows.Close()
@@ -4379,7 +4393,7 @@ func (h *AdminHandler) AdminDeleteGroup(c *gin.Context) {
 	_, err := h.pool.Exec(c.Request.Context(),
 		`UPDATE groups SET is_active = false WHERE id = $1`, groupID)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		internalError(c, "Failed to deactivate group", err)
 		return
 	}
 	c.JSON(http.StatusOK, gin.H{"message": "group deactivated"})
@@ -4396,7 +4410,7 @@ func (h *AdminHandler) AdminListGroupMembers(c *gin.Context) {
 		ORDER BY gm.joined_at
 	`, groupID)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		internalError(c, "Failed to list group members", err)
 		return
 	}
 	defer rows.Close()
@@ -4426,7 +4440,7 @@ func (h *AdminHandler) AdminRemoveGroupMember(c *gin.Context) {
 	_, err := h.pool.Exec(c.Request.Context(),
 		`DELETE FROM group_members WHERE group_id = $1 AND user_id = $2`, groupID, userID)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		internalError(c, "Failed to remove group member", err)
 		return
 	}
 	// Flag group for key rotation (client will auto-rotate on next open)
@@ -4450,7 +4464,7 @@ func (h *AdminHandler) AdminUpdateMemberRole(c *gin.Context) {
 		`UPDATE group_members SET role = $1 WHERE group_id = $2 AND user_id = $3`,
 		req.Role, groupID, userID)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		internalError(c, "Failed to update member role", err)
 		return
 	}
 	c.JSON(http.StatusOK, gin.H{"message": "role updated"})
@@ -4477,7 +4491,7 @@ func (h *AdminHandler) GetBrokenQuips(c *gin.Context) {
 		LIMIT $1
 	`, limit)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		internalError(c, "Failed to query broken quips", err)
 		return
 	}
 	defer rows.Close()
@@ -4513,7 +4527,7 @@ func (h *AdminHandler) SetPostThumbnail(c *gin.Context) {
 	_, err := h.pool.Exec(c.Request.Context(),
 		`UPDATE posts SET thumbnail_url = $1 WHERE id = $2`, req.ThumbnailURL, postID)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		internalError(c, "Failed to set quip thumbnail", err)
 		return
 	}
 	c.JSON(http.StatusOK, gin.H{"message": "thumbnail updated"})
@@ -4539,13 +4553,12 @@ func (h *AdminHandler) RepairQuip(c *gin.Context) {
 
 	vp := services.NewVideoProcessor(h.s3Client, h.videoBucket, h.vidDomain)
 	frames, err := vp.ExtractFrames(c.Request.Context(), videoURL, 3)
-	if err != nil || len(frames) == 0 {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "frame extraction failed: " + func() string {
-			if err != nil {
-				return err.Error()
-			}
-			return "no frames"
-		}()})
+	if err != nil {
+		internalError(c, "Failed to extract frames", err)
+		return
+	}
+	if len(frames) == 0 {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to extract frames"})
 		return
 	}
 
@@ -4553,7 +4566,7 @@ func (h *AdminHandler) RepairQuip(c *gin.Context) {
 	_, err = h.pool.Exec(c.Request.Context(),
 		`UPDATE posts SET thumbnail_url = $1 WHERE id = $2`, thumbnail, postID)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		internalError(c, "Failed to save repaired thumbnail", err)
 		return
 	}
 	c.JSON(http.StatusOK, gin.H{"thumbnail_url": thumbnail})
@@ -4712,7 +4725,7 @@ func (h *AdminHandler) AdminGetFeedScores(c *gin.Context) {
 		LIMIT $1
 	`, limit)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		internalError(c, "Failed to query feed scores", err)
 		return
 	}
 	defer rows.Close()
@@ -4804,7 +4817,7 @@ func (h *AdminHandler) AdminUpdatePost(c *gin.Context) {
 
 	_, err := h.pool.Exec(ctx, query, args...)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to update post: " + err.Error()})
+		internalError(c, "Failed to update post", err)
 		return
 	}
 
@@ -4875,7 +4888,7 @@ func (h *AdminHandler) AdminUpdateGroup(c *gin.Context) {
 
 	_, err := h.pool.Exec(ctx, query, args...)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to update group: " + err.Error()})
+		internalError(c, "Failed to update group", err)
 		return
 	}
 
@@ -4905,14 +4918,14 @@ func (h *AdminHandler) AdminDeleteCategory(c *gin.Context) {
 	// Nullify references
 	_, err := h.pool.Exec(ctx, `UPDATE posts SET category_id = NULL WHERE category_id = $1::uuid`, catID)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to unlink posts: " + err.Error()})
+		internalError(c, "Failed to unlink posts", err)
 		return
 	}
 
 	// Delete category
 	tag, err := h.pool.Exec(ctx, `DELETE FROM categories WHERE id = $1::uuid`, catID)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to delete category: " + err.Error()})
+		internalError(c, "Failed to delete category", err)
 		return
 	}
 	if tag.RowsAffected() == 0 {
@@ -4959,7 +4972,7 @@ func (h *AdminHandler) AdminCreateNeighborhood(c *gin.Context) {
 		VALUES ($1, $2, $3, $4, $5, $6, $7, $8) RETURNING id
 	`, req.Name, req.City, req.State, req.ZipCode, req.Country, req.Lat, req.Lng, req.RadiusMeters).Scan(&id)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to create neighborhood: " + err.Error()})
+		internalError(c, "Failed to create neighborhood", err)
 		return
 	}
 
@@ -5026,7 +5039,7 @@ func (h *AdminHandler) AdminUpdateNeighborhood(c *gin.Context) {
 
 	tag, err := h.pool.Exec(ctx, query, args...)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to update neighborhood: " + err.Error()})
+		internalError(c, "Failed to update neighborhood", err)
 		return
 	}
 	if tag.RowsAffected() == 0 {
@@ -5062,7 +5075,7 @@ func (h *AdminHandler) AdminDeleteNeighborhood(c *gin.Context) {
 
 	tag, err := h.pool.Exec(ctx, `DELETE FROM neighborhood_seeds WHERE id = $1::uuid`, nID)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to delete neighborhood: " + err.Error()})
+		internalError(c, "Failed to delete neighborhood", err)
 		return
 	}
 	if tag.RowsAffected() == 0 {
@@ -5107,7 +5120,7 @@ func (h *AdminHandler) AdminUpdateUserEmail(c *gin.Context) {
 
 	_, err := h.pool.Exec(ctx, `UPDATE users SET email = $1, updated_at = NOW() WHERE id = $2::uuid`, req.Email, targetUserID)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to update email: " + err.Error()})
+		internalError(c, "Failed to update email", err)
 		return
 	}
 
@@ -5173,7 +5186,7 @@ func (h *AdminHandler) AdminListEvents(c *gin.Context) {
 
 	rows, err := h.pool.Query(ctx, query, args...)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		internalError(c, "Failed to list events", err)
 		return
 	}
 	defer rows.Close()
@@ -5257,7 +5270,7 @@ func (h *AdminHandler) AdminUpdateEvent(c *gin.Context) {
 
 	tag, err := h.pool.Exec(ctx, query, args...)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to update event: " + err.Error()})
+		internalError(c, "Failed to update event", err)
 		return
 	}
 	if tag.RowsAffected() == 0 {
@@ -5285,7 +5298,7 @@ func (h *AdminHandler) AdminDeleteEvent(c *gin.Context) {
 
 	tag, err := h.pool.Exec(ctx, `DELETE FROM group_events WHERE id = $1::uuid`, eventID)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to delete event: " + err.Error()})
+		internalError(c, "Failed to delete event", err)
 		return
 	}
 	if tag.RowsAffected() == 0 {
@@ -5435,14 +5448,16 @@ func (h *AdminHandler) OllamaLoadModel(c *gin.Context) {
 	client := &http.Client{Timeout: 120 * time.Second}
 	resp, err := client.Do(req)
 	if err != nil {
-		c.JSON(http.StatusServiceUnavailable, gin.H{"error": fmt.Sprintf("Ollama not reachable: %v", err)})
+		log.Error().Err(err).Msg("Ollama not reachable")
+		c.JSON(http.StatusServiceUnavailable, gin.H{"error": "Ollama not reachable"})
 		return
 	}
 	defer resp.Body.Close()
 	io.Copy(io.Discard, resp.Body)
 
 	if resp.StatusCode != http.StatusOK {
-		c.JSON(resp.StatusCode, gin.H{"error": fmt.Sprintf("Ollama returned status %d", resp.StatusCode)})
+		log.Error().Int("status", resp.StatusCode).Msg("Ollama returned error status")
+		c.JSON(http.StatusBadGateway, gin.H{"error": "Ollama returned an error"})
 		return
 	}
 
@@ -5469,7 +5484,8 @@ func (h *AdminHandler) OllamaUnloadModel(c *gin.Context) {
 	client := &http.Client{Timeout: 30 * time.Second}
 	resp, err := client.Do(req)
 	if err != nil {
-		c.JSON(http.StatusServiceUnavailable, gin.H{"error": fmt.Sprintf("Ollama not reachable: %v", err)})
+		log.Error().Err(err).Msg("Ollama not reachable for unload")
+		c.JSON(http.StatusServiceUnavailable, gin.H{"error": "Ollama not reachable"})
 		return
 	}
 	defer resp.Body.Close()
@@ -5498,14 +5514,16 @@ func (h *AdminHandler) OllamaDeleteModel(c *gin.Context) {
 	client := &http.Client{Timeout: 30 * time.Second}
 	resp, err := client.Do(req)
 	if err != nil {
-		c.JSON(http.StatusServiceUnavailable, gin.H{"error": fmt.Sprintf("Ollama not reachable: %v", err)})
+		log.Error().Err(err).Msg("Ollama not reachable for delete")
+		c.JSON(http.StatusServiceUnavailable, gin.H{"error": "Ollama not reachable"})
 		return
 	}
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusOK {
 		body, _ := io.ReadAll(resp.Body)
-		c.JSON(resp.StatusCode, gin.H{"error": fmt.Sprintf("Ollama delete failed: %s", string(body))})
+		log.Error().Int("status", resp.StatusCode).Str("body", string(body)).Msg("Ollama delete failed")
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Ollama delete failed"})
 		return
 	}
 
@@ -5534,14 +5552,16 @@ func (h *AdminHandler) OllamaPullModel(c *gin.Context) {
 	client := &http.Client{Timeout: 600 * time.Second}
 	resp, err := client.Do(httpReq)
 	if err != nil {
-		c.JSON(http.StatusServiceUnavailable, gin.H{"error": fmt.Sprintf("Ollama not reachable: %v", err)})
+		log.Error().Err(err).Msg("Ollama not reachable for pull")
+		c.JSON(http.StatusServiceUnavailable, gin.H{"error": "Ollama not reachable"})
 		return
 	}
 	defer resp.Body.Close()
 
 	body, _ := io.ReadAll(resp.Body)
 	if resp.StatusCode != http.StatusOK {
-		c.JSON(resp.StatusCode, gin.H{"error": fmt.Sprintf("Pull failed: %s", string(body))})
+		log.Error().Int("status", resp.StatusCode).Str("body", string(body)).Msg("Ollama pull failed")
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Pull failed"})
 		return
 	}
 
@@ -5698,7 +5718,7 @@ func (h *AdminHandler) HardDeleteUser(c *gin.Context) {
 	userRepo := repository.NewUserRepository(h.pool)
 	if err := userRepo.CascadePurgeUser(ctx, targetUserID); err != nil {
 		log.Error().Err(err).Str("target_user_id", targetUserID).Msg("Admin hard-delete failed")
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to delete user: " + err.Error()})
+		internalError(c, "Failed to delete user", err)
 		return
 	}
 

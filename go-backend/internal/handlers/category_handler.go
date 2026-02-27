@@ -60,7 +60,7 @@ func (h *CategoryHandler) SetUserCategorySettings(c *gin.Context) {
 
 	err := h.repo.SetUserCategorySettings(c.Request.Context(), userIDStr.(string), settings)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to save settings: " + err.Error()})
+		internalError(c, "Failed to save settings", err)
 		return
 	}
 

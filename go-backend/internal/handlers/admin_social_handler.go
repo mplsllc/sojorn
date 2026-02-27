@@ -19,6 +19,7 @@ import (
 
 	"github.com/aws/aws-sdk-go-v2/service/s3"
 	"github.com/gin-gonic/gin"
+	"github.com/rs/zerolog/log"
 )
 
 const socialCookiesDir = "/opt/sojorn/data/social-cookies"
@@ -189,9 +190,8 @@ func (h *AdminHandler) TestSocialCookies(c *gin.Context) {
 			cmd.Process.Kill()
 		}
 		c.JSON(http.StatusGatewayTimeout, gin.H{
-			"valid":   false,
-			"error":   "Test timed out",
-			"details": "yt-dlp took too long to respond",
+			"valid": false,
+			"error": "Test timed out",
 		})
 		return
 	case <-done:
@@ -202,11 +202,11 @@ func (h *AdminHandler) TestSocialCookies(c *gin.Context) {
 		if len(errMsg) > 500 {
 			errMsg = errMsg[:500]
 		}
+		log.Error().Str("platform", platform).Str("output", strings.TrimSpace(errMsg)).Msg("Social cookie test failed")
 		c.JSON(http.StatusOK, gin.H{
 			"valid":    false,
 			"platform": platform,
 			"error":    "Cookies appear invalid or expired",
-			"details":  strings.TrimSpace(errMsg),
 		})
 		return
 	}
@@ -364,9 +364,9 @@ func (h *AdminHandler) FetchSocialContent(c *gin.Context) {
 		if len(errMsg) > 500 {
 			errMsg = errMsg[:500]
 		}
+		log.Error().Str("output", strings.TrimSpace(errMsg)).Msg("Failed to fetch social content")
 		c.JSON(http.StatusBadGateway, gin.H{
-			"error":   "Failed to fetch content from platform",
-			"details": strings.TrimSpace(errMsg),
+			"error": "Failed to fetch content from platform",
 		})
 		return
 	}
@@ -594,9 +594,9 @@ func (h *AdminHandler) DownloadSocialMedia(c *gin.Context) {
 			if len(errMsg) > 500 {
 				errMsg = errMsg[:500]
 			}
+			log.Error().Str("output", strings.TrimSpace(errMsg)).Msg("Failed to download social content")
 			c.JSON(http.StatusBadGateway, gin.H{
-				"error":   "Failed to download content",
-				"details": strings.TrimSpace(errMsg),
+				"error": "Failed to download content",
 			})
 			return
 		}
@@ -669,9 +669,9 @@ func (h *AdminHandler) DownloadSocialMedia(c *gin.Context) {
 		ContentType: &contentType,
 	})
 	if err != nil {
+		log.Error().Err(err).Msg("Failed to upload social content to R2")
 		c.JSON(http.StatusInternalServerError, gin.H{
-			"error":   "Downloaded but failed to upload to R2",
-			"details": err.Error(),
+			"error": "Downloaded but failed to upload to R2",
 		})
 		return
 	}

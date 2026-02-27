@@ -94,8 +94,7 @@ func (h *KeyHandler) PublishKeys(c *gin.Context) {
 	})
 
 	if err != nil {
-		fmt.Printf("[KEYS] ERROR: Failed to upsert keys for user %s: %v\n", userID.String(), err)
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to update keys", "details": err.Error()})
+		internalError(c, "Failed to update keys", err)
 		return
 	}
 

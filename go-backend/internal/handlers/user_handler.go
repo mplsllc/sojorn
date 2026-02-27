@@ -132,8 +132,7 @@ func (h *UserHandler) Follow(c *gin.Context) {
 			c.JSON(http.StatusNotFound, gin.H{"error": "User to follow not found"})
 			return
 		}
-		log.Error().Err(err).Msg("Failed to follow user")
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to follow user", "details": err.Error()})
+		internalError(c, "Failed to follow user", err)
 		return
 	}
 
@@ -237,15 +236,12 @@ func (h *UserHandler) UpdateProfile(c *gin.Context) {
 
 	err := h.repo.UpdateProfile(c.Request.Context(), profile)
 	if err != nil {
-		// Log error
-		log.Error().Err(err).Msg("Failed to update profile")
-
 		// Check for duplicate handle
 		if strings.Contains(err.Error(), "23505") {
 			c.JSON(http.StatusConflict, gin.H{"error": "Handle already taken"})
 			return
 		}
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to update profile", "details": err.Error()})
+		internalError(c, "Failed to update profile", err)
 		return
 	}
 
@@ -585,7 +581,8 @@ func (h *UserHandler) AddToCircle(c *gin.Context) {
 	memberID := c.Param("id")
 
 	if err := h.repo.AddToCircle(c.Request.Context(), userID.(string), memberID); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		log.Error().Err(err).Msg("Failed to add to circle")
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Failed to add to circle"})
 		return
 	}
 

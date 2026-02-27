@@ -105,7 +105,7 @@ func (h *AppealHandler) CreateAppeal(c *gin.Context) {
 	appeal, err := h.appealService.CreateAppeal(c.Request.Context(), userID, &req)
 	if err != nil {
 		log.Error().Err(err).Msg("Failed to create appeal")
-		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Failed to create appeal"})
 		return
 	}
 
