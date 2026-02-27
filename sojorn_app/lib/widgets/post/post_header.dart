@@ -275,12 +275,21 @@ class _PrivacyIcon extends StatelessWidget {
       _ => Icons.public,
     };
 
-    return GestureDetector(
-      onTap: onTap,
-      child: Icon(
-        icon,
-        size: 12,
-        color: AppTheme.navyText.withValues(alpha: 0.6),
+    final label = switch (visibility) {
+      'followers' => 'Visible to followers',
+      'private' => 'Private',
+      _ => 'Public',
+    };
+    return Semantics(
+      button: true,
+      label: 'Visibility: $label',
+      child: GestureDetector(
+        onTap: onTap,
+        child: Icon(
+          icon,
+          size: 12,
+          color: AppTheme.navyText.withValues(alpha: 0.6),
+        ),
       ),
     );
   }

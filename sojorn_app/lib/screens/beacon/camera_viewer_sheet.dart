@@ -173,7 +173,7 @@ class _CameraViewerSheetState extends State<CameraViewerSheet> {
                             )),
                           ),
                           Text('MN DOT Traffic Camera',
-                            style: TextStyle(color: SojornColors.textDisabled, fontSize: 11)),
+                            style: TextStyle(color: AppTheme.textDisabled, fontSize: 11)),
                         ]),
                       ],
                     ),

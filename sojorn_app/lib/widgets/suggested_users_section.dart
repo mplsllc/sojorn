@@ -217,7 +217,7 @@ class __SuggestedUserCardState extends State<_SuggestedUserCard> {
               '@$username',
               style: TextStyle(
                 fontSize: 12,
-                color: SojornColors.textDisabled,
+                color: AppTheme.textDisabled,
               ),
               maxLines: 1,
               overflow: TextOverflow.ellipsis,
@@ -229,7 +229,7 @@ class __SuggestedUserCardState extends State<_SuggestedUserCard> {
                 reason,
                 style: TextStyle(
                   fontSize: 10,
-                  color: SojornColors.textDisabled,
+                  color: AppTheme.textDisabled,
                   fontStyle: FontStyle.italic,
                 ),
                 maxLines: 2,

@@ -4,17 +4,19 @@
 
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:go_router/go_router.dart';
 import '../../providers/api_provider.dart';
 import '../../providers/feed_refresh_provider.dart';
+import '../../services/analytics_service.dart';
 import '../../models/post.dart';
 import '../../models/feed_filter.dart';
+import '../../services/feed_cache_service.dart';
+import '../../services/network_service.dart';
 import '../../theme/app_theme.dart';
 import '../../widgets/sojorn_post_card.dart';
 import '../../widgets/app_scaffold.dart';
 import '../../widgets/feed_filter_button.dart';
 import '../compose/compose_screen.dart';
-import '../post/post_detail_screen.dart';
-import '../../widgets/desktop/desktop_dialog_helper.dart';
 import '../../widgets/first_use_hint.dart';
 import '../../widgets/skeleton_loader.dart';
 
@@ -32,6 +34,8 @@ class _FeedPersonalScreenState extends ConsumerState<FeedPersonalScreen> {
   bool _hasMore = true;
   String? _error;
   FeedFilter _currentFilter = FeedFilter.all;
+  bool _isOfflineCache = false;
+  static const String _cacheKey = 'personal_feed';
 
   @override
   void initState() {
@@ -51,6 +55,7 @@ class _FeedPersonalScreenState extends ConsumerState<FeedPersonalScreen> {
     _setStateIfMounted(() {
       _isLoading = true;
       _error = null;
+      _isOfflineCache = false;
       if (refresh) {
         _posts = [];
         _hasMore = true;
@@ -74,8 +79,27 @@ class _FeedPersonalScreenState extends ConsumerState<FeedPersonalScreen> {
         }
         _hasMore = posts.length == 50;
       });
+
+      // Cache first page on successful refresh (full-replace, never merge).
+      if (refresh && posts.isNotEmpty) {
+        FeedCacheService.instance.cachePosts(_cacheKey, posts);
+      }
     } catch (e) {
       debugPrint('[Feed/Personal] ✗ load failed: $e');
+
+      // If offline and no posts loaded yet, show cached posts.
+      if (_posts.isEmpty && !NetworkService().isConnected) {
+        final cached = await FeedCacheService.instance.getCachedPosts(_cacheKey);
+        if (cached.isNotEmpty) {
+          _setStateIfMounted(() {
+            _posts = cached;
+            _hasMore = false;
+            _isOfflineCache = true;
+          });
+          return;
+        }
+      }
+
       _setStateIfMounted(() {
         _error = e.toString().replaceAll('Exception: ', '');
       });
@@ -87,7 +111,7 @@ class _FeedPersonalScreenState extends ConsumerState<FeedPersonalScreen> {
   }
 
   void _openPostDetail(Post post) {
-    openDesktopDialog(context, width: 700, child: PostDetailScreen(post: post));
+    context.push('/p/${post.id}', extra: post);
   }
 
   void _openChainComposer(Post post) async {
@@ -101,6 +125,7 @@ class _FeedPersonalScreenState extends ConsumerState<FeedPersonalScreen> {
   }
 
   void _onFilterChanged(FeedFilter filter) {
+    AnalyticsService.instance.event('feed_sort_changed', value: filter.name);
     setState(() => _currentFilter = filter);
     _loadPosts(refresh: true);
   }
@@ -128,15 +153,54 @@ class _FeedPersonalScreenState extends ConsumerState<FeedPersonalScreen> {
           : _posts.isEmpty && !_isLoading
               ? const _EmptyState()
               : RefreshIndicator(
-                  onRefresh: () => _loadPosts(refresh: true),
+                  onRefresh: () {
+                    AnalyticsService.instance.event('feed_refresh');
+                    return _loadPosts(refresh: true);
+                  },
                   child: CustomScrollView(
                     slivers: [
                       const SliverToBoxAdapter(
                         child: FirstUseHint(
                           storageKey: 'hint_following',
-                          text: 'People you’ve chosen',
+                          text: "People you've chosen",
                         ),
                       ),
+                      if (_isOfflineCache)
+                        SliverToBoxAdapter(
+                          child: Container(
+                            margin: const EdgeInsets.symmetric(
+                              horizontal: AppTheme.spacingLg,
+                              vertical: AppTheme.spacingSm,
+                            ),
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 16,
+                              vertical: 10,
+                            ),
+                            decoration: BoxDecoration(
+                              color: AppTheme.warning.withValues(alpha: 0.1),
+                              borderRadius: BorderRadius.circular(12),
+                              border: Border.all(
+                                color: AppTheme.warning.withValues(alpha: 0.3),
+                              ),
+                            ),
+                            child: Row(
+                              children: [
+                                Icon(Icons.cloud_off, size: 16, color: AppTheme.warning),
+                                const SizedBox(width: 8),
+                                Expanded(
+                                  child: Text(
+                                    'Offline \u2014 showing cached posts. Pull to refresh when connected.',
+                                    style: TextStyle(
+                                      fontSize: 12,
+                                      color: AppTheme.warning,
+                                      fontWeight: FontWeight.w500,
+                                    ),
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ),
                       if (_isLoading && _posts.isEmpty)
                         const SliverToBoxAdapter(
                           child: SkeletonFeedList(count: 5),
@@ -167,6 +231,35 @@ class _FeedPersonalScreenState extends ConsumerState<FeedPersonalScreen> {
                           ),
                         ),
                       ),
+                      if (_hasMore && !_isLoading && _posts.isNotEmpty)
+                        SliverToBoxAdapter(
+                          child: Padding(
+                            padding: const EdgeInsets.symmetric(
+                              vertical: AppTheme.spacingMd,
+                              horizontal: AppTheme.spacingLg,
+                            ),
+                            child: Center(
+                              child: OutlinedButton.icon(
+                                onPressed: () => _loadPosts(),
+                                icon: const Icon(Icons.expand_more, size: 18),
+                                label: const Text('Load more posts'),
+                                style: OutlinedButton.styleFrom(
+                                  foregroundColor: AppTheme.egyptianBlue,
+                                  side: BorderSide(
+                                    color: AppTheme.egyptianBlue.withValues(alpha: 0.3),
+                                  ),
+                                  shape: RoundedRectangleBorder(
+                                    borderRadius: BorderRadius.circular(12),
+                                  ),
+                                  padding: const EdgeInsets.symmetric(
+                                    horizontal: 24,
+                                    vertical: 12,
+                                  ),
+                                ),
+                              ),
+                            ),
+                          ),
+                        ),
                       if (_isLoading && _posts.isNotEmpty)
                         const SliverToBoxAdapter(
                           child: Padding(
@@ -185,7 +278,7 @@ class _FeedPersonalScreenState extends ConsumerState<FeedPersonalScreen> {
                                   2, // Replaced AppTheme.spacing4xl
                             ),
                             child: Text(
-                              'You’ve reached the end.',
+                              "You've reached the end.",
                               style: AppTheme.textTheme.labelSmall?.copyWith(
                                 // Replaced bodySmall
                                 color: AppTheme

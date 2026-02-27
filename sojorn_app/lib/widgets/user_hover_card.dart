@@ -72,18 +72,22 @@ class _UserHoverCardState extends State<UserHoverCard> {
     final screenSize = MediaQuery.of(context).size;
     const cardWidth = 280.0;
 
-    // Position the card near the mouse cursor
-    final cursorX = _lastPointerPosition.dx;
-    final cursorY = _lastPointerPosition.dy;
+    // Anchor to the widget's position for stable placement
+    final renderBox = context.findRenderObject() as RenderBox?;
+    final widgetPos = renderBox?.localToGlobal(Offset.zero) ?? _lastPointerPosition;
+    final widgetSize = renderBox?.size ?? Size.zero;
 
-    // Place below cursor with a small gap, or above if not enough space
-    final spaceBelow = screenSize.height - cursorY;
+    final anchorX = widgetPos.dx;
+    final anchorY = widgetPos.dy + widgetSize.height;
+
+    // Place below widget with a small gap, or above if not enough space
+    final spaceBelow = screenSize.height - anchorY;
     final showAbove = spaceBelow < 260;
-    final top = showAbove ? null : cursorY + 12;
-    final bottom = showAbove ? screenSize.height - cursorY + 12 : null;
+    final top = showAbove ? null : anchorY + 4;
+    final bottom = showAbove ? screenSize.height - widgetPos.dy + 4 : null;
 
-    // Anchor left edge to cursor (offset slightly left so card doesn't cover text)
-    var left = cursorX - 20;
+    // Align left edge with the widget
+    var left = anchorX;
     if (left + cardWidth > screenSize.width - 10) left = screenSize.width - cardWidth - 10;
     if (left < 10) left = 10;
 

@@ -200,7 +200,7 @@ class _MFAVerifyScreenState extends ConsumerState<MFAVerifyScreen> {
                           ),
                           child: Row(
                             children: [
-                              const Icon(Icons.error_outline,
+                              Icon(Icons.error_outline,
                                   color: AppTheme.error, size: 18),
                               const SizedBox(width: 8),
                               Expanded(

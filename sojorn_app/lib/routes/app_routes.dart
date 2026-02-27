@@ -8,6 +8,7 @@ import 'package:go_router/go_router.dart';
 import 'package:latlong2/latlong.dart';
 import '../services/auth_service.dart';
 import '../services/api_service.dart';
+import '../services/analytics_service.dart';
 import '../models/event.dart';
 
 // ── Eager (critical path) ─────────────────────────────────────────────
@@ -37,6 +38,7 @@ import '../screens/clusters/clusters_screen.dart' deferred as clusters_lib;
 import '../screens/discover/discover_screen.dart' deferred as discover_lib;
 import '../screens/events/event_detail_screen.dart' deferred as event_detail_lib;
 import '../screens/events/event_discovery_screen.dart' deferred as event_discovery_lib;
+import '../screens/profile/profile_settings_screen.dart' deferred as settings_lib;
 
 /// App routing config (GoRouter).
 class AppRoutes {
@@ -62,6 +64,7 @@ class AppRoutes {
     initialLocation: homeAlias,
     refreshListenable: _authRefreshNotifier,
     redirect: _adminRedirect,
+    observers: [_AnalyticsObserver()],
     routes: [
       GoRoute(
         path: home,
@@ -141,6 +144,14 @@ class AppRoutes {
             eventId: state.pathParameters['eventId'] ?? '',
             initialEvent: state.extra is GroupEvent ? state.extra as GroupEvent : null,
           ),
+        ),
+      ),
+      GoRoute(
+        path: '/settings',
+        parentNavigatorKey: rootNavigatorKey,
+        builder: (_, __) => _deferred(
+          settings_lib.loadLibrary,
+          () => settings_lib.ProfileSettingsScreen(),
         ),
       ),
       StatefulShellRoute.indexedStack(
@@ -381,6 +392,47 @@ class AuthRefreshNotifier extends ChangeNotifier {
   void dispose() {
     _subscription.cancel();
     super.dispose();
+  }
+}
+
+// ── Analytics observer ────────────────────────────────────────────────
+/// Tracks screen views via Umami. Strips dynamic segments so no user IDs,
+/// post IDs, or other identifiers are ever sent.
+class _AnalyticsObserver extends NavigatorObserver {
+  @override
+  void didPush(Route<dynamic> route, Route<dynamic>? previousRoute) {
+    _trackRoute(route);
+  }
+
+  @override
+  void didReplace({Route<dynamic>? newRoute, Route<dynamic>? oldRoute}) {
+    if (newRoute != null) _trackRoute(newRoute);
+  }
+
+  void _trackRoute(Route<dynamic> route) {
+    final name = route.settings.name;
+    if (name == null || name.isEmpty) return;
+    final sanitized = _sanitizePath(name);
+    if (sanitized != null) AnalyticsService.instance.screen(sanitized);
+  }
+
+  /// Map raw GoRouter paths to clean, non-identifying analytics paths.
+  static String? _sanitizePath(String path) {
+    // Strip query parameters.
+    final uri = Uri.tryParse(path);
+    final clean = uri?.path ?? path;
+
+    // Skip admin routes — internal only.
+    if (clean.startsWith('/admin')) return null;
+
+    // Dynamic segment replacements.
+    if (clean.startsWith('/u/')) return '/profile/other';
+    if (clean.startsWith('/p/')) return '/post/detail';
+    if (clean.startsWith('/secure-chat/')) return '/messages/thread';
+    if (clean.startsWith('/events/')) return '/events/detail';
+
+    // Static routes pass through as-is.
+    return clean;
   }
 }
 

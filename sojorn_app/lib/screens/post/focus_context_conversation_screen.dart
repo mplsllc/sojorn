@@ -6,7 +6,7 @@ import 'package:flutter/material.dart';
 import '../../models/post.dart';
 import 'threaded_conversation_screen.dart';
 
-/// Legacy alias for the Dynamic Block thread view.
+/// Legacy alias for the chain view (formerly thread view).
 class FocusContextConversationScreen extends StatelessWidget {
   final String postId;
   final Post? initialPost;

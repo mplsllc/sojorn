@@ -32,6 +32,7 @@ import 'category_settings_screen.dart';
 import '../compose/image_editor_screen.dart';
 import '../../models/sojorn_media_result.dart';
 import '../security/encryption_hub_screen.dart';
+import '../settings/accessibility_settings_screen.dart';
 import '../settings/mfa_setup_screen.dart';
 import '../../widgets/neighborhood/neighborhood_picker_sheet.dart';
 import '../../widgets/desktop/desktop_dialog_helper.dart';
@@ -284,7 +285,13 @@ class _ProfileSettingsScreenState extends ConsumerState<ProfileSettingsScreen> {
                          icon: Icons.accessibility_new_outlined,
                          title: 'Accessibility',
                          subtitle: 'Text size, motion, screen reader',
-                         onTap: () => context.showInfo('Accessibility settings coming soon'),
+                         onTap: () {
+                           if (isDesktop) {
+                             openDesktopSlidePanel(context, width: 480, child: const AccessibilitySettingsScreen());
+                           } else {
+                             Navigator.of(context).push(MaterialPageRoute(builder: (_) => const AccessibilitySettingsScreen()));
+                           }
+                         },
                        ),
                        _buildEditTile(
                          icon: Icons.link,
@@ -575,9 +582,13 @@ class _ProfileSettingsScreenState extends ConsumerState<ProfileSettingsScreen> {
         const SizedBox(height: AppTheme.spacingMd),
         Container(
           decoration: BoxDecoration(
-            color: SojornColors.basicWhite.withValues(alpha: 0.5),
+            color: AppTheme.isDark
+                ? SojornColors.darkSurfaceElevated.withValues(alpha: 0.6)
+                : SojornColors.basicWhite.withValues(alpha: 0.5),
             borderRadius: BorderRadius.circular(20),
-            border: Border.all(color: AppTheme.egyptianBlue.withValues(alpha: 0.1)),
+            border: Border.all(color: AppTheme.isDark
+                ? SojornColors.darkBorder.withValues(alpha: 0.3)
+                : AppTheme.egyptianBlue.withValues(alpha: 0.1)),
           ),
           clipBehavior: Clip.antiAlias,
           child: Column(children: children),
@@ -860,7 +871,7 @@ class _ProfileSettingsScreenState extends ConsumerState<ProfileSettingsScreen> {
                 const SizedBox(height: 4),
                 Text(
                   'Control what content appears in your feed',
-                  style: AppTheme.textTheme.labelSmall?.copyWith(color: SojornColors.textDisabled),
+                  style: AppTheme.textTheme.labelSmall?.copyWith(color: AppTheme.textDisabled),
                 ),
                 const SizedBox(height: 16),
                 SwitchListTile(
@@ -1825,19 +1836,19 @@ class _ProfileSettingsScreenState extends ConsumerState<ProfileSettingsScreen> {
           content: Column(
             mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.start,
-            children: const [
-              Text(
+            children: [
+              const Text(
                 'A confirmation email has been sent to your registered address.',
                 style: TextStyle(fontWeight: FontWeight.w600),
               ),
-              SizedBox(height: 12),
-              Text(
+              const SizedBox(height: 12),
+              const Text(
                 'You MUST click the link in that email to complete the destruction. '
                 'Your account will be destroyed the instant you click that link.',
               ),
-              SizedBox(height: 12),
+              const SizedBox(height: 12),
               Text(
-                'If you did not mean to do this, simply ignore the email — your account will not be affected. '
+                'If you did not mean to do this, simply ignore the email \u2014 your account will not be affected. '
                 'The link expires in 1 hour.',
                 style: TextStyle(color: AppTheme.textDisabled),
               ),

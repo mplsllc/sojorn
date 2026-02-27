@@ -181,7 +181,7 @@ class _BoardEntryDetailScreenState extends ConsumerState<BoardEntryDetailScreen>
                                 Icon(Icons.chat_bubble_outline, size: 36, color: AppTheme.navyBlue.withValues(alpha: 0.15)),
                                 const SizedBox(height: 8),
                                 Text('No replies yet — be the first!',
-                                  style: TextStyle(color: SojornColors.textDisabled, fontSize: 13)),
+                                  style: TextStyle(color: AppTheme.textDisabled, fontSize: 13)),
                               ],
                             ),
                           ),
@@ -230,11 +230,11 @@ class _BoardEntryDetailScreenState extends ConsumerState<BoardEntryDetailScreen>
                 Icon(Icons.push_pin, size: 13, color: AppTheme.brightNavy),
               ],
               const Spacer(),
-              Text(_entry.getTimeAgo(), style: TextStyle(color: SojornColors.textDisabled, fontSize: 12)),
+              Text(_entry.getTimeAgo(), style: TextStyle(color: AppTheme.textDisabled, fontSize: 12)),
               const Spacer(),
               if (_isNeighborhoodAdmin)
                 PopupMenuButton<String>(
-                  icon: Icon(Icons.more_horiz, size: 16, color: SojornColors.textDisabled),
+                  icon: Icon(Icons.more_horiz, size: 16, color: AppTheme.textDisabled),
                   onSelected: (val) {
                     if (val == 'remove') _removeEntry();
                     if (val == 'flag') _flagEntry();
@@ -246,7 +246,7 @@ class _BoardEntryDetailScreenState extends ConsumerState<BoardEntryDetailScreen>
                 )
               else
                 IconButton(
-                  icon: Icon(Icons.flag_outlined, size: 16, color: SojornColors.textDisabled),
+                  icon: Icon(Icons.flag_outlined, size: 16, color: AppTheme.textDisabled),
                   onPressed: _flagEntry,
                   tooltip: 'Report Content',
                   constraints: const BoxConstraints(),
@@ -273,7 +273,7 @@ class _BoardEntryDetailScreenState extends ConsumerState<BoardEntryDetailScreen>
           const SizedBox(height: 12),
           // Body
           Text(_entry.body,
-            style: TextStyle(color: SojornColors.postContent, fontSize: 15, height: 1.5)),
+            style: TextStyle(color: AppTheme.postContent, fontSize: 15, height: 1.5)),
           // Image
           if (_entry.imageUrl != null) ...[
             const SizedBox(height: 12),
@@ -298,10 +298,10 @@ class _BoardEntryDetailScreenState extends ConsumerState<BoardEntryDetailScreen>
                   ),
                   child: Row(mainAxisSize: MainAxisSize.min, children: [
                     Icon(Icons.arrow_upward, size: 15,
-                      color: _entry.hasVoted ? AppTheme.brightNavy : SojornColors.textDisabled),
+                      color: _entry.hasVoted ? AppTheme.brightNavy : AppTheme.textDisabled),
                     const SizedBox(width: 4),
                     Text('${_entry.upvotes}', style: TextStyle(
-                      color: _entry.hasVoted ? AppTheme.brightNavy : SojornColors.textDisabled,
+                      color: _entry.hasVoted ? AppTheme.brightNavy : AppTheme.textDisabled,
                       fontSize: 13, fontWeight: FontWeight.w600)),
                   ]),
                 ),
@@ -316,10 +316,10 @@ class _BoardEntryDetailScreenState extends ConsumerState<BoardEntryDetailScreen>
                   border: Border.all(color: AppTheme.navyBlue.withValues(alpha: 0.1)),
                 ),
                 child: Row(mainAxisSize: MainAxisSize.min, children: [
-                  Icon(Icons.chat_bubble_outline, size: 14, color: SojornColors.textDisabled),
+                  Icon(Icons.chat_bubble_outline, size: 14, color: AppTheme.textDisabled),
                   const SizedBox(width: 4),
                   Text('${_entry.replyCount}', style: TextStyle(
-                    color: SojornColors.textDisabled, fontSize: 13, fontWeight: FontWeight.w600)),
+                    color: AppTheme.textDisabled, fontSize: 13, fontWeight: FontWeight.w600)),
                 ]),
               ),
             ],
@@ -358,28 +358,32 @@ class _BoardEntryDetailScreenState extends ConsumerState<BoardEntryDetailScreen>
                     style: TextStyle(color: AppTheme.navyBlue, fontSize: 12, fontWeight: FontWeight.w600),
                   ),
                 ),
-                Text(reply.getTimeAgo(), style: TextStyle(color: SojornColors.textDisabled, fontSize: 11)),
+                Text(reply.getTimeAgo(), style: TextStyle(color: AppTheme.textDisabled, fontSize: 11)),
                 const Spacer(),
-                GestureDetector(
-                  onTap: () => _flagReply(reply.id),
-                  child: Icon(Icons.flag_outlined, size: 14, color: SojornColors.textDisabled.withValues(alpha: 0.5)),
+                Semantics(
+                  button: true,
+                  label: 'Report reply',
+                  child: GestureDetector(
+                    onTap: () => _flagReply(reply.id),
+                    child: Icon(Icons.flag_outlined, size: 14, color: AppTheme.textDisabled.withValues(alpha: 0.5)),
+                  ),
                 ),
               ],
             ),
             const SizedBox(height: 8),
             // Body
             Text(reply.body,
-              style: TextStyle(color: SojornColors.postContentLight, fontSize: 14, height: 1.4)),
+              style: TextStyle(color: AppTheme.postContentLight, fontSize: 14, height: 1.4)),
             const SizedBox(height: 8),
             // Upvote
             GestureDetector(
               onTap: () => _toggleReplyVote(index),
               child: Row(mainAxisSize: MainAxisSize.min, children: [
                 Icon(reply.hasVoted ? Icons.arrow_upward : Icons.arrow_upward_outlined,
-                  size: 13, color: reply.hasVoted ? AppTheme.brightNavy : SojornColors.textDisabled),
+                  size: 13, color: reply.hasVoted ? AppTheme.brightNavy : AppTheme.textDisabled),
                 const SizedBox(width: 3),
                 Text('${reply.upvotes}', style: TextStyle(
-                  color: reply.hasVoted ? AppTheme.brightNavy : SojornColors.textDisabled, fontSize: 12)),
+                  color: reply.hasVoted ? AppTheme.brightNavy : AppTheme.textDisabled, fontSize: 12)),
               ]),
             ),
           ],

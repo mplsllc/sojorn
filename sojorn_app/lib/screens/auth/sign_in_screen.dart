@@ -310,7 +310,7 @@ class _SignInScreenState extends ConsumerState<SignInScreen> {
                                   ),
                                   child: Row(
                                     children: [
-                                      const Icon(
+                                      Icon(
                                         Icons.error_outline,
                                         color: AppTheme.error,
                                         size: 20,
@@ -375,6 +375,7 @@ class _SignInScreenState extends ConsumerState<SignInScreen> {
                                                       fontWeight: FontWeight.bold,
                                                       decoration:
                                                           TextDecoration.underline,
+                                                      decorationColor: AppTheme.error.withValues(alpha: 0.5),
                                                     ),
                                                   ),
                                                 ),

@@ -94,4 +94,39 @@ class ThreadNode {
     }
     return posts;
   }
+
+  /// Find a node by post ID anywhere in this subtree
+  ThreadNode? findNode(String postId) {
+    if (post.id == postId) return this;
+    for (final child in children) {
+      final found = child.findNode(postId);
+      if (found != null) return found;
+    }
+    return null;
+  }
+
+  /// Get the path from this node to a target node (breadcrumb trail)
+  List<ThreadNode> pathTo(String postId) {
+    if (post.id == postId) return [this];
+    for (final child in children) {
+      final childPath = child.pathTo(postId);
+      if (childPath.isNotEmpty) return [this, ...childPath];
+    }
+    return [];
+  }
+
+  /// Get the maximum depth in this subtree
+  int get maxTreeDepth {
+    if (children.isEmpty) return depth;
+    return children.map((c) => c.maxTreeDepth).reduce((a, b) => a > b ? a : b);
+  }
+
+  /// Get all nodes in this subtree as a flat list
+  List<ThreadNode> get allNodes {
+    final nodes = <ThreadNode>[this];
+    for (final child in children) {
+      nodes.addAll(child.allNodes);
+    }
+    return nodes;
+  }
 }

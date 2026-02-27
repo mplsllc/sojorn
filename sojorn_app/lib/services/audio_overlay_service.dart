@@ -8,6 +8,7 @@ import 'package:flutter/material.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:permission_handler/permission_handler.dart';
+import '../theme/app_theme.dart';
 import 'media/ffmpeg.dart';
 
 class AudioOverlayService {
@@ -355,7 +356,7 @@ class _AudioOverlayControlsState extends State<AudioOverlayControls> {
                           width: 100,
                           margin: const EdgeInsets.only(right: 8),
                           decoration: BoxDecoration(
-                            color: isSelected ? Colors.blue : Colors.grey[800],
+                            color: isSelected ? Colors.blue : AppTheme.surfaceElevated,
                             borderRadius: BorderRadius.circular(8),
                             border: isSelected ? Border.all(color: Colors.blue) : null,
                           ),
@@ -412,7 +413,7 @@ class _AudioOverlayControlsState extends State<AudioOverlayControls> {
                   divisions: 10,
                   label: '${(_volume * 100).toInt()}%',
                   activeColor: Colors.blue,
-                  inactiveColor: Colors.grey[600],
+                  inactiveColor: AppTheme.textDisabled,
                   onChanged: (value) {
                     setState(() {
                       _volume = value;
@@ -441,7 +442,7 @@ class _AudioOverlayControlsState extends State<AudioOverlayControls> {
                   child: Container(
                     padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
                     decoration: BoxDecoration(
-                      color: _fadeIn ? Colors.blue : Colors.grey[700],
+                      color: _fadeIn ? Colors.blue : AppTheme.textDisabled,
                       borderRadius: BorderRadius.circular(8),
                     ),
                     child: Row(
@@ -474,7 +475,7 @@ class _AudioOverlayControlsState extends State<AudioOverlayControls> {
                   child: Container(
                     padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
                     decoration: BoxDecoration(
-                      color: _fadeOut ? Colors.blue : Colors.grey[700],
+                      color: _fadeOut ? Colors.blue : AppTheme.textDisabled,
                       borderRadius: BorderRadius.circular(8),
                     ),
                     child: Row(

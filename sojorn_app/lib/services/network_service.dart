@@ -5,6 +5,7 @@
 import 'dart:async';
 import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:connectivity_plus/connectivity_plus.dart';
+import 'analytics_service.dart';
 
 /// Service for monitoring network connectivity status
 class NetworkService {
@@ -33,8 +34,12 @@ class NetworkService {
     _connectivity = Connectivity();
     _connectivity!.onConnectivityChanged.listen((List<ConnectivityResult> results) {
       final result = results.isNotEmpty ? results.first : ConnectivityResult.none;
+      final wasConnected = _isConnected;
       _isConnected = result != ConnectivityResult.none;
       _connectionController.add(_isConnected);
+      if (wasConnected && !_isConnected) {
+        AnalyticsService.instance.event('offline_mode_triggered');
+      }
     });
 
     // Check initial state

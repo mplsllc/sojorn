@@ -154,6 +154,7 @@ class _MarkdownBodyContent extends StatelessWidget {
         a: TextStyle(
           color: AppTheme.brightNavy,
           decoration: TextDecoration.underline,
+          decorationColor: AppTheme.brightNavy.withValues(alpha: 0.5),
         ),
 
         // Lists

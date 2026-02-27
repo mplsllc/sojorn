@@ -10,6 +10,7 @@ import '../../models/group.dart';
 import '../../services/api_service.dart';
 import '../../theme/tokens.dart';
 import '../../utils/snackbar_ext.dart';
+import '../../theme/app_theme.dart';
 
 /// Full event detail screen. Accepts either:
 ///   - [event] directly (when navigating with `extra:`)
@@ -219,7 +220,7 @@ class _EventDetailScreenState extends State<EventDetailScreen> {
               event.title,
               style: theme.textTheme.headlineSmall?.copyWith(
                 fontWeight: FontWeight.w800,
-                color: isPast ? SojornColors.textDisabled : null,
+                color: isPast ? AppTheme.textDisabled : null,
               ),
             ),
             const SizedBox(height: SojornSpacing.sm),
@@ -306,15 +307,15 @@ class _EventDetailScreenState extends State<EventDetailScreen> {
               Container(
                 padding: const EdgeInsets.all(SojornSpacing.sm),
                 decoration: BoxDecoration(
-                  color: SojornColors.textDisabled.withValues(alpha: 0.08),
+                  color: AppTheme.textDisabled.withValues(alpha: 0.08),
                   borderRadius: BorderRadius.circular(SojornRadii.md),
                 ),
                 child: Row(
                   children: [
-                    Icon(Icons.history, size: 16, color: SojornColors.textDisabled),
+                    Icon(Icons.history, size: 16, color: AppTheme.textDisabled),
                     const SizedBox(width: 8),
                     Text('This event has passed',
-                        style: TextStyle(color: SojornColors.textDisabled, fontSize: 13)),
+                        style: TextStyle(color: AppTheme.textDisabled, fontSize: 13)),
                   ],
                 ),
               ),
@@ -338,7 +339,7 @@ class _DateBlock extends StatelessWidget {
   Widget build(BuildContext context) {
     final local = event.startsAt.toLocal();
     final monthFmt = DateFormat('MMM');
-    final color = isPast ? SojornColors.textDisabled : SojornColors.basicRoyalPurple;
+    final color = isPast ? AppTheme.textDisabled : SojornColors.basicRoyalPurple;
 
     return Row(
       children: [
@@ -409,7 +410,7 @@ class _InfoRow extends StatelessWidget {
     return Row(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Icon(icon, size: 16, color: SojornColors.textDisabled),
+        Icon(icon, size: 16, color: AppTheme.textDisabled),
         const SizedBox(width: 8),
         Expanded(
           child: Text(text, style: Theme.of(context).textTheme.bodySmall),
@@ -432,7 +433,7 @@ class _AttendeeSection extends StatelessWidget {
 
     return Row(
       children: [
-        Icon(Icons.people_outline, size: 18, color: SojornColors.textDisabled),
+        Icon(Icons.people_outline, size: 18, color: AppTheme.textDisabled),
         const SizedBox(width: 8),
         if (hasCapacity) ...[
           Text(

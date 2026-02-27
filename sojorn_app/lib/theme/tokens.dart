@@ -30,12 +30,54 @@ class SojornColors {
   static const Color popCardSurface = Color(0xFFFFFFFF);
   static const Color popHighlight = Color(0xFFE5C0DD);
 
+  // ── Dark theme palette ──────────────────────────────
+  // Indigo-tinted dark — never pure black, warm enough for extended reading.
+  // Backgrounds (layered depth)
+  static const Color darkScaffoldBg = Color(0xFF13141F);       // bg0 — deepest, app background
+  static const Color darkCardSurface = Color(0xFF1A1B2E);      // bg1 — primary surface, cards
+  static const Color darkSurfaceElevated = Color(0xFF222337);  // bg2 — sheets, modals, compose
+  static const Color darkSurfaceHighest = Color(0xFF2A2B45);   // bg3 — dropdowns, tooltips, hover
+
+  // Text (never pure white)
+  static const Color darkNavyText = Color(0xFFE8E9F0);         // text1 — primary, ~12:1 on bg1
+  static const Color darkTextSecondary = Color(0xFFA0A3B5);    // text2 — timestamps, handles
+  static const Color darkTextTertiary = Color(0xFF6B6E82);     // text3 — placeholders, disabled
+
+  // Borders & dividers
+  static const Color darkBorder = Color(0xFF2E3050);           // border1 — subtle dividers
+  static const Color darkBorderStrong = Color(0xFF3A3C5C);     // border2 — inputs, active elements
+
+  // Brand indigo — unchanged from light, pops better on dark
+  static const Color darkBrand = Color(0xFF6366F1);            // primary accent
+  static const Color darkBrandMuted = Color(0xFF4F51C0);       // hover/pressed state
+
+  // Brand colors mapped to existing fields
+  static const Color darkEgyptianBlue = Color(0xFF6366F1);     // brand indigo
+  static const Color darkBrightNavy = Color(0xFF5558E0);       // pressed/hover variant
+  static const Color darkRoyalPurple = Color(0xFF9B8BDB);      // softened for dark
+  static const Color darkKsuPurple = Color(0xFF8B5FC7);
+  static const Color darkQueenPink = Color(0xFF3D2A38);
+  static const Color darkQueenPinkLight = Color(0xFF1A1520);
+
+  // Semantic (adjusted for dark backgrounds — brighter than light mode)
+  static const Color darkWarning = Color(0xFFD4940C);          // lifted from #AD7A0A
+  static const Color darkInfo = Color(0xFF5B9FE8);             // brighter blue
+  static const Color darkError = Color(0xFFE85B5B);            // brighter red
+  static const Color darkSuccess = Color(0xFF4ADE80);          // online indicators, confirmations
+
+  // Input
+  static const Color darkInputBg = Color(0xFF1E1F33);
+
+  // Post content on dark
+  static const Color darkPostContent = Color(0xFFE8E9F0);      // same as text1
+  static const Color darkPostContentLight = Color(0xFFA0A3B5); // same as text2
+
   // ── Semantic ─────────────────────────────────────────
   static const Color error = Color(0xFFD32F2F);
   static const Color destructive = Color(0xFFD32F2F);
-  static const Color warning = Color(0xFFFBC02D);
-  static const Color info = Color(0xFF2196F3);
-  static const Color textDisabled = Color(0xFF9E9E9E);
+  static const Color warning = Color(0xFFAD7A0A);          // was #FBC02D (1.6:1 on white — WCAG fail); now ~5.7:1 on white (AA)
+  static const Color info = Color(0xFF0B6FCC);              // was #2196F3 (3.5:1 on white — WCAG fail); now ~4.6:1 on white (AA)
+  static const Color textDisabled = Color(0xFF707070);      // was #9E9E9E (3.5:1 on white — WCAG fail); now ~5.0:1 on white (AA)
   static const Color textOnAccent = Color(0xFFFFFFFF);
 
   // ── Post content ─────────────────────────────────────
@@ -43,7 +85,7 @@ class SojornColors {
   static const Color postContentLight = Color(0xFF4A4A4A);
 
   // ── Navigation ───────────────────────────────────────
-  static const Color bottomNavUnselected = Color(0xFF9EA3B0);
+  static const Color bottomNavUnselected = Color(0xFF6B7082);  // was #9EA3B0 (3.3:1 on white — WCAG fail); now ~4.7:1 on white (AA)
 
   // ── Trust tiers ──────────────────────────────────────
   static const Color tierNew = Color(0xFF9E9E9E);

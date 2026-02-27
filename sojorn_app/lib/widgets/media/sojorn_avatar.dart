@@ -48,30 +48,36 @@ class SojornAvatar extends StatelessWidget {
         displayName.isNotEmpty ? displayName[0].toUpperCase() : '?';
     final url = avatarUrl;
 
-    return ClipRRect(
-      borderRadius: BorderRadius.circular(_radius),
-      child: SizedBox(
-        width: size,
-        height: size,
-        child: url != null && url.isNotEmpty
-            ? SignedMediaImage(
-                url: url,
-                width: size,
-                height: size,
-                fit: BoxFit.cover,
-              )
-            : Container(
-                color: _backgroundColor(),
-                alignment: Alignment.center,
-                child: Text(
-                  letter,
-                  style: TextStyle(
-                    color: Colors.white,
-                    fontWeight: FontWeight.w700,
-                    fontSize: size * 0.38,
+    return Semantics(
+      image: true,
+      label: '$displayName avatar',
+      child: ClipRRect(
+        borderRadius: BorderRadius.circular(_radius),
+        child: SizedBox(
+          width: size,
+          height: size,
+          child: url != null && url.isNotEmpty
+              ? SignedMediaImage(
+                  url: url,
+                  width: size,
+                  height: size,
+                  fit: BoxFit.cover,
+                )
+              : Container(
+                  color: _backgroundColor(),
+                  alignment: Alignment.center,
+                  child: ExcludeSemantics(
+                    child: Text(
+                      letter,
+                      style: TextStyle(
+                        color: Colors.white,
+                        fontWeight: FontWeight.w700,
+                        fontSize: size * 0.38,
+                      ),
+                    ),
                   ),
                 ),
-              ),
+        ),
       ),
     );
   }

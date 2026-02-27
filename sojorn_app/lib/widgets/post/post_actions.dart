@@ -3,6 +3,7 @@
 // See LICENSE file in the project root for full license text.
 
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart' show HapticFeedback;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:share_plus/share_plus.dart';
 import 'package:google_fonts/google_fonts.dart';
@@ -104,6 +105,7 @@ class _PostActionsState extends ConsumerState<PostActions>
 
   Future<void> _toggleSave() async {
     if (_isSaving) return;
+    HapticFeedback.lightImpact();
     setState(() {
       _isSaving = true;
       _isSaved = !_isSaved;

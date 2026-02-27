@@ -196,12 +196,12 @@ class _GroupChatTabState extends State<GroupChatTab> {
                       fontWeight: FontWeight.w700)),
               const SizedBox(height: 4),
               Text('Why are you reporting this message?',
-                  style: TextStyle(color: SojornColors.textDisabled, fontSize: 13)),
+                  style: TextStyle(color: AppTheme.textDisabled, fontSize: 13)),
               const SizedBox(height: 16),
               ...reasons.map((r) => RadioListTile<String>(
                     dense: true,
                     title: Text(r,
-                        style: TextStyle(color: SojornColors.postContent, fontSize: 14)),
+                        style: TextStyle(color: AppTheme.postContent, fontSize: 14)),
                     value: r,
                     groupValue: selectedReason,
                     activeColor: AppTheme.brightNavy,
@@ -348,10 +348,10 @@ class _GroupChatTabState extends State<GroupChatTab> {
                         children: [
                           Icon(Icons.chat_bubble_outline, size: 40, color: AppTheme.navyBlue.withValues(alpha: 0.15)),
                           const SizedBox(height: 12),
-                          Text('No messages yet', style: TextStyle(color: SojornColors.postContentLight, fontSize: 14)),
+                          Text('No messages yet', style: TextStyle(color: AppTheme.postContentLight, fontSize: 14)),
                           const SizedBox(height: 4),
                           Text(widget.isEncrypted ? 'Messages are end-to-end encrypted' : 'Start the conversation!',
-                              style: TextStyle(color: SojornColors.textDisabled, fontSize: 12)),
+                              style: TextStyle(color: AppTheme.textDisabled, fontSize: 12)),
                         ],
                       ),
                     )
@@ -439,7 +439,7 @@ class _ChatBubble extends StatelessWidget {
     final bubbleBg = isMine
         ? (isEncrypted ? const Color(0xFF2E7D32) : AppTheme.brightNavy)
         : const Color(0xFFF1F5F9);
-    final textColor = isMine ? Colors.white : SojornColors.postContent;
+    final textColor = isMine ? Colors.white : AppTheme.postContent;
 
     final isDesktop = MediaQuery.of(context).size.width >= 900;
 
@@ -529,7 +529,7 @@ class _ChatBubble extends StatelessWidget {
               child: Text(
                 timeStr,
                 style: TextStyle(
-                  color: SojornColors.textDisabled.withValues(alpha: 0.6),
+                  color: AppTheme.textDisabled.withValues(alpha: 0.6),
                   fontSize: 10,
                 ),
               ),

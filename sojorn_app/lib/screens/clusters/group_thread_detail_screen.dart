@@ -135,7 +135,7 @@ class _GroupThreadDetailScreenState extends State<GroupThreadDetailScreen> {
                                 const SizedBox(width: 8),
                                 Text(
                                   _timeAgo(_thread!['created_at']?.toString()),
-                                  style: TextStyle(color: SojornColors.textDisabled, fontSize: 11),
+                                  style: TextStyle(color: AppTheme.textDisabled, fontSize: 11),
                                 ),
                               ],
                             ),
@@ -143,7 +143,7 @@ class _GroupThreadDetailScreenState extends State<GroupThreadDetailScreen> {
                               const SizedBox(height: 12),
                               Text(
                                 _thread!['body'] as String,
-                                style: TextStyle(color: SojornColors.postContent, fontSize: 14, height: 1.5),
+                                style: TextStyle(color: AppTheme.postContent, fontSize: 14, height: 1.5),
                               ),
                             ],
                           ],
@@ -164,7 +164,7 @@ class _GroupThreadDetailScreenState extends State<GroupThreadDetailScreen> {
                           const SizedBox(width: 4),
                           Text(
                             '${_uniqueParticipants()} participants',
-                            style: TextStyle(color: SojornColors.textDisabled, fontSize: 12),
+                            style: TextStyle(color: AppTheme.textDisabled, fontSize: 12),
                           ),
                         ],
                       ),
@@ -176,7 +176,7 @@ class _GroupThreadDetailScreenState extends State<GroupThreadDetailScreen> {
                         child: Center(
                           child: Text(
                             'Encrypted thread replies coming soon',
-                            style: TextStyle(color: SojornColors.textDisabled, fontSize: 13),
+                            style: TextStyle(color: AppTheme.textDisabled, fontSize: 13),
                           ),
                         ),
                       ),
@@ -318,11 +318,11 @@ class _ReplyCard extends StatelessWidget {
                       Text(displayName.isNotEmpty ? displayName : handle,
                           style: TextStyle(color: AppTheme.navyBlue, fontWeight: FontWeight.w600, fontSize: 12)),
                       const SizedBox(width: 6),
-                      Text(timeAgo, style: TextStyle(color: SojornColors.textDisabled, fontSize: 10)),
+                      Text(timeAgo, style: TextStyle(color: AppTheme.textDisabled, fontSize: 10)),
                     ],
                   ),
                   const SizedBox(height: 8),
-                  Text(body, style: TextStyle(color: SojornColors.postContent, fontSize: 13, height: 1.4)),
+                  Text(body, style: TextStyle(color: AppTheme.postContent, fontSize: 13, height: 1.4)),
                 ],
               ),
             ),

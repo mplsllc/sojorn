@@ -349,6 +349,7 @@ class ApiService {
     int? registrationId,
     String? encryptedPrivateKey,
     List<ProfileMetadataField>? metadataFields,
+    String? statusText,
   }) async {
     // Validate and sanitize inputs
     if (handle != null && !SecurityUtils.isValidHandle(handle)) {
@@ -363,7 +364,8 @@ class ApiService {
     final sanitizedInterests = interests?.map((i) => SecurityUtils.sanitizeText(i)).toList();
     final sanitizedAvatarUrl = avatarUrl != null ? SecurityUtils.sanitizeUrl(avatarUrl) : null;
     final sanitizedCoverUrl = coverUrl != null ? SecurityUtils.sanitizeUrl(coverUrl) : null;
-    
+    final sanitizedStatusText = statusText != null ? SecurityUtils.sanitizeText(statusText) : null;
+
     final data = await _callGoApi(
       '/profile',
       method: 'PATCH',
@@ -380,6 +382,7 @@ class ApiService {
         if (registrationId != null) 'registration_id': registrationId,
         if (encryptedPrivateKey != null)
           'encrypted_private_key': encryptedPrivateKey,
+        if (sanitizedStatusText != null) 'status_text': sanitizedStatusText,
       },
       requireSignature: true,
     );

@@ -56,7 +56,7 @@ class HarmonyExplainerModal extends StatelessWidget {
             const SizedBox(height: 10),
             Text(
               'Your Harmony State is your community contribution score. It affects your reach multiplier — how far your posts travel.',
-              style: TextStyle(fontSize: 14, color: SojornColors.postContentLight, height: 1.5),
+              style: TextStyle(fontSize: 14, color: AppTheme.postContentLight, height: 1.5),
             ),
             const SizedBox(height: 24),
 
@@ -150,7 +150,7 @@ class _CurrentStateCard extends StatelessWidget {
                       fontSize: 16, fontWeight: FontWeight.w700, color: AppTheme.navyBlue,
                     )),
                     Text('Score: $score', style: TextStyle(
-                      fontSize: 13, color: SojornColors.textDisabled,
+                      fontSize: 13, color: AppTheme.textDisabled,
                     )),
                   ],
                 ),
@@ -177,10 +177,10 @@ class _CurrentStateCard extends StatelessWidget {
                   mainAxisAlignment: MainAxisAlignment.spaceBetween,
                   children: [
                     Text('Next: ${nextTier.displayName}', style: TextStyle(
-                      fontSize: 12, fontWeight: FontWeight.w600, color: SojornColors.textDisabled,
+                      fontSize: 12, fontWeight: FontWeight.w600, color: AppTheme.textDisabled,
                     )),
                     Text('$score / $nextThreshold', style: TextStyle(
-                      fontSize: 12, color: SojornColors.textDisabled,
+                      fontSize: 12, color: AppTheme.textDisabled,
                     )),
                   ],
                 ),
@@ -275,9 +275,9 @@ class _LevelRow extends StatelessWidget {
         const SizedBox(width: 12),
         Expanded(child: Text(label, style: TextStyle(
           fontSize: 14, fontWeight: isActive ? FontWeight.w700 : FontWeight.w500,
-          color: isActive ? AppTheme.navyBlue : SojornColors.textDisabled,
+          color: isActive ? AppTheme.navyBlue : AppTheme.textDisabled,
         ))),
-        Text(range, style: TextStyle(fontSize: 12, color: SojornColors.textDisabled)),
+        Text(range, style: TextStyle(fontSize: 12, color: AppTheme.textDisabled)),
         const SizedBox(width: 14),
         Container(
           padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
@@ -287,7 +287,7 @@ class _LevelRow extends StatelessWidget {
           ),
           child: Text(multiplier, style: TextStyle(
             fontSize: 12, fontWeight: FontWeight.w700,
-            color: isActive ? color : SojornColors.textDisabled,
+            color: isActive ? color : AppTheme.textDisabled,
           )),
         ),
       ],
@@ -312,7 +312,7 @@ class _TipRow extends StatelessWidget {
           Icon(icon, size: 18, color: color),
           const SizedBox(width: 10),
           Expanded(child: Text(text, style: TextStyle(
-            fontSize: 13, color: SojornColors.postContentLight, height: 1.4,
+            fontSize: 13, color: AppTheme.postContentLight, height: 1.4,
           ))),
         ],
       ),

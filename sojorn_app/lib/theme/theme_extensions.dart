@@ -311,6 +311,76 @@ class SojornExt extends ThemeExtension<SojornExt> {
     ),
   );
 
+  static const SojornExt basicDark = SojornExt(
+    brandColors: SojornBrandColors(
+      navyBlue: SojornColors.darkBrand,
+      navyText: SojornColors.darkNavyText,
+      egyptianBlue: SojornColors.darkEgyptianBlue,
+      brightNavy: SojornColors.darkBrightNavy,
+      royalPurple: SojornColors.darkRoyalPurple,
+      ksuPurple: SojornColors.darkKsuPurple,
+      queenPink: SojornColors.darkQueenPink,
+      queenPinkLight: SojornColors.darkQueenPinkLight,
+      scaffoldBg: SojornColors.darkScaffoldBg,
+      cardSurface: SojornColors.darkCardSurface,
+    ),
+    trustTierColors: SojornTrustTierColors(
+      established: SojornColors.darkBrand,
+      trusted: SojornColors.darkRoyalPurple,
+      fresh: SojornColors.tierNew,
+    ),
+    flowLines: SojornFlowLines(
+      appBarBorder: SojornLines.borderThin,
+      cardBorder: SojornLines.borderThin,
+      inputBorder: SojornLines.borderThin,
+      inputFocusBorder: SojornLines.borderStrong,
+      divider: SojornLines.divider,
+      flow: SojornLines.flow,
+    ),
+    feedPalettes: SojornFeedPalettes.defaultPresets,
+    options: SojornThemeOptions(
+      showBottomNavLabels: true,
+      bottomNavElevation: 0,
+      fabElevation: 6,
+      fabShape: null,
+    ),
+  );
+
+  static const SojornExt popDark = SojornExt(
+    brandColors: SojornBrandColors(
+      navyBlue: SojornColors.darkBrand,
+      navyText: SojornColors.darkNavyText,
+      egyptianBlue: SojornColors.darkEgyptianBlue,
+      brightNavy: SojornColors.darkBrightNavy,
+      royalPurple: SojornColors.darkRoyalPurple,
+      ksuPurple: SojornColors.darkKsuPurple,
+      queenPink: SojornColors.darkQueenPink,
+      queenPinkLight: SojornColors.darkQueenPinkLight,
+      scaffoldBg: SojornColors.darkScaffoldBg,
+      cardSurface: SojornColors.darkCardSurface,
+    ),
+    trustTierColors: SojornTrustTierColors(
+      established: SojornColors.darkBrand,
+      trusted: SojornColors.darkRoyalPurple,
+      fresh: SojornColors.tierNew,
+    ),
+    flowLines: SojornFlowLines(
+      appBarBorder: SojornLines.borderStrong,
+      cardBorder: SojornLines.borderThin,
+      inputBorder: SojornLines.borderThin,
+      inputFocusBorder: SojornLines.borderStrong,
+      divider: SojornLines.divider,
+      flow: SojornLines.flow,
+    ),
+    feedPalettes: SojornFeedPalettes.defaultPresets,
+    options: SojornThemeOptions(
+      showBottomNavLabels: false,
+      bottomNavElevation: 10,
+      fabElevation: 4,
+      fabShape: const CircleBorder(),
+    ),
+  );
+
   @override
   SojornExt copyWith({
     SojornBrandColors? brandColors,

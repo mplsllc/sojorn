@@ -305,7 +305,7 @@ class _ReactionPickerState extends ConsumerState<ReactionPicker>
                           child: Column(
                             crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
-                              Divider(color: SojornColors.textDisabled),
+                              Divider(color: AppTheme.textDisabled),
                               const SizedBox(height: 8),
                               Text(
                                 'Credits:',
@@ -363,7 +363,8 @@ class _ReactionPickerState extends ConsumerState<ReactionPicker>
         a: GoogleFonts.inter(
             fontSize: 10,
             color: AppTheme.brightNavy,
-            decoration: TextDecoration.underline),
+            decoration: TextDecoration.underline,
+            decorationColor: AppTheme.brightNavy.withValues(alpha: 0.5)),
       ),
     );
   }

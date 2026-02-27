@@ -89,7 +89,28 @@ class _UnifiedProfileScreenState extends ConsumerState<UnifiedProfileScreen>
   ProfilePrivacySettings? _privacySettings;
   bool _isPrivacyLoading = false;
   List<Map<String, dynamic>> _mutualFollowers = [];
+  List<String> _top8SelectedIds = [];
   bool _isMutualFollowersLoading = false;
+
+  /// Returns Top 8 friends ordered by dashboard config (if curated), else first 8.
+  List<Map<String, dynamic>> get _resolvedTop8 {
+    if (_top8SelectedIds.isEmpty) return _mutualFollowers.take(8).toList();
+    final ordered = _top8SelectedIds
+        .map((id) => _mutualFollowers.cast<Map<String, dynamic>?>().firstWhere(
+              (f) => f?['id'] == id || f?['user_id'] == id,
+              orElse: () => null,
+            ))
+        .whereType<Map<String, dynamic>>()
+        .toList();
+    if (ordered.length < 8) {
+      final selectedSet = _top8SelectedIds.toSet();
+      final extras = _mutualFollowers
+          .where((f) => !selectedSet.contains(f['id'] as String? ?? f['user_id'] as String? ?? ''))
+          .take(8 - ordered.length);
+      ordered.addAll(extras);
+    }
+    return ordered.take(8).toList();
+  }
 
   bool _isBannerUploading = false;
   double _bannerUploadProgress = 0.0;
@@ -202,6 +223,8 @@ class _UnifiedProfileScreenState extends ConsumerState<UnifiedProfileScreen>
       if (isOwnProfile) {
         await _loadPrivacySettings();
       }
+      // Load Top 8 friends in parallel with posts
+      _loadMutualFollowers(profile.id, isOwnProfile);
       await _loadPosts(refresh: true);
     } catch (error) {
       debugPrint('[PROFILE] Load error: $error');
@@ -482,6 +505,45 @@ class _UnifiedProfileScreenState extends ConsumerState<UnifiedProfileScreen>
           _isPrivacyLoading = false;
         });
       }
+    }
+  }
+
+  Future<void> _loadMutualFollowers(String userId, bool isOwn) async {
+    if (_isMutualFollowersLoading) return;
+    _isMutualFollowersLoading = true;
+    try {
+      final apiService = ref.read(apiServiceProvider);
+      final followers = await apiService.getMutualFollowers(userId);
+      if (!mounted) return;
+
+      // For own profile, load dashboard config to get curated Top 8 order
+      List<String> selectedIds = [];
+      if (isOwn) {
+        try {
+          final layout = await apiService.getDashboardLayout();
+          // Find top8 widget config in left or right sidebar
+          for (final slot in ['left_sidebar', 'right_sidebar']) {
+            final widgets = layout[slot] as List? ?? [];
+            for (final w in widgets) {
+              if (w is Map<String, dynamic> && w['type'] == 'top8') {
+                final config = w['config'] as Map<String, dynamic>? ?? {};
+                selectedIds = (config['selected_friend_ids'] as List?)?.cast<String>() ?? [];
+                break;
+              }
+            }
+            if (selectedIds.isNotEmpty) break;
+          }
+        } catch (_) {}
+      }
+
+      setState(() {
+        _mutualFollowers = followers;
+        _top8SelectedIds = selectedIds;
+      });
+    } catch (e) {
+      debugPrint('[PROFILE] Failed to load mutual followers: $e');
+    } finally {
+      _isMutualFollowersLoading = false;
     }
   }
 
@@ -1255,8 +1317,9 @@ class _UnifiedProfileScreenState extends ConsumerState<UnifiedProfileScreen>
                                         icon: const Icon(Icons.ios_share_outlined, size: 14),
                                         label: const Text('Share', style: TextStyle(fontSize: 12)),
                                         style: OutlinedButton.styleFrom(
-                                          foregroundColor: AppTheme.navyText.withValues(alpha: 0.7),
-                                          side: BorderSide(color: AppTheme.navyText.withValues(alpha: 0.2)),
+                                          foregroundColor: AppTheme.isDark ? AppTheme.navyText : AppTheme.navyText.withValues(alpha: 0.7),
+                                          backgroundColor: AppTheme.isDark ? AppTheme.navyText.withValues(alpha: 0.08) : null,
+                                          side: BorderSide(color: AppTheme.navyText.withValues(alpha: AppTheme.isDark ? 0.15 : 0.2)),
                                           padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
                                           shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
                                         ),
@@ -1275,8 +1338,9 @@ class _UnifiedProfileScreenState extends ConsumerState<UnifiedProfileScreen>
                                           icon: const Icon(Icons.mail_outline, size: 14),
                                           label: const Text('Message', style: TextStyle(fontSize: 12)),
                                           style: OutlinedButton.styleFrom(
-                                            foregroundColor: AppTheme.navyText.withValues(alpha: 0.7),
-                                            side: BorderSide(color: AppTheme.navyText.withValues(alpha: 0.2)),
+                                            foregroundColor: AppTheme.isDark ? AppTheme.navyText : AppTheme.navyText.withValues(alpha: 0.7),
+                                            backgroundColor: AppTheme.isDark ? AppTheme.navyText.withValues(alpha: 0.08) : null,
+                                            side: BorderSide(color: AppTheme.navyText.withValues(alpha: AppTheme.isDark ? 0.15 : 0.2)),
                                             padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
                                             shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
                                           ),
@@ -1425,16 +1489,18 @@ class _UnifiedProfileScreenState extends ConsumerState<UnifiedProfileScreen>
       child: Container(
         padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
         decoration: BoxDecoration(
-          color: Colors.white.withValues(alpha: 0.9),
+          color: AppTheme.isDark
+              ? SojornColors.darkSurfaceElevated.withValues(alpha: 0.9)
+              : Colors.white.withValues(alpha: 0.9),
           borderRadius: BorderRadius.circular(8),
-          boxShadow: [BoxShadow(color: Colors.black.withValues(alpha: 0.1), blurRadius: 8)],
+          boxShadow: [BoxShadow(color: Colors.black.withValues(alpha: AppTheme.isDark ? 0.3 : 0.1), blurRadius: 8)],
         ),
         child: Row(
           mainAxisSize: MainAxisSize.min,
           children: [
-            Icon(icon, size: 16, color: const Color(0xFF374151)),
+            Icon(icon, size: 16, color: AppTheme.isDark ? SojornColors.darkPostContent : const Color(0xFF374151)),
             const SizedBox(width: 6),
-            Text(label, style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w600, color: Color(0xFF374151))),
+            Text(label, style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600, color: AppTheme.isDark ? SojornColors.darkPostContent : const Color(0xFF374151))),
           ],
         ),
       ),
@@ -1452,9 +1518,11 @@ class _UnifiedProfileScreenState extends ConsumerState<UnifiedProfileScreen>
     return FilledButton(
       onPressed: _isFollowActionLoading ? null : _toggleFollow,
       style: FilledButton.styleFrom(
-        backgroundColor: _isFollowing ? Colors.white : AppTheme.royalPurple,
+        backgroundColor: _isFollowing
+            ? (AppTheme.isDark ? AppTheme.royalPurple.withValues(alpha: 0.15) : Colors.white)
+            : AppTheme.royalPurple,
         foregroundColor: _isFollowing ? AppTheme.royalPurple : Colors.white,
-        side: _isFollowing ? BorderSide(color: AppTheme.royalPurple, width: 2) : null,
+        side: _isFollowing ? BorderSide(color: AppTheme.royalPurple, width: AppTheme.isDark ? 1 : 2) : null,
         padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
       ),
@@ -1503,7 +1571,7 @@ class _UnifiedProfileScreenState extends ConsumerState<UnifiedProfileScreen>
                   onTap: () => UrlLauncherHelper.launchUrlSafely(context, profile.website!),
                   child: Text(
                     profile.website!,
-                    style: TextStyle(fontSize: 14, color: AppTheme.royalPurple, fontWeight: FontWeight.w600, decoration: TextDecoration.underline),
+                    style: TextStyle(fontSize: 14, color: AppTheme.royalPurple, fontWeight: FontWeight.w600, decoration: TextDecoration.underline, decorationColor: AppTheme.royalPurple.withValues(alpha: 0.5)),
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
                   ),
@@ -1571,18 +1639,18 @@ class _UnifiedProfileScreenState extends ConsumerState<UnifiedProfileScreen>
             child: Text('See all friends', style: TextStyle(fontSize: 13, color: AppTheme.royalPurple, fontWeight: FontWeight.w600)),
           ),
           children: [
-            if (_mutualFollowers.isEmpty)
+            if (_mutualFollowers.isEmpty && !_isMutualFollowersLoading)
               Center(
                 child: Padding(
                   padding: const EdgeInsets.symmetric(vertical: 8),
                   child: Text('No friends yet', style: TextStyle(fontSize: 13, color: AppTheme.navyText.withValues(alpha: 0.4))),
                 ),
               )
-            else
+            else if (_mutualFollowers.isNotEmpty)
               Wrap(
                 spacing: 8,
                 runSpacing: 8,
-                children: _mutualFollowers.take(8).map((f) {
+                children: _resolvedTop8.map((f) {
                   final name = f['display_name'] ?? f['handle'] ?? '?';
                   final avatar = _resolveAvatar(f['avatar_url'] as String?);
                   final handle = f['handle'] as String? ?? '';
@@ -2320,6 +2388,7 @@ class _UnifiedProfileScreenState extends ConsumerState<UnifiedProfileScreen>
                       style: AppTheme.bodyMedium.copyWith(
                         color: AppTheme.brightNavy,
                         decoration: TextDecoration.underline,
+                        decorationColor: AppTheme.brightNavy.withValues(alpha: 0.5),
                       ),
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
@@ -2883,6 +2952,7 @@ class _ProfileHeader extends StatelessWidget {
             onPressed: onMessageTap,
             style: OutlinedButton.styleFrom(
               foregroundColor: AppTheme.royalPurple,
+              backgroundColor: AppTheme.isDark ? AppTheme.royalPurple.withValues(alpha: 0.1) : null,
               side: BorderSide(color: AppTheme.royalPurple.withValues(alpha: 0.6)),
               padding: const EdgeInsets.symmetric(
                 horizontal: AppTheme.spacingMd,

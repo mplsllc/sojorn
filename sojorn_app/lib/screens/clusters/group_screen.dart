@@ -8,6 +8,7 @@ import 'package:cryptography/cryptography.dart';
 import '../../models/cluster.dart';
 import '../../services/api_service.dart';
 import '../../services/auth_service.dart';
+import '../../services/analytics_service.dart';
 import '../../services/capsule_security_service.dart';
 import '../../theme/tokens.dart';
 import '../../theme/app_theme.dart';
@@ -121,6 +122,7 @@ class _GroupScreenState extends ConsumerState<GroupScreen>
     setState(() => _isJoining = true);
     try {
       await ApiService.instance.joinGroup(widget.group.id);
+      AnalyticsService.instance.event('group_joined');
       if (mounted) setState(() { _isMember = true; _isJoining = false; });
     } catch (e) {
       if (mounted) {
@@ -165,7 +167,7 @@ class _GroupScreenState extends ConsumerState<GroupScreen>
       controller: _tabController,
       indicatorColor: isEncrypted ? const Color(0xFF4CAF50) : AppTheme.brightNavy,
       labelColor: AppTheme.navyBlue,
-      unselectedLabelColor: SojornColors.textDisabled,
+      unselectedLabelColor: AppTheme.textDisabled,
       labelStyle: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600),
       isScrollable: _isGroupAdmin,
       tabs: [
@@ -262,16 +264,16 @@ class _GroupScreenState extends ConsumerState<GroupScreen>
                   children: [
                     _GroupBadge(isEncrypted: isEncrypted),
                     const SizedBox(width: 10),
-                    Icon(Icons.people, size: 13, color: SojornColors.textDisabled),
+                    Icon(Icons.people, size: 13, color: AppTheme.textDisabled),
                     const SizedBox(width: 4),
                     Text('${widget.group.memberCount}',
-                        style: TextStyle(color: SojornColors.postContentLight, fontSize: 12)),
+                        style: TextStyle(color: AppTheme.postContentLight, fontSize: 12)),
                     if (widget.group.description.isNotEmpty) ...[
                       const SizedBox(width: 12),
                       Flexible(
                         child: Text(
                           widget.group.description,
-                          style: TextStyle(color: SojornColors.textDisabled, fontSize: 12),
+                          style: TextStyle(color: AppTheme.textDisabled, fontSize: 12),
                           maxLines: 1,
                           overflow: TextOverflow.ellipsis,
                         ),
@@ -346,16 +348,16 @@ class _GroupScreenState extends ConsumerState<GroupScreen>
                     children: [
                       _GroupBadge(isEncrypted: isEncrypted),
                       const Spacer(),
-                      Icon(Icons.people, size: 14, color: SojornColors.textDisabled),
+                      Icon(Icons.people, size: 14, color: AppTheme.textDisabled),
                       const SizedBox(width: 4),
                       Text('${widget.group.memberCount}',
-                          style: TextStyle(color: SojornColors.postContentLight, fontSize: 13)),
+                          style: TextStyle(color: AppTheme.postContentLight, fontSize: 13)),
                       if (isEncrypted) ...[
                         const SizedBox(width: 12),
-                        Icon(Icons.vpn_key, size: 14, color: SojornColors.textDisabled),
+                        Icon(Icons.vpn_key, size: 14, color: AppTheme.textDisabled),
                         const SizedBox(width: 4),
                         Text('v${widget.group.keyVersion}',
-                            style: TextStyle(color: SojornColors.textDisabled, fontSize: 11)),
+                            style: TextStyle(color: AppTheme.textDisabled, fontSize: 11)),
                       ],
                     ],
                   ),
@@ -363,7 +365,7 @@ class _GroupScreenState extends ConsumerState<GroupScreen>
                     const Spacer(),
                     Text(
                       widget.group.description,
-                      style: TextStyle(color: SojornColors.postContentLight, fontSize: 13),
+                      style: TextStyle(color: AppTheme.postContentLight, fontSize: 13),
                       maxLines: 2,
                       overflow: TextOverflow.ellipsis,
                     ),
@@ -398,7 +400,7 @@ class _GroupScreenState extends ConsumerState<GroupScreen>
           controller: _tabController,
           indicatorColor: isEncrypted ? const Color(0xFF4CAF50) : AppTheme.brightNavy,
           labelColor: AppTheme.navyBlue,
-          unselectedLabelColor: SojornColors.textDisabled,
+          unselectedLabelColor: AppTheme.textDisabled,
           labelStyle: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600),
           isScrollable: _isGroupAdmin,
           tabs: [
@@ -435,6 +437,7 @@ class _GroupScreenState extends ConsumerState<GroupScreen>
               Navigator.pop(ctx);
               try {
                 await ApiService.instance.leaveGroup(widget.group.id);
+                AnalyticsService.instance.event('group_left');
                 if (mounted) Navigator.pop(context);
               } catch (e) {
                 if (mounted) {
@@ -460,7 +463,7 @@ class _GroupScreenState extends ConsumerState<GroupScreen>
           children: [
             const Icon(Icons.lock, size: 48, color: Color(0xFF4CAF50)),
             const SizedBox(height: 20),
-            Text('Decrypting…', style: TextStyle(color: SojornColors.textDisabled, fontSize: 14)),
+            Text('Decrypting…', style: TextStyle(color: AppTheme.textDisabled, fontSize: 14)),
             const SizedBox(height: 8),
             SizedBox(
               width: 120,
@@ -490,17 +493,17 @@ class _GroupScreenState extends ConsumerState<GroupScreen>
             if (widget.group.description.isNotEmpty) ...[
               const SizedBox(height: 8),
               Text(widget.group.description,
-                style: TextStyle(fontSize: 13, color: SojornColors.textDisabled),
+                style: TextStyle(fontSize: 13, color: AppTheme.textDisabled),
                 textAlign: TextAlign.center, maxLines: 4, overflow: TextOverflow.ellipsis),
             ],
             const SizedBox(height: 8),
             Row(
               mainAxisSize: MainAxisSize.min,
               children: [
-                Icon(Icons.people, size: 14, color: SojornColors.textDisabled),
+                Icon(Icons.people, size: 14, color: AppTheme.textDisabled),
                 const SizedBox(width: 4),
                 Text('${widget.group.memberCount} members',
-                  style: TextStyle(fontSize: 12, color: SojornColors.textDisabled)),
+                  style: TextStyle(fontSize: 12, color: AppTheme.textDisabled)),
                 if (widget.group.category != GroupCategory.general) ...[
                   const SizedBox(width: 12),
                   Icon(widget.group.category.icon, size: 14, color: widget.group.category.color),
@@ -541,11 +544,11 @@ class _GroupScreenState extends ConsumerState<GroupScreen>
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            Icon(Icons.verified_user, size: 48, color: SojornColors.textDisabled.withValues(alpha: 0.4)),
+            Icon(Icons.verified_user, size: 48, color: AppTheme.textDisabled.withValues(alpha: 0.4)),
             const SizedBox(height: 12),
-            Text('No pending reports', style: TextStyle(color: SojornColors.textDisabled, fontSize: 14)),
+            Text('No pending reports', style: TextStyle(color: AppTheme.textDisabled, fontSize: 14)),
             const SizedBox(height: 4),
-            Text('All clear in this group', style: TextStyle(color: SojornColors.textDisabled.withValues(alpha: 0.6), fontSize: 12)),
+            Text('All clear in this group', style: TextStyle(color: AppTheme.textDisabled.withValues(alpha: 0.6), fontSize: 12)),
           ],
         ),
       );
@@ -600,19 +603,19 @@ class _GroupScreenState extends ConsumerState<GroupScreen>
                         ),
                       ],
                       const SizedBox(width: 8),
-                      Text('by @$reporter', style: TextStyle(fontSize: 11, color: SojornColors.textDisabled)),
+                      Text('by @$reporter', style: TextStyle(fontSize: 11, color: AppTheme.textDisabled)),
                       const Spacer(),
                       if (createdAt.isNotEmpty)
-                        Text(_formatTime(createdAt), style: TextStyle(fontSize: 10, color: SojornColors.textDisabled)),
+                        Text(_formatTime(createdAt), style: TextStyle(fontSize: 10, color: AppTheme.textDisabled)),
                     ],
                   ),
                   if (target.isNotEmpty) ...[
                     const SizedBox(height: 6),
-                    Text('Target: @$target', style: TextStyle(fontSize: 12, color: SojornColors.postContentLight)),
+                    Text('Target: @$target', style: TextStyle(fontSize: 12, color: AppTheme.postContentLight)),
                   ],
                   if (desc.isNotEmpty) ...[
                     const SizedBox(height: 6),
-                    Text(desc, style: TextStyle(fontSize: 13, color: SojornColors.postContent), maxLines: 3, overflow: TextOverflow.ellipsis),
+                    Text(desc, style: TextStyle(fontSize: 13, color: AppTheme.postContent), maxLines: 3, overflow: TextOverflow.ellipsis),
                   ],
                   const SizedBox(height: 10),
                   Row(
@@ -623,7 +626,7 @@ class _GroupScreenState extends ConsumerState<GroupScreen>
                           icon: const Icon(Icons.close, size: 16),
                           label: const Text('Dismiss'),
                           style: OutlinedButton.styleFrom(
-                            foregroundColor: SojornColors.textDisabled,
+                            foregroundColor: AppTheme.textDisabled,
                             side: BorderSide(color: AppTheme.navyBlue.withValues(alpha: 0.12)),
                             padding: const EdgeInsets.symmetric(vertical: 8),
                             textStyle: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600),

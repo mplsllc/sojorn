@@ -5,6 +5,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter/foundation.dart';
+import '../../config/api_config.dart';
 import '../../providers/api_provider.dart';
 
 class SignedMediaImage extends ConsumerStatefulWidget {
@@ -53,11 +54,17 @@ class _SignedMediaImageState extends ConsumerState<SignedMediaImage> {
 
   void _configureForUrl(String url) {
     _shouldSign = _needsSigning(url);
-    _resolvedUrl = _shouldSign ? null : url;
     _refreshing = false;
     _hasRefreshed = false;
 
-    if (_shouldSign) {
+    // On web, external URLs (archive.org, imgur, giphy) need CORS proxying
+    if (kIsWeb && ApiConfig.needsProxy(url)) {
+      _resolvedUrl = ApiConfig.proxyImageUrl(url);
+    } else {
+      _resolvedUrl = _shouldSign ? null : url;
+    }
+
+    if (_shouldSign && _resolvedUrl == null) {
       WidgetsBinding.instance.addPostFrameCallback((_) {
         if (!mounted) return;
         _refreshSignedUrl();

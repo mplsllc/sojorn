@@ -12,6 +12,7 @@ import 'package:image_picker/image_picker.dart';
 import 'package:permission_handler/permission_handler.dart';
 import 'package:sojorn/services/video_stitching_service.dart';
 import 'package:video_player/video_player.dart';
+import '../../../services/analytics_service.dart';
 import '../../../theme/tokens.dart';
 import '../../../theme/app_theme.dart';
 import '../../audio/audio_library_screen.dart';
@@ -365,6 +366,7 @@ class _EnhancedQuipRecorderScreenState extends State<EnhancedQuipRecorderScreen>
       MaterialPageRoute(builder: (_) => const AudioLibraryScreen()),
     );
     if (result != null && mounted) {
+      AnalyticsService.instance.event('quip_audio_overlay');
       setState(() => _selectedAudio = result);
     }
   }
@@ -544,7 +546,7 @@ class _EnhancedQuipRecorderScreenState extends State<EnhancedQuipRecorderScreen>
                               child: Container(
                                 padding: const EdgeInsets.all(12),
                                 decoration: BoxDecoration(
-                                  color: Colors.grey[700],
+                                  color: AppTheme.surfaceElevated,
                                   shape: BoxShape.circle,
                                 ),
                                 child: const Icon(

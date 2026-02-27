@@ -254,13 +254,13 @@ class ProfileWidgetRenderer extends StatelessWidget {
             Container(
               height: 100,
               decoration: BoxDecoration(
-                color: Colors.grey[200],
+                color: AppTheme.surfaceElevated,
                 borderRadius: BorderRadius.circular(8),
               ),
-              child: const Center(
+              child: Center(
                 child: Icon(
                   Icons.add_photo_alternate,
-                  color: Colors.grey,
+                  color: AppTheme.textDisabled,
                   size: 32,
                 ),
               ),
@@ -284,15 +284,15 @@ class ProfileWidgetRenderer extends StatelessWidget {
                     imageUrl: imageUrl,
                     fit: BoxFit.cover,
                     placeholder: (context, url) => Container(
-                      color: Colors.grey[200],
+                      color: AppTheme.surfaceElevated,
                       child: const Center(
                         child: CircularProgressIndicator(),
                       ),
                     ),
                     errorWidget: (context, url, error) => Container(
-                      color: Colors.grey[200],
-                      child: const Center(
-                        child: Icon(Icons.broken_image, color: Colors.grey),
+                      color: AppTheme.surfaceElevated,
+                      child: Center(
+                        child: Icon(Icons.broken_image, color: AppTheme.textDisabled),
                       ),
                     ),
                   ),

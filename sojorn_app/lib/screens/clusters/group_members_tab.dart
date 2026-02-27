@@ -158,7 +158,7 @@ class _GroupMembersTabState extends State<GroupMembersTab> {
       case 'owner': return const Color(0xFFFFA726);
       case 'admin': return AppTheme.brightNavy;
       case 'moderator': return const Color(0xFF4CAF50);
-      default: return SojornColors.textDisabled;
+      default: return AppTheme.textDisabled;
     }
   }
 
@@ -169,7 +169,7 @@ class _GroupMembersTabState extends State<GroupMembersTab> {
         _loading
             ? const Center(child: CircularProgressIndicator())
             : _members.isEmpty
-                ? Center(child: Text('No members', style: TextStyle(color: SojornColors.textDisabled)))
+                ? Center(child: Text('No members', style: TextStyle(color: AppTheme.textDisabled)))
                 : RefreshIndicator(
                     onRefresh: _loadMembers,
                     child: ListView.builder(
@@ -224,7 +224,7 @@ class _GroupMembersTabState extends State<GroupMembersTab> {
                               ),
                               if (isMe) ...[
                                 const SizedBox(width: 6),
-                                Text('(you)', style: TextStyle(color: SojornColors.textDisabled, fontSize: 11)),
+                                Text('(you)', style: TextStyle(color: AppTheme.textDisabled, fontSize: 11)),
                               ],
                               if (role == 'admin' || role == 'owner') ...[
                                 const SizedBox(width: 6),
@@ -242,7 +242,7 @@ class _GroupMembersTabState extends State<GroupMembersTab> {
                               ],
                             ],
                           ),
-                          subtitle: Text('@$handle', style: TextStyle(color: SojornColors.textDisabled, fontSize: 12)),
+                          subtitle: Text('@$handle', style: TextStyle(color: AppTheme.textDisabled, fontSize: 12)),
                         );
                       },
                     ),
@@ -326,11 +326,11 @@ class _InviteSheetState extends State<_InviteSheet> {
           const SizedBox(height: 12),
           TextField(
             controller: _searchCtrl,
-            style: TextStyle(color: SojornColors.postContent, fontSize: 14),
+            style: TextStyle(color: AppTheme.postContent, fontSize: 14),
             decoration: InputDecoration(
               hintText: 'Search by handle or name…',
-              hintStyle: TextStyle(color: SojornColors.textDisabled),
-              prefixIcon: Icon(Icons.search, color: SojornColors.textDisabled, size: 20),
+              hintStyle: TextStyle(color: AppTheme.textDisabled),
+              prefixIcon: Icon(Icons.search, color: AppTheme.textDisabled, size: 20),
               filled: true, fillColor: AppTheme.scaffoldBg,
               contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
               border: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide.none),
@@ -361,7 +361,7 @@ class _InviteSheetState extends State<_InviteSheet> {
                       size: 36,
                     ),
                     title: Text(displayName, style: TextStyle(color: AppTheme.navyBlue, fontSize: 13, fontWeight: FontWeight.w600)),
-                    subtitle: Text('@$handle', style: TextStyle(color: SojornColors.textDisabled, fontSize: 11)),
+                    subtitle: Text('@$handle', style: TextStyle(color: AppTheme.textDisabled, fontSize: 11)),
                     trailing: isInviting
                         ? const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2))
                         : TextButton(

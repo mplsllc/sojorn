@@ -226,12 +226,12 @@ class _GroupForumTabState extends State<GroupForumTab> {
                       child: Row(
                         mainAxisSize: MainAxisSize.min,
                         children: [
-                          Icon(Icons.arrow_back, size: 15, color: SojornColors.textDisabled),
+                          Icon(Icons.arrow_back, size: 15, color: AppTheme.textDisabled),
                           const SizedBox(width: 6),
                           Text(
                             'Subforums',
                             style: TextStyle(
-                              color: SojornColors.textDisabled,
+                              color: AppTheme.textDisabled,
                               fontSize: 12,
                               fontWeight: FontWeight.w600,
                             ),
@@ -271,10 +271,10 @@ class _GroupForumTabState extends State<GroupForumTab> {
                               children: [
                                 Icon(Icons.forum, size: 48, color: AppTheme.navyBlue.withValues(alpha: 0.15)),
                                 const SizedBox(height: 12),
-                                Text('No discussions yet', style: TextStyle(color: SojornColors.postContentLight, fontSize: 14)),
+                                Text('No discussions yet', style: TextStyle(color: AppTheme.postContentLight, fontSize: 14)),
                                 const SizedBox(height: 4),
                                 Text('Start a thread to get the conversation going',
-                                    style: TextStyle(color: SojornColors.textDisabled, fontSize: 12)),
+                                    style: TextStyle(color: AppTheme.textDisabled, fontSize: 12)),
                               ],
                             ),
                           )
@@ -320,7 +320,7 @@ class _GroupForumTabState extends State<GroupForumTab> {
                                         Padding(
                                           padding: const EdgeInsets.only(top: 4),
                                           child: Text(body, maxLines: 2, overflow: TextOverflow.ellipsis,
-                                              style: TextStyle(color: SojornColors.postContentLight, fontSize: 12)),
+                                              style: TextStyle(color: AppTheme.postContentLight, fontSize: 12)),
                                         ),
                                       const SizedBox(height: 6),
                                       Row(
@@ -328,16 +328,16 @@ class _GroupForumTabState extends State<GroupForumTab> {
                                           Text(displayName.isNotEmpty ? displayName : handle,
                                               style: TextStyle(color: AppTheme.brightNavy, fontSize: 11, fontWeight: FontWeight.w500)),
                                           const SizedBox(width: 8),
-                                          Icon(Icons.chat_bubble_outline, size: 12, color: SojornColors.textDisabled),
+                                          Icon(Icons.chat_bubble_outline, size: 12, color: AppTheme.textDisabled),
                                           const SizedBox(width: 3),
-                                          Text('$replyCount', style: TextStyle(color: SojornColors.textDisabled, fontSize: 11)),
+                                          Text('$replyCount', style: TextStyle(color: AppTheme.textDisabled, fontSize: 11)),
                                           const SizedBox(width: 8),
-                                          Text(_timeAgo(createdAt), style: TextStyle(color: SojornColors.textDisabled, fontSize: 11)),
+                                          Text(_timeAgo(createdAt), style: TextStyle(color: AppTheme.textDisabled, fontSize: 11)),
                                         ],
                                       ),
                                     ],
                                   ),
-                                  trailing: Icon(Icons.chevron_right, size: 18, color: SojornColors.textDisabled),
+                                  trailing: Icon(Icons.chevron_right, size: 18, color: AppTheme.textDisabled),
                                 );
                               },
                             ),
@@ -387,7 +387,7 @@ class _GroupForumTabState extends State<GroupForumTab> {
                 Expanded(child: Divider(color: AppTheme.navyBlue.withValues(alpha: 0.08))),
                 Padding(
                   padding: const EdgeInsets.symmetric(horizontal: 10),
-                  child: Text('No posts yet', style: TextStyle(color: SojornColors.textDisabled, fontSize: 11, fontWeight: FontWeight.w500)),
+                  child: Text('No posts yet', style: TextStyle(color: AppTheme.textDisabled, fontSize: 11, fontWeight: FontWeight.w500)),
                 ),
                 Expanded(child: Divider(color: AppTheme.navyBlue.withValues(alpha: 0.08))),
               ],
@@ -437,7 +437,7 @@ class _GroupForumTabState extends State<GroupForumTab> {
                   borderRadius: BorderRadius.circular(9),
                 ),
                 child: Icon(Icons.forum, size: 18,
-                    color: isActive ? AppTheme.brightNavy : SojornColors.textDisabled),
+                    color: isActive ? AppTheme.brightNavy : AppTheme.textDisabled),
               ),
               const SizedBox(width: 12),
               Expanded(
@@ -447,7 +447,7 @@ class _GroupForumTabState extends State<GroupForumTab> {
                     Text(
                       subforum,
                       style: TextStyle(
-                        color: isActive ? AppTheme.navyBlue : SojornColors.postContentLight,
+                        color: isActive ? AppTheme.navyBlue : AppTheme.postContentLight,
                         fontSize: 14,
                         fontWeight: isActive ? FontWeight.w700 : FontWeight.w600,
                       ),
@@ -456,7 +456,7 @@ class _GroupForumTabState extends State<GroupForumTab> {
                     Text(
                       isActive ? description : 'Be the first to post!',
                       style: TextStyle(
-                        color: SojornColors.textDisabled,
+                        color: AppTheme.textDisabled,
                         fontSize: 12,
                         fontStyle: isActive ? FontStyle.normal : FontStyle.italic,
                       ),
@@ -483,7 +483,7 @@ class _GroupForumTabState extends State<GroupForumTab> {
                 const SizedBox(width: 4),
               ],
               Icon(Icons.chevron_right, size: 18,
-                  color: isActive ? SojornColors.textDisabled : SojornColors.textDisabled.withValues(alpha: 0.4)),
+                  color: isActive ? AppTheme.textDisabled : AppTheme.textDisabled.withValues(alpha: 0.4)),
             ],
           ),
         ),
@@ -538,10 +538,10 @@ class _NewThreadSheetState extends State<_NewThreadSheet> {
           const SizedBox(height: 16),
           TextField(
             controller: _titleCtrl,
-            style: TextStyle(color: SojornColors.postContent, fontSize: 14),
+            style: TextStyle(color: AppTheme.postContent, fontSize: 14),
             decoration: InputDecoration(
               hintText: 'Thread title',
-              hintStyle: TextStyle(color: SojornColors.textDisabled),
+              hintStyle: TextStyle(color: AppTheme.textDisabled),
               filled: true, fillColor: AppTheme.scaffoldBg,
               border: OutlineInputBorder(borderRadius: BorderRadius.circular(10), borderSide: BorderSide.none),
             ),
@@ -594,11 +594,11 @@ class _NewThreadSheetState extends State<_NewThreadSheet> {
           ],
           TextField(
             controller: _bodyCtrl,
-            style: TextStyle(color: SojornColors.postContent, fontSize: 14),
+            style: TextStyle(color: AppTheme.postContent, fontSize: 14),
             maxLines: 4,
             decoration: InputDecoration(
               hintText: 'What do you want to discuss?',
-              hintStyle: TextStyle(color: SojornColors.textDisabled),
+              hintStyle: TextStyle(color: AppTheme.textDisabled),
               filled: true, fillColor: AppTheme.scaffoldBg,
               border: OutlineInputBorder(borderRadius: BorderRadius.circular(10), borderSide: BorderSide.none),
             ),

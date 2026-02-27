@@ -251,7 +251,7 @@ class _BeaconDetailScreenState extends ConsumerState<BeaconDetailScreen>
                       style: TextStyle(color: AppTheme.navyBlue, fontSize: 18, fontWeight: FontWeight.bold)),
                     const SizedBox(height: 2),
                     Text('${_beacon.getFormattedDistance()} away',
-                      style: TextStyle(color: SojornColors.textDisabled, fontSize: 13)),
+                      style: TextStyle(color: AppTheme.textDisabled, fontSize: 13)),
                   ],
                 ),
               ),
@@ -259,7 +259,7 @@ class _BeaconDetailScreenState extends ConsumerState<BeaconDetailScreen>
           ),
           const SizedBox(height: 16),
           Text(_post.body,
-            style: TextStyle(color: SojornColors.postContent, fontSize: 15, height: 1.5)),
+            style: TextStyle(color: AppTheme.postContent, fontSize: 15, height: 1.5)),
         ],
       ),
     );
@@ -291,9 +291,9 @@ class _BeaconDetailScreenState extends ConsumerState<BeaconDetailScreen>
   Widget _metaItem(IconData icon, String label) {
     return Column(
       children: [
-        Icon(icon, size: 16, color: SojornColors.textDisabled),
+        Icon(icon, size: 16, color: AppTheme.textDisabled),
         const SizedBox(height: 4),
-        Text(label, style: TextStyle(color: SojornColors.textDisabled, fontSize: 10)),
+        Text(label, style: TextStyle(color: AppTheme.textDisabled, fontSize: 10)),
       ],
     );
   }
@@ -316,11 +316,11 @@ class _BeaconDetailScreenState extends ConsumerState<BeaconDetailScreen>
       subText = '$verCount / 3 neighbors confirmed this report';
       borderColor = const Color(0xFF4CAF50).withValues(alpha: 0.3);
     } else if (_isExpired) {
-      statusColor = SojornColors.textDisabled;
+      statusColor = AppTheme.textDisabled;
       statusText = 'Verification expired';
       statusIcon = Icons.timer_off_outlined;
       subText = 'Only $verCount / 3 verifications received before the 4-hour window closed';
-      borderColor = SojornColors.textDisabled.withValues(alpha: 0.2);
+      borderColor = AppTheme.textDisabled.withValues(alpha: 0.2);
     } else {
       statusColor = SojornColors.nsfwWarningIcon;
       statusText = 'Awaiting verification';
@@ -356,7 +356,7 @@ class _BeaconDetailScreenState extends ConsumerState<BeaconDetailScreen>
                         style: TextStyle(color: statusColor, fontSize: 14, fontWeight: FontWeight.w600)),
                       const SizedBox(height: 2),
                       Text(subText,
-                        style: TextStyle(color: SojornColors.textDisabled, fontSize: 12)),
+                        style: TextStyle(color: AppTheme.textDisabled, fontSize: 12)),
                     ],
                   ),
                 ),
@@ -453,19 +453,19 @@ class _BeaconDetailScreenState extends ConsumerState<BeaconDetailScreen>
               width: double.infinity,
               padding: const EdgeInsets.symmetric(vertical: 16),
               decoration: BoxDecoration(
-                color: SojornColors.textDisabled.withValues(alpha: 0.07),
+                color: AppTheme.textDisabled.withValues(alpha: 0.07),
                 borderRadius: BorderRadius.circular(12),
-                border: Border.all(color: SojornColors.textDisabled.withValues(alpha: 0.2)),
+                border: Border.all(color: AppTheme.textDisabled.withValues(alpha: 0.2)),
               ),
               child: Column(
                 children: [
-                  Icon(Icons.timer_off_outlined, size: 22, color: SojornColors.textDisabled),
+                  Icon(Icons.timer_off_outlined, size: 22, color: AppTheme.textDisabled),
                   const SizedBox(height: 6),
                   Text('This report has expired',
-                    style: TextStyle(color: SojornColors.textDisabled, fontSize: 14, fontWeight: FontWeight.w600)),
+                    style: TextStyle(color: AppTheme.textDisabled, fontSize: 14, fontWeight: FontWeight.w600)),
                   const SizedBox(height: 2),
                   Text('Not enough community verifications within 4 hours',
-                    style: TextStyle(color: SojornColors.textDisabled, fontSize: 11)),
+                    style: TextStyle(color: AppTheme.textDisabled, fontSize: 11)),
                 ],
               ),
             )

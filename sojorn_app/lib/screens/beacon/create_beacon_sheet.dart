@@ -11,6 +11,7 @@ import 'package:latlong2/latlong.dart';
 import '../../models/beacon.dart';
 import '../../models/post.dart';
 import '../../providers/api_provider.dart';
+import '../../services/analytics_service.dart';
 import '../../services/image_upload_service.dart';
 import '../../theme/tokens.dart';
 import '../../theme/app_theme.dart';
@@ -165,6 +166,7 @@ class _CreateBeaconSheetState extends ConsumerState<CreateBeaconSheet> {
       );
 
       debugPrint('[Beacon] created id=${post.id}');
+      AnalyticsService.instance.event('beacon_created', value: _selectedType.value);
       if (mounted) {
         widget.onBeaconCreated(post);
         Navigator.of(context).pop();
@@ -278,7 +280,7 @@ class _CreateBeaconSheetState extends ConsumerState<CreateBeaconSheet> {
                   ),
                   IconButton(
                     onPressed: _isSubmitting ? null : () => Navigator.of(context).pop(),
-                    icon: Icon(Icons.close, color: SojornColors.textDisabled),
+                    icon: Icon(Icons.close, color: AppTheme.textDisabled),
                   ),
                 ],
               ),
@@ -324,7 +326,7 @@ class _CreateBeaconSheetState extends ConsumerState<CreateBeaconSheet> {
               const SizedBox(height: 6),
               Text(
                 'Tap map to move pin  •  ~${_pickedLat.toStringAsFixed(2)}, ~${_pickedLong.toStringAsFixed(2)}',
-                style: TextStyle(color: SojornColors.textDisabled, fontSize: 11),
+                style: TextStyle(color: AppTheme.textDisabled, fontSize: 11),
               ),
               const SizedBox(height: 16),
 
@@ -356,11 +358,11 @@ class _CreateBeaconSheetState extends ConsumerState<CreateBeaconSheet> {
                         child: Row(
                           mainAxisSize: MainAxisSize.min,
                           children: [
-                            Icon(type.icon, size: 14, color: isSelected ? type.color : SojornColors.postContentLight),
+                            Icon(type.icon, size: 14, color: isSelected ? type.color : AppTheme.postContentLight),
                             const SizedBox(width: 5),
                             Text(type.displayName,
                               style: TextStyle(
-                                color: isSelected ? type.color : SojornColors.postContentLight,
+                                color: isSelected ? type.color : AppTheme.postContentLight,
                                 fontSize: 12, fontWeight: isSelected ? FontWeight.w600 : FontWeight.normal)),
                           ],
                         ),
@@ -393,11 +395,11 @@ class _CreateBeaconSheetState extends ConsumerState<CreateBeaconSheet> {
                         ),
                         child: Column(
                           children: [
-                            Icon(sev.icon, size: 18, color: isSelected ? sev.color : SojornColors.textDisabled),
+                            Icon(sev.icon, size: 18, color: isSelected ? sev.color : AppTheme.textDisabled),
                             const SizedBox(height: 4),
                             Text(sev.label,
                               style: TextStyle(
-                                color: isSelected ? sev.color : SojornColors.textDisabled,
+                                color: isSelected ? sev.color : AppTheme.textDisabled,
                                 fontSize: 10, fontWeight: FontWeight.w600)),
                           ],
                         ),
@@ -411,10 +413,10 @@ class _CreateBeaconSheetState extends ConsumerState<CreateBeaconSheet> {
               // Description
               TextFormField(
                 controller: _descriptionController,
-                style: TextStyle(color: SojornColors.postContent, fontSize: 14),
+                style: TextStyle(color: AppTheme.postContent, fontSize: 14),
                 decoration: InputDecoration(
                   hintText: _hintText,
-                  hintStyle: TextStyle(color: SojornColors.textDisabled),
+                  hintStyle: TextStyle(color: AppTheme.textDisabled),
                   filled: true,
                   fillColor: AppTheme.scaffoldBg,
                   border: OutlineInputBorder(
@@ -429,7 +431,7 @@ class _CreateBeaconSheetState extends ConsumerState<CreateBeaconSheet> {
                     borderRadius: BorderRadius.circular(10),
                     borderSide: BorderSide(color: AppTheme.brightNavy, width: 1),
                   ),
-                  counterStyle: TextStyle(color: SojornColors.textDisabled),
+                  counterStyle: TextStyle(color: AppTheme.textDisabled),
                 ),
                 maxLines: 3,
                 maxLength: 300,
@@ -471,10 +473,10 @@ class _CreateBeaconSheetState extends ConsumerState<CreateBeaconSheet> {
                         if (_isUploadingImage)
                           SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2, color: AppTheme.brightNavy))
                         else
-                          Icon(Icons.add_photo_alternate, size: 18, color: SojornColors.textDisabled),
+                          Icon(Icons.add_photo_alternate, size: 18, color: AppTheme.textDisabled),
                         const SizedBox(width: 8),
                         Text(_isUploadingImage ? 'Uploading...' : 'Add photo evidence',
-                          style: TextStyle(color: SojornColors.textDisabled, fontSize: 13)),
+                          style: TextStyle(color: AppTheme.textDisabled, fontSize: 13)),
                       ],
                     ),
                   ),

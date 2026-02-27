@@ -8,6 +8,7 @@ import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_svg/flutter_svg.dart';
 import 'package:go_router/go_router.dart';
+import '../../../services/analytics_service.dart';
 import 'package:video_player/video_player.dart';
 import '../../../models/quip_text_overlay.dart';
 import '../../../widgets/media/signed_media_image.dart';
@@ -74,6 +75,13 @@ class _QuipVideoItemState extends State<QuipVideoItem>
   bool _showHeart = false;
   bool _isCaptionExpanded = false;
   bool _isMuted = false;
+
+  // Touch gesture state
+  bool _is2xSpeed = false;
+  bool _overlayHidden = false;
+  bool _speedLocked = false;
+  bool _overlayLocked = false;
+  int _pointerCount = 0;
 
   // Cached overlay data — parsed once, not on every build
   late String _audioLabel;
@@ -376,7 +384,10 @@ class _QuipVideoItemState extends State<QuipVideoItem>
           message: 'React',
           child: _buildActionBtn(
             child: _buildReactionIcon(),
-            onTap: () => widget.onReact(_quickReactEmoji),
+            onTap: () {
+              AnalyticsService.instance.event('quip_action', value: 'react');
+              widget.onReact(_quickReactEmoji);
+            },
             onLongPressAt: widget.onOpenReactionPicker,
             label: reactionLabel,
           ),
@@ -388,7 +399,10 @@ class _QuipVideoItemState extends State<QuipVideoItem>
           child: _buildActionBtn(
             child: const Icon(Icons.chat_bubble_outline,
                 color: SojornColors.basicWhite, size: 28),
-            onTap: widget.onComment,
+            onTap: () {
+              AnalyticsService.instance.event('quip_action', value: 'comment');
+              widget.onComment();
+            },
             label: commentLabel,
           ),
         ),
@@ -399,7 +413,10 @@ class _QuipVideoItemState extends State<QuipVideoItem>
           child: _buildActionBtn(
             child: const Icon(Icons.send_outlined,
                 color: SojornColors.basicWhite, size: 28),
-            onTap: widget.onShare,
+            onTap: () {
+              AnalyticsService.instance.event('quip_action', value: 'share');
+              widget.onShare();
+            },
           ),
         ),
         const SizedBox(height: 20),
@@ -412,9 +429,10 @@ class _QuipVideoItemState extends State<QuipVideoItem>
             onTap: _showMoreSheet,
           ),
         ),
-        const SizedBox(height: 32),
-        // Up/Down navigation arrows
-        if (widget.onScrollUp != null || widget.onScrollDown != null) ...[
+        // Up/Down navigation arrows — desktop only (mobile uses swipe)
+        if ((widget.onScrollUp != null || widget.onScrollDown != null) &&
+            MediaQuery.of(context).size.width >= 900) ...[
+          const SizedBox(height: 32),
           _buildArrowBtn(Icons.keyboard_arrow_up, widget.onScrollUp),
           const SizedBox(height: 8),
           _buildArrowBtn(Icons.keyboard_arrow_down, widget.onScrollDown),
@@ -730,101 +748,237 @@ class _QuipVideoItemState extends State<QuipVideoItem>
     return '$n';
   }
 
+  // ── Touch gesture handlers ─────────────────────────────────────────────
+
+  void _onPointerDown(PointerEvent _) {
+    _pointerCount++;
+    if (_pointerCount >= 2 && !_overlayLocked) {
+      setState(() => _overlayHidden = true);
+    }
+  }
+
+  void _onPointerUp(PointerEvent _) {
+    _pointerCount = (_pointerCount - 1).clamp(0, 10);
+    if (_pointerCount < 2 && _overlayHidden && !_overlayLocked) {
+      setState(() => _overlayHidden = false);
+    }
+  }
+
+  void _startSpeedUp() {
+    if (_speedLocked) return;
+    setState(() => _is2xSpeed = true);
+    widget.controller?.setPlaybackSpeed(2.0);
+  }
+
+  void _stopSpeedUp() {
+    if (_speedLocked) return;
+    setState(() => _is2xSpeed = false);
+    widget.controller?.setPlaybackSpeed(1.0);
+  }
+
+  void _handleVerticalDragOnAction(DragEndDetails details) {
+    // Swipe down while in a gesture state → lock it
+    if (details.velocity.pixelsPerSecond.dy > 100) {
+      if (_is2xSpeed && !_speedLocked) {
+        setState(() => _speedLocked = true);
+      } else if (_overlayHidden && !_overlayLocked) {
+        setState(() => _overlayLocked = true);
+      }
+    }
+    // Swipe up → unlock
+    if (details.velocity.pixelsPerSecond.dy < -100) {
+      if (_speedLocked) {
+        setState(() {
+          _speedLocked = false;
+          _is2xSpeed = false;
+        });
+        widget.controller?.setPlaybackSpeed(1.0);
+      }
+      if (_overlayLocked) {
+        setState(() {
+          _overlayLocked = false;
+          _overlayHidden = false;
+        });
+      }
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
-    return GestureDetector(
-      onTap: widget.onTogglePause,
-      onDoubleTapDown: _handleDoubleTap,
-      onDoubleTap: () {}, // consume event so single-tap doesn't fire on double-tap
-      child: Container(
-        color: SojornColors.basicBlack,
-        child: LayoutBuilder(
-          builder: (context, constraints) => Stack(
-            fit: StackFit.expand,
-            children: [
-              _buildVideo(),
-              // Quip overlays (text + stickers, non-interactive in feed)
-              ..._buildOverlayWidgets(constraints),
-              // Gradient scrim: strong at bottom for text legibility
-              const DecoratedBox(
-                decoration: BoxDecoration(
-                  gradient: LinearGradient(
-                    begin: Alignment.topCenter,
-                    end: Alignment.bottomCenter,
-                    colors: [
-                      Color(0x55000000), // subtle top vignette
-                      Colors.transparent,
-                      Colors.transparent,
-                      Color(0xB0000000), // strong bottom scrim
-                    ],
-                    stops: [0, 0.15, 0.55, 1],
-                  ),
-                ),
-              ),
-              // User info — bottom-left
-              _buildUserInfo(),
-              // Side actions — right
-              Positioned(
-                right: 12,
-                bottom: 90,
-                child: _buildSideActions(),
-              ),
-              // Pause overlay
-              _buildPauseOverlay(),
-              // Double-tap heart burst
-              _buildHeartBurst(),
-              // Video count indicator — top-left on desktop
-              if (widget.totalCount > 0 && MediaQuery.of(context).size.width >= 900)
-                Positioned(
-                  top: 12,
-                  left: 12,
-                  child: Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+    final showOverlay = !_overlayHidden;
+
+    return Listener(
+      onPointerDown: _onPointerDown,
+      onPointerUp: _onPointerUp,
+      onPointerCancel: _onPointerUp,
+      child: GestureDetector(
+        onTap: widget.onTogglePause,
+        onDoubleTapDown: _handleDoubleTap,
+        onDoubleTap: () {},
+        onVerticalDragEnd: (_is2xSpeed || _overlayHidden) ? _handleVerticalDragOnAction : null,
+        child: Container(
+          color: SojornColors.basicBlack,
+          child: LayoutBuilder(
+            builder: (context, constraints) => Stack(
+              fit: StackFit.expand,
+              children: [
+                _buildVideo(),
+                // Quip overlays (text + stickers, non-interactive in feed)
+                ..._buildOverlayWidgets(constraints),
+                // Gradient scrim
+                if (showOverlay)
+                  const DecoratedBox(
                     decoration: BoxDecoration(
-                      color: const Color(0x99000000),
-                      borderRadius: BorderRadius.circular(SojornRadii.sm),
-                    ),
-                    child: Text(
-                      '${widget.currentIndex + 1} / ${widget.totalCount}',
-                      style: const TextStyle(
-                        color: SojornColors.basicWhite,
-                        fontSize: 12,
-                        fontWeight: FontWeight.w600,
+                      gradient: LinearGradient(
+                        begin: Alignment.topCenter,
+                        end: Alignment.bottomCenter,
+                        colors: [
+                          Color(0x55000000),
+                          Colors.transparent,
+                          Colors.transparent,
+                          Color(0xB0000000),
+                        ],
+                        stops: [0, 0.15, 0.55, 1],
                       ),
                     ),
                   ),
-                ),
-              // Mute/unmute button — bottom-right
-              Positioned(
-                right: 12,
-                bottom: 16,
-                child: GestureDetector(
-                  onTap: () {
-                    setState(() => _isMuted = !_isMuted);
-                    widget.controller?.setVolume(_isMuted ? 0.0 : 1.0);
-                  },
-                  child: Container(
-                    padding: const EdgeInsets.all(8),
-                    decoration: const BoxDecoration(
-                      color: Color(0x66000000),
-                      shape: BoxShape.circle,
-                    ),
-                    child: Icon(
-                      _isMuted ? Icons.volume_off : Icons.volume_up,
-                      color: SojornColors.basicWhite,
-                      size: 18,
+                // User info — bottom-left
+                if (showOverlay) _buildUserInfo(),
+                // Side actions — right
+                if (showOverlay)
+                  Positioned(
+                    right: 12,
+                    bottom: 90,
+                    child: _buildSideActions(),
+                  ),
+                // Pause overlay
+                _buildPauseOverlay(),
+                // Double-tap heart burst
+                _buildHeartBurst(),
+                // Video count indicator — top-left on desktop
+                if (showOverlay && widget.totalCount > 0 && MediaQuery.of(context).size.width >= 900)
+                  Positioned(
+                    top: 12,
+                    left: 12,
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+                      decoration: BoxDecoration(
+                        color: const Color(0x99000000),
+                        borderRadius: BorderRadius.circular(SojornRadii.sm),
+                      ),
+                      child: Text(
+                        '${widget.currentIndex + 1} / ${widget.totalCount}',
+                        style: const TextStyle(
+                          color: SojornColors.basicWhite,
+                          fontSize: 12,
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
                     ),
                   ),
-                ),
-              ),
-              // Thin video progress bar at very bottom
-              _buildProgressBar(),
-              // Buffering spinner
-              if (!(widget.controller?.value.isInitialized ?? false))
-                const Center(
-                  child: CircularProgressIndicator(color: SojornColors.basicWhite),
-                ),
-            ],
+                // Mute/unmute button — bottom-right
+                if (showOverlay)
+                  Positioned(
+                    right: 12,
+                    bottom: 16,
+                    child: GestureDetector(
+                      onTap: () {
+                        setState(() => _isMuted = !_isMuted);
+                        widget.controller?.setVolume(_isMuted ? 0.0 : 1.0);
+                      },
+                      child: Container(
+                        padding: const EdgeInsets.all(8),
+                        decoration: const BoxDecoration(
+                          color: Color(0x66000000),
+                          shape: BoxShape.circle,
+                        ),
+                        child: Icon(
+                          _isMuted ? Icons.volume_off : Icons.volume_up,
+                          color: SojornColors.basicWhite,
+                          size: 18,
+                        ),
+                      ),
+                    ),
+                  ),
+                // Thin video progress bar at very bottom
+                _buildProgressBar(),
+                // Buffering spinner
+                if (!(widget.controller?.value.isInitialized ?? false))
+                  const Center(
+                    child: CircularProgressIndicator(color: SojornColors.basicWhite),
+                  ),
+                // ── 2x speed touch zone (left half, mobile only) ──
+                if (MediaQuery.of(context).size.width < 900)
+                  Positioned(
+                    left: 0,
+                    top: 0,
+                    bottom: 0,
+                    width: constraints.maxWidth * 0.4,
+                    child: Semantics(
+                      label: 'Press and hold for 2x speed. Swipe down to lock.',
+                      child: GestureDetector(
+                        behavior: HitTestBehavior.translucent,
+                        onLongPressStart: (_) => _startSpeedUp(),
+                        onLongPressEnd: (_) => _stopSpeedUp(),
+                      ),
+                    ),
+                  ),
+                // ── 2x speed indicator ──
+                if (_is2xSpeed)
+                  Positioned(
+                    top: 20,
+                    left: 0,
+                    right: 0,
+                    child: Center(
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 6),
+                        decoration: BoxDecoration(
+                          color: const Color(0xCC000000),
+                          borderRadius: BorderRadius.circular(20),
+                        ),
+                        child: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            const Icon(Icons.fast_forward, color: SojornColors.basicWhite, size: 16),
+                            const SizedBox(width: 4),
+                            Text(
+                              _speedLocked ? '2x Speed (locked)' : '2x Speed',
+                              style: const TextStyle(color: SojornColors.basicWhite, fontSize: 12, fontWeight: FontWeight.w600),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
+                  ),
+                // ── Hidden overlay indicator ──
+                if (_overlayHidden)
+                  Positioned(
+                    top: 20,
+                    left: 0,
+                    right: 0,
+                    child: Center(
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 6),
+                        decoration: BoxDecoration(
+                          color: const Color(0xCC000000),
+                          borderRadius: BorderRadius.circular(20),
+                        ),
+                        child: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            const Icon(Icons.visibility_off, color: SojornColors.basicWhite, size: 16),
+                            const SizedBox(width: 4),
+                            Text(
+                              _overlayLocked ? 'Clean view (locked)' : 'Clean view',
+                              style: const TextStyle(color: SojornColors.basicWhite, fontSize: 12, fontWeight: FontWeight.w600),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
+                  ),
+              ],
+            ),
           ),
         ),
       ),
@@ -872,6 +1026,7 @@ class _MoreOptionsSheet extends StatelessWidget {
             icon: Icons.thumb_down_outlined,
             label: 'Not Interested',
             onTap: () {
+              AnalyticsService.instance.event('quip_skipped');
               Navigator.pop(context);
               onNotInterested();
             },

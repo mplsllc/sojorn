@@ -749,7 +749,7 @@ class _ConversationTileState extends State<_ConversationTile> {
                         padding: const EdgeInsets.only(left: 8),
                         child: IconButton(
                           onPressed: widget.onDelete,
-                          icon: const Icon(
+                          icon: Icon(
                             Icons.delete_outline,
                             color: AppTheme.error,
                             size: 20,

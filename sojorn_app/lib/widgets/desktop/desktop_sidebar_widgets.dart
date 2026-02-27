@@ -37,7 +37,8 @@ class _FlipCardState extends State<_FlipCard> with SingleTickerProviderStateMixi
   @override
   void initState() {
     super.initState();
-    _ctrl = AnimationController(vsync: this, duration: const Duration(milliseconds: 350));
+    final reduceMotion = WidgetsBinding.instance.platformDispatcher.accessibilityFeatures.disableAnimations;
+    _ctrl = AnimationController(vsync: this, duration: reduceMotion ? Duration.zero : const Duration(milliseconds: 350));
     _anim = CurvedAnimation(parent: _ctrl, curve: Curves.easeInOut);
   }
 
@@ -75,17 +76,21 @@ class _FlipCardState extends State<_FlipCard> with SingleTickerProviderStateMixi
                 Positioned(
                   top: 10,
                   right: 10,
-                  child: GestureDetector(
-                    onTap: _flip,
-                    child: Container(
-                      width: 28,
-                      height: 28,
-                      decoration: BoxDecoration(
-                        color: AppTheme.royalPurple.withValues(alpha: 0.12),
-                        shape: BoxShape.circle,
-                        border: Border.all(color: AppTheme.royalPurple.withValues(alpha: 0.2)),
+                  child: Semantics(
+                    button: true,
+                    label: 'Widget settings',
+                    child: GestureDetector(
+                      onTap: _flip,
+                      child: Container(
+                        width: 28,
+                        height: 28,
+                        decoration: BoxDecoration(
+                          color: AppTheme.royalPurple.withValues(alpha: 0.12),
+                          shape: BoxShape.circle,
+                          border: Border.all(color: AppTheme.royalPurple.withValues(alpha: 0.2)),
+                        ),
+                        child: Icon(Icons.tune, size: 14, color: AppTheme.royalPurple.withValues(alpha: 0.7)),
                       ),
-                      child: Icon(Icons.tune, size: 14, color: AppTheme.royalPurple.withValues(alpha: 0.7)),
                     ),
                   ),
                 ),
@@ -166,6 +171,7 @@ class DesktopProfileCard extends StatelessWidget {
   final Map<String, int> stats;
   final VoidCallback? onProfileTap;
   final VoidCallback? onEditTap;
+  final VoidCallback? onStatusTap;
 
   const DesktopProfileCard({
     super.key,
@@ -173,6 +179,7 @@ class DesktopProfileCard extends StatelessWidget {
     required this.stats,
     this.onProfileTap,
     this.onEditTap,
+    this.onStatusTap,
   });
 
   @override
@@ -244,36 +251,58 @@ class DesktopProfileCard extends StatelessWidget {
                 // Status line — AIM-style ephemeral presence text.
                 if (profile.statusText != null && profile.statusText!.isNotEmpty) ...[
                   const SizedBox(height: 6),
-                  Row(
-                    children: [
-                      Container(
-                        width: 7,
-                        height: 7,
-                        decoration: BoxDecoration(
-                          color: const Color(0xFF43A047),
-                          shape: BoxShape.circle,
-                          boxShadow: [
-                            BoxShadow(
-                              color: const Color(0xFF43A047).withValues(alpha: 0.4),
-                              blurRadius: 4,
-                            ),
-                          ],
-                        ),
-                      ),
-                      const SizedBox(width: 6),
-                      Expanded(
-                        child: Text(
-                          profile.statusText!,
-                          style: TextStyle(
-                            color: AppTheme.navyText.withValues(alpha: 0.55),
-                            fontSize: 11,
-                            fontStyle: FontStyle.italic,
+                  GestureDetector(
+                    onTap: onStatusTap,
+                    child: Row(
+                      children: [
+                        Container(
+                          width: 7,
+                          height: 7,
+                          decoration: BoxDecoration(
+                            color: const Color(0xFF43A047),
+                            shape: BoxShape.circle,
+                            boxShadow: [
+                              BoxShadow(
+                                color: const Color(0xFF43A047).withValues(alpha: 0.4),
+                                blurRadius: 4,
+                              ),
+                            ],
                           ),
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
                         ),
-                      ),
-                    ],
+                        const SizedBox(width: 6),
+                        Expanded(
+                          child: Text(
+                            profile.statusText!,
+                            style: TextStyle(
+                              color: AppTheme.navyText.withValues(alpha: 0.55),
+                              fontSize: 11,
+                              fontStyle: FontStyle.italic,
+                            ),
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ] else if (onStatusTap != null) ...[
+                  const SizedBox(height: 6),
+                  GestureDetector(
+                    onTap: onStatusTap,
+                    child: Row(
+                      children: [
+                        Icon(Icons.add_circle_outline,
+                            size: 12,
+                            color: AppTheme.navyText.withValues(alpha: 0.3)),
+                        const SizedBox(width: 6),
+                        Text('Set a status...',
+                            style: TextStyle(
+                              fontSize: 11,
+                              fontStyle: FontStyle.italic,
+                              color: AppTheme.navyText.withValues(alpha: 0.35),
+                            )),
+                      ],
+                    ),
                   ),
                 ],
                 // Harmony trust badge — visible reward for community contribution.
@@ -2657,17 +2686,21 @@ class _FriendActivityWidgetState extends State<FriendActivityWidget> {
                       fontWeight: FontWeight.w800)),
               const Spacer(),
               if (widget.onConfigChange != null)
-                GestureDetector(
-                  onTap: () =>
-                      setState(() => _settingsExpanded = !_settingsExpanded),
-                  child: Icon(
-                    _settingsExpanded
-                        ? Icons.keyboard_arrow_up
-                        : Icons.tune_outlined,
-                    size: 16,
-                    color: _settingsExpanded
-                        ? AppTheme.royalPurple
-                        : AppTheme.navyText.withValues(alpha: 0.35),
+                Semantics(
+                  button: true,
+                  label: _settingsExpanded ? 'Collapse settings' : 'Expand settings',
+                  child: GestureDetector(
+                    onTap: () =>
+                        setState(() => _settingsExpanded = !_settingsExpanded),
+                    child: Icon(
+                      _settingsExpanded
+                          ? Icons.keyboard_arrow_up
+                          : Icons.tune_outlined,
+                      size: 16,
+                      color: _settingsExpanded
+                          ? AppTheme.royalPurple
+                          : AppTheme.navyText.withValues(alpha: 0.35),
+                    ),
                   ),
                 ),
             ],
@@ -2918,4 +2951,381 @@ class _FAStepperButton extends StatelessWidget {
       ),
     );
   }
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+//  Discover-specific sidebar widgets
+// ═══════════════════════════════════════════════════════════════════════════
+
+/// Suggested users to follow — fetches from /users/suggested API.
+class DesktopSuggestedUsersCard extends StatefulWidget {
+  const DesktopSuggestedUsersCard({super.key});
+
+  @override
+  State<DesktopSuggestedUsersCard> createState() =>
+      _DesktopSuggestedUsersCardState();
+}
+
+class _DesktopSuggestedUsersCardState extends State<DesktopSuggestedUsersCard> {
+  List<Map<String, dynamic>> _suggestions = [];
+  bool _isLoading = true;
+
+  @override
+  void initState() {
+    super.initState();
+    _load();
+  }
+
+  Future<void> _load() async {
+    try {
+      final data = await ApiService.instance.getSuggestedUsers(limit: 8);
+      if (mounted) setState(() { _suggestions = data; _isLoading = false; });
+    } catch (_) {
+      if (mounted) setState(() => _isLoading = false);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    if (_isLoading) {
+      return Container(
+        padding: const EdgeInsets.all(16),
+        decoration: _cardDecoration(),
+        child: const Center(child: SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2))),
+      );
+    }
+    if (_suggestions.isEmpty) return const SizedBox.shrink();
+
+    return Container(
+      padding: const EdgeInsets.all(16),
+      decoration: _cardDecoration(),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Icon(Icons.person_add_outlined, size: 14, color: AppTheme.royalPurple),
+              const SizedBox(width: 6),
+              Text('People to Follow',
+                  style: TextStyle(fontSize: 12, fontWeight: FontWeight.w700, color: AppTheme.navyText)),
+            ],
+          ),
+          const SizedBox(height: 12),
+          ..._suggestions.take(6).map((u) {
+            final displayName = u['display_name'] as String? ?? u['handle'] as String? ?? '';
+            final handle = u['handle'] as String? ?? '';
+            final avatarUrl = u['avatar_url'] as String?;
+            final userId = u['user_id'] as String? ?? u['id'] as String? ?? '';
+            final reason = u['reason'] as String?;
+            return _SuggestedUserRow(
+              displayName: displayName,
+              handle: handle,
+              avatarUrl: avatarUrl,
+              userId: userId,
+              reason: reason,
+              onFollowed: () {
+                setState(() => _suggestions.removeWhere(
+                    (s) => (s['user_id'] ?? s['id']) == userId));
+              },
+            );
+          }),
+        ],
+      ),
+    );
+  }
+}
+
+class _SuggestedUserRow extends StatefulWidget {
+  final String displayName;
+  final String handle;
+  final String? avatarUrl;
+  final String userId;
+  final String? reason;
+  final VoidCallback onFollowed;
+
+  const _SuggestedUserRow({
+    required this.displayName,
+    required this.handle,
+    this.avatarUrl,
+    required this.userId,
+    this.reason,
+    required this.onFollowed,
+  });
+
+  @override
+  State<_SuggestedUserRow> createState() => _SuggestedUserRowState();
+}
+
+class _SuggestedUserRowState extends State<_SuggestedUserRow> {
+  bool _isFollowing = false;
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 10),
+      child: Row(
+        children: [
+          SojornAvatar(
+            displayName: widget.displayName,
+            avatarUrl: widget.avatarUrl,
+            size: 32,
+          ),
+          const SizedBox(width: 8),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(widget.displayName,
+                    style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: AppTheme.navyText),
+                    maxLines: 1, overflow: TextOverflow.ellipsis),
+                Text('@${widget.handle}',
+                    style: TextStyle(fontSize: 10, color: AppTheme.textDisabled),
+                    maxLines: 1, overflow: TextOverflow.ellipsis),
+                if (widget.reason != null)
+                  Text(widget.reason!,
+                      style: TextStyle(fontSize: 9, fontStyle: FontStyle.italic, color: AppTheme.navyText.withValues(alpha: 0.4)),
+                      maxLines: 1, overflow: TextOverflow.ellipsis),
+              ],
+            ),
+          ),
+          const SizedBox(width: 6),
+          SizedBox(
+            height: 26,
+            child: FilledButton(
+              onPressed: _isFollowing ? null : () async {
+                setState(() => _isFollowing = true);
+                try {
+                  await ApiService.instance.followUser(widget.userId);
+                  widget.onFollowed();
+                } catch (_) {
+                  if (mounted) setState(() => _isFollowing = false);
+                }
+              },
+              style: FilledButton.styleFrom(
+                backgroundColor: AppTheme.brightNavy,
+                padding: const EdgeInsets.symmetric(horizontal: 10),
+                textStyle: const TextStyle(fontSize: 10, fontWeight: FontWeight.w600),
+              ),
+              child: Text(_isFollowing ? 'Following' : 'Follow'),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+/// Trending hashtags — fetches from /discover API.
+class DesktopTrendingHashtagsCard extends StatefulWidget {
+  const DesktopTrendingHashtagsCard({super.key});
+
+  @override
+  State<DesktopTrendingHashtagsCard> createState() =>
+      _DesktopTrendingHashtagsCardState();
+}
+
+class _DesktopTrendingHashtagsCardState
+    extends State<DesktopTrendingHashtagsCard> {
+  List<Map<String, dynamic>> _tags = [];
+  bool _isLoading = true;
+
+  @override
+  void initState() {
+    super.initState();
+    _load();
+  }
+
+  Future<void> _load() async {
+    try {
+      final apiService = ApiService.instance;
+      final response = await apiService.get('/discover');
+      final tags = (response['top_tags'] as List?) ?? [];
+      if (mounted) {
+        setState(() {
+          _tags = tags.cast<Map<String, dynamic>>();
+          _isLoading = false;
+        });
+      }
+    } catch (_) {
+      if (mounted) setState(() => _isLoading = false);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    if (_isLoading) {
+      return Container(
+        padding: const EdgeInsets.all(16),
+        decoration: _cardDecoration(),
+        child: const Center(child: SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2))),
+      );
+    }
+    if (_tags.isEmpty) return const SizedBox.shrink();
+
+    return Container(
+      padding: const EdgeInsets.all(16),
+      decoration: _cardDecoration(),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Icon(Icons.trending_up, size: 14, color: AppTheme.royalPurple),
+              const SizedBox(width: 6),
+              Text('Trending',
+                  style: TextStyle(fontSize: 12, fontWeight: FontWeight.w700, color: AppTheme.navyText)),
+            ],
+          ),
+          const SizedBox(height: 12),
+          Wrap(
+            spacing: 6,
+            runSpacing: 6,
+            children: _tags.take(10).map((tag) {
+              final name = tag['display_name'] as String? ?? tag['name'] as String? ?? '';
+              final count = tag['use_count'] as int? ?? 0;
+              return GestureDetector(
+                onTap: () {
+                  // Navigate to discover with tag search
+                  // TODO: wire up tag navigation
+                },
+                child: Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+                  decoration: BoxDecoration(
+                    color: AppTheme.royalPurple.withValues(alpha: 0.08),
+                    borderRadius: BorderRadius.circular(12),
+                    border: Border.all(color: AppTheme.royalPurple.withValues(alpha: 0.15)),
+                  ),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Text('#$name',
+                          style: TextStyle(fontSize: 11, fontWeight: FontWeight.w600, color: AppTheme.royalPurple)),
+                      if (count > 0) ...[
+                        const SizedBox(width: 4),
+                        Text('$count',
+                            style: TextStyle(fontSize: 9, color: AppTheme.textDisabled)),
+                      ],
+                    ],
+                  ),
+                ),
+              );
+            }).toList(),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+/// Popular groups — fetches from /groups API.
+class DesktopPopularGroupsCard extends StatefulWidget {
+  const DesktopPopularGroupsCard({super.key});
+
+  @override
+  State<DesktopPopularGroupsCard> createState() =>
+      _DesktopPopularGroupsCardState();
+}
+
+class _DesktopPopularGroupsCardState extends State<DesktopPopularGroupsCard> {
+  List<Map<String, dynamic>> _groups = [];
+  bool _isLoading = true;
+
+  @override
+  void initState() {
+    super.initState();
+    _load();
+  }
+
+  Future<void> _load() async {
+    try {
+      final data = await ApiService.instance.callGoApi(
+        '/groups', method: 'GET', queryParams: {'limit': '5'},
+      );
+      final groups = (data['groups'] as List?) ?? [];
+      if (mounted) {
+        setState(() {
+          _groups = groups.cast<Map<String, dynamic>>();
+          _isLoading = false;
+        });
+      }
+    } catch (_) {
+      if (mounted) setState(() => _isLoading = false);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    if (_isLoading) {
+      return Container(
+        padding: const EdgeInsets.all(16),
+        decoration: _cardDecoration(),
+        child: const Center(child: SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2))),
+      );
+    }
+    if (_groups.isEmpty) return const SizedBox.shrink();
+
+    return Container(
+      padding: const EdgeInsets.all(16),
+      decoration: _cardDecoration(),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Icon(Icons.groups_outlined, size: 14, color: AppTheme.royalPurple),
+              const SizedBox(width: 6),
+              Text('Popular Groups',
+                  style: TextStyle(fontSize: 12, fontWeight: FontWeight.w700, color: AppTheme.navyText)),
+            ],
+          ),
+          const SizedBox(height: 12),
+          ..._groups.take(5).map((g) {
+            final name = g['name'] as String? ?? '';
+            final memberCount = g['member_count'] as int? ?? 0;
+            final avatarUrl = g['avatar_url'] as String?;
+            return Padding(
+              padding: const EdgeInsets.only(bottom: 10),
+              child: Row(
+                children: [
+                  SojornAvatar(
+                    displayName: name,
+                    avatarUrl: avatarUrl,
+                    size: 32,
+                  ),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(name,
+                            style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: AppTheme.navyText),
+                            maxLines: 1, overflow: TextOverflow.ellipsis),
+                        Text('$memberCount members',
+                            style: TextStyle(fontSize: 10, color: AppTheme.textDisabled)),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+            );
+          }),
+        ],
+      ),
+    );
+  }
+}
+
+/// Shared card decoration for discover sidebar widgets.
+BoxDecoration _cardDecoration() {
+  return BoxDecoration(
+    color: AppTheme.cardSurface,
+    borderRadius: BorderRadius.circular(SojornRadii.card),
+    boxShadow: [
+      BoxShadow(
+        color: AppTheme.royalPurple.withValues(alpha: 0.08),
+        blurRadius: 12,
+        offset: const Offset(0, 2),
+      ),
+    ],
+  );
 }

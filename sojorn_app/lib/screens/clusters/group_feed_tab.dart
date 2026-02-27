@@ -184,9 +184,9 @@ class _GroupFeedTabState extends State<GroupFeedTab> {
                         children: [
                           Icon(Icons.dynamic_feed, size: 48, color: AppTheme.navyBlue.withValues(alpha: 0.15)),
                           const SizedBox(height: 12),
-                          Text('No posts yet', style: TextStyle(color: SojornColors.postContentLight, fontSize: 14)),
+                          Text('No posts yet', style: TextStyle(color: AppTheme.postContentLight, fontSize: 14)),
                           const SizedBox(height: 4),
-                          Text('Be the first to post!', style: TextStyle(color: SojornColors.textDisabled, fontSize: 12)),
+                          Text('Be the first to post!', style: TextStyle(color: AppTheme.textDisabled, fontSize: 12)),
                         ],
                       ),
                     )
@@ -277,7 +277,7 @@ class _PostCard extends StatelessWidget {
                     Text(displayName.isNotEmpty ? displayName : handle,
                         style: TextStyle(color: AppTheme.navyBlue, fontWeight: FontWeight.w600, fontSize: 13)),
                     Text('@$handle · $timeAgo',
-                        style: TextStyle(color: SojornColors.textDisabled, fontSize: 11)),
+                        style: TextStyle(color: AppTheme.textDisabled, fontSize: 11)),
                   ],
                 ),
               ),
@@ -287,7 +287,7 @@ class _PostCard extends StatelessWidget {
           ),
           const SizedBox(height: 10),
           // Body
-          Text(body, style: TextStyle(color: SojornColors.postContent, fontSize: 14, height: 1.4)),
+          Text(body, style: TextStyle(color: AppTheme.postContent, fontSize: 14, height: 1.4)),
           // Image
           if (imageUrl.isNotEmpty) ...[
             const SizedBox(height: 10),
@@ -311,9 +311,9 @@ class _PostCard extends StatelessWidget {
                   child: Row(
                     children: [
                       Icon(likedByMe ? Icons.favorite : Icons.favorite_border,
-                          size: 18, color: likedByMe ? SojornColors.destructive : SojornColors.textDisabled),
+                          size: 18, color: likedByMe ? SojornColors.destructive : AppTheme.textDisabled),
                       const SizedBox(width: 4),
-                      Text('$likeCount', style: TextStyle(color: SojornColors.textDisabled, fontSize: 12)),
+                      Text('$likeCount', style: TextStyle(color: AppTheme.textDisabled, fontSize: 12)),
                     ],
                   ),
                 ),
@@ -322,9 +322,9 @@ class _PostCard extends StatelessWidget {
                   onTap: onComment,
                   child: Row(
                     children: [
-                      Icon(Icons.chat_bubble_outline, size: 16, color: SojornColors.textDisabled),
+                      Icon(Icons.chat_bubble_outline, size: 16, color: AppTheme.textDisabled),
                       const SizedBox(width: 4),
-                      Text('$commentCount', style: TextStyle(color: SojornColors.textDisabled, fontSize: 12)),
+                      Text('$commentCount', style: TextStyle(color: AppTheme.textDisabled, fontSize: 12)),
                     ],
                   ),
                 ),
@@ -387,7 +387,7 @@ class _CommentsSheetState extends State<_CommentsSheet> {
             child: _loading
                 ? const Center(child: CircularProgressIndicator())
                 : _comments.isEmpty
-                    ? Center(child: Text('No comments yet', style: TextStyle(color: SojornColors.textDisabled)))
+                    ? Center(child: Text('No comments yet', style: TextStyle(color: AppTheme.textDisabled)))
                     : ListView.builder(
                         shrinkWrap: true,
                         itemCount: _comments.length,
@@ -407,7 +407,7 @@ class _CommentsSheetState extends State<_CommentsSheet> {
                                     children: [
                                       Text(c['author_handle'] ?? '', style: TextStyle(color: AppTheme.navyBlue, fontWeight: FontWeight.w600, fontSize: 12)),
                                       const SizedBox(height: 2),
-                                      Text(c['body'] ?? '', style: TextStyle(color: SojornColors.postContent, fontSize: 13)),
+                                      Text(c['body'] ?? '', style: TextStyle(color: AppTheme.postContent, fontSize: 13)),
                                     ],
                                   ),
                                 ),

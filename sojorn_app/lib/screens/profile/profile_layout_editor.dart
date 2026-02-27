@@ -239,7 +239,7 @@ class _ProfileLayoutEditorState extends State<ProfileLayoutEditor> {
                 Expanded(
                   child: _widgets.isEmpty
                       ? Center(
-                          child: Text('Add widgets below', style: TextStyle(color: SojornColors.textDisabled, fontSize: 13)),
+                          child: Text('Add widgets below', style: TextStyle(color: AppTheme.textDisabled, fontSize: 13)),
                         )
                       : ReorderableListView.builder(
                           padding: const EdgeInsets.symmetric(horizontal: SojornSpacing.md),
@@ -287,7 +287,7 @@ class _ProfileLayoutEditorState extends State<ProfileLayoutEditor> {
                   Container(
                     padding: const EdgeInsets.all(SojornSpacing.md),
                     decoration: BoxDecoration(
-                      border: Border(top: BorderSide(color: Colors.grey.withValues(alpha: 0.2))),
+                      border: Border(top: BorderSide(color: AppTheme.borderSubtle)),
                     ),
                     child: Wrap(
                       spacing: 6,

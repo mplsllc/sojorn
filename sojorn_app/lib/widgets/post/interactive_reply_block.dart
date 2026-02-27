@@ -3,6 +3,7 @@
 // See LICENSE file in the project root for full license text.
 
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart' show HapticFeedback;
 import 'package:flutter_animate/flutter_animate.dart';
 import 'package:google_fonts/google_fonts.dart';
 import '../../models/post.dart';
@@ -117,7 +118,7 @@ class _InteractiveReplyBlockState extends State<InteractiveReplyBlock>
     _bounceController.forward(from: 0.0);
     
     // Haptic feedback for tactile response
-    // HapticFeedback.mediumImpact(); // Uncomment if haptic feedback is desired
+    HapticFeedback.mediumImpact();
   }
 
   void _transitionToIdle() {

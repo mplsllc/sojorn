@@ -149,10 +149,18 @@ class _sojornPostCardState extends ConsumerState<sojornPostCard> {
 
     final isDesktop = MediaQuery.of(context).size.width >= 900;
 
+    // Build an accessible label: "author: body preview"
+    final semanticAuthor = post.author?.handle ?? 'unknown';
+    final semanticBody = post.body.length > 100 ? '${post.body.substring(0, 100)}...' : post.body;
+    final semanticBeacon = post.beaconType != null ? '${post.beaconType!.displayName} alert. ' : '';
+
     // _HoverShell owns all hover/shadow state. When the mouse enters/exits,
     // only the thin AnimatedDecoratedBox shadow layer repaints. The card
     // content tree is behind its own RepaintBoundary and is never diffed.
-    return GestureDetector(
+    return Semantics(
+      label: '$semanticBeacon$semanticAuthor: $semanticBody',
+      container: true,
+      child: GestureDetector(
       onSecondaryTapDown: isDesktop
           ? (details) => _showContextMenu(context, details.globalPosition)
           : null,
@@ -495,6 +503,7 @@ class _sojornPostCardState extends ConsumerState<sojornPostCard> {
             ),
           ),
         ),
+      ),
       ),
     );
   }

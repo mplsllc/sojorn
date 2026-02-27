@@ -36,7 +36,7 @@ class RepostWidget extends ConsumerWidget {
     return Container(
       margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
       decoration: BoxDecoration(
-        color: Colors.grey[900],
+        color: AppTheme.cardSurface,
         borderRadius: BorderRadius.circular(12),
         border: Border.all(
           color: repost != null ? Colors.blue.withOpacity(0.3) : Colors.transparent,
@@ -105,8 +105,8 @@ class RepostWidget extends ConsumerWidget {
                   children: [
                     Text(
                       repost.authorHandle,
-                      style: const TextStyle(
-                        color: Colors.white,
+                      style: TextStyle(
+                        color: AppTheme.postContent,
                         fontSize: 14,
                         fontWeight: FontWeight.bold,
                       ),
@@ -129,7 +129,7 @@ class RepostWidget extends ConsumerWidget {
                 Text(
                   repost.timeAgo,
                   style: TextStyle(
-                    color: Colors.grey[400],
+                    color: AppTheme.textDisabled,
                     fontSize: 12,
                   ),
                 ),
@@ -180,8 +180,8 @@ class RepostWidget extends ConsumerWidget {
                   children: [
                     Text(
                       originalPost.author?.handle ?? 'unknown',
-                      style: const TextStyle(
-                        color: Colors.white,
+                      style: TextStyle(
+                        color: AppTheme.postContent,
                         fontSize: 14,
                         fontWeight: FontWeight.bold,
                       ),
@@ -189,7 +189,7 @@ class RepostWidget extends ConsumerWidget {
                     Text(
                       timeago.format(originalPost.createdAt),
                       style: TextStyle(
-                        color: Colors.grey[400],
+                        color: AppTheme.textDisabled,
                         fontSize: 12,
                       ),
                     ),
@@ -205,8 +205,8 @@ class RepostWidget extends ConsumerWidget {
           if (originalPost.body.isNotEmpty)
             Text(
               originalPost.body,
-              style: const TextStyle(
-                color: Colors.white,
+              style: TextStyle(
+                color: AppTheme.postContent,
                 fontSize: 16,
                 height: 1.4,
               ),
@@ -225,9 +225,9 @@ class RepostWidget extends ConsumerWidget {
                 errorBuilder: (context, error, stackTrace) {
                   return Container(
                     height: 200,
-                    color: Colors.grey[800],
-                    child: const Center(
-                      child: Icon(Icons.image_not_supported, color: Colors.grey),
+                    color: AppTheme.surfaceElevated,
+                    child: Center(
+                      child: Icon(Icons.image_not_supported, color: AppTheme.textDisabled),
                     ),
                   );
                 },
@@ -240,11 +240,11 @@ class RepostWidget extends ConsumerWidget {
             Container(
               height: 200,
               decoration: BoxDecoration(
-                color: Colors.grey[800],
+                color: AppTheme.surfaceElevated,
                 borderRadius: BorderRadius.circular(12),
               ),
-              child: const Center(
-                child: Icon(Icons.play_circle_filled, color: Colors.white, size: 48),
+              child: Center(
+                child: Icon(Icons.play_circle_filled, color: AppTheme.postContent, size: 48),
               ),
             ),
           ],
@@ -259,7 +259,7 @@ class RepostWidget extends ConsumerWidget {
       decoration: BoxDecoration(
         border: Border(
           top: BorderSide(
-            color: Colors.grey[700]!,
+            color: AppTheme.borderSubtle,
             width: 1,
           ),
         ),
@@ -342,7 +342,7 @@ class RepostWidget extends ConsumerWidget {
               padding: const EdgeInsets.only(top: 8),
               child: Text(
                 repostState.error!,
-                style: const TextStyle(color: Colors.red, fontSize: 12),
+                style: TextStyle(color: AppTheme.error, fontSize: 12),
               ),
             ),
         ],
@@ -362,14 +362,14 @@ class RepostWidget extends ConsumerWidget {
         children: [
           Icon(
             icon,
-            color: Colors.grey[400],
+            color: AppTheme.textDisabled,
             size: 20,
           ),
           const SizedBox(height: 4),
           Text(
             count.toString(),
-            style: const TextStyle(
-              color: Colors.white,
+            style: TextStyle(
+              color: AppTheme.postContent,
               fontSize: 14,
               fontWeight: FontWeight.bold,
             ),
@@ -377,7 +377,7 @@ class RepostWidget extends ConsumerWidget {
           Text(
             label,
             style: TextStyle(
-              color: Colors.grey[400],
+              color: AppTheme.textDisabled,
               fontSize: 10,
             ),
           ),
@@ -435,7 +435,7 @@ class RepostWidget extends ConsumerWidget {
           margin: const EdgeInsets.all(16),
           padding: const EdgeInsets.all(16),
           decoration: BoxDecoration(
-            color: Colors.grey[800],
+            color: AppTheme.surfaceElevated,
             borderRadius: BorderRadius.circular(12),
           ),
           child: Column(
@@ -449,10 +449,10 @@ class RepostWidget extends ConsumerWidget {
                     size: 20,
                   ),
                   const SizedBox(width: 8),
-                  const Text(
+                  Text(
                     'Amplification Analytics',
                     style: TextStyle(
-                      color: Colors.white,
+                      color: AppTheme.postContent,
                       fontSize: 16,
                       fontWeight: FontWeight.bold,
                     ),
@@ -487,8 +487,8 @@ class RepostWidget extends ConsumerWidget {
               // Repost breakdown
               Text(
                 'Repost Breakdown',
-                style: const TextStyle(
-                  color: Colors.white,
+                style: TextStyle(
+                  color: AppTheme.postContent,
                   fontSize: 14,
                   fontWeight: FontWeight.bold,
                 ),
@@ -508,8 +508,8 @@ class RepostWidget extends ConsumerWidget {
                       const SizedBox(width: 8),
                       Text(
                         '${entry.key.displayName}: ${entry.value}',
-                        style: const TextStyle(
-                          color: Colors.white,
+                        style: TextStyle(
+                          color: AppTheme.postContent,
                           fontSize: 12,
                         ),
                       ),
@@ -531,7 +531,7 @@ class RepostWidget extends ConsumerWidget {
         padding: const EdgeInsets.all(16),
         child: Text(
           'Failed to load analytics',
-          style: TextStyle(color: Colors.red[400]),
+          style: TextStyle(color: AppTheme.error),
         ),
       ),
     );
@@ -548,8 +548,8 @@ class RepostWidget extends ConsumerWidget {
         const SizedBox(height: 4),
         Text(
           value,
-          style: const TextStyle(
-            color: Colors.white,
+          style: TextStyle(
+            color: AppTheme.postContent,
             fontSize: 16,
             fontWeight: FontWeight.bold,
           ),
@@ -557,7 +557,7 @@ class RepostWidget extends ConsumerWidget {
         Text(
           label,
           style: TextStyle(
-            color: Colors.grey[400],
+            color: AppTheme.textDisabled,
             fontSize: 10,
           ),
         ),

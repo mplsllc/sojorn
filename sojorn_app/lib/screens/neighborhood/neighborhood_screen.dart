@@ -11,6 +11,7 @@ import 'package:url_launcher/url_launcher.dart';
 import '../../models/board_entry.dart';
 import '../../models/group.dart';
 import '../../services/api_service.dart';
+import '../../services/analytics_service.dart';
 import '../../services/auth_service.dart';
 import '../../theme/app_theme.dart';
 import '../../theme/tokens.dart';
@@ -119,6 +120,10 @@ class _NeighborhoodScreenState extends State<NeighborhoodScreen>
   void _onTabChanged() {
     if (!_tabController.indexIsChanging) {
       setState(() => _currentTab = _tabController.index);
+      final tabNames = ['feed', 'chat', 'forum', 'events', 'members', if (_isAdmin) 'moderation'];
+      if (_tabController.index < tabNames.length) {
+        AnalyticsService.instance.event('commons_tab_switched', value: tabNames[_tabController.index]);
+      }
       // Animate FAB: show on Feed (0), hide on others
       if (_tabController.index == 0) {
         _fabAnimController.forward();
@@ -449,14 +454,14 @@ class _NeighborhoodScreenState extends State<NeighborhoodScreen>
     final city = hoodData?['city'] as String? ?? '';
     final memberCount = hood?['member_count'] as int? ?? 0;
     final activeNow = hood?['active_now'] as int? ?? 0;
-    final showSidebar = _currentTab != 1; // Hide sidebar on Chat tab
+    final isChatTab = _currentTab == 1;
 
     final tabBar = TabBar(
       controller: _tabController,
       indicatorColor: AppTheme.brightNavy,
       indicatorWeight: 2.5,
       labelColor: AppTheme.navyText,
-      unselectedLabelColor: SojornColors.textDisabled,
+      unselectedLabelColor: AppTheme.textDisabled,
       labelStyle: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600),
       tabs: [
         const Tab(icon: Icon(Icons.dynamic_feed, size: 18), text: 'Feed'),
@@ -498,13 +503,13 @@ class _NeighborhoodScreenState extends State<NeighborhoodScreen>
                         ],
                       ),
                     ),
-                    if (showSidebar) ...[
-                      const SizedBox(width: 20),
-                      SizedBox(
-                        width: 260,
-                        child: _buildRightSidebar(activeNow, memberCount),
-                      ),
-                    ],
+                    const SizedBox(width: 20),
+                    SizedBox(
+                      width: 260,
+                      child: isChatTab
+                          ? _buildChatSidebar()
+                          : _buildRightSidebar(activeNow, memberCount),
+                    ),
                   ],
                 ),
               ),
@@ -531,7 +536,7 @@ class _NeighborhoodScreenState extends State<NeighborhoodScreen>
       controller: _tabController,
       indicatorColor: AppTheme.brightNavy,
       labelColor: AppTheme.navyText,
-      unselectedLabelColor: SojornColors.textDisabled,
+      unselectedLabelColor: AppTheme.textDisabled,
       labelStyle: const TextStyle(fontSize: 11, fontWeight: FontWeight.w600),
       isScrollable: _isAdmin, // scrollable when mod tab present
       tabs: [
@@ -947,7 +952,7 @@ class _NeighborhoodScreenState extends State<NeighborhoodScreen>
                             size: 12,
                             color: isSelected
                                 ? Colors.white
-                                : SojornColors.textDisabled),
+                                : AppTheme.textDisabled),
                         const SizedBox(width: 4),
                         Text(t.displayName),
                       ],
@@ -964,7 +969,7 @@ class _NeighborhoodScreenState extends State<NeighborhoodScreen>
                           : FontWeight.normal,
                       color: isSelected
                           ? Colors.white
-                          : SojornColors.postContentLight,
+                          : AppTheme.postContentLight,
                     ),
                     side: BorderSide(
                       color: isSelected ? t.color : AppTheme.navyText.withValues(alpha: 0.15),
@@ -1045,7 +1050,7 @@ class _NeighborhoodScreenState extends State<NeighborhoodScreen>
           style: TextStyle(
             fontSize: 12,
             fontWeight: isSelected ? FontWeight.w700 : FontWeight.w500,
-            color: isSelected ? AppTheme.navyText : SojornColors.textDisabled,
+            color: isSelected ? AppTheme.navyText : AppTheme.textDisabled,
           ),
         ),
       ),
@@ -1142,7 +1147,7 @@ class _NeighborhoodScreenState extends State<NeighborhoodScreen>
     if (groupId == null) {
       return Center(
         child: Text('No group linked',
-            style: TextStyle(color: SojornColors.textDisabled)),
+            style: TextStyle(color: AppTheme.textDisabled)),
       );
     }
     return GroupChatTab(
@@ -1180,7 +1185,7 @@ class _NeighborhoodScreenState extends State<NeighborhoodScreen>
             Padding(
               padding: const EdgeInsets.symmetric(horizontal: 10),
               child: Text('No posts yet — be the first',
-                  style: TextStyle(fontSize: 11, color: SojornColors.textDisabled, fontStyle: FontStyle.italic)),
+                  style: TextStyle(fontSize: 11, color: AppTheme.textDisabled, fontStyle: FontStyle.italic)),
             ),
             Expanded(child: Divider(color: AppTheme.navyBlue.withValues(alpha: 0.08))),
           ],
@@ -1207,6 +1212,7 @@ class _NeighborhoodScreenState extends State<NeighborhoodScreen>
       child: _HoverHighlight(
         borderRadius: BorderRadius.circular(12),
         onTap: () {
+          AnalyticsService.instance.event('commons_category_filter', value: topic.value);
           setState(() => _forumActiveTopic = topic);
           _loadForumEntries(topic);
         },
@@ -1244,7 +1250,7 @@ class _NeighborhoodScreenState extends State<NeighborhoodScreen>
                       Text(
                         isActive ? desc : 'Be the first to post!',
                         style: TextStyle(
-                          color: SojornColors.textDisabled,
+                          color: AppTheme.textDisabled,
                           fontSize: 12,
                           fontStyle: isActive ? FontStyle.normal : FontStyle.italic,
                         ),
@@ -1266,9 +1272,9 @@ class _NeighborhoodScreenState extends State<NeighborhoodScreen>
                             fontWeight: FontWeight.w800)),
                   )
                 else
-                  Text('0', style: TextStyle(color: SojornColors.textDisabled, fontSize: 12)),
+                  Text('0', style: TextStyle(color: AppTheme.textDisabled, fontSize: 12)),
                 const SizedBox(width: 4),
-                Icon(Icons.chevron_right, size: 18, color: SojornColors.textDisabled),
+                Icon(Icons.chevron_right, size: 18, color: AppTheme.textDisabled),
               ],
             ),
           ),
@@ -1313,11 +1319,11 @@ class _NeighborhoodScreenState extends State<NeighborhoodScreen>
                     children: [
                       Icon(Icons.arrow_back,
                           size: 15,
-                          color: SojornColors.textDisabled),
+                          color: AppTheme.textDisabled),
                       const SizedBox(width: 6),
                       Text('Categories',
                           style: TextStyle(
-                            color: SojornColors.textDisabled,
+                            color: AppTheme.textDisabled,
                             fontSize: 12,
                             fontWeight: FontWeight.w600,
                           )),
@@ -1381,13 +1387,13 @@ class _NeighborhoodScreenState extends State<NeighborhoodScreen>
                           Text('No threads yet',
                               style: TextStyle(
                                   color:
-                                      SojornColors.postContentLight,
+                                      AppTheme.postContentLight,
                                   fontSize: 14)),
                           const SizedBox(height: 4),
                           Text(
                               'Start a thread to get the conversation going',
                               style: TextStyle(
-                                  color: SojornColors.textDisabled,
+                                  color: AppTheme.textDisabled,
                                   fontSize: 12)),
                         ],
                       ),
@@ -1476,7 +1482,7 @@ class _NeighborhoodScreenState extends State<NeighborhoodScreen>
                                 Icons.chevron_right,
                                 size: 18,
                                 color:
-                                    SojornColors.textDisabled),
+                                    AppTheme.textDisabled),
                           );
                         },
                       ),
@@ -1545,11 +1551,11 @@ class _NeighborhoodScreenState extends State<NeighborhoodScreen>
             TextField(
               controller: titleCtrl,
               style: TextStyle(
-                  color: SojornColors.postContent, fontSize: 14),
+                  color: AppTheme.postContent, fontSize: 14),
               decoration: InputDecoration(
                 hintText: 'Thread title',
                 hintStyle:
-                    TextStyle(color: SojornColors.textDisabled),
+                    TextStyle(color: AppTheme.textDisabled),
                 filled: true,
                 fillColor: AppTheme.scaffoldBg,
                 border: OutlineInputBorder(
@@ -1561,12 +1567,12 @@ class _NeighborhoodScreenState extends State<NeighborhoodScreen>
             TextField(
               controller: bodyCtrl,
               style: TextStyle(
-                  color: SojornColors.postContent, fontSize: 14),
+                  color: AppTheme.postContent, fontSize: 14),
               maxLines: 4,
               decoration: InputDecoration(
                 hintText: 'What do you want to discuss?',
                 hintStyle:
-                    TextStyle(color: SojornColors.textDisabled),
+                    TextStyle(color: AppTheme.textDisabled),
                 filled: true,
                 fillColor: AppTheme.scaffoldBg,
                 border: OutlineInputBorder(
@@ -1678,7 +1684,7 @@ class _NeighborhoodScreenState extends State<NeighborhoodScreen>
                 const SizedBox(height: 4),
                 Text('Report a problem in $hoodName',
                     style: TextStyle(
-                        color: SojornColors.textDisabled, fontSize: 12)),
+                        color: AppTheme.textDisabled, fontSize: 12)),
                 const SizedBox(height: 16),
                 // Issue type chips
                 Wrap(
@@ -1699,7 +1705,7 @@ class _NeighborhoodScreenState extends State<NeighborhoodScreen>
                             selected ? FontWeight.w600 : FontWeight.w400,
                         color: selected
                             ? Colors.white
-                            : SojornColors.postContentLight,
+                            : AppTheme.postContentLight,
                       ),
                       side: BorderSide(
                         color: selected
@@ -1714,11 +1720,11 @@ class _NeighborhoodScreenState extends State<NeighborhoodScreen>
                 TextField(
                   controller: descCtrl,
                   style: TextStyle(
-                      color: SojornColors.postContent, fontSize: 14),
+                      color: AppTheme.postContent, fontSize: 14),
                   maxLines: 3,
                   decoration: InputDecoration(
                     hintText: 'Describe the issue (optional)',
-                    hintStyle: TextStyle(color: SojornColors.textDisabled),
+                    hintStyle: TextStyle(color: AppTheme.textDisabled),
                     filled: true,
                     fillColor: AppTheme.scaffoldBg,
                     border: OutlineInputBorder(
@@ -1801,7 +1807,7 @@ class _NeighborhoodScreenState extends State<NeighborhoodScreen>
     if (groupId == null) {
       return Center(
         child: Text('No group linked',
-            style: TextStyle(color: SojornColors.textDisabled)),
+            style: TextStyle(color: AppTheme.textDisabled)),
       );
     }
     return GroupEventsTab(
@@ -1878,7 +1884,7 @@ class _NeighborhoodScreenState extends State<NeighborhoodScreen>
               ? Center(
                   child: Text(emptyMessages[_memberFilter] ?? 'No members found',
                       style: TextStyle(
-                          color: SojornColors.textDisabled)))
+                          color: AppTheme.textDisabled)))
               : RefreshIndicator(
                   onRefresh: _loadMembers,
                   child: ListView.builder(
@@ -1987,7 +1993,7 @@ class _NeighborhoodScreenState extends State<NeighborhoodScreen>
                           subtitle: Text('@$handle',
                               style: TextStyle(
                                   color:
-                                      SojornColors.textDisabled,
+                                      AppTheme.textDisabled,
                                   fontSize: 12)),
                         ),
                       );
@@ -2013,11 +2019,11 @@ class _NeighborhoodScreenState extends State<NeighborhoodScreen>
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            Icon(Icons.verified_user, size: 48, color: SojornColors.textDisabled.withValues(alpha: 0.4)),
+            Icon(Icons.verified_user, size: 48, color: AppTheme.textDisabled.withValues(alpha: 0.4)),
             const SizedBox(height: 12),
-            Text('No pending reports', style: TextStyle(color: SojornColors.textDisabled, fontSize: 14)),
+            Text('No pending reports', style: TextStyle(color: AppTheme.textDisabled, fontSize: 14)),
             const SizedBox(height: 4),
-            Text('All clear in this neighborhood', style: TextStyle(color: SojornColors.textDisabled.withValues(alpha: 0.6), fontSize: 12)),
+            Text('All clear in this neighborhood', style: TextStyle(color: AppTheme.textDisabled.withValues(alpha: 0.6), fontSize: 12)),
           ],
         ),
       );
@@ -2066,24 +2072,24 @@ class _NeighborhoodScreenState extends State<NeighborhoodScreen>
                         ),
                       ),
                       const SizedBox(width: 8),
-                      Text('by @$reporter', style: TextStyle(fontSize: 11, color: SojornColors.textDisabled)),
+                      Text('by @$reporter', style: TextStyle(fontSize: 11, color: AppTheme.textDisabled)),
                       const Spacer(),
                       if (createdAt.isNotEmpty)
                         Text(
                           _formatReportTime(createdAt),
-                          style: TextStyle(fontSize: 10, color: SojornColors.textDisabled),
+                          style: TextStyle(fontSize: 10, color: AppTheme.textDisabled),
                         ),
                     ],
                   ),
                   if (target.isNotEmpty) ...[
                     const SizedBox(height: 6),
-                    Text('Target: @$target', style: TextStyle(fontSize: 12, color: SojornColors.postContentLight)),
+                    Text('Target: @$target', style: TextStyle(fontSize: 12, color: AppTheme.postContentLight)),
                   ],
                   if (desc.isNotEmpty) ...[
                     const SizedBox(height: 6),
                     Text(
                       desc,
-                      style: TextStyle(fontSize: 13, color: SojornColors.postContent),
+                      style: TextStyle(fontSize: 13, color: AppTheme.postContent),
                       maxLines: 3,
                       overflow: TextOverflow.ellipsis,
                     ),
@@ -2097,7 +2103,7 @@ class _NeighborhoodScreenState extends State<NeighborhoodScreen>
                           icon: const Icon(Icons.close, size: 16),
                           label: const Text('Dismiss'),
                           style: OutlinedButton.styleFrom(
-                            foregroundColor: SojornColors.textDisabled,
+                            foregroundColor: AppTheme.textDisabled,
                             side: BorderSide(color: AppTheme.navyBlue.withValues(alpha: 0.12)),
                             padding: const EdgeInsets.symmetric(vertical: 8),
                             textStyle: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600),
@@ -2149,7 +2155,7 @@ class _NeighborhoodScreenState extends State<NeighborhoodScreen>
       case 'moderator':
         return const Color(0xFF4CAF50);
       default:
-        return SojornColors.textDisabled;
+        return AppTheme.textDisabled;
     }
   }
 
@@ -2547,9 +2553,144 @@ class _NeighborhoodScreenState extends State<NeighborhoodScreen>
                       fontSize: 11,
                       color: AppTheme.navyText.withValues(alpha: 0.7))),
             ),
-            Icon(Icons.chevron_right, size: 14, color: SojornColors.textDisabled),
+            Icon(Icons.chevron_right, size: 14, color: AppTheme.textDisabled),
           ],
         ),
+      ),
+    );
+  }
+
+  // ── Chat tab sidebar — active members list ──────────────────────────────
+  Widget _buildChatSidebar() {
+    final onlineMembers =
+        _sidebarMembers.where((m) => m['is_online'] == true).toList();
+    final offlineMembers =
+        _sidebarMembers.where((m) => m['is_online'] != true).toList();
+
+    return SingleChildScrollView(
+      padding: const EdgeInsets.all(14),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          // Active Now card
+          _buildSidebarCard(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  children: [
+                    Container(
+                      width: 7,
+                      height: 7,
+                      decoration: const BoxDecoration(
+                        color: Color(0xFF4CAF50),
+                        shape: BoxShape.circle,
+                      ),
+                    ),
+                    const SizedBox(width: 6),
+                    Text('Active Now',
+                        style: TextStyle(
+                            fontSize: 12,
+                            fontWeight: FontWeight.w700,
+                            color: AppTheme.navyText)),
+                    const Spacer(),
+                    Text('${onlineMembers.length}',
+                        style: TextStyle(
+                            fontSize: 11,
+                            fontWeight: FontWeight.w600,
+                            color: AppTheme.brightNavy)),
+                  ],
+                ),
+                if (onlineMembers.isNotEmpty) ...[
+                  const SizedBox(height: 10),
+                  ...onlineMembers.map((m) => _buildMemberRow(m, isOnline: true)),
+                ] else ...[
+                  const SizedBox(height: 8),
+                  Text('No one online right now',
+                      style: TextStyle(
+                          fontSize: 11,
+                          color: AppTheme.navyText.withValues(alpha: 0.4))),
+                ],
+              ],
+            ),
+          ),
+          const SizedBox(height: 14),
+
+          // Members card (offline)
+          if (offlineMembers.isNotEmpty)
+            _buildSidebarCard(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text('Members',
+                      style: TextStyle(
+                          fontSize: 12,
+                          fontWeight: FontWeight.w700,
+                          color: AppTheme.navyText)),
+                  const SizedBox(height: 10),
+                  ...offlineMembers
+                      .take(10)
+                      .map((m) => _buildMemberRow(m, isOnline: false)),
+                  const SizedBox(height: 8),
+                  GestureDetector(
+                    onTap: () => _tabController.animateTo(4),
+                    child: Text('See all members',
+                        style: TextStyle(
+                            fontSize: 11,
+                            fontWeight: FontWeight.w600,
+                            color: AppTheme.brightNavy)),
+                  ),
+                ],
+              ),
+            ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildMemberRow(Map<String, dynamic> m, {required bool isOnline}) {
+    final displayName =
+        m['display_name'] as String? ?? m['handle'] as String? ?? '';
+    final avatarUrl = m['avatar_url'] as String? ?? '';
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 8),
+      child: Row(
+        children: [
+          Stack(
+            clipBehavior: Clip.none,
+            children: [
+              SojornAvatar(
+                displayName: displayName,
+                avatarUrl: avatarUrl.isNotEmpty ? avatarUrl : null,
+                size: 28,
+              ),
+              if (isOnline)
+                Positioned(
+                  right: -1,
+                  bottom: -1,
+                  child: Container(
+                    width: 8,
+                    height: 8,
+                    decoration: BoxDecoration(
+                      color: const Color(0xFF22C55E),
+                      shape: BoxShape.circle,
+                      border: Border.all(
+                          color: AppTheme.cardSurface, width: 1.5),
+                    ),
+                  ),
+                ),
+            ],
+          ),
+          const SizedBox(width: 8),
+          Expanded(
+            child: Text(displayName,
+                style: TextStyle(
+                    fontSize: 12,
+                    fontWeight: FontWeight.w500,
+                    color: AppTheme.navyText),
+                overflow: TextOverflow.ellipsis),
+          ),
+        ],
       ),
     );
   }
@@ -2728,14 +2869,14 @@ class _NeighborhoodScreenState extends State<NeighborhoodScreen>
                         const Spacer(),
                         Text(entry.getTimeAgo(),
                             style: TextStyle(
-                                color: SojornColors.textDisabled,
+                                color: AppTheme.textDisabled,
                                 fontSize: 10)),
                         if (_isNeighborhoodAdmin) ...[
                           const SizedBox(width: 4),
                           PopupMenuButton<String>(
                             icon: Icon(Icons.more_vert,
                                 size: 14,
-                                color: SojornColors.textDisabled),
+                                color: AppTheme.textDisabled),
                             iconSize: 14,
                             padding: EdgeInsets.zero,
                             onSelected: (action) =>
@@ -2772,7 +2913,7 @@ class _NeighborhoodScreenState extends State<NeighborhoodScreen>
                         Flexible(
                           child: Text(authorName,
                               style: TextStyle(
-                                  color: SojornColors.postContent,
+                                  color: AppTheme.postContent,
                                   fontSize: 14,
                                   fontWeight: FontWeight.w600),
                               maxLines: 1,
@@ -2796,7 +2937,7 @@ class _NeighborhoodScreenState extends State<NeighborhoodScreen>
                             maxLines: 2,
                             overflow: TextOverflow.ellipsis,
                             style: TextStyle(
-                                color: SojornColors.postContentLight,
+                                color: AppTheme.postContentLight,
                                 fontSize: 14,
                                 height: 1.4)),
                       ],
@@ -2805,7 +2946,7 @@ class _NeighborhoodScreenState extends State<NeighborhoodScreen>
                           maxLines: 3,
                           overflow: TextOverflow.ellipsis,
                           style: TextStyle(
-                              color: SojornColors.postContentLight,
+                              color: AppTheme.postContentLight,
                               fontSize: 15,
                               height: 1.45)),
                     if (entry.imageUrl != null) ...[
@@ -2828,29 +2969,29 @@ class _NeighborhoodScreenState extends State<NeighborhoodScreen>
                           size: 13,
                           color: entry.hasVoted
                               ? AppTheme.brightNavy
-                              : SojornColors.textDisabled,
+                              : AppTheme.textDisabled,
                         ),
                         const SizedBox(width: 4),
                         Text('${entry.upvotes}',
                             style: TextStyle(
                                 color: entry.hasVoted
                                     ? AppTheme.brightNavy
-                                    : SojornColors.textDisabled,
+                                    : AppTheme.textDisabled,
                                 fontSize: 11,
                                 fontWeight: FontWeight.w600)),
                         const SizedBox(width: 12),
                         Icon(Icons.chat_bubble_outline,
                             size: 12,
-                            color: SojornColors.textDisabled),
+                            color: AppTheme.textDisabled),
                         const SizedBox(width: 4),
                         Text('${entry.replyCount}',
                             style: TextStyle(
-                                color: SojornColors.textDisabled,
+                                color: AppTheme.textDisabled,
                                 fontSize: 11)),
                         const Spacer(),
                         IconButton(
                           icon: Icon(Icons.share_outlined,
-                              size: 14, color: SojornColors.textDisabled),
+                              size: 14, color: AppTheme.textDisabled),
                           onPressed: () {},
                           padding: EdgeInsets.zero,
                           constraints: const BoxConstraints(minWidth: 28, minHeight: 28),

@@ -465,8 +465,34 @@ class _RetroTabState extends State<_RetroTab>
   bool _hasError = false;
   String _loadedQuery = '';
   Timer? _debounce;
+  bool _showSuggestions = true;
 
   static const _defaultQuery = 'space';
+
+  /// Curated search suggestions — themes that return great results from
+  /// GifCities' semantic search over archived GeoCities GIFs.
+  static const _suggestions = [
+    ('Under Construction', 'under construction'),
+    ('Welcome', 'welcome to my page'),
+    ('Fire', 'fire flames'),
+    ('Stars', 'stars sparkle'),
+    ('Dancing', 'dancing animation'),
+    ('Cats', 'cats kittens'),
+    ('Skulls', 'skull goth'),
+    ('Rainbow', 'rainbow colorful'),
+    ('Email', 'email mailbox'),
+    ('Angels', 'angel wings'),
+    ('Smiley', 'smiley face happy'),
+    ('Hearts', 'hearts love'),
+    ('Space', 'space planets'),
+    ('Guestbook', 'guestbook sign'),
+    ('Dividers', 'horizontal divider bar'),
+    ('Dolphins', 'dolphins ocean'),
+    ('Dragons', 'dragon fantasy'),
+    ('Music', 'music notes'),
+    ('Christmas', 'christmas snow'),
+    ('Flowers', 'flowers garden'),
+  ];
 
   @override
   bool get wantKeepAlive => true;
@@ -485,12 +511,24 @@ class _RetroTabState extends State<_RetroTab>
     super.dispose();
   }
 
+  void _selectSuggestion(String query) {
+    widget.searchCtrl.text = query;
+    setState(() => _showSuggestions = false);
+    _fetch(query);
+  }
+
   void _onSearchChanged() {
     _debounce?.cancel();
     _debounce = Timer(const Duration(milliseconds: 400), () {
       final q = widget.searchCtrl.text.trim();
+      if (q.isEmpty && !_showSuggestions) {
+        setState(() => _showSuggestions = true);
+        _fetch(_defaultQuery);
+        return;
+      }
       final effective = q.isEmpty ? _defaultQuery : q;
       if (effective != _loadedQuery) {
+        setState(() => _showSuggestions = false);
         _fetch(effective);
       }
     });
@@ -541,6 +579,46 @@ class _RetroTabState extends State<_RetroTab>
     }
   }
 
+  Widget _buildSuggestionChips() {
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+      child: Wrap(
+        spacing: 6,
+        runSpacing: 6,
+        children: _suggestions.map((s) {
+          final (label, query) = s;
+          return GestureDetector(
+            onTap: () => _selectSuggestion(query),
+            child: Container(
+              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+              decoration: BoxDecoration(
+                color: AppTheme.isDark
+                    ? SojornColors.darkSurfaceElevated
+                    : AppTheme.navyBlue.withValues(alpha: 0.06),
+                borderRadius: BorderRadius.circular(16),
+                border: Border.all(
+                  color: AppTheme.isDark
+                      ? SojornColors.darkBorder.withValues(alpha: 0.4)
+                      : AppTheme.navyBlue.withValues(alpha: 0.12),
+                ),
+              ),
+              child: Text(
+                label,
+                style: TextStyle(
+                  fontSize: 12,
+                  fontWeight: FontWeight.w500,
+                  color: AppTheme.isDark
+                      ? SojornColors.darkPostContent
+                      : AppTheme.navyBlue,
+                ),
+              ),
+            ),
+          );
+        }).toList(),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     super.build(context);
@@ -550,6 +628,7 @@ class _RetroTabState extends State<_RetroTab>
           ctrl: widget.searchCtrl,
           hint: 'Search retro gifs from the Internet Archive',
         ),
+        if (_showSuggestions) _buildSuggestionChips(),
         Expanded(child: _GifGrid(
           gifs: _gifs,
           loading: _loading,

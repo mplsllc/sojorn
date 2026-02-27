@@ -395,12 +395,12 @@ class _VaultSetupGateState extends ConsumerState<VaultSetupGate> {
                     controller: _backupKeyCtrl,
                     textCapitalization: TextCapitalization.characters,
                     style: GoogleFonts.jetBrainsMono(
-                      color: SojornColors.postContent, fontSize: 15, letterSpacing: 1.5),
+                      color: AppTheme.postContent, fontSize: 15, letterSpacing: 1.5),
                     decoration: InputDecoration(
                       labelText: 'Backup Key',
-                      labelStyle: TextStyle(color: SojornColors.textDisabled),
+                      labelStyle: TextStyle(color: AppTheme.textDisabled),
                       hintText: 'XXXX-XXXX-XXXX-XXXX-...',
-                      hintStyle: TextStyle(color: SojornColors.textDisabled),
+                      hintStyle: TextStyle(color: AppTheme.textDisabled),
                       prefixIcon: Icon(Icons.vpn_key, color: AppTheme.brightNavy),
                       enabledBorder: OutlineInputBorder(
                         borderRadius: BorderRadius.circular(12),
@@ -419,16 +419,16 @@ class _VaultSetupGateState extends ConsumerState<VaultSetupGate> {
                   TextField(
                     controller: _passwordCtrl,
                     obscureText: _obscure,
-                    style: TextStyle(color: SojornColors.postContent),
+                    style: TextStyle(color: AppTheme.postContent),
                     decoration: InputDecoration(
                       labelText: isCreate ? 'Sync Password' : 'Your Sync Password',
-                      labelStyle: TextStyle(color: SojornColors.textDisabled),
+                      labelStyle: TextStyle(color: AppTheme.textDisabled),
                       hintText: isCreate ? 'At least 8 characters' : null,
-                      hintStyle: TextStyle(color: SojornColors.textDisabled),
+                      hintStyle: TextStyle(color: AppTheme.textDisabled),
                       prefixIcon: Icon(Icons.key, color: AppTheme.brightNavy),
                       suffixIcon: IconButton(
                         icon: Icon(_obscure ? Icons.visibility_off : Icons.visibility,
-                          color: SojornColors.textDisabled, size: 20),
+                          color: AppTheme.textDisabled, size: 20),
                         onPressed: () => setState(() => _obscure = !_obscure),
                       ),
                       enabledBorder: OutlineInputBorder(
@@ -450,10 +450,10 @@ class _VaultSetupGateState extends ConsumerState<VaultSetupGate> {
                   TextField(
                     controller: _confirmCtrl,
                     obscureText: _obscure,
-                    style: TextStyle(color: SojornColors.postContent),
+                    style: TextStyle(color: AppTheme.postContent),
                     decoration: InputDecoration(
                       labelText: 'Confirm Password',
-                      labelStyle: TextStyle(color: SojornColors.textDisabled),
+                      labelStyle: TextStyle(color: AppTheme.textDisabled),
                       prefixIcon: Icon(Icons.lock, color: AppTheme.brightNavy),
                       enabledBorder: OutlineInputBorder(
                         borderRadius: BorderRadius.circular(12),
@@ -670,7 +670,7 @@ class _VaultSetupGateState extends ConsumerState<VaultSetupGate> {
                   child: ElevatedButton(
                     onPressed: _keyCopied ? _finish : null,
                     style: ElevatedButton.styleFrom(
-                      backgroundColor: _keyCopied ? const Color(0xFF4CAF50) : Colors.grey.shade300,
+                      backgroundColor: _keyCopied ? const Color(0xFF4CAF50) : AppTheme.borderSubtle,
                       foregroundColor: SojornColors.basicWhite,
                       padding: const EdgeInsets.symmetric(vertical: 16),
                       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),

@@ -219,13 +219,13 @@ class _GroupDiscoverCardState extends ConsumerState<GroupDiscoverCard> {
                       children: [
                         Icon(Icons.people_outline,
                             size: 14,
-                            color: SojornColors.textDisabled),
+                            color: AppTheme.textDisabled),
                         const SizedBox(width: 4),
                         Text(
                           group.memberCountText,
                           style: TextStyle(
                             fontSize: 12,
-                            color: SojornColors.textDisabled,
+                            color: AppTheme.textDisabled,
                           ),
                         ),
                         if (group.postCount > 0) ...[
@@ -233,18 +233,18 @@ class _GroupDiscoverCardState extends ConsumerState<GroupDiscoverCard> {
                             ' · ',
                             style: TextStyle(
                               fontSize: 12,
-                              color: SojornColors.textDisabled,
+                              color: AppTheme.textDisabled,
                             ),
                           ),
                           Icon(Icons.article_outlined,
                               size: 13,
-                              color: SojornColors.textDisabled),
+                              color: AppTheme.textDisabled),
                           const SizedBox(width: 3),
                           Text(
                             group.postCountText,
                             style: TextStyle(
                               fontSize: 12,
-                              color: SojornColors.textDisabled,
+                              color: AppTheme.textDisabled,
                             ),
                           ),
                         ],
@@ -254,7 +254,7 @@ class _GroupDiscoverCardState extends ConsumerState<GroupDiscoverCard> {
                             ' · ',
                             style: TextStyle(
                               fontSize: 12,
-                              color: SojornColors.textDisabled,
+                              color: AppTheme.textDisabled,
                             ),
                           ),
                           Flexible(
@@ -337,7 +337,7 @@ class _GroupDiscoverCardState extends ConsumerState<GroupDiscoverCard> {
         child: OutlinedButton(
           onPressed: null,
           style: OutlinedButton.styleFrom(
-            side: BorderSide(color: Colors.grey.shade300),
+            side: BorderSide(color: AppTheme.borderSubtle),
             shape: RoundedRectangleBorder(
                 borderRadius: BorderRadius.circular(SojornRadii.md)),
             padding: const EdgeInsets.symmetric(vertical: 9),
@@ -347,7 +347,7 @@ class _GroupDiscoverCardState extends ConsumerState<GroupDiscoverCard> {
             style: TextStyle(
               fontSize: 13,
               fontWeight: FontWeight.w600,
-              color: SojornColors.textDisabled,
+              color: AppTheme.textDisabled,
             ),
           ),
         ),

@@ -24,6 +24,7 @@ import '../../models/group.dart' as group_models;
 import '../../services/api_service.dart';
 import '../../services/auth_service.dart';
 import '../../services/local_intel_service.dart';
+import '../../services/analytics_service.dart';
 import '../../services/capsule_security_service.dart';
 import '../../widgets/safety/active_alerts_ticker.dart';
 import 'beacon_detail_screen.dart';
@@ -630,6 +631,7 @@ class BeaconScreenState extends ConsumerState<BeaconScreen> with TickerProviderS
       _showCameraSheet(post.toBeacon());
       return;
     }
+    AnalyticsService.instance.event('beacon_detail_viewed');
     openDesktopDialog(
       context,
       width: 700,
@@ -924,7 +926,7 @@ class BeaconScreenState extends ConsumerState<BeaconScreen> with TickerProviderS
             child: TabBar(
               controller: _tabController,
               labelColor: AppTheme.brightNavy,
-              unselectedLabelColor: SojornColors.textDisabled,
+              unselectedLabelColor: AppTheme.textDisabled,
               indicatorColor: AppTheme.brightNavy,
               indicatorWeight: 2.5,
               labelStyle: const TextStyle(fontSize: 13, fontWeight: FontWeight.w700),
@@ -1034,10 +1036,10 @@ class BeaconScreenState extends ConsumerState<BeaconScreen> with TickerProviderS
                   padding: const EdgeInsets.fromLTRB(16, 8, 16, 2),
                   child: Row(
                     children: [
-                      Icon(Icons.location_on, size: 11, color: SojornColors.textDisabled),
+                      Icon(Icons.location_on, size: 11, color: AppTheme.textDisabled),
                       const SizedBox(width: 3),
                       Text('Sorted by distance',
-                        style: TextStyle(color: SojornColors.textDisabled, fontSize: 10)),
+                        style: TextStyle(color: AppTheme.textDisabled, fontSize: 10)),
                     ],
                   ),
                 ),
@@ -1149,10 +1151,10 @@ class BeaconScreenState extends ConsumerState<BeaconScreen> with TickerProviderS
                               padding: const EdgeInsets.fromLTRB(16, 8, 16, 2),
                               child: Row(
                                 children: [
-                                  Icon(Icons.location_on, size: 11, color: SojornColors.textDisabled),
+                                  Icon(Icons.location_on, size: 11, color: AppTheme.textDisabled),
                                   const SizedBox(width: 3),
                                   Text('Sorted by distance',
-                                    style: TextStyle(color: SojornColors.textDisabled, fontSize: 10)),
+                                    style: TextStyle(color: AppTheme.textDisabled, fontSize: 10)),
                                 ],
                               ),
                             ),
@@ -1290,25 +1292,33 @@ class BeaconScreenState extends ConsumerState<BeaconScreen> with TickerProviderS
                       child: Container(
                         padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
                         decoration: BoxDecoration(
-                          color: SojornColors.basicWhite.withValues(alpha: 0.28),
+                          color: AppTheme.isDark
+                              ? SojornColors.darkSurfaceElevated.withValues(alpha: 0.85)
+                              : SojornColors.basicWhite.withValues(alpha: 0.28),
                           borderRadius: BorderRadius.circular(22),
                           border: Border.all(
-                            color: SojornColors.basicWhite.withValues(alpha: 0.55),
+                            color: AppTheme.isDark
+                                ? SojornColors.darkBorder.withValues(alpha: 0.6)
+                                : SojornColors.basicWhite.withValues(alpha: 0.55),
                             width: 1.0,
                           ),
                           boxShadow: [
-                            BoxShadow(color: SojornColors.basicBlack.withValues(alpha: 0.10), blurRadius: 10),
+                            BoxShadow(color: SojornColors.basicBlack.withValues(alpha: AppTheme.isDark ? 0.30 : 0.10), blurRadius: 10),
                           ],
                         ),
                         child: Row(
                           mainAxisSize: MainAxisSize.min,
                           children: [
                             Icon(_weatherIcon(_weather!.weatherCode), size: 15,
-                              color: AppTheme.navyBlue.withValues(alpha: 0.85)),
+                              color: AppTheme.isDark
+                                  ? SojornColors.darkPostContent.withValues(alpha: 0.85)
+                                  : AppTheme.navyBlue.withValues(alpha: 0.85)),
                             const SizedBox(width: 4),
                             Text('${_weather!.temperature.round()}°F',
                               style: TextStyle(
-                                color: AppTheme.navyBlue,
+                                color: AppTheme.isDark
+                                    ? SojornColors.darkPostContent
+                                    : AppTheme.navyBlue,
                                 fontSize: 13,
                                 fontWeight: FontWeight.w800,
                               )),
@@ -1345,12 +1355,22 @@ class BeaconScreenState extends ConsumerState<BeaconScreen> with TickerProviderS
           child: Container(
             width: 32, height: 32,
             decoration: BoxDecoration(
-              color: SojornColors.basicWhite.withValues(alpha: 0.70),
+              color: AppTheme.isDark
+                  ? SojornColors.darkSurfaceElevated.withValues(alpha: 0.85)
+                  : SojornColors.basicWhite.withValues(alpha: 0.70),
               shape: BoxShape.circle,
-              border: Border.all(color: SojornColors.basicWhite.withValues(alpha: 0.5), width: 0.5),
-              boxShadow: [BoxShadow(color: SojornColors.basicBlack.withValues(alpha: 0.08), blurRadius: 6)],
+              border: Border.all(
+                color: AppTheme.isDark
+                    ? SojornColors.darkBorder.withValues(alpha: 0.6)
+                    : SojornColors.basicWhite.withValues(alpha: 0.5),
+                width: 0.5,
+              ),
+              boxShadow: [BoxShadow(color: SojornColors.basicBlack.withValues(alpha: AppTheme.isDark ? 0.30 : 0.08), blurRadius: 6)],
             ),
-            child: Icon(icon, size: 16, color: AppTheme.navyBlue.withValues(alpha: 0.75)),
+            child: Icon(icon, size: 16,
+              color: AppTheme.isDark
+                  ? SojornColors.darkPostContent.withValues(alpha: 0.85)
+                  : AppTheme.navyBlue.withValues(alpha: 0.75)),
           ),
         ),
       ),
@@ -1402,19 +1422,26 @@ class BeaconScreenState extends ConsumerState<BeaconScreen> with TickerProviderS
           height: 32,
           padding: const EdgeInsets.symmetric(horizontal: 4),
           decoration: BoxDecoration(
-            color: Colors.white.withValues(alpha: 0.82),
+            color: AppTheme.isDark
+                ? SojornColors.darkSurfaceElevated.withValues(alpha: 0.85)
+                : Colors.white.withValues(alpha: 0.82),
             borderRadius: BorderRadius.circular(22),
             border: Border.all(
-                color: Colors.white.withValues(alpha: 0.6), width: 0.5),
+                color: AppTheme.isDark
+                    ? SojornColors.darkBorder.withValues(alpha: 0.6)
+                    : Colors.white.withValues(alpha: 0.6),
+                width: 0.5),
             boxShadow: [
               BoxShadow(
-                  color: Colors.black.withValues(alpha: 0.10),
+                  color: Colors.black.withValues(alpha: AppTheme.isDark ? 0.30 : 0.10),
                   blurRadius: 8,
                   offset: const Offset(0, 2))
             ],
           ),
-          child: Row(
-            mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+          child: SingleChildScrollView(
+            scrollDirection: Axis.horizontal,
+            child: Row(
+            mainAxisSize: MainAxisSize.min,
             children: _mapLayerGroups.map((group) {
               final groupIdx = _mapLayerGroups.indexOf(group);
               final visibleCount =
@@ -1435,7 +1462,7 @@ class BeaconScreenState extends ConsumerState<BeaconScreen> with TickerProviderS
                   border: Border.all(
                     color: isVisible
                         ? group.color.withValues(alpha: 0.8)
-                        : Colors.grey.withValues(alpha: 0.35),
+                        : AppTheme.textDisabled.withValues(alpha: 0.5),
                     width: 1,
                   ),
                 ),
@@ -1460,7 +1487,7 @@ class BeaconScreenState extends ConsumerState<BeaconScreen> with TickerProviderS
                             size: 11,
                             color: isVisible
                                 ? group.color
-                                : Colors.grey.withValues(alpha: 0.55),
+                                : AppTheme.textDisabled,
                           ),
                           const SizedBox(width: 2),
                           Text(
@@ -1470,7 +1497,7 @@ class BeaconScreenState extends ConsumerState<BeaconScreen> with TickerProviderS
                               fontWeight: FontWeight.w600,
                               color: isVisible
                                   ? group.color
-                                  : Colors.grey.withValues(alpha: 0.55),
+                                  : AppTheme.textDisabled,
                             ),
                           ),
                           if (isVisible && !allVisible) ...[
@@ -1488,17 +1515,21 @@ class BeaconScreenState extends ConsumerState<BeaconScreen> with TickerProviderS
                       ),
                     ),
                     // Tap arrow: toggle sub-filter dropdown
-                    GestureDetector(
-                      behavior: HitTestBehavior.opaque,
-                      onTap: () => _toggleSubFilter(groupIdx),
-                      child: Padding(
-                        padding: const EdgeInsets.only(left: 1, right: 4),
-                        child: Icon(
-                          isExpanded ? Icons.keyboard_arrow_up_rounded : Icons.keyboard_arrow_down_rounded,
-                          size: 12,
-                          color: isVisible
-                              ? group.color.withValues(alpha: 0.6)
-                              : Colors.grey.withValues(alpha: 0.4),
+                    Semantics(
+                      button: true,
+                      label: isExpanded ? 'Collapse ${group.label} filters' : 'Expand ${group.label} filters',
+                      child: GestureDetector(
+                        behavior: HitTestBehavior.opaque,
+                        onTap: () => _toggleSubFilter(groupIdx),
+                        child: Padding(
+                          padding: const EdgeInsets.only(left: 1, right: 4),
+                          child: Icon(
+                            isExpanded ? Icons.keyboard_arrow_up_rounded : Icons.keyboard_arrow_down_rounded,
+                            size: 12,
+                            color: isVisible
+                                ? group.color.withValues(alpha: 0.6)
+                                : AppTheme.textDisabled.withValues(alpha: 0.6),
+                          ),
                         ),
                       ),
                     ),
@@ -1506,6 +1537,7 @@ class BeaconScreenState extends ConsumerState<BeaconScreen> with TickerProviderS
                 ),
               );
             }).toList(),
+          ),
           ),
         ),
       ),
@@ -1527,9 +1559,9 @@ class BeaconScreenState extends ConsumerState<BeaconScreen> with TickerProviderS
           filter: ImageFilter.blur(sigmaX: 14, sigmaY: 14),
           child: Container(
             decoration: BoxDecoration(
-              color: Colors.white.withValues(alpha: 0.92),
+              color: AppTheme.cardSurface.withValues(alpha: 0.92),
               borderRadius: BorderRadius.circular(8),
-              border: Border.all(color: Colors.grey.withValues(alpha: 0.3)),
+              border: Border.all(color: AppTheme.borderSubtle),
               boxShadow: [
                 BoxShadow(
                   color: Colors.black.withValues(alpha: 0.10),
@@ -1559,13 +1591,13 @@ class BeaconScreenState extends ConsumerState<BeaconScreen> with TickerProviderS
                     padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
                     decoration: BoxDecoration(
                       border: isLast ? null : Border(
-                        bottom: BorderSide(color: Colors.grey.withValues(alpha: 0.15)),
+                        bottom: BorderSide(color: AppTheme.borderSubtle),
                       ),
                     ),
                     child: Row(
                       children: [
                         Icon(type.icon, size: 14,
-                          color: visible ? type.color : Colors.grey.withValues(alpha: 0.4)),
+                          color: visible ? type.color : AppTheme.textDisabled.withValues(alpha: 0.6)),
                         const SizedBox(width: 8),
                         Expanded(
                           child: Text(
@@ -1573,14 +1605,14 @@ class BeaconScreenState extends ConsumerState<BeaconScreen> with TickerProviderS
                             style: TextStyle(
                               fontSize: 12,
                               fontWeight: FontWeight.w500,
-                              color: visible ? Colors.black87 : Colors.grey.withValues(alpha: 0.5),
+                              color: visible ? AppTheme.postContent : AppTheme.textDisabled.withValues(alpha: 0.7),
                             ),
                           ),
                         ),
                         Icon(
                           visible ? Icons.check_box_rounded : Icons.check_box_outline_blank_rounded,
                           size: 16,
-                          color: visible ? group.color : Colors.grey.withValues(alpha: 0.35),
+                          color: visible ? group.color : AppTheme.textDisabled.withValues(alpha: 0.5),
                         ),
                       ],
                     ),
@@ -1644,7 +1676,7 @@ class BeaconScreenState extends ConsumerState<BeaconScreen> with TickerProviderS
                 children: [
                   Icon(Icons.location_off, size: 48, color: AppTheme.navyBlue.withValues(alpha: 0.2)),
                   const SizedBox(height: 16),
-                  const Text('No neighborhood detected', style: TextStyle(color: SojornColors.textDisabled)),
+                  Text('No neighborhood detected', style: TextStyle(color: AppTheme.textDisabled)),
                   TextButton(onPressed: () => _detectNeighborhood(_userLocation?.latitude ?? 0, _userLocation?.longitude ?? 0),
                     child: const Text('Retry')),
                 ],
@@ -1655,7 +1687,7 @@ class BeaconScreenState extends ConsumerState<BeaconScreen> with TickerProviderS
     final groupId = _neighborhoodGroupId;
     if (groupId == null || groupId.isEmpty) {
       return Center(
-        child: Text('Neighborhood unavailable', style: TextStyle(color: SojornColors.textDisabled)),
+        child: Text('Neighborhood unavailable', style: TextStyle(color: AppTheme.textDisabled)),
       );
     }
 
@@ -1723,7 +1755,7 @@ class BeaconScreenState extends ConsumerState<BeaconScreen> with TickerProviderS
                               if (availableSwitchTargets.isNotEmpty)
                                 PopupMenuButton<String>(
                                   tooltip: 'Quick switch',
-                                  icon: Icon(Icons.keyboard_arrow_down, size: 18, color: SojornColors.textDisabled),
+                                  icon: Icon(Icons.keyboard_arrow_down, size: 18, color: AppTheme.textDisabled),
                                   onSelected: (value) {
                                     final target = _clusters.where((c) => c.id == value).firstOrNull;
                                     if (target == null) return;
@@ -1767,14 +1799,14 @@ class BeaconScreenState extends ConsumerState<BeaconScreen> with TickerProviderS
                                 const SizedBox(width: 4),
                                 Text(
                                   _isLoadingNeighborhoodHubMeta ? '...' : '$_activeNowCount online',
-                                  style: TextStyle(color: SojornColors.textDisabled, fontSize: 12),
+                                  style: TextStyle(color: AppTheme.textDisabled, fontSize: 12),
                                 ),
                                 const SizedBox(width: 4),
-                                Text(' \u00B7 ', style: TextStyle(color: SojornColors.textDisabled, fontSize: 12)),
+                                Text(' \u00B7 ', style: TextStyle(color: AppTheme.textDisabled, fontSize: 12)),
                               ],
                               Text(
                                 '$memberCount member${memberCount == 1 ? '' : 's'}',
-                                style: TextStyle(color: SojornColors.textDisabled, fontSize: 12),
+                                style: TextStyle(color: AppTheme.textDisabled, fontSize: 12),
                               ),
                             ],
                           ),
@@ -1797,7 +1829,7 @@ class BeaconScreenState extends ConsumerState<BeaconScreen> with TickerProviderS
                         isChangeMode: true,
                         nextChangeDate: (_neighborhood?.canChange ?? true) ? null : _neighborhood?.nextChangeAllowedAt,
                       ),
-                      icon: Icon(Icons.swap_horiz_rounded, size: 20, color: SojornColors.textDisabled),
+                      icon: Icon(Icons.swap_horiz_rounded, size: 20, color: AppTheme.textDisabled),
                       tooltip: 'Change neighborhood',
                       visualDensity: VisualDensity.compact,
                     ),
@@ -1869,7 +1901,7 @@ class BeaconScreenState extends ConsumerState<BeaconScreen> with TickerProviderS
                 style: TextStyle(
                   fontSize: 13.5,
                   fontWeight: selected ? FontWeight.w700 : FontWeight.w500,
-                  color: selected ? AppTheme.brightNavy : SojornColors.textDisabled,
+                  color: selected ? AppTheme.brightNavy : AppTheme.textDisabled,
                 ),
               ),
               if (badgeCount > 0) ...[
@@ -1922,7 +1954,7 @@ class BeaconScreenState extends ConsumerState<BeaconScreen> with TickerProviderS
                       "What's happening in $groupName?",
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
-                      style: TextStyle(color: SojornColors.textDisabled, fontSize: 14),
+                      style: TextStyle(color: AppTheme.textDisabled, fontSize: 14),
                     ),
                   ),
                   FilledButton(
@@ -1990,14 +2022,14 @@ class BeaconScreenState extends ConsumerState<BeaconScreen> with TickerProviderS
                         children: [
                           Icon(Icons.forum_outlined, size: 52, color: AppTheme.navyBlue.withValues(alpha: 0.18)),
                           const SizedBox(height: 14),
-                          Text('No posts yet', style: TextStyle(color: SojornColors.textDisabled, fontSize: 15, fontWeight: FontWeight.w600)),
+                          Text('No posts yet', style: TextStyle(color: AppTheme.textDisabled, fontSize: 15, fontWeight: FontWeight.w600)),
                           const SizedBox(height: 6),
                           Padding(
                             padding: const EdgeInsets.symmetric(horizontal: 40),
                             child: Text(
                               'The neighborhood board is where residents share local news, ask questions, and help each other.',
                               textAlign: TextAlign.center,
-                              style: TextStyle(color: SojornColors.textDisabled, fontSize: 13, height: 1.4),
+                              style: TextStyle(color: AppTheme.textDisabled, fontSize: 13, height: 1.4),
                             ),
                           ),
                           const SizedBox(height: 20),
@@ -2047,7 +2079,7 @@ class BeaconScreenState extends ConsumerState<BeaconScreen> with TickerProviderS
           style: TextStyle(
             fontSize: 12,
             fontWeight: FontWeight.w600,
-            color: selected ? AppTheme.navyBlue : SojornColors.textDisabled,
+            color: selected ? AppTheme.navyBlue : AppTheme.textDisabled,
           ),
         ),
       ),
@@ -2180,7 +2212,7 @@ class BeaconScreenState extends ConsumerState<BeaconScreen> with TickerProviderS
                                 authorName,
                                 maxLines: 1,
                                 overflow: TextOverflow.ellipsis,
-                                style: TextStyle(color: SojornColors.postContent, fontSize: 13, fontWeight: FontWeight.w600),
+                                style: TextStyle(color: AppTheme.postContent, fontSize: 13, fontWeight: FontWeight.w600),
                               ),
                               const SizedBox(height: 1),
                               Row(
@@ -2190,9 +2222,9 @@ class BeaconScreenState extends ConsumerState<BeaconScreen> with TickerProviderS
                                   Text(entry.topic.displayName,
                                     style: TextStyle(fontSize: 11, fontWeight: FontWeight.w500, color: topicColor)),
                                   const SizedBox(width: 6),
-                                  Text('·', style: TextStyle(color: SojornColors.textDisabled, fontSize: 11)),
+                                  Text('·', style: TextStyle(color: AppTheme.textDisabled, fontSize: 11)),
                                   const SizedBox(width: 6),
-                                  Text(entry.getTimeAgo(), style: TextStyle(color: SojornColors.textDisabled, fontSize: 11)),
+                                  Text(entry.getTimeAgo(), style: TextStyle(color: AppTheme.textDisabled, fontSize: 11)),
                                 ],
                               ),
                             ],
@@ -2203,7 +2235,7 @@ class BeaconScreenState extends ConsumerState<BeaconScreen> with TickerProviderS
                     const SizedBox(height: 8),
                     // Body
                     Text(entry.body, maxLines: 4, overflow: TextOverflow.ellipsis,
-                      style: TextStyle(color: SojornColors.postContentLight, fontSize: 14, height: 1.4)),
+                      style: TextStyle(color: AppTheme.postContentLight, fontSize: 14, height: 1.4)),
                     // Image
                     if (entry.imageUrl != null) ...[
                       const SizedBox(height: 8),
@@ -2228,11 +2260,11 @@ class BeaconScreenState extends ConsumerState<BeaconScreen> with TickerProviderS
                                 Icon(
                                   entry.hasVoted ? Icons.arrow_upward : Icons.arrow_upward_outlined,
                                   size: 15,
-                                  color: entry.hasVoted ? AppTheme.brightNavy : SojornColors.textDisabled,
+                                  color: entry.hasVoted ? AppTheme.brightNavy : AppTheme.textDisabled,
                                 ),
                                 const SizedBox(width: 3),
                                 Text('${entry.upvotes}', style: TextStyle(
-                                  color: entry.hasVoted ? AppTheme.brightNavy : SojornColors.textDisabled,
+                                  color: entry.hasVoted ? AppTheme.brightNavy : AppTheme.textDisabled,
                                   fontSize: 12,
                                   fontWeight: FontWeight.w600,
                                 )),
@@ -2245,16 +2277,16 @@ class BeaconScreenState extends ConsumerState<BeaconScreen> with TickerProviderS
                         Padding(
                           padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
                           child: Row(mainAxisSize: MainAxisSize.min, children: [
-                            Icon(Icons.chat_bubble_outline, size: 14, color: SojornColors.textDisabled),
+                            Icon(Icons.chat_bubble_outline, size: 14, color: AppTheme.textDisabled),
                             const SizedBox(width: 3),
-                            Text('${entry.replyCount}', style: TextStyle(color: SojornColors.textDisabled, fontSize: 12, fontWeight: FontWeight.w600)),
+                            Text('${entry.replyCount}', style: TextStyle(color: AppTheme.textDisabled, fontSize: 12, fontWeight: FontWeight.w600)),
                           ]),
                         ),
                         const Spacer(),
                         // Flag/Report button
                         if (_isNeighborhoodAdmin)
                           PopupMenuButton<String>(
-                            icon: Icon(Icons.more_horiz, size: 16, color: SojornColors.textDisabled),
+                            icon: Icon(Icons.more_horiz, size: 16, color: AppTheme.textDisabled),
                             onSelected: (val) {
                               if (val == 'remove') _removeBoardEntry(entry);
                               if (val == 'flag') _flagBoardEntry(entry);
@@ -2266,7 +2298,7 @@ class BeaconScreenState extends ConsumerState<BeaconScreen> with TickerProviderS
                           )
                         else
                           IconButton(
-                            icon: Icon(Icons.flag_outlined, size: 14, color: SojornColors.textDisabled.withValues(alpha: 0.5)),
+                            icon: Icon(Icons.flag_outlined, size: 14, color: AppTheme.textDisabled.withValues(alpha: 0.5)),
                             onPressed: () => _flagBoardEntry(entry),
                             tooltip: 'Report Content',
                             constraints: const BoxConstraints(minWidth: 36, minHeight: 36),
@@ -2307,14 +2339,14 @@ class BeaconScreenState extends ConsumerState<BeaconScreen> with TickerProviderS
               child: TextField(
                 controller: _searchController,
                 onChanged: _onSearchChanged,
-                style: TextStyle(color: SojornColors.postContent, fontSize: 14),
+                style: TextStyle(color: AppTheme.postContent, fontSize: 14),
                 decoration: InputDecoration(
                   hintText: 'Search beacons, boards, groups…',
-                  hintStyle: TextStyle(color: SojornColors.textDisabled),
-                  prefixIcon: Icon(Icons.search, size: 20, color: SojornColors.textDisabled),
+                  hintStyle: TextStyle(color: AppTheme.textDisabled),
+                  prefixIcon: Icon(Icons.search, size: 20, color: AppTheme.textDisabled),
                   suffixIcon: hasQuery
                       ? IconButton(
-                          icon: Icon(Icons.close, size: 18, color: SojornColors.textDisabled),
+                          icon: Icon(Icons.close, size: 18, color: AppTheme.textDisabled),
                           onPressed: () {
                             _searchController.clear();
                             _onSearchChanged('');
@@ -2342,7 +2374,7 @@ class BeaconScreenState extends ConsumerState<BeaconScreen> with TickerProviderS
                               style: TextStyle(color: AppTheme.navyBlue.withValues(alpha: 0.4), fontSize: 15, fontWeight: FontWeight.w600)),
                             const SizedBox(height: 4),
                             Text('Find incidents, board posts, and public groups',
-                              style: TextStyle(color: SojornColors.textDisabled, fontSize: 13)),
+                              style: TextStyle(color: AppTheme.textDisabled, fontSize: 13)),
                           ],
                         ),
                       )
@@ -2391,7 +2423,7 @@ class BeaconScreenState extends ConsumerState<BeaconScreen> with TickerProviderS
           const SizedBox(width: 8),
           Text(title, style: TextStyle(color: AppTheme.navyBlue, fontSize: 13, fontWeight: FontWeight.w700)),
           const SizedBox(width: 6),
-          Text('($count)', style: TextStyle(color: SojornColors.textDisabled, fontSize: 12)),
+          Text('($count)', style: TextStyle(color: AppTheme.textDisabled, fontSize: 12)),
         ],
       ),
     );
@@ -2407,9 +2439,9 @@ class BeaconScreenState extends ConsumerState<BeaconScreen> with TickerProviderS
         dense: true,
         leading: Icon(Icons.warning_amber, color: Colors.orange, size: 22),
         title: Text(b['body'] ?? '', maxLines: 2, overflow: TextOverflow.ellipsis,
-          style: TextStyle(color: SojornColors.postContent, fontSize: 13)),
+          style: TextStyle(color: AppTheme.postContent, fontSize: 13)),
         subtitle: Text('${b['category'] ?? 'incident'} · ${b['author_handle'] ?? ''}',
-          style: TextStyle(color: SojornColors.textDisabled, fontSize: 11)),
+          style: TextStyle(color: AppTheme.textDisabled, fontSize: 11)),
         onTap: () {
           try {
             final post = Post.fromJson(b);
@@ -2437,14 +2469,14 @@ class BeaconScreenState extends ConsumerState<BeaconScreen> with TickerProviderS
         dense: true,
         leading: Icon(Icons.forum, color: AppTheme.brightNavy, size: 22),
         title: Text(b['body'] ?? '', maxLines: 2, overflow: TextOverflow.ellipsis,
-          style: TextStyle(color: SojornColors.postContent, fontSize: 13)),
+          style: TextStyle(color: AppTheme.postContent, fontSize: 13)),
         subtitle: Text('$topic · ${b['author_handle'] ?? ''}',
-          style: TextStyle(color: SojornColors.textDisabled, fontSize: 11)),
+          style: TextStyle(color: AppTheme.textDisabled, fontSize: 11)),
         trailing: Row(
           mainAxisSize: MainAxisSize.min,
           children: [
-            Icon(Icons.arrow_upward, size: 12, color: SojornColors.textDisabled),
-            Text('${b['upvotes'] ?? 0}', style: TextStyle(color: SojornColors.textDisabled, fontSize: 11)),
+            Icon(Icons.arrow_upward, size: 12, color: AppTheme.textDisabled),
+            Text('${b['upvotes'] ?? 0}', style: TextStyle(color: AppTheme.textDisabled, fontSize: 11)),
           ],
         ),
         onTap: () {
@@ -2472,7 +2504,7 @@ class BeaconScreenState extends ConsumerState<BeaconScreen> with TickerProviderS
           avatarUrl: (g['avatar_url'] as String?)?.isNotEmpty == true ? g['avatar_url'] as String : null,
           size: 36,
         ),
-        title: Text(g['name'] ?? '', style: TextStyle(color: SojornColors.postContent, fontSize: 13, fontWeight: FontWeight.w600)),
+        title: Text(g['name'] ?? '', style: TextStyle(color: AppTheme.postContent, fontSize: 13, fontWeight: FontWeight.w600)),
         subtitle: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           mainAxisSize: MainAxisSize.min,
@@ -2482,13 +2514,13 @@ class BeaconScreenState extends ConsumerState<BeaconScreen> with TickerProviderS
                 g['description'] as String,
                 maxLines: 2,
                 overflow: TextOverflow.ellipsis,
-                style: TextStyle(color: SojornColors.postContentLight, fontSize: 11),
+                style: TextStyle(color: AppTheme.postContentLight, fontSize: 11),
               ),
               const SizedBox(height: 2),
             ],
             Text(
               '${g['member_count'] ?? 0} member${(g['member_count'] ?? 0) == 1 ? '' : 's'} · ${g['type'] ?? ''}',
-              style: TextStyle(color: SojornColors.textDisabled, fontSize: 11),
+              style: TextStyle(color: AppTheme.textDisabled, fontSize: 11),
             ),
           ],
         ),
@@ -2564,9 +2596,9 @@ class BeaconScreenState extends ConsumerState<BeaconScreen> with TickerProviderS
                   padding: const EdgeInsets.fromLTRB(12, 8, 12, 0),
                   child: Row(
                     children: [
-                      Icon(Icons.swipe, size: 13, color: SojornColors.textDisabled),
+                      Icon(Icons.swipe, size: 13, color: AppTheme.textDisabled),
                       const SizedBox(width: 4),
-                      Text('Swipe for more categories', style: TextStyle(fontSize: 11, color: SojornColors.textDisabled)),
+                      Text('Swipe for more categories', style: TextStyle(fontSize: 11, color: AppTheme.textDisabled)),
                     ],
                   ),
                 ),
@@ -2663,7 +2695,7 @@ class BeaconScreenState extends ConsumerState<BeaconScreen> with TickerProviderS
                                     color: AppTheme.navyBlue.withValues(alpha: 0.4), fontSize: 15, fontWeight: FontWeight.w600)),
                                   const SizedBox(height: 4),
                                   Text('Create a group to get started',
-                                    style: TextStyle(color: SojornColors.textDisabled, fontSize: 13)),
+                                    style: TextStyle(color: AppTheme.textDisabled, fontSize: 13)),
                                 ],
                               ),
                             ),
@@ -2820,16 +2852,16 @@ class BeaconScreenState extends ConsumerState<BeaconScreen> with TickerProviderS
                       const SizedBox(width: 3),
                       Text('E2E Encrypted', style: TextStyle(fontSize: 10, color: capsuleDark, fontWeight: FontWeight.w600)),
                     ] else ...[
-                      Icon(Icons.public, size: 11, color: SojornColors.textDisabled),
+                      Icon(Icons.public, size: 11, color: AppTheme.textDisabled),
                       const SizedBox(width: 3),
-                      Text('Public', style: TextStyle(fontSize: 10, color: SojornColors.textDisabled)),
+                      Text('Public', style: TextStyle(fontSize: 10, color: AppTheme.textDisabled)),
                     ],
                     const SizedBox(width: 8),
                     Icon(Icons.people, size: 11,
-                      color: SojornColors.textDisabled),
+                      color: AppTheme.textDisabled),
                     const SizedBox(width: 3),
                     Text('${cluster.memberCount}', style: TextStyle(fontSize: 10,
-                      color: SojornColors.textDisabled)),
+                      color: AppTheme.textDisabled)),
                     if (cluster.category != GroupCategory.general) ...[
                       const SizedBox(width: 8),
                       Icon(cluster.category.icon, size: 11, color: cluster.category.color.withValues(alpha: 0.7)),
@@ -2841,7 +2873,7 @@ class BeaconScreenState extends ConsumerState<BeaconScreen> with TickerProviderS
               ),
             ),
             Icon(Icons.chevron_right, size: 18,
-              color: SojornColors.textDisabled),
+              color: AppTheme.textDisabled),
           ],
         ),
       ),
@@ -3014,22 +3046,22 @@ class BeaconScreenState extends ConsumerState<BeaconScreen> with TickerProviderS
                   ),
                   const SizedBox(height: 3),
                   Text(beacon.body, maxLines: 2, overflow: TextOverflow.ellipsis,
-                    style: TextStyle(color: SojornColors.postContentLight, fontSize: 12)),
+                    style: TextStyle(color: AppTheme.postContentLight, fontSize: 12)),
                   const SizedBox(height: 4),
                   Row(
                     children: [
-                      Icon(Icons.schedule, size: 11, color: SojornColors.textDisabled),
+                      Icon(Icons.schedule, size: 11, color: AppTheme.textDisabled),
                       const SizedBox(width: 3),
-                      Text(beacon.getTimeAgo(), style: TextStyle(color: SojornColors.textDisabled, fontSize: 11)),
+                      Text(beacon.getTimeAgo(), style: TextStyle(color: AppTheme.textDisabled, fontSize: 11)),
                       const SizedBox(width: 10),
-                      Icon(Icons.location_on, size: 11, color: SojornColors.textDisabled),
+                      Icon(Icons.location_on, size: 11, color: AppTheme.textDisabled),
                       const SizedBox(width: 3),
-                      Text(beacon.getFormattedDistance(), style: TextStyle(color: SojornColors.textDisabled, fontSize: 11)),
+                      Text(beacon.getFormattedDistance(), style: TextStyle(color: AppTheme.textDisabled, fontSize: 11)),
                       const Spacer(),
                       if (beacon.verificationCount > 0) ...[
-                        Icon(Icons.visibility, size: 11, color: SojornColors.textDisabled),
+                        Icon(Icons.visibility, size: 11, color: AppTheme.textDisabled),
                         const SizedBox(width: 3),
-                        Text('${beacon.verificationCount}', style: TextStyle(color: SojornColors.textDisabled, fontSize: 11)),
+                        Text('${beacon.verificationCount}', style: TextStyle(color: AppTheme.textDisabled, fontSize: 11)),
                       ],
                     ],
                   ),
@@ -3066,7 +3098,9 @@ class BeaconScreenState extends ConsumerState<BeaconScreen> with TickerProviderS
       ),
       children: [
         TileLayer(
-          urlTemplate: 'https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png',
+          urlTemplate: Theme.of(context).brightness == Brightness.dark
+              ? 'https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png'
+              : 'https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png',
           subdomains: const ['a', 'b', 'c', 'd'],
           userAgentPackageName: 'com.sojorn.app',
           retinaMode: RetinaMode.isHighDensity(context),
@@ -3182,11 +3216,11 @@ class BeaconScreenState extends ConsumerState<BeaconScreen> with TickerProviderS
                 textAlign: TextAlign.center),
               const SizedBox(height: 8),
               Text('Community Safety Network',
-                style: Theme.of(context).textTheme.bodyMedium?.copyWith(color: SojornColors.textDisabled),
+                style: Theme.of(context).textTheme.bodyMedium?.copyWith(color: AppTheme.textDisabled),
                 textAlign: TextAlign.center),
               const SizedBox(height: 20),
               Text('Location access is required to show safety alerts and connect you with your neighborhood.',
-                style: Theme.of(context).textTheme.bodyMedium?.copyWith(color: SojornColors.postContentLight),
+                style: Theme.of(context).textTheme.bodyMedium?.copyWith(color: AppTheme.postContentLight),
                 textAlign: TextAlign.center),
               const SizedBox(height: 24),
               Material(
@@ -3750,16 +3784,16 @@ class _CreateCapsuleInlineState extends State<_CreateCapsuleInline> {
           ]),
           const SizedBox(height: 4),
           Text('End-to-end encrypted. The server never sees your content.',
-            style: TextStyle(fontSize: 12, color: SojornColors.textDisabled)),
+            style: TextStyle(fontSize: 12, color: AppTheme.textDisabled)),
           const SizedBox(height: 20),
           Material(
             color: Colors.transparent,
             child: TextField(
               controller: _nameCtrl,
-              style: TextStyle(color: SojornColors.postContent),
+              style: TextStyle(color: AppTheme.postContent),
               decoration: InputDecoration(
                 labelText: 'Capsule name',
-                labelStyle: TextStyle(color: SojornColors.textDisabled),
+                labelStyle: TextStyle(color: AppTheme.textDisabled),
                 filled: true, fillColor: AppTheme.scaffoldBg,
                 border: OutlineInputBorder(borderRadius: BorderRadius.circular(10), borderSide: BorderSide.none),
               ),
@@ -3770,10 +3804,10 @@ class _CreateCapsuleInlineState extends State<_CreateCapsuleInline> {
             color: Colors.transparent,
             child: TextField(
               controller: _descCtrl, maxLines: 2,
-              style: TextStyle(color: SojornColors.postContent),
+              style: TextStyle(color: AppTheme.postContent),
               decoration: InputDecoration(
                 labelText: 'Description (optional)',
-                labelStyle: TextStyle(color: SojornColors.textDisabled),
+                labelStyle: TextStyle(color: AppTheme.textDisabled),
                 filled: true, fillColor: AppTheme.scaffoldBg,
                 border: OutlineInputBorder(borderRadius: BorderRadius.circular(10), borderSide: BorderSide.none),
               ),
@@ -3791,7 +3825,7 @@ class _CreateCapsuleInlineState extends State<_CreateCapsuleInline> {
               Icon(Icons.shield, size: 14, color: const Color(0xFF4CAF50).withValues(alpha: 0.7)),
               const SizedBox(width: 8),
               Expanded(child: Text('Keys are generated on your device. Only invited members can decrypt content.',
-                style: TextStyle(fontSize: 11, color: SojornColors.postContentLight))),
+                style: TextStyle(fontSize: 11, color: AppTheme.postContentLight))),
             ]),
           ),
           const SizedBox(height: 20),
@@ -3870,7 +3904,7 @@ class _SignDetailSheet extends StatelessWidget {
                     Text('Road Sign',
                       style: TextStyle(color: AppTheme.navyBlue, fontWeight: FontWeight.w700, fontSize: 15)),
                     Text('MN DOT Electronic Sign',
-                      style: TextStyle(color: SojornColors.textDisabled, fontSize: 11)),
+                      style: TextStyle(color: AppTheme.textDisabled, fontSize: 11)),
                   ],
                 ),
               ),
@@ -3906,11 +3940,11 @@ class _SignDetailSheet extends StatelessWidget {
               border: Border.all(color: AppTheme.navyBlue.withValues(alpha: 0.08)),
             ),
             child: Text(sign.body,
-              style: TextStyle(color: SojornColors.postContent, fontSize: 14)),
+              style: TextStyle(color: AppTheme.postContent, fontSize: 14)),
           ),
           const SizedBox(height: 8),
           Text(sign.getTimeAgo(),
-            style: TextStyle(color: SojornColors.textDisabled, fontSize: 11)),
+            style: TextStyle(color: AppTheme.textDisabled, fontSize: 11)),
         ],
       ),
     );
@@ -3963,7 +3997,7 @@ class _WeatherDetailSheet extends StatelessWidget {
                     Text('Weather Station',
                       style: TextStyle(color: AppTheme.navyBlue, fontWeight: FontWeight.w700, fontSize: 15)),
                     Text('MN DOT RWIS Sensor',
-                      style: TextStyle(color: SojornColors.textDisabled, fontSize: 11)),
+                      style: TextStyle(color: AppTheme.textDisabled, fontSize: 11)),
                   ],
                 ),
               ),
@@ -3998,11 +4032,11 @@ class _WeatherDetailSheet extends StatelessWidget {
               border: Border.all(color: AppTheme.navyBlue.withValues(alpha: 0.08)),
             ),
             child: Text(wx.body,
-              style: TextStyle(color: SojornColors.postContent, fontSize: 14, height: 1.5)),
+              style: TextStyle(color: AppTheme.postContent, fontSize: 14, height: 1.5)),
           ),
           const SizedBox(height: 8),
           Text(wx.getTimeAgo(),
-            style: TextStyle(color: SojornColors.textDisabled, fontSize: 11)),
+            style: TextStyle(color: AppTheme.textDisabled, fontSize: 11)),
         ],
       ),
     );

@@ -24,10 +24,12 @@ import 'services/key_vault_service.dart';
 import 'services/local_message_store.dart';
 import 'services/sync_manager.dart';
 import 'services/network_service.dart';
+import 'services/analytics_service.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'theme/app_theme.dart';
 import 'providers/theme_provider.dart' as theme_provider;
 import 'providers/auth_provider.dart';
+import 'providers/accessibility_provider.dart';
 import 'providers/settings_provider.dart';
 import 'providers/feed_refresh_provider.dart';
 import 'providers/header_state_provider.dart';
@@ -159,6 +161,8 @@ class _sojornAppState extends ConsumerState<sojornApp> with WidgetsBindingObserv
     _listenForAuth();
     // Initialize network monitoring
     NetworkService().initialize();
+    // Track app open (queued until analytics init completes at 600ms).
+    AnalyticsService.instance.event('app_opened');
     
     if (kDebugMode) debugPrint('[APP] initState sync complete — deferring heavy init');
     // Defer heavy work with real delays to avoid jank on first paint
@@ -166,6 +170,9 @@ class _sojornAppState extends ConsumerState<sojornApp> with WidgetsBindingObserv
       if (kDebugMode) debugPrint('[APP] Post-frame: starting deferred init');
       // E2EE init is now handled by VaultSetupGate to avoid racing ahead
       // of the vault restore prompt. Only notifications and sync here.
+      Future.delayed(const Duration(milliseconds: 600), () {
+        AnalyticsService.instance.initialize();
+      });
       Future.delayed(const Duration(milliseconds: 800), () {
         _initNotifications();
       });
@@ -188,6 +195,9 @@ class _sojornAppState extends ConsumerState<sojornApp> with WidgetsBindingObserv
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
     if (kDebugMode) debugPrint('[APP] Lifecycle: $state  ${DateTime.now().toIso8601String()}');
+    if (state == AppLifecycleState.paused || state == AppLifecycleState.detached) {
+      AnalyticsService.instance.event('app_backgrounded');
+    }
     if (state == AppLifecycleState.resumed && _authService.isAuthenticated) {
       // If keys aren't in memory, try to reload them from local storage first.
       // Only surface the vault gate if initialization genuinely cannot find keys
@@ -315,21 +325,38 @@ class _sojornAppState extends ConsumerState<sojornApp> with WidgetsBindingObserv
   @override
   Widget build(BuildContext context) {
     final themeMode = ref.watch(theme_provider.themeProvider);
+    final a11y = ref.watch(accessibilityProvider);
 
     AppTheme.setThemeType(themeMode == theme_provider.ThemeMode.pop
         ? AppThemeType.pop
         : AppThemeType.basic);
 
-    return MaterialApp.router(
-      title: 'sojorn',
-      theme: AppTheme.lightTheme,
-      debugShowCheckedModeBanner: false,
-      localizationsDelegates: const [
-        GlobalWidgetsLocalizations.delegate,
-        GlobalMaterialLocalizations.delegate,
-        flutter_quill.FlutterQuillLocalizations.delegate,
-      ],
-      routerConfig: AppRoutes.router,
+    // Resolve effective brightness for AppTheme static getters.
+    final platformBrightness = MediaQuery.of(context).platformBrightness;
+    final effectiveBrightness = switch (a11y.themeMode) {
+      ThemeMode.dark => Brightness.dark,
+      ThemeMode.light => Brightness.light,
+      ThemeMode.system => platformBrightness,
+    };
+    AppTheme.setBrightness(effectiveBrightness);
+
+    return MediaQuery(
+      data: MediaQuery.of(context).copyWith(
+        textScaler: TextScaler.linear(a11y.textSize.scaleFactor),
+      ),
+      child: MaterialApp.router(
+        title: 'sojorn',
+        theme: AppTheme.lightTheme,
+        darkTheme: AppTheme.darkTheme,
+        themeMode: a11y.themeMode,
+        debugShowCheckedModeBanner: false,
+        localizationsDelegates: const [
+          GlobalWidgetsLocalizations.delegate,
+          GlobalMaterialLocalizations.delegate,
+          flutter_quill.FlutterQuillLocalizations.delegate,
+        ],
+        routerConfig: AppRoutes.router,
+      ),
     );
   }
 }

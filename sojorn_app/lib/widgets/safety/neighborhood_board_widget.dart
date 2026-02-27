@@ -99,7 +99,7 @@ class NeighborhoodBoardWidget extends StatelessWidget {
                   const SizedBox(height: 4),
                   Text(
                     'Start a conversation with your neighbors',
-                    style: TextStyle(color: SojornColors.textDisabled, fontSize: 12),
+                    style: TextStyle(color: AppTheme.textDisabled, fontSize: 12),
                   ),
                 ],
               ),
@@ -161,7 +161,7 @@ class _DiscussionCard extends StatelessWidget {
                 const Spacer(),
                 Text(
                   beacon.getTimeAgo(),
-                  style: TextStyle(color: SojornColors.textDisabled, fontSize: 11),
+                  style: TextStyle(color: AppTheme.textDisabled, fontSize: 11),
                 ),
               ],
             ),
@@ -169,7 +169,7 @@ class _DiscussionCard extends StatelessWidget {
             // Body
             Text(
               beacon.body,
-              style: TextStyle(color: SojornColors.postContent, fontSize: 13, height: 1.4),
+              style: TextStyle(color: AppTheme.postContent, fontSize: 13, height: 1.4),
               maxLines: 3,
               overflow: TextOverflow.ellipsis,
             ),
@@ -177,26 +177,26 @@ class _DiscussionCard extends StatelessWidget {
             // Bottom: author + distance
             Row(
               children: [
-                if (beacon.authorDisplayName != null) ...[                  Icon(Icons.person_outline, size: 12, color: SojornColors.textDisabled),
+                if (beacon.authorDisplayName != null) ...[                  Icon(Icons.person_outline, size: 12, color: AppTheme.textDisabled),
                   const SizedBox(width: 3),
                   Text(
                     beacon.authorDisplayName!,
-                    style: TextStyle(color: SojornColors.textDisabled, fontSize: 11),
+                    style: TextStyle(color: AppTheme.textDisabled, fontSize: 11),
                   ),
                   const SizedBox(width: 12),
                 ],
-                Icon(Icons.location_on, size: 12, color: SojornColors.textDisabled),
+                Icon(Icons.location_on, size: 12, color: AppTheme.textDisabled),
                 const SizedBox(width: 2),
                 Text(
                   beacon.getFormattedDistance(),
-                  style: TextStyle(color: SojornColors.textDisabled, fontSize: 11),
+                  style: TextStyle(color: AppTheme.textDisabled, fontSize: 11),
                 ),
                 const Spacer(),
-                Icon(Icons.visibility, size: 12, color: SojornColors.textDisabled),
+                Icon(Icons.visibility, size: 12, color: AppTheme.textDisabled),
                 const SizedBox(width: 3),
                 Text(
                   '${beacon.verificationCount}',
-                  style: TextStyle(color: SojornColors.textDisabled, fontSize: 11),
+                  style: TextStyle(color: AppTheme.textDisabled, fontSize: 11),
                 ),
               ],
             ),

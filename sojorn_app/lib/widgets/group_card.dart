@@ -98,7 +98,7 @@ class _GroupCardState extends ConsumerState<GroupCard> {
         width: 80,
         height: 32,
         decoration: BoxDecoration(
-          color: Colors.grey[300],
+          color: AppTheme.borderSubtle,
           borderRadius: BorderRadius.circular(16),
         ),
         child: const Center(
@@ -215,7 +215,7 @@ class _GroupCardState extends ConsumerState<GroupCard> {
                             ),
                           ),
                           if (widget.group.isPrivate)
-                            const Icon(Icons.lock, size: 16, color: Colors.grey),
+                            Icon(Icons.lock, size: 16, color: AppTheme.textDisabled),
                         ],
                       ),
                       const SizedBox(height: 4),
@@ -247,7 +247,7 @@ class _GroupCardState extends ConsumerState<GroupCard> {
                 widget.group.description,
                 style: TextStyle(
                   fontSize: 13,
-                  color: Colors.grey[600],
+                  color: AppTheme.textDisabled,
                   height: 1.3,
                 ),
                 maxLines: 2,
@@ -264,16 +264,16 @@ class _GroupCardState extends ConsumerState<GroupCard> {
                   widget.group.memberCountText,
                   style: TextStyle(
                     fontSize: 12,
-                    color: Colors.grey[500],
+                    color: AppTheme.textDisabled,
                     fontWeight: FontWeight.w500,
                   ),
                 ),
-                Text(' • ', style: TextStyle(fontSize: 12, color: Colors.grey[500])),
+                Text(' • ', style: TextStyle(fontSize: 12, color: AppTheme.textDisabled)),
                 Text(
                   widget.group.postCountText,
                   style: TextStyle(
                     fontSize: 12,
-                    color: Colors.grey[500],
+                    color: AppTheme.textDisabled,
                     fontWeight: FontWeight.w500,
                   ),
                 ),
@@ -380,12 +380,12 @@ class CompactGroupCard extends StatelessWidget {
               mainAxisAlignment: MainAxisAlignment.center,
               children: [
                 if (group.isPrivate)
-                  Icon(Icons.lock, size: 12, color: Colors.grey[600]),
+                  Icon(Icons.lock, size: 12, color: AppTheme.textDisabled),
                 Text(
                   group.memberCountText,
                   style: TextStyle(
                     fontSize: 11,
-                    color: Colors.grey[500],
+                    color: AppTheme.textDisabled,
                   ),
                 ),
               ],

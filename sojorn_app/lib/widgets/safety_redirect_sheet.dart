@@ -45,7 +45,7 @@ class SafetyRedirectSheet extends StatelessWidget {
               CupertinoIcons.arrow_up_right_square,
               size: 56,
               color: theme.iconTheme.color?.withValues(alpha: 0.7) ??
-                  SojornColors.textDisabled,
+                  AppTheme.textDisabled,
             ),
             const SizedBox(height: 20),
 
@@ -119,7 +119,7 @@ class SafetyRedirectSheet extends StatelessWidget {
                   Icon(
                     CupertinoIcons.hand_raised,
                     color: theme.iconTheme.color?.withValues(alpha: 0.6) ??
-                        SojornColors.textDisabled,
+                        AppTheme.textDisabled,
                     size: 18,
                   ),
                   const SizedBox(width: 8),

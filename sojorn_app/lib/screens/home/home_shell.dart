@@ -27,6 +27,7 @@ import '../../widgets/onboarding_modal.dart';
 import '../../widgets/offline_indicator.dart';
 import '../../widgets/neighborhood/neighborhood_picker_sheet.dart';
 import '../../services/api_service.dart';
+import '../../services/analytics_service.dart';
 import '../../providers/quip_upload_provider.dart';
 import '../../providers/notification_provider.dart';
 import '../../models/profile.dart';
@@ -88,8 +89,9 @@ class _HomeShellState extends ConsumerState<HomeShell> with WidgetsBindingObserv
   void initState() {
     super.initState();
     if (kDebugMode) debugPrint('[SHELL] HomeShell initState');
+    final reduceMotion = WidgetsBinding.instance.platformDispatcher.accessibilityFeatures.disableAnimations;
     _fabRotationController = AnimationController(
-      duration: const Duration(milliseconds: 300),
+      duration: reduceMotion ? Duration.zero : const Duration(milliseconds: 300),
       vsync: this,
     );
     WidgetsBinding.instance.addObserver(this);
@@ -140,6 +142,76 @@ class _HomeShellState extends ConsumerState<HomeShell> with WidgetsBindingObserv
     } catch (e) {
       if (kDebugMode) debugPrint('[SHELL] Desktop sidebar data load failed: $e');
     }
+  }
+
+  void _showDesktopStatusEditor() {
+    final profile = _desktopProfile;
+    if (profile == null) return;
+    final ctrl = TextEditingController(text: profile.statusText ?? '');
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        backgroundColor: AppTheme.cardSurface,
+        shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(SojornRadii.modal)),
+        title: Text('Set Status',
+            style: TextStyle(
+                fontSize: 16,
+                fontWeight: FontWeight.w700,
+                color: AppTheme.navyText)),
+        content: TextField(
+          controller: ctrl,
+          autofocus: true,
+          maxLength: 80,
+          style: TextStyle(fontSize: 14, color: AppTheme.postContent),
+          decoration: InputDecoration(
+            hintText: 'at the coffee shop',
+            hintStyle: TextStyle(
+                color: AppTheme.navyText.withValues(alpha: 0.35),
+                fontStyle: FontStyle.italic),
+            border: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(SojornRadii.md)),
+            focusedBorder: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(SojornRadii.md),
+                borderSide: BorderSide(color: AppTheme.brightNavy)),
+          ),
+        ),
+        actions: [
+          if ((profile.statusText ?? '').isNotEmpty)
+            TextButton(
+              onPressed: () async {
+                Navigator.pop(ctx);
+                try {
+                  final updated =
+                      await ApiService.instance.updateProfile(statusText: '');
+                  if (mounted) setState(() => _desktopProfile = updated);
+                } catch (_) {}
+              },
+              child: Text('Clear', style: TextStyle(color: AppTheme.error)),
+            ),
+          TextButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: Text('Cancel',
+                style: TextStyle(color: AppTheme.textDisabled)),
+          ),
+          FilledButton(
+            onPressed: () async {
+              final text = ctrl.text.trim();
+              Navigator.pop(ctx);
+              if (text == (profile.statusText ?? '')) return;
+              try {
+                final updated =
+                    await ApiService.instance.updateProfile(statusText: text);
+                if (mounted) setState(() => _desktopProfile = updated);
+              } catch (_) {}
+            },
+            style: FilledButton.styleFrom(
+                backgroundColor: AppTheme.brightNavy),
+            child: const Text('Save'),
+          ),
+        ],
+      ),
+    );
   }
 
   Future<void> _loadNavTapCounts() async {
@@ -369,6 +441,12 @@ class _HomeShellState extends ConsumerState<HomeShell> with WidgetsBindingObserv
 
   Color _ambientColor() {
     final hour = DateTime.now().hour;
+    if (AppTheme.isDark) {
+      if (hour >= 6 && hour < 10) return const Color(0xFF161724);
+      if (hour >= 10 && hour < 16) return SojornColors.darkScaffoldBg;
+      if (hour >= 16 && hour < 20) return const Color(0xFF151625);
+      return const Color(0xFF121320);
+    }
     if (hour >= 6 && hour < 10) return const Color(0xFFFFF8F0);
     if (hour >= 10 && hour < 16) return SojornColors.basicQueenPinkLight;
     if (hour >= 16 && hour < 20) return const Color(0xFFF5F0F8);
@@ -742,42 +820,9 @@ class _HomeShellState extends ConsumerState<HomeShell> with WidgetsBindingObserv
               : SingleChildScrollView(
                   padding: const EdgeInsets.all(16),
                   child: Column(
-                    children: [
-                      if (currentIndex == 4) ...[
-                        Container(
-                          width: double.infinity,
-                          padding: const EdgeInsets.all(14),
-                          decoration: BoxDecoration(
-                            gradient: LinearGradient(
-                              colors: [
-                                AppTheme.royalPurple.withValues(alpha: 0.12),
-                                AppTheme.brightNavy.withValues(alpha: 0.08),
-                              ],
-                            ),
-                            borderRadius: BorderRadius.circular(SojornRadii.card),
-                          ),
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Row(
-                                children: [
-                                  Icon(Icons.explore, size: 18, color: AppTheme.royalPurple),
-                                  const SizedBox(width: 8),
-                                  Text('Discover', style: TextStyle(fontSize: 14, fontWeight: FontWeight.w700, color: AppTheme.navyText)),
-                                ],
-                              ),
-                              const SizedBox(height: 4),
-                              Text(
-                                'Find new people, trending topics, and popular content.',
-                                style: TextStyle(fontSize: 11, color: AppTheme.navyText.withValues(alpha: 0.6)),
-                              ),
-                            ],
-                          ),
-                        ),
-                        const SizedBox(height: 12),
-                      ],
-                      ..._buildSidebarWidgets(leftWidgets),
-                    ],
+                    children: currentIndex == 4
+                        ? _buildDiscoverLeftSidebar(leftWidgets)
+                        : _buildSidebarWidgets(leftWidgets),
                   ),
                 ),
         ),
@@ -811,12 +856,86 @@ class _HomeShellState extends ConsumerState<HomeShell> with WidgetsBindingObserv
               : SingleChildScrollView(
                   padding: const EdgeInsets.all(16),
                   child: Column(
-                    children: _buildSidebarWidgets(rightWidgets),
+                    children: currentIndex == 4
+                        ? _buildDiscoverRightSidebar()
+                        : _buildSidebarWidgets(rightWidgets),
                   ),
                 ),
         ),
       ],
     );
+  }
+
+  // ── Discover-specific sidebar builders ────────────────────────────────────
+
+  List<Widget> _buildDiscoverLeftSidebar(List<DashboardWidget> leftWidgets) {
+    return [
+      // Discover banner
+      Container(
+        width: double.infinity,
+        padding: const EdgeInsets.all(14),
+        decoration: BoxDecoration(
+          gradient: LinearGradient(
+            colors: [
+              AppTheme.royalPurple.withValues(alpha: 0.12),
+              AppTheme.brightNavy.withValues(alpha: 0.08),
+            ],
+          ),
+          borderRadius: BorderRadius.circular(SojornRadii.card),
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                Icon(Icons.explore, size: 18, color: AppTheme.royalPurple),
+                const SizedBox(width: 8),
+                Text('Discover',
+                    style: TextStyle(
+                        fontSize: 14,
+                        fontWeight: FontWeight.w700,
+                        color: AppTheme.navyText)),
+              ],
+            ),
+            const SizedBox(height: 4),
+            Text(
+              'Find new people, trending topics, and popular content.',
+              style: TextStyle(
+                  fontSize: 11,
+                  color: AppTheme.navyText.withValues(alpha: 0.6)),
+            ),
+          ],
+        ),
+      ),
+      const SizedBox(height: 12),
+      // Profile card (identity anchor)
+      if (_desktopProfile != null)
+        DesktopProfileCard(
+          profile: _desktopProfile!,
+          stats: _desktopStats,
+          onProfileTap: () => widget.navigationShell.goBranch(3),
+          onEditTap: () => widget.navigationShell.goBranch(3),
+          onStatusTap: _showDesktopStatusEditor,
+        ),
+      const SizedBox(height: 12),
+      // Suggested users to follow
+      const DesktopSuggestedUsersCard(),
+    ];
+  }
+
+  List<Widget> _buildDiscoverRightSidebar() {
+    return [
+      const DesktopTrendingHashtagsCard(),
+      const SizedBox(height: 12),
+      const DesktopPopularGroupsCard(),
+      const SizedBox(height: 12),
+      // Keep calendar — events are discoverable content
+      ..._buildSidebarWidgets(
+        _dashboardLayout.rightSidebar
+            .where((w) => w.type == DashboardWidgetType.upcomingEvents)
+            .toList(),
+      ),
+    ];
   }
 
   /// Sidebar in edit mode: draggable widgets with visual chrome.
@@ -981,6 +1100,7 @@ class _HomeShellState extends ConsumerState<HomeShell> with WidgetsBindingObserv
           stats: _desktopStats,
           onProfileTap: () => widget.navigationShell.goBranch(3),
           onEditTap: () => widget.navigationShell.goBranch(3),
+          onStatusTap: _showDesktopStatusEditor,
         );
       case DashboardWidgetType.top8Friends:
         if (_desktopFriends.isEmpty) return null;
@@ -1062,6 +1182,7 @@ class _HomeShellState extends ConsumerState<HomeShell> with WidgetsBindingObserv
                         _fabRotationController.reverse();
                       },
                       onPostTap: () {
+                        AnalyticsService.instance.event('fab_action', value: 'post');
                         Navigator.of(context).push(
                           MaterialPageRoute(
                             builder: (_) => const ComposeScreen(),
@@ -1069,6 +1190,7 @@ class _HomeShellState extends ConsumerState<HomeShell> with WidgetsBindingObserv
                         );
                       },
                       onQuipTap: () {
+                        AnalyticsService.instance.event('fab_action', value: 'quip');
                         Navigator.of(context).push(
                           MaterialPageRoute(
                             builder: (_) => const QuipCreationFlow(),
@@ -1076,6 +1198,7 @@ class _HomeShellState extends ConsumerState<HomeShell> with WidgetsBindingObserv
                         );
                       },
                       onBeaconTap: () {
+                        AnalyticsService.instance.event('fab_action', value: 'beacon');
                         setState(() => _isRadialMenuVisible = false);
                         _fabRotationController.reverse();
                         widget.navigationShell.goBranch(2);
@@ -1152,6 +1275,7 @@ class _HomeShellState extends ConsumerState<HomeShell> with WidgetsBindingObserv
                 setState(() => _isRadialMenuVisible = !_isRadialMenuVisible);
                 if (_isRadialMenuVisible) {
                   _fabRotationController.forward();
+                  AnalyticsService.instance.event('fab_opened');
                 } else {
                   _fabRotationController.reverse();
                 }
@@ -1334,7 +1458,11 @@ class _HomeShellState extends ConsumerState<HomeShell> with WidgetsBindingObserv
     final tooltip = _longPressTooltips[index];
 
     return Expanded(
-      child: GestureDetector(
+      child: Semantics(
+        selected: isActive,
+        label: label,
+        button: true,
+        child: GestureDetector(
         onLongPress: tooltip != null ? () {
           final overlay = Overlay.of(context);
           late OverlayEntry entry;
@@ -1351,9 +1479,11 @@ class _HomeShellState extends ConsumerState<HomeShell> with WidgetsBindingObserv
         } : null,
         child: InkWell(
           onTap: () {
+            HapticFeedback.selectionClick();
             final tabs = ['Home', 'Quips', 'Beacons', 'Profile'];
             if (kDebugMode) debugPrint('[NAV] Tab tapped: ${index < tabs.length ? tabs[index] : index}');
             _incrementNavTap(index);
+            AnalyticsService.instance.event('nav_tab_tap', value: tabs[index].toLowerCase());
             widget.navigationShell.goBranch(
               index,
               initialLocation: index == widget.navigationShell.currentIndex,
@@ -1369,17 +1499,21 @@ class _HomeShellState extends ConsumerState<HomeShell> with WidgetsBindingObserv
                 Stack(
                   clipBehavior: Clip.none,
                   children: [
-                    assetPath != null
+                    ExcludeSemantics(
+                      child: assetPath != null
                         ? Image.asset(
                             (isActive && activeAssetPath != null) ? activeAssetPath : assetPath,
                             width: SojornNav.bottomBarIconSize,
                             height: SojornNav.bottomBarIconSize,
+                            semanticLabel: label,
                           )
                         : Icon(
                             isActive ? activeIcon : icon,
                             color: isActive ? AppTheme.navyBlue : SojornColors.bottomNavUnselected,
                             size: SojornNav.bottomBarIconSize,
+                            semanticLabel: label,
                           ),
+                    ),
                     if (showHelper)
                       Positioned(
                         right: -18,
@@ -1398,20 +1532,23 @@ class _HomeShellState extends ConsumerState<HomeShell> with WidgetsBindingObserv
                   ],
                 ),
                 SizedBox(height: SojornNav.bottomBarLabelTopGap),
-                Text(
-                  label,
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: TextStyle(
-                    fontSize: SojornNav.bottomBarLabelSize,
-                    fontWeight: isActive ? FontWeight.w700 : FontWeight.w600,
-                    color: isActive ? AppTheme.navyBlue : SojornColors.bottomNavUnselected,
+                ExcludeSemantics(
+                  child: Text(
+                    label,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: TextStyle(
+                      fontSize: SojornNav.bottomBarLabelSize,
+                      fontWeight: isActive ? FontWeight.w700 : FontWeight.w600,
+                      color: isActive ? AppTheme.navyBlue : SojornColors.bottomNavUnselected,
+                    ),
                   ),
                 ),
               ],
             ),
           ),
         ),
+      ),
       ),
     );
   }

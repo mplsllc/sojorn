@@ -176,6 +176,7 @@ class _MFASetupScreenState extends State<MFASetupScreen> {
           decoration: BoxDecoration(
             color: Colors.white,
             borderRadius: BorderRadius.circular(16),
+            border: AppTheme.isDark ? Border.all(color: Colors.white.withValues(alpha: 0.1)) : null,
           ),
           child: QrImageView(
             data: _provisioningUri!,

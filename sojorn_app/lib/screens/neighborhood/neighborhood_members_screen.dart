@@ -84,7 +84,7 @@ class _NeighborhoodMembersScreenState
       case 'moderator':
         return const Color(0xFF4CAF50);
       default:
-        return SojornColors.textDisabled;
+        return AppTheme.textDisabled;
     }
   }
 
@@ -120,12 +120,12 @@ class _NeighborhoodMembersScreenState
             child: TextField(
               controller: _searchCtrl,
               style: TextStyle(
-                  color: SojornColors.postContent, fontSize: 14),
+                  color: AppTheme.postContent, fontSize: 14),
               decoration: InputDecoration(
                 hintText: 'Search members...',
-                hintStyle: TextStyle(color: SojornColors.textDisabled),
+                hintStyle: TextStyle(color: AppTheme.textDisabled),
                 prefixIcon: Icon(Icons.search,
-                    color: SojornColors.textDisabled, size: 20),
+                    color: AppTheme.textDisabled, size: 20),
                 filled: true,
                 fillColor: AppTheme.scaffoldBg,
                 contentPadding: const EdgeInsets.symmetric(
@@ -150,7 +150,7 @@ class _NeighborhoodMembersScreenState
                   Text(
                     '${_filtered.length} member${_filtered.length == 1 ? '' : 's'}',
                     style: theme.textTheme.bodySmall?.copyWith(
-                      color: SojornColors.textDisabled,
+                      color: AppTheme.textDisabled,
                       fontWeight: FontWeight.w600,
                     ),
                   ),
@@ -168,7 +168,7 @@ class _NeighborhoodMembersScreenState
                     ? Center(
                         child: Text('No members found',
                             style: TextStyle(
-                                color: SojornColors.textDisabled)))
+                                color: AppTheme.textDisabled)))
                     : RefreshIndicator(
                         onRefresh: _loadMembers,
                         child: ListView.builder(

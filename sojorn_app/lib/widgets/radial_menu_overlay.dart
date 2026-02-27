@@ -37,8 +37,9 @@ class _RadialMenuOverlayState extends State<RadialMenuOverlay>
   @override
   void initState() {
     super.initState();
+    final reduceMotion = WidgetsBinding.instance.platformDispatcher.accessibilityFeatures.disableAnimations;
     _controller = AnimationController(
-      duration: const Duration(milliseconds: 400),
+      duration: reduceMotion ? Duration.zero : const Duration(milliseconds: 400),
       vsync: this,
     );
 

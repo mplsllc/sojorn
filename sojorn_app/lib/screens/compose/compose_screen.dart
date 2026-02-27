@@ -7,6 +7,8 @@ import 'dart:typed_data';
 
 import 'package:flutter/material.dart';
 import 'package:flutter/foundation.dart';
+import 'package:flutter/services.dart' show HapticFeedback;
+import '../../services/analytics_service.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:image_picker/image_picker.dart';
 import 'dart:async';
@@ -350,6 +352,7 @@ class _ComposeScreenState extends ConsumerState<ComposeScreen> {
                     ? Icon(Icons.check_circle, color: AppTheme.brightNavy, size: 20)
                     : null,
                 onTap: () {
+                  AnalyticsService.instance.event('post_visibility_set', value: value);
                   setState(() => _visibility = value);
                   Navigator.pop(ctx);
                 },
@@ -485,7 +488,7 @@ class _ComposeScreenState extends ConsumerState<ComposeScreen> {
   }
 
   Future<void> _publish() async {
-    if (_bodyController.text.trim().isEmpty) {
+    if (_bodyController.text.trim().isEmpty && !_hasMedia) {
       sojornSnackbar.showError(
         context: context,
         message: 'Post cannot be empty',
@@ -551,15 +554,19 @@ class _ComposeScreenState extends ConsumerState<ComposeScreen> {
         audioOverlayUrl: _selectedAudioTrack?.path,
       );
       debugPrint('[Compose] ✓ published');
+      final mediaType = (_selectedGifUrl != null || _selectedImageFile != null || imageUrl != null) ? 'image' : 'text';
+      AnalyticsService.instance.event('post_created', value: mediaType);
 
       if (mounted && !_popped) {
         _popped = true;
+        HapticFeedback.lightImpact();
         ref.read(feedRefreshProvider.notifier).increment();
         Navigator.of(context).pop(true);
         return; // Skip finally setState — widget is being disposed
       }
     } catch (e) {
       debugPrint('[Compose] ✗ publish failed: $e');
+      AnalyticsService.instance.event('error_upload_failed', value: 'post');
       if (!mounted || _popped) return;
       final msg = e.toString().replaceAll('Exception: ', '');
       // Server-side blocklist catch (422 with blocked content message)
@@ -646,14 +653,18 @@ class _ComposeScreenState extends ConsumerState<ComposeScreen> {
                       ],
                     ),
                   ),
-                  GestureDetector(
-                    onTap: () => setState(() => _blockedMessage = null),
-                    child: Padding(
-                      padding: const EdgeInsets.only(left: 8),
-                      child: Icon(
-                        Icons.close,
-                        size: 16,
-                        color: AppTheme.error.withValues(alpha: 0.6),
+                  Semantics(
+                    button: true,
+                    label: 'Dismiss warning',
+                    child: GestureDetector(
+                      onTap: () => setState(() => _blockedMessage = null),
+                      child: Padding(
+                        padding: const EdgeInsets.only(left: 8),
+                        child: Icon(
+                          Icons.close,
+                          size: 16,
+                          color: AppTheme.error.withValues(alpha: 0.6),
+                        ),
                       ),
                     ),
                   ),
@@ -664,8 +675,14 @@ class _ComposeScreenState extends ConsumerState<ComposeScreen> {
     );
   }
 
+  bool get _hasMedia =>
+      _selectedImageFile != null ||
+      _selectedImageBytes != null ||
+      _selectedGifUrl != null;
+
   bool get _canPublish {
-    return _bodyController.text.trim().isNotEmpty &&
+    final hasText = _bodyController.text.trim().isNotEmpty;
+    return (hasText || _hasMedia) &&
         _bodyController.text.trim().length <= _maxCharacters &&
         !_isLoading &&
         !_isUploadingImage;
@@ -909,12 +926,16 @@ class _ComposeScreenState extends ConsumerState<ComposeScreen> {
               child: Material(
                 color: SojornColors.overlayDark,
                 shape: const CircleBorder(),
-                child: InkWell(
-                  onTap: _removeImage,
-                  customBorder: const CircleBorder(),
-                  child: const Padding(
-                    padding: EdgeInsets.all(6),
-                    child: Icon(Icons.close, color: SojornColors.basicWhite, size: 18),
+                child: Semantics(
+                  button: true,
+                  label: 'Remove image',
+                  child: InkWell(
+                    onTap: _removeImage,
+                    customBorder: const CircleBorder(),
+                    child: const Padding(
+                      padding: EdgeInsets.all(6),
+                      child: Icon(Icons.close, color: SojornColors.basicWhite, size: 18),
+                    ),
                   ),
                 ),
               ),
@@ -947,12 +968,16 @@ class _ComposeScreenState extends ConsumerState<ComposeScreen> {
               child: Material(
                 color: SojornColors.overlayDark,
                 shape: const CircleBorder(),
-                child: InkWell(
-                  onTap: _removeImage,
-                  customBorder: const CircleBorder(),
-                  child: const Padding(
-                    padding: EdgeInsets.all(6),
-                    child: Icon(Icons.close, color: SojornColors.basicWhite, size: 18),
+                child: Semantics(
+                  button: true,
+                  label: 'Remove GIF',
+                  child: InkWell(
+                    onTap: _removeImage,
+                    customBorder: const CircleBorder(),
+                    child: const Padding(
+                      padding: EdgeInsets.all(6),
+                      child: Icon(Icons.close, color: SojornColors.basicWhite, size: 18),
+                    ),
                   ),
                 ),
               ),
@@ -1023,12 +1048,16 @@ class _ComposeScreenState extends ConsumerState<ComposeScreen> {
               child: CircularProgressIndicator(strokeWidth: 2),
             )
           else
-            GestureDetector(
-              onTap: () => setState(() {
-                _linkPreview = null;
-                _detectedUrl = null;
-              }),
-              child: Icon(Icons.close, size: 18, color: AppTheme.textTertiary),
+            Semantics(
+              button: true,
+              label: 'Dismiss link preview',
+              child: GestureDetector(
+                onTap: () => setState(() {
+                  _linkPreview = null;
+                  _detectedUrl = null;
+                }),
+                child: Icon(Icons.close, size: 18, color: AppTheme.textTertiary),
+              ),
             ),
         ],
       ),
@@ -1300,9 +1329,13 @@ class ComposeBottomBar extends StatelessWidget {
                         overflow: TextOverflow.ellipsis,
                       ),
                     ),
-                    GestureDetector(
-                      onTap: onClearAudio,
-                      child: const Icon(Icons.close, size: 16, color: Colors.purple),
+                    Semantics(
+                      button: true,
+                      label: 'Remove audio',
+                      child: GestureDetector(
+                        onTap: onClearAudio,
+                        child: const Icon(Icons.close, size: 16, color: Colors.purple),
+                      ),
                     ),
                   ],
                 ),

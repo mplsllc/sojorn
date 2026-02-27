@@ -6,6 +6,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../models/board_entry.dart';
 import '../../providers/api_provider.dart';
+import '../../services/analytics_service.dart';
 import '../../theme/tokens.dart';
 import '../../theme/app_theme.dart';
 import '../../widgets/composer/composer_bar.dart';
@@ -44,6 +45,7 @@ class _CreateBoardPostSheetState extends ConsumerState<CreateBoardPostSheet> {
     );
     if (mounted) {
       final entry = BoardEntry.fromJson(data['entry'] as Map<String, dynamic>);
+      AnalyticsService.instance.event('commons_post_created', value: _selectedTopic.value);
       widget.onEntryCreated(entry);
       Navigator.of(context).pop();
     }
@@ -82,7 +84,7 @@ class _CreateBoardPostSheetState extends ConsumerState<CreateBoardPostSheet> {
                 ),
                 IconButton(
                   onPressed: () => Navigator.of(context).pop(),
-                  icon: Icon(Icons.close, color: SojornColors.textDisabled),
+                  icon: Icon(Icons.close, color: AppTheme.textDisabled),
                 ),
               ],
             ),
@@ -115,12 +117,12 @@ class _CreateBoardPostSheetState extends ConsumerState<CreateBoardPostSheet> {
                     child: Column(
                       mainAxisAlignment: MainAxisAlignment.center,
                       children: [
-                        Icon(topic.icon, size: 22, color: isSelected ? topic.color : SojornColors.postContentLight),
+                        Icon(topic.icon, size: 22, color: isSelected ? topic.color : AppTheme.postContentLight),
                         const SizedBox(height: 4),
                         Text(
                           topic.displayName,
                           style: TextStyle(
-                            color: isSelected ? topic.color : SojornColors.postContentLight,
+                            color: isSelected ? topic.color : AppTheme.postContentLight,
                             fontSize: 10,
                             fontWeight: isSelected ? FontWeight.w600 : FontWeight.normal,
                           ),

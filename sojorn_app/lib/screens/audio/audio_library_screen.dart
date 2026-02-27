@@ -12,6 +12,7 @@ import 'package:video_player/video_player.dart';
 
 import '../../config/api_config.dart';
 import '../../providers/api_provider.dart';
+import '../../theme/app_theme.dart';
 
 /// Result returned when the user picks an audio track.
 class AudioTrack {
@@ -241,23 +242,23 @@ class _AudioLibraryScreenState extends ConsumerState<AudioLibraryScreen>
   Widget _libraryBody() {
     if (_loading) return const Center(child: CircularProgressIndicator());
     if (_unavailable) {
-      return const Center(
+      return Center(
         child: Padding(
-          padding: EdgeInsets.all(32),
+          padding: const EdgeInsets.all(32),
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
-              Icon(Icons.cloud_off, size: 48, color: Colors.grey),
-              SizedBox(height: 16),
-              Text(
+              Icon(Icons.cloud_off, size: 48, color: AppTheme.textDisabled),
+              const SizedBox(height: 16),
+              const Text(
                 'Sound library unavailable',
                 style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600),
               ),
-              SizedBox(height: 8),
+              const SizedBox(height: 8),
               Text(
                 'Use the Device tab to add your own audio, or try again later.',
                 textAlign: TextAlign.center,
-                style: TextStyle(color: Colors.grey),
+                style: TextStyle(color: AppTheme.textDisabled),
               ),
             ],
           ),
@@ -320,13 +321,13 @@ class _DeviceTab extends StatelessWidget {
       child: Column(
         mainAxisSize: MainAxisSize.min,
         children: [
-          const Icon(Icons.folder_open, size: 64, color: Colors.grey),
+          Icon(Icons.folder_open, size: 64, color: AppTheme.textDisabled),
           const SizedBox(height: 16),
           const Text('Pick an audio file from your device',
               style: TextStyle(fontSize: 16)),
           const SizedBox(height: 8),
-          const Text('MP3, AAC, WAV, FLAC and more',
-              style: TextStyle(color: Colors.grey)),
+          Text('MP3, AAC, WAV, FLAC and more',
+              style: TextStyle(color: AppTheme.textDisabled)),
           const SizedBox(height: 24),
           ElevatedButton.icon(
             onPressed: onPick,

@@ -8,6 +8,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:path_provider/path_provider.dart';
+import '../theme/app_theme.dart';
 import 'package:permission_handler/permission_handler.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:share_plus/share_plus.dart';
@@ -327,12 +328,12 @@ class _BlockManagementScreenState extends State<BlockManagementScreen> {
             ...BlockingService.getSupportedFormats().map((format) => ListTile(
               leading: Icon(
                 format.importFunction != null ? Icons.file_download : Icons.file_upload,
-                color: format.importFunction != null ? Colors.green : Colors.grey,
+                color: format.importFunction != null ? Colors.green : AppTheme.textDisabled,
               ),
               title: Text(format.name),
               subtitle: Text(format.description),
               trailing: format.importFunction != null
-                  ? const Icon(Icons.arrow_forward_ios, color: Colors.grey)
+                  ? Icon(Icons.arrow_forward_ios, color: AppTheme.textDisabled)
                   : null,
               onTap: format.importFunction != null
                   ? () => _importFromFormat(format)
@@ -558,24 +559,24 @@ class _BlockManagementScreenState extends State<BlockManagementScreen> {
               child: Column(
                 mainAxisAlignment: MainAxisAlignment.center,
                 children: [
-                  const Icon(
+                  Icon(
                     Icons.block,
-                    color: Colors.grey,
+                    color: AppTheme.textDisabled,
                     size: 48,
                   ),
                   const SizedBox(height: 16),
-                  const Text(
+                  Text(
                     'No blocked users',
                     style: TextStyle(
-                      color: Colors.grey,
+                      color: AppTheme.textDisabled,
                       fontSize: 18,
                     ),
                   ),
                   const SizedBox(height: 8),
-                  const Text(
+                  Text(
                     'Import an existing block list or start blocking users',
                     style: TextStyle(
-                      color: Colors.grey,
+                      color: AppTheme.textDisabled,
                       fontSize: 14,
                     ),
                     textAlign: TextAlign.center,
@@ -590,16 +591,16 @@ class _BlockManagementScreenState extends State<BlockManagementScreen> {
                   margin: const EdgeInsets.all(16),
                   padding: const EdgeInsets.all(16),
                   decoration: BoxDecoration(
-                    color: Colors.grey[900],
+                    color: AppTheme.cardSurface,
                     borderRadius: BorderRadius.circular(12),
                   ),
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      const Text(
+                      Text(
                         'Statistics',
                         style: TextStyle(
-                          color: Colors.white,
+                          color: AppTheme.postContent,
                           fontSize: 18,
                           fontWeight: FontWeight.bold,
                         ),
@@ -607,8 +608,8 @@ class _BlockManagementScreenState extends State<BlockManagementScreen> {
                       const SizedBox(height: 8),
                       Text(
                         'Total Blocked: ${_blockedUsers.length}',
-                        style: const TextStyle(
-                          color: Colors.white,
+                        style: TextStyle(
+                          color: AppTheme.postContent,
                           fontSize: 14,
                         ),
                       ),
@@ -616,7 +617,7 @@ class _BlockManagementScreenState extends State<BlockManagementScreen> {
                       Text(
                         'Last Updated: ${DateTime.now().toIso8601String()}',
                         style: TextStyle(
-                          color: Colors.grey[400],
+                          color: AppTheme.textDisabled,
                           fontSize: 12,
                         ),
                       ),
@@ -632,10 +633,10 @@ class _BlockManagementScreenState extends State<BlockManagementScreen> {
                       final userId = _blockedUsers[index];
                       return ListTile(
                         leading: CircleAvatar(
-                          backgroundColor: Colors.grey[700],
-                          child: const Icon(
+                          backgroundColor: AppTheme.surfaceElevated,
+                          child: Icon(
                             Icons.person,
-                            color: Colors.white,
+                            color: AppTheme.postContent,
                           ),
                         ),
                         title: Text(

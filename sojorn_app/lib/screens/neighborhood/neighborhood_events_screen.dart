@@ -105,17 +105,17 @@ class _NeighborhoodEventsScreenState extends State<NeighborhoodEventsScreen> {
                             children: [
                               Icon(Icons.event_outlined,
                                   size: 48,
-                                  color: SojornColors.textDisabled),
+                                  color: AppTheme.textDisabled),
                               const SizedBox(height: 12),
                               Text('No events yet',
                                   style: theme.textTheme.bodyLarge?.copyWith(
-                                    color: SojornColors.textDisabled,
+                                    color: AppTheme.textDisabled,
                                   )),
                               const SizedBox(height: 4),
                               Text(
                                   'Events in your neighborhood will appear here',
                                   style: theme.textTheme.bodySmall?.copyWith(
-                                    color: SojornColors.textDisabled,
+                                    color: AppTheme.textDisabled,
                                   )),
                               if (_canCreate) ...[
                                 const SizedBox(height: 16),
@@ -270,7 +270,7 @@ class _EventCard extends StatelessWidget {
                     const SizedBox(width: 4),
                     PopupMenuButton<String>(
                       icon: Icon(Icons.more_vert,
-                          size: 16, color: SojornColors.textDisabled),
+                          size: 16, color: AppTheme.textDisabled),
                       iconSize: 16,
                       padding: EdgeInsets.zero,
                       onSelected: (v) {
@@ -308,7 +308,7 @@ class _EventCard extends StatelessWidget {
                 event.title,
                 style: theme.textTheme.titleMedium?.copyWith(
                   fontWeight: FontWeight.bold,
-                  color: isPast ? SojornColors.textDisabled : null,
+                  color: isPast ? AppTheme.textDisabled : null,
                 ),
               ),
 
@@ -325,12 +325,12 @@ class _EventCard extends StatelessWidget {
                 Row(
                   children: [
                     Icon(Icons.location_on_outlined,
-                        size: 14, color: SojornColors.textDisabled),
+                        size: 14, color: AppTheme.textDisabled),
                     const SizedBox(width: 4),
                     Expanded(
                       child: Text(event.locationName!,
                           style: theme.textTheme.bodySmall?.copyWith(
-                            color: SojornColors.textDisabled,
+                            color: AppTheme.textDisabled,
                           )),
                     ),
                   ],
@@ -343,11 +343,11 @@ class _EventCard extends StatelessWidget {
               Row(
                 children: [
                   Icon(Icons.people_outline,
-                      size: 16, color: SojornColors.textDisabled),
+                      size: 16, color: AppTheme.textDisabled),
                   const SizedBox(width: 4),
                   Text('${event.attendeeCount} going',
                       style: theme.textTheme.bodySmall?.copyWith(
-                        color: SojornColors.textDisabled,
+                        color: AppTheme.textDisabled,
                       )),
                   const Spacer(),
                   if (!isPast) ...[

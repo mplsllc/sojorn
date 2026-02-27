@@ -82,9 +82,10 @@ class _ChatBubbleWidgetState extends State<ChatBubbleWidget>
   @override
   void initState() {
     super.initState();
+    final reduceMotion = WidgetsBinding.instance.platformDispatcher.accessibilityFeatures.disableAnimations;
     _animController = AnimationController(
       vsync: this,
-      duration: const Duration(milliseconds: 260),
+      duration: reduceMotion ? Duration.zero : const Duration(milliseconds: 260),
     );
     _fade =
         CurvedAnimation(parent: _animController, curve: Curves.easeOutCubic);

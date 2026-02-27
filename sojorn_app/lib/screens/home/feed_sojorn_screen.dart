@@ -7,6 +7,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:geolocator/geolocator.dart';
+import 'package:go_router/go_router.dart';
 import 'package:share_plus/share_plus.dart';
 import '../../providers/api_provider.dart';
 import '../../providers/feed_refresh_provider.dart';
@@ -19,9 +20,6 @@ import '../../widgets/post/post_view_mode.dart';
 import '../../widgets/sojorn_post_card.dart';
 import '../../services/ad_integration_service.dart';
 import '../compose/compose_screen.dart';
-import '../post/post_detail_screen.dart';
-import '../profile/viewable_profile_screen.dart';
-import '../../widgets/desktop/desktop_dialog_helper.dart';
 import '../../widgets/desktop/desktop_slide_panel.dart';
 
 /// sojorn feed - TikTok/Reels style immersive swipeable feed
@@ -195,7 +193,7 @@ class _FeedsojornScreenState extends ConsumerState<FeedsojornScreen> {
   }
 
   void _openPostDetail(Post post) {
-    openDesktopDialog(context, width: 700, child: PostDetailScreen(post: post));
+    context.push('/p/${post.id}', extra: post);
   }
 
   void _openChainComposer(Post post) async {
@@ -210,16 +208,7 @@ class _FeedsojornScreenState extends ConsumerState<FeedsojornScreen> {
 
   void _openAuthorProfile(Post post) {
     if (post.author != null && post.author!.handle.isNotEmpty) {
-      final isDesktop = MediaQuery.of(context).size.width >= 900;
-      if (isDesktop) {
-        openDesktopDialog(context, width: 700, child: UnifiedProfileScreen(handle: post.author!.handle));
-      } else {
-        Navigator.of(context).push(
-          MaterialPageRoute(
-            builder: (_) => UnifiedProfileScreen(handle: post.author!.handle),
-          ),
-        );
-      }
+      context.push('/u/${post.author!.handle}');
     }
   }
 

@@ -138,14 +138,14 @@ class _NeighborhoodResourcesScreenState
                                     Icon(_selectedTopic.icon,
                                         size: 48,
                                         color:
-                                            SojornColors.textDisabled),
+                                            AppTheme.textDisabled),
                                     const SizedBox(height: 12),
                                     Text(
                                         'No ${_selectedTopic.displayName.toLowerCase()}s yet',
                                         style: theme.textTheme.bodyLarge
                                             ?.copyWith(
                                           color:
-                                              SojornColors.textDisabled,
+                                              AppTheme.textDisabled,
                                         )),
                                     const SizedBox(height: 4),
                                     Text(
@@ -153,7 +153,7 @@ class _NeighborhoodResourcesScreenState
                                         style: theme.textTheme.bodySmall
                                             ?.copyWith(
                                           color:
-                                              SojornColors.textDisabled,
+                                              AppTheme.textDisabled,
                                         )),
                                   ],
                                 ),
@@ -227,7 +227,7 @@ class _ResourceCard extends StatelessWidget {
                       ),
                       Text('@${entry.authorHandle}',
                           style: TextStyle(
-                              color: SojornColors.textDisabled,
+                              color: AppTheme.textDisabled,
                               fontSize: 11)),
                     ],
                   ),
@@ -263,7 +263,7 @@ class _ResourceCard extends StatelessWidget {
             Text(
               entry.body,
               style: theme.textTheme.bodyMedium?.copyWith(
-                color: SojornColors.postContent,
+                color: AppTheme.postContent,
               ),
               maxLines: 6,
               overflow: TextOverflow.ellipsis,
@@ -274,24 +274,24 @@ class _ResourceCard extends StatelessWidget {
             Row(
               children: [
                 Icon(Icons.arrow_upward,
-                    size: 14, color: SojornColors.textDisabled),
+                    size: 14, color: AppTheme.textDisabled),
                 const SizedBox(width: 2),
                 Text('${entry.upvotes}',
                     style: TextStyle(
-                        color: SojornColors.textDisabled,
+                        color: AppTheme.textDisabled,
                         fontSize: 12)),
                 const SizedBox(width: 12),
                 Icon(Icons.chat_bubble_outline,
-                    size: 14, color: SojornColors.textDisabled),
+                    size: 14, color: AppTheme.textDisabled),
                 const SizedBox(width: 2),
                 Text('${entry.replyCount}',
                     style: TextStyle(
-                        color: SojornColors.textDisabled,
+                        color: AppTheme.textDisabled,
                         fontSize: 12)),
                 const Spacer(),
                 Text(entry.getTimeAgo(),
                     style: TextStyle(
-                        color: SojornColors.textDisabled,
+                        color: AppTheme.textDisabled,
                         fontSize: 11)),
               ],
             ),

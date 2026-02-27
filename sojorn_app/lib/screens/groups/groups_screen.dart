@@ -57,23 +57,30 @@ class _GroupsScreenState extends ConsumerState<GroupsScreen> {
 
   Future<void> _loadInitialData() async {
     setState(() => _isLoading = true);
+    // Fire all three requests independently so one failure doesn't block the rest
+    await Future.wait([
+      _loadMyGroups(),
+      _loadSuggestedGroups(),
+      _loadDiscoverGroups(),
+    ]);
+    if (mounted) setState(() => _isLoading = false);
+  }
+
+  Future<void> _loadMyGroups() async {
     try {
-      final results = await Future.wait([
-        ApiService.instance.getMyGroups(),
-        ApiService.instance.getSuggestedGroups(limit: 6),
-        ApiService.instance.listGroups(limit: 50),
-      ]);
-      if (mounted) {
-        setState(() {
-          _myGroups = results[0] as List<Group>;
-          _suggestedGroups = results[1] as List<SuggestedGroup>;
-          _discoverGroups = results[2] as List<Group>;
-        });
-      }
+      final groups = await ApiService.instance.getMyGroups();
+      if (mounted) setState(() => _myGroups = groups);
     } catch (e) {
-      if (kDebugMode) debugPrint('[GROUPS] Load failed: $e');
-    } finally {
-      if (mounted) setState(() => _isLoading = false);
+      if (kDebugMode) debugPrint('[GROUPS] My groups load failed: $e');
+    }
+  }
+
+  Future<void> _loadSuggestedGroups() async {
+    try {
+      final suggested = await ApiService.instance.getSuggestedGroups(limit: 6);
+      if (mounted) setState(() => _suggestedGroups = suggested);
+    } catch (e) {
+      if (kDebugMode) debugPrint('[GROUPS] Suggested load failed: $e');
     }
   }
 
@@ -275,7 +282,7 @@ class _GroupsScreenState extends ConsumerState<GroupsScreen> {
             style: TextStyle(
               fontSize: 11,
               fontWeight: FontWeight.w700,
-              color: SojornColors.textDisabled,
+              color: AppTheme.textDisabled,
               letterSpacing: 0.5,
             ),
           ),
@@ -340,7 +347,7 @@ class _GroupsScreenState extends ConsumerState<GroupsScreen> {
                     '${group.memberCount} members · ${group.userRole?.displayName ?? 'Member'}',
                     style: TextStyle(
                       fontSize: 11,
-                      color: SojornColors.textDisabled,
+                      color: AppTheme.textDisabled,
                     ),
                   ),
                 ],
@@ -348,7 +355,7 @@ class _GroupsScreenState extends ConsumerState<GroupsScreen> {
             ),
             if (group.isPrivate)
               Icon(Icons.lock,
-                  size: 14, color: SojornColors.textDisabled),
+                  size: 14, color: AppTheme.textDisabled),
           ],
         ),
       ),
@@ -409,7 +416,7 @@ class _GroupsScreenState extends ConsumerState<GroupsScreen> {
             style: TextStyle(
               fontSize: 11,
               fontWeight: FontWeight.w700,
-              color: SojornColors.textDisabled,
+              color: AppTheme.textDisabled,
               letterSpacing: 0.5,
             ),
           ),
@@ -457,7 +464,7 @@ class _GroupsScreenState extends ConsumerState<GroupsScreen> {
                       '$count',
                       style: TextStyle(
                         fontSize: 12,
-                        color: SojornColors.textDisabled,
+                        color: AppTheme.textDisabled,
                       ),
                     ),
                 ],
@@ -498,7 +505,7 @@ class _GroupsScreenState extends ConsumerState<GroupsScreen> {
               'Groups based on your interests',
               style: TextStyle(
                 fontSize: 13,
-                color: SojornColors.textDisabled,
+                color: AppTheme.textDisabled,
               ),
             ),
             const SizedBox(height: 16),
@@ -512,14 +519,16 @@ class _GroupsScreenState extends ConsumerState<GroupsScreen> {
           ],
 
           // ── Filter pills ──
-          Wrap(
-            spacing: 8,
-            runSpacing: 8,
-            children: [
-              _buildFilterPill(null, 'All'),
-              ...GroupCategory.values
-                  .map((c) => _buildFilterPill(c, c.displayName)),
-            ],
+          SingleChildScrollView(
+            scrollDirection: Axis.horizontal,
+            child: Row(
+              children: [
+                _buildFilterPill(null, 'All'),
+                const SizedBox(width: 8),
+                ...GroupCategory.values
+                    .expand((c) => [_buildFilterPill(c, c.displayName), const SizedBox(width: 8)]),
+              ],
+            ),
           ),
           const SizedBox(height: 20),
 
@@ -541,7 +550,7 @@ class _GroupsScreenState extends ConsumerState<GroupsScreen> {
                 : 'Popular and active groups',
             style: TextStyle(
               fontSize: 13,
-              color: SojornColors.textDisabled,
+              color: AppTheme.textDisabled,
             ),
           ),
           const SizedBox(height: 16),
@@ -581,7 +590,7 @@ class _GroupsScreenState extends ConsumerState<GroupsScreen> {
           borderRadius: BorderRadius.circular(20),
           border: isActive
               ? null
-              : Border.all(color: Colors.grey.shade300),
+              : Border.all(color: AppTheme.borderSubtle),
         ),
         child: Text(
           label,
@@ -782,7 +791,7 @@ class _GroupsScreenState extends ConsumerState<GroupsScreen> {
               style: const TextStyle(fontSize: 12),
             ),
             trailing: group.isPrivate
-                ? const Icon(Icons.lock, size: 16, color: Colors.grey)
+                ? Icon(Icons.lock, size: 16, color: AppTheme.textDisabled)
                 : const Icon(Icons.chevron_right, size: 18),
             onTap: () => _navigateToGroup(group),
           );

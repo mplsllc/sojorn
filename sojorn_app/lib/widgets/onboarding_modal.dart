@@ -4,6 +4,7 @@
 
 import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import '../services/analytics_service.dart';
 import '../theme/app_theme.dart';
 import '../theme/tokens.dart';
 
@@ -49,6 +50,7 @@ class _OnboardingModalState extends State<OnboardingModal> {
   }
 
   Future<void> _complete() async {
+    AnalyticsService.instance.event('onboarding_completed');
     final prefs = await SharedPreferences.getInstance();
     await prefs.setBool(OnboardingModal._prefKey, true);
     if (mounted) Navigator.of(context).pop();
@@ -88,7 +90,10 @@ class _OnboardingModalState extends State<OnboardingModal> {
                 Expanded(
                   child: PageView(
                     controller: _controller,
-                    onPageChanged: (i) => setState(() => _currentPage = i),
+                    onPageChanged: (i) {
+                      AnalyticsService.instance.event('onboarding_step', value: '${i + 1}');
+                      setState(() => _currentPage = i);
+                    },
                     children: const [
                       _WelcomePage(),
                       _FeaturesPage(),
@@ -187,7 +192,7 @@ class _WelcomePage extends StatelessWidget {
           Text(
             'Let\'s learn about all the features available to you.',
             style: TextStyle(
-              fontSize: 14, color: SojornColors.postContentLight, height: 1.5,
+              fontSize: 14, color: AppTheme.postContentLight, height: 1.5,
             ),
             textAlign: TextAlign.center,
           ),
@@ -283,7 +288,7 @@ class _FeatureRow extends StatelessWidget {
               )),
               const SizedBox(height: 2),
               Text(subtitle, style: TextStyle(
-                fontSize: 12, color: SojornColors.textDisabled,
+                fontSize: 12, color: AppTheme.textDisabled,
               )),
             ],
           ),
@@ -319,7 +324,7 @@ class _HarmonyPage extends StatelessWidget {
           Text(
             'Your Harmony State grows as you contribute positively. Higher harmony means greater reach.',
             style: TextStyle(
-              fontSize: 14, color: SojornColors.postContentLight, height: 1.5,
+              fontSize: 14, color: AppTheme.postContentLight, height: 1.5,
             ),
             textAlign: TextAlign.center,
           ),
@@ -377,10 +382,10 @@ class _HarmonyLevel extends StatelessWidget {
         Expanded(
           child: Text(label, style: TextStyle(
             fontSize: 13, fontWeight: isActive ? FontWeight.w700 : FontWeight.w500,
-            color: isActive ? AppTheme.navyBlue : SojornColors.textDisabled,
+            color: isActive ? AppTheme.navyBlue : AppTheme.textDisabled,
           )),
         ),
-        Text(range, style: TextStyle(fontSize: 11, color: SojornColors.textDisabled)),
+        Text(range, style: TextStyle(fontSize: 11, color: AppTheme.textDisabled)),
         const SizedBox(width: 12),
         Container(
           padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
@@ -392,7 +397,7 @@ class _HarmonyLevel extends StatelessWidget {
           ),
           child: Text(multiplier, style: TextStyle(
             fontSize: 11, fontWeight: FontWeight.w700,
-            color: isActive ? const Color(0xFF4CAF50) : SojornColors.textDisabled,
+            color: isActive ? const Color(0xFF4CAF50) : AppTheme.textDisabled,
           )),
         ),
       ],

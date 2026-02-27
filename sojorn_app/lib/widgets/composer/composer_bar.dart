@@ -170,11 +170,11 @@ class _ComposerBarState extends State<ComposerBar> {
               child: TextField(
                 controller: _ctrl,
                 focusNode: widget.focusNode,
-                style: TextStyle(color: SojornColors.postContent, fontSize: 14),
+                style: TextStyle(color: AppTheme.postContent, fontSize: 14),
                 maxLines: widget.config.maxLines,
                 decoration: InputDecoration(
                   hintText: widget.config.hintText,
-                  hintStyle: TextStyle(color: SojornColors.textDisabled),
+                  hintStyle: TextStyle(color: AppTheme.textDisabled),
                   filled: true,
                   fillColor: AppTheme.scaffoldBg,
                   contentPadding:
@@ -237,10 +237,14 @@ class _ComposerBarState extends State<ComposerBar> {
                 ),
               if (_hasAttachment) ...[
                 const Spacer(),
-                GestureDetector(
-                  onTap: _clearAttachment,
-                  child: Icon(Icons.cancel_outlined,
-                      size: 18, color: AppTheme.textSecondary),
+                Semantics(
+                  button: true,
+                  label: 'Remove attachment',
+                  child: GestureDetector(
+                    onTap: _clearAttachment,
+                    child: Icon(Icons.cancel_outlined,
+                        size: 18, color: AppTheme.textSecondary),
+                  ),
                 ),
               ],
             ],

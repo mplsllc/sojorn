@@ -149,7 +149,7 @@ class _PrivateCapsuleScreenState extends ConsumerState<PrivateCapsuleScreen>
           const SizedBox(height: 20),
           Text(
             'Decrypting…',
-            style: TextStyle(color: SojornColors.textDisabled, fontSize: 14),
+            style: TextStyle(color: AppTheme.textDisabled, fontSize: 14),
           ),
           const SizedBox(height: 8),
           SizedBox(
@@ -222,18 +222,18 @@ class _PrivateCapsuleScreenState extends ConsumerState<PrivateCapsuleScreen>
                         children: [
                           _SecureBadge(),
                           const Spacer(),
-                          Icon(Icons.people, size: 14, color: SojornColors.textDisabled),
+                          Icon(Icons.people, size: 14, color: AppTheme.textDisabled),
                           const SizedBox(width: 4),
                           Text(
                             '${widget.capsule.memberCount}',
-                            style: TextStyle(color: SojornColors.postContentLight, fontSize: 13),
+                            style: TextStyle(color: AppTheme.postContentLight, fontSize: 13),
                           ),
                           const SizedBox(width: 12),
-                          Icon(Icons.vpn_key, size: 14, color: SojornColors.textDisabled),
+                          Icon(Icons.vpn_key, size: 14, color: AppTheme.textDisabled),
                           const SizedBox(width: 4),
                           Text(
                             'v${widget.capsule.keyVersion}',
-                            style: TextStyle(color: SojornColors.textDisabled, fontSize: 11),
+                            style: TextStyle(color: AppTheme.textDisabled, fontSize: 11),
                           ),
                         ],
                       ),
@@ -241,7 +241,7 @@ class _PrivateCapsuleScreenState extends ConsumerState<PrivateCapsuleScreen>
                         const Spacer(),
                         Text(
                           widget.capsule.description,
-                          style: TextStyle(color: SojornColors.postContentLight, fontSize: 13),
+                          style: TextStyle(color: AppTheme.postContentLight, fontSize: 13),
                           maxLines: 2,
                           overflow: TextOverflow.ellipsis,
                         ),
@@ -269,7 +269,7 @@ class _PrivateCapsuleScreenState extends ConsumerState<PrivateCapsuleScreen>
               controller: _tabController,
               indicatorColor: const Color(0xFF4CAF50),
               labelColor: AppTheme.navyBlue,
-              unselectedLabelColor: SojornColors.textDisabled,
+              unselectedLabelColor: AppTheme.textDisabled,
               tabs: const [
                 Tab(icon: Icon(Icons.chat_bubble, size: 18), text: 'Chat'),
                 Tab(icon: Icon(Icons.forum, size: 18), text: 'Forum'),
@@ -521,9 +521,9 @@ class _CapsuleChatTabState extends State<_CapsuleChatTab> {
                         children: [
                           Icon(Icons.chat_bubble_outline, size: 40, color: AppTheme.navyBlue.withValues(alpha: 0.15)),
                           const SizedBox(height: 12),
-                          Text('No messages yet', style: TextStyle(color: SojornColors.postContentLight, fontSize: 14)),
+                          Text('No messages yet', style: TextStyle(color: AppTheme.postContentLight, fontSize: 14)),
                           const SizedBox(height: 4),
-                          Text('Messages are end-to-end encrypted', style: TextStyle(color: SojornColors.textDisabled, fontSize: 12)),
+                          Text('Messages are end-to-end encrypted', style: TextStyle(color: AppTheme.textDisabled, fontSize: 12)),
                         ],
                       ),
                     )
@@ -555,10 +555,10 @@ class _CapsuleChatTabState extends State<_CapsuleChatTab> {
                 Expanded(
                   child: TextField(
                     controller: _msgCtrl,
-                    style: TextStyle(color: SojornColors.postContent, fontSize: 14),
+                    style: TextStyle(color: AppTheme.postContent, fontSize: 14),
                     decoration: InputDecoration(
                       hintText: 'Encrypted message…',
-                      hintStyle: TextStyle(color: SojornColors.textDisabled),
+                      hintStyle: TextStyle(color: AppTheme.textDisabled),
                       filled: true,
                       fillColor: AppTheme.scaffoldBg,
                       contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
@@ -625,7 +625,7 @@ class _ChatBubble extends StatelessWidget {
                 padding: const EdgeInsets.only(bottom: 3),
                 child: Text(handle, style: const TextStyle(color: Color(0xFF4CAF50), fontSize: 11, fontWeight: FontWeight.w600)),
               ),
-            Text(text, style: TextStyle(color: SojornColors.postContent, fontSize: 14, height: 1.35)),
+            Text(text, style: TextStyle(color: AppTheme.postContent, fontSize: 14, height: 1.35)),
           ],
         ),
       ),
@@ -725,9 +725,9 @@ class _CapsuleForumTabState extends State<_CapsuleForumTab> {
                       children: [
                         Icon(Icons.forum, size: 40, color: AppTheme.navyBlue.withValues(alpha: 0.15)),
                         const SizedBox(height: 12),
-                        Text('No threads yet', style: TextStyle(color: SojornColors.postContentLight, fontSize: 14)),
+                        Text('No threads yet', style: TextStyle(color: AppTheme.postContentLight, fontSize: 14)),
                         const SizedBox(height: 4),
-                        Text('Threaded discussions with E2E encryption', style: TextStyle(color: SojornColors.textDisabled, fontSize: 12)),
+                        Text('Threaded discussions with E2E encryption', style: TextStyle(color: AppTheme.textDisabled, fontSize: 12)),
                       ],
                     ),
                   )
@@ -753,7 +753,7 @@ class _CapsuleForumTabState extends State<_CapsuleForumTab> {
                               if (body.isNotEmpty)
                                 Padding(
                                   padding: const EdgeInsets.only(top: 4),
-                                  child: Text(body, maxLines: 2, overflow: TextOverflow.ellipsis, style: TextStyle(color: SojornColors.postContentLight, fontSize: 12)),
+                                  child: Text(body, maxLines: 2, overflow: TextOverflow.ellipsis, style: TextStyle(color: AppTheme.postContentLight, fontSize: 12)),
                                 ),
                               const SizedBox(height: 6),
                               Text(handle, style: TextStyle(color: const Color(0xFF4CAF50).withValues(alpha: 0.7), fontSize: 11)),
@@ -804,10 +804,10 @@ class _NewForumThreadSheetState extends State<_NewForumThreadSheet> {
           const SizedBox(height: 16),
           TextField(
             controller: _titleCtrl,
-            style: TextStyle(color: SojornColors.postContent, fontSize: 14),
+            style: TextStyle(color: AppTheme.postContent, fontSize: 14),
             decoration: InputDecoration(
               hintText: 'Thread title',
-              hintStyle: TextStyle(color: SojornColors.textDisabled),
+              hintStyle: TextStyle(color: AppTheme.textDisabled),
               filled: true, fillColor: AppTheme.scaffoldBg,
               border: OutlineInputBorder(borderRadius: BorderRadius.circular(10), borderSide: BorderSide.none),
             ),
@@ -815,11 +815,11 @@ class _NewForumThreadSheetState extends State<_NewForumThreadSheet> {
           const SizedBox(height: 10),
           TextField(
             controller: _bodyCtrl,
-            style: TextStyle(color: SojornColors.postContent, fontSize: 14),
+            style: TextStyle(color: AppTheme.postContent, fontSize: 14),
             maxLines: 4,
             decoration: InputDecoration(
               hintText: 'What do you want to discuss?',
-              hintStyle: TextStyle(color: SojornColors.textDisabled),
+              hintStyle: TextStyle(color: AppTheme.textDisabled),
               filled: true, fillColor: AppTheme.scaffoldBg,
               border: OutlineInputBorder(borderRadius: BorderRadius.circular(10), borderSide: BorderSide.none),
             ),
@@ -945,9 +945,9 @@ class _CapsuleVaultTabState extends State<_CapsuleVaultTab> {
                       children: [
                         Icon(Icons.folder_special, size: 40, color: AppTheme.navyBlue.withValues(alpha: 0.15)),
                         const SizedBox(height: 12),
-                        Text('Vault is empty', style: TextStyle(color: SojornColors.postContentLight, fontSize: 14)),
+                        Text('Vault is empty', style: TextStyle(color: AppTheme.postContentLight, fontSize: 14)),
                         const SizedBox(height: 4),
-                        Text('Shared encrypted notes and files', style: TextStyle(color: SojornColors.textDisabled, fontSize: 12)),
+                        Text('Shared encrypted notes and files', style: TextStyle(color: AppTheme.textDisabled, fontSize: 12)),
                       ],
                     ),
                   )
@@ -988,7 +988,7 @@ class _CapsuleVaultTabState extends State<_CapsuleVaultTab> {
                                   children: [
                                     Text(name, style: TextStyle(color: AppTheme.navyBlue, fontWeight: FontWeight.w600, fontSize: 13)),
                                     const SizedBox(height: 3),
-                                    Text('by $handle', style: TextStyle(color: SojornColors.textDisabled, fontSize: 11)),
+                                    Text('by $handle', style: TextStyle(color: AppTheme.textDisabled, fontSize: 11)),
                                   ],
                                 ),
                               ),
@@ -1039,10 +1039,10 @@ class _NewVaultNoteSheetState extends State<_NewVaultNoteSheet> {
           const SizedBox(height: 16),
           TextField(
             controller: _nameCtrl,
-            style: TextStyle(color: SojornColors.postContent, fontSize: 14),
+            style: TextStyle(color: AppTheme.postContent, fontSize: 14),
             decoration: InputDecoration(
               hintText: 'Note title',
-              hintStyle: TextStyle(color: SojornColors.textDisabled),
+              hintStyle: TextStyle(color: AppTheme.textDisabled),
               filled: true, fillColor: AppTheme.scaffoldBg,
               border: OutlineInputBorder(borderRadius: BorderRadius.circular(10), borderSide: BorderSide.none),
             ),
@@ -1050,11 +1050,11 @@ class _NewVaultNoteSheetState extends State<_NewVaultNoteSheet> {
           const SizedBox(height: 10),
           TextField(
             controller: _bodyCtrl,
-            style: TextStyle(color: SojornColors.postContent, fontSize: 14),
+            style: TextStyle(color: AppTheme.postContent, fontSize: 14),
             maxLines: 5,
             decoration: InputDecoration(
               hintText: 'Note content…',
-              hintStyle: TextStyle(color: SojornColors.textDisabled),
+              hintStyle: TextStyle(color: AppTheme.textDisabled),
               filled: true, fillColor: AppTheme.scaffoldBg,
               border: OutlineInputBorder(borderRadius: BorderRadius.circular(10), borderSide: BorderSide.none),
             ),
@@ -1446,13 +1446,13 @@ class _AdminAction extends StatelessWidget {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text(label, style: TextStyle(color: SojornColors.postContent, fontSize: 14, fontWeight: FontWeight.w600)),
+                  Text(label, style: TextStyle(color: AppTheme.postContent, fontSize: 14, fontWeight: FontWeight.w600)),
                   const SizedBox(height: 2),
-                  Text(subtitle, style: TextStyle(color: SojornColors.textDisabled, fontSize: 11)),
+                  Text(subtitle, style: TextStyle(color: AppTheme.textDisabled, fontSize: 11)),
                 ],
               ),
             ),
-            Icon(Icons.chevron_right, color: SojornColors.textDisabled, size: 18),
+            Icon(Icons.chevron_right, color: AppTheme.textDisabled, size: 18),
           ],
         ),
       ),

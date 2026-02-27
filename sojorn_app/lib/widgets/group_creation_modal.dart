@@ -6,6 +6,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../models/group.dart';
 import '../providers/api_provider.dart';
+import '../services/analytics_service.dart';
 import '../theme/app_theme.dart';
 import 'media/sojorn_avatar.dart';
 import '../utils/error_handler.dart';
@@ -58,6 +59,7 @@ class _GroupCreationModalState extends ConsumerState<GroupCreationModal> {
       );
 
       if (mounted) {
+        AnalyticsService.instance.event('group_created', value: _isPrivate ? 'private' : 'public');
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
             content: Text('Group created successfully!'),
@@ -86,7 +88,7 @@ class _GroupCreationModalState extends ConsumerState<GroupCreationModal> {
             child: Container(
               height: 4,
               decoration: BoxDecoration(
-                color: i <= _currentStep ? AppTheme.navyBlue : Colors.grey[300],
+                color: i <= _currentStep ? AppTheme.navyBlue : AppTheme.borderSubtle,
                 borderRadius: BorderRadius.circular(2),
               ),
             ),
@@ -172,7 +174,7 @@ class _GroupCreationModalState extends ConsumerState<GroupCreationModal> {
                       color: isSelected ? AppTheme.navyBlue : Colors.black87,
                     ),
                     side: BorderSide(
-                      color: isSelected ? AppTheme.navyBlue : Colors.grey[300]!,
+                      color: isSelected ? AppTheme.navyBlue : AppTheme.borderSubtle,
                     ),
                   );
                 }).toList(),
@@ -213,7 +215,7 @@ class _GroupCreationModalState extends ConsumerState<GroupCreationModal> {
           'Add personality to your group with images (optional)',
           style: TextStyle(
             fontSize: 14,
-            color: Colors.grey[600],
+            color: AppTheme.textDisabled,
           ),
         ),
         const SizedBox(height: 20),
@@ -222,7 +224,7 @@ class _GroupCreationModalState extends ConsumerState<GroupCreationModal> {
         Container(
           height: 120,
           decoration: BoxDecoration(
-            border: Border.all(color: Colors.grey[300]!),
+            border: Border.all(color: AppTheme.borderSubtle),
             borderRadius: BorderRadius.circular(12),
           ),
           child: Column(
@@ -250,13 +252,13 @@ class _GroupCreationModalState extends ConsumerState<GroupCreationModal> {
         Container(
           height: 80,
           decoration: BoxDecoration(
-            border: Border.all(color: Colors.grey[300]!),
+            border: Border.all(color: AppTheme.borderSubtle),
             borderRadius: BorderRadius.circular(12),
           ),
           child: Column(
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
-              Icon(Icons.image_outlined, size: 32, color: Colors.grey[400]),
+              Icon(Icons.image_outlined, size: 32, color: AppTheme.textDisabled),
               const SizedBox(height: 4),
               TextButton(
                 onPressed: () {
@@ -335,7 +337,7 @@ class _GroupCreationModalState extends ConsumerState<GroupCreationModal> {
                     ),
                   ),
                   if (_isPrivate)
-                    const Icon(Icons.lock, size: 16, color: Colors.grey),
+                    Icon(Icons.lock, size: 16, color: AppTheme.textDisabled),
                 ],
               ),
               if (_descriptionController.text.trim().isNotEmpty) ...[
@@ -344,7 +346,7 @@ class _GroupCreationModalState extends ConsumerState<GroupCreationModal> {
                   _descriptionController.text.trim(),
                   style: TextStyle(
                     fontSize: 14,
-                    color: Colors.grey[600],
+                    color: AppTheme.textDisabled,
                   ),
                 ),
               ],

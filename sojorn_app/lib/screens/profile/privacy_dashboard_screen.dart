@@ -5,6 +5,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../models/profile_privacy_settings.dart';
+import '../../providers/analytics_provider.dart';
 import '../../providers/api_provider.dart';
 import '../../theme/app_theme.dart';
 import '../../theme/tokens.dart';
@@ -76,7 +77,7 @@ class _PrivacyDashboardScreenState extends ConsumerState<PrivacyDashboardScreen>
       body: _isLoading
           ? const Center(child: CircularProgressIndicator())
           : _settings == null
-              ? Center(child: Text('Could not load settings', style: TextStyle(color: SojornColors.textDisabled)))
+              ? Center(child: Text('Could not load settings', style: TextStyle(color: AppTheme.textDisabled)))
               : ListView(
                   padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
                   children: [
@@ -160,6 +161,21 @@ class _PrivacyDashboardScreenState extends ConsumerState<PrivacyDashboardScreen>
                       options: const {'everyone': 'Auto-accept', 'manual': 'Manual Approval'},
                       onChanged: (v) => _save(_settings!.copyWith(followRequestPolicy: v)),
                     ),
+                    const SizedBox(height: 20),
+
+                    // Analytics
+                    _SectionTitle(title: 'Analytics'),
+                    const SizedBox(height: 8),
+                    Consumer(builder: (context, ref, _) {
+                      final optedOut = ref.watch(analyticsOptOutProvider);
+                      return _ToggleTile(
+                        icon: Icons.bar_chart_outlined,
+                        title: 'Usage Analytics',
+                        subtitle: 'Help improve Sojorn by sharing anonymous usage data (screens visited, features tapped — never content or identity)',
+                        value: !optedOut,
+                        onChanged: (v) => ref.read(analyticsOptOutProvider.notifier).set(!v),
+                      );
+                    }),
                     const SizedBox(height: 20),
 
                     // Data & Encryption
@@ -252,7 +268,7 @@ class _PrivacyScoreCard extends StatelessWidget {
                 const SizedBox(height: 4),
                 Text(
                   'Your data is encrypted. Adjust settings below to control who sees what.',
-                  style: TextStyle(fontSize: 12, color: SojornColors.textDisabled, height: 1.4),
+                  style: TextStyle(fontSize: 12, color: AppTheme.textDisabled, height: 1.4),
                 ),
               ],
             ),
@@ -310,7 +326,7 @@ class _ToggleTile extends StatelessWidget {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(title, style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w600)),
-                Text(subtitle, style: TextStyle(fontSize: 11, color: SojornColors.textDisabled)),
+                Text(subtitle, style: TextStyle(fontSize: 11, color: AppTheme.textDisabled)),
               ],
             ),
           ),
@@ -412,7 +428,7 @@ class _InfoTile extends StatelessWidget {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(title, style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w600)),
-                Text(subtitle, style: TextStyle(fontSize: 11, color: SojornColors.textDisabled)),
+                Text(subtitle, style: TextStyle(fontSize: 11, color: AppTheme.textDisabled)),
               ],
             ),
           ),

@@ -16,17 +16,31 @@ enum AppThemeType {
 
 class AppTheme {
   static AppThemeType _currentThemeType = AppThemeType.basic;
+  static bool _isDark = false;
 
   static void setThemeType(AppThemeType type) {
     _currentThemeType = type;
   }
+
+  static void setBrightness(Brightness brightness) {
+    _isDark = brightness == Brightness.dark;
+  }
+
+  static bool get isDark => _isDark;
 
   static const Map<AppThemeType, SojornExt> _extensions = {
     AppThemeType.basic: SojornExt.basic,
     AppThemeType.pop: SojornExt.pop,
   };
 
-  static SojornExt get ext => _extensions[_currentThemeType]!;
+  static const Map<AppThemeType, SojornExt> _darkExtensions = {
+    AppThemeType.basic: SojornExt.basicDark,
+    AppThemeType.pop: SojornExt.popDark,
+  };
+
+  static SojornExt get ext => _isDark
+      ? _darkExtensions[_currentThemeType]!
+      : _extensions[_currentThemeType]!;
   static SojornBrandColors get _brand => ext.brandColors;
   static SojornFlowLines get _lines => ext.flowLines;
 
@@ -43,12 +57,23 @@ class AppTheme {
   static Color get cardSurface => _brand.cardSurface;
   static const Color white = SojornColors.basicWhite;
 
-  // Semantic
-  static const Color error = SojornColors.error;
-  static const Color destructive = SojornColors.destructive;
-  static Color get success => ksuPurple;
-  static const Color warning = SojornColors.warning;
-  static const Color info = SojornColors.info;
+  // Semantic — brightness-aware
+  static Color get error => _isDark ? SojornColors.darkError : SojornColors.error;
+  static Color get destructive => _isDark ? SojornColors.darkError : SojornColors.destructive;
+  static Color get success => _isDark ? SojornColors.darkSuccess : ksuPurple;
+  static Color get warning => _isDark ? SojornColors.darkWarning : SojornColors.warning;
+  static Color get info => _isDark ? SojornColors.darkInfo : SojornColors.info;
+
+  // Dark surface layers (elevated, highest)
+  static Color get surfaceElevated => _isDark ? SojornColors.darkSurfaceElevated : cardSurface;
+  static Color get surfaceHighest => _isDark ? SojornColors.darkSurfaceHighest : cardSurface;
+
+  // Dark border tokens
+  static Color get borderSubtle => _isDark ? SojornColors.darkBorder : egyptianBlue;
+  static Color get borderStrong => _isDark ? SojornColors.darkBorderStrong : egyptianBlue;
+
+  // Input background
+  static Color get inputBg => _isDark ? SojornColors.darkInputBg : cardSurface;
 
   // NSFW / Sensitive
   static const Color nsfwWarningBg = SojornColors.nsfwWarningBg;
@@ -91,15 +116,15 @@ class AppTheme {
 
   // Text Colors - COLOR HIERARCHY: Content neutral, UI branded.
   static Color get textPrimary => navyText;
-  static Color get textSecondary => navyText;
-  static Color get textTertiary => navyText;
-  static const Color textDisabled = SojornColors.textDisabled;
+  static Color get textSecondary => _isDark ? SojornColors.darkTextSecondary : navyText;
+  static Color get textTertiary => _isDark ? SojornColors.darkTextTertiary : navyText;
+  static Color get textDisabled => _isDark ? SojornColors.darkTextTertiary : SojornColors.textDisabled;
   static const Color textOnAccent = SojornColors.textOnAccent;
   static Color get border => egyptianBlue;
 
   // Post Content - Neutral for contrast with purple UI.
-  static const Color postContent = SojornColors.postContent;
-  static const Color postContentLight = SojornColors.postContentLight;
+  static Color get postContent => _isDark ? SojornColors.darkPostContent : SojornColors.postContent;
+  static Color get postContentLight => _isDark ? SojornColors.darkPostContentLight : SojornColors.postContentLight;
 
   // Lines
   static const double borderWidth = SojornLines.border;
@@ -134,27 +159,39 @@ class AppTheme {
 
   // Theme Data
   static ThemeData get lightTheme => themeFor(_currentThemeType);
+  static ThemeData get darkTheme => darkThemeFor(_currentThemeType);
 
   static ThemeData themeFor(AppThemeType type) {
     final ext = _extensions[type]!;
-    return _buildTheme(ext);
+    return _buildTheme(ext, Brightness.light);
   }
 
-  static ThemeData _buildTheme(SojornExt ext) {
+  static ThemeData darkThemeFor(AppThemeType type) {
+    final ext = _darkExtensions[type]!;
+    return _buildTheme(ext, Brightness.dark);
+  }
+
+  static ThemeData _buildTheme(SojornExt ext, [Brightness brightness = Brightness.light]) {
     final brand = ext.brandColors;
     final lines = ext.flowLines;
     final textTheme = _buildTextTheme(brand);
 
+    final isDarkBrand = brand.scaffoldBg == SojornColors.darkScaffoldBg;
     return ThemeData(
       useMaterial3: true,
-      brightness: Brightness.light,
+      brightness: brightness,
       scaffoldBackgroundColor: brand.scaffoldBg,
       primaryColor: brand.navyBlue,
-      colorScheme: _buildColorScheme(brand),
+      cardColor: brand.cardSurface,
+      canvasColor: brand.scaffoldBg,
+      dialogTheme: DialogThemeData(
+        backgroundColor: isDarkBrand ? SojornColors.darkSurfaceElevated : brand.cardSurface,
+      ),
+      colorScheme: _buildColorScheme(brand, brightness),
       textTheme: textTheme,
       fontFamily: GoogleFonts.literata().fontFamily,
       fontFamilyFallback: const ['Apple Color Emoji', 'Segoe UI Emoji', 'Noto Color Emoji'],
-      appBarTheme: _buildAppBarTheme(brand, textTheme, lines),
+      appBarTheme: _buildAppBarTheme(brand, textTheme, lines, brightness),
       cardTheme: _buildCardTheme(brand, lines),
       elevatedButtonTheme: _buildElevatedButtonTheme(brand),
       textButtonTheme: _buildTextButtonTheme(brand),
@@ -162,23 +199,30 @@ class AppTheme {
       floatingActionButtonTheme: _buildFabTheme(brand, ext.options),
       dividerTheme: _buildDividerTheme(brand, lines),
       inputDecorationTheme: _buildInputTheme(brand, lines),
+      bottomSheetTheme: BottomSheetThemeData(
+        backgroundColor: isDarkBrand ? SojornColors.darkSurfaceElevated : brand.cardSurface,
+      ),
+      popupMenuTheme: PopupMenuThemeData(
+        color: isDarkBrand ? SojornColors.darkSurfaceElevated : brand.cardSurface,
+      ),
       extensions: <ThemeExtension<dynamic>>[ext],
     );
   }
 
   static TextTheme _buildTextTheme(SojornBrandColors brand) {
+    final isDarkBrand = brand.scaffoldBg == SojornColors.darkScaffoldBg;
     return GoogleFonts.literataTextTheme().copyWith(
       bodyLarge: GoogleFonts.literata(
         fontSize: 17,
         height: 1.5,
         fontWeight: FontWeight.w400,
-        color: SojornColors.postContent,
+        color: isDarkBrand ? SojornColors.darkPostContent : SojornColors.postContent,
       ),
       bodyMedium: GoogleFonts.literata(
         fontSize: 16,
         height: 1.5,
         fontWeight: FontWeight.w400,
-        color: SojornColors.postContentLight,
+        color: isDarkBrand ? SojornColors.darkPostContentLight : SojornColors.postContentLight,
       ),
       labelSmall: GoogleFonts.inter(
         fontSize: 13,
@@ -212,7 +256,17 @@ class AppTheme {
     );
   }
 
-  static ColorScheme _buildColorScheme(SojornBrandColors brand) {
+  static ColorScheme _buildColorScheme(SojornBrandColors brand, [Brightness brightness = Brightness.light]) {
+    if (brightness == Brightness.dark) {
+      return ColorScheme.dark(
+        primary: brand.navyBlue,
+        secondary: brand.brightNavy,
+        tertiary: brand.royalPurple,
+        surface: brand.cardSurface,
+        onSurface: brand.navyText,
+        error: SojornColors.error,
+      );
+    }
     return ColorScheme.light(
       primary: brand.navyBlue,
       secondary: brand.brightNavy,
@@ -226,8 +280,11 @@ class AppTheme {
   static AppBarTheme _buildAppBarTheme(
     SojornBrandColors brand,
     TextTheme textTheme,
-    SojornFlowLines lines,
-  ) {
+    SojornFlowLines lines, [
+    Brightness brightness = Brightness.light,
+  ]) {
+    final isDarkBrand = brand.scaffoldBg == SojornColors.darkScaffoldBg;
+    final borderColor = isDarkBrand ? SojornColors.darkBorder : brand.egyptianBlue;
     return AppBarTheme(
       backgroundColor: brand.cardSurface,
       surfaceTintColor: const Color(0x00000000),
@@ -235,21 +292,25 @@ class AppTheme {
       centerTitle: false,
       iconTheme: IconThemeData(color: brand.navyBlue),
       titleTextStyle: textTheme.headlineSmall,
-      systemOverlayStyle: SystemUiOverlayStyle.dark,
+      systemOverlayStyle: brightness == Brightness.dark
+          ? SystemUiOverlayStyle.light
+          : SystemUiOverlayStyle.dark,
       shape: Border(
-        bottom: BorderSide(color: brand.egyptianBlue, width: lines.appBarBorder),
+        bottom: BorderSide(color: borderColor, width: lines.appBarBorder),
       ),
     );
   }
 
   static CardThemeData _buildCardTheme(SojornBrandColors brand, SojornFlowLines lines) {
+    final isDarkBrand = brand.scaffoldBg == SojornColors.darkScaffoldBg;
+    final borderColor = isDarkBrand ? SojornColors.darkBorder : brand.egyptianBlue;
     return CardThemeData(
       color: brand.cardSurface,
       elevation: 0,
       margin: EdgeInsets.zero,
       shape: RoundedRectangleBorder(
         borderRadius: BorderRadius.circular(SojornRadii.lg),
-        side: BorderSide(color: brand.egyptianBlue, width: lines.cardBorder),
+        side: BorderSide(color: borderColor, width: lines.cardBorder),
       ),
     );
   }
@@ -285,10 +346,11 @@ class AppTheme {
     SojornBrandColors brand,
     SojornThemeOptions options,
   ) {
+    final isDarkBrand = brand.scaffoldBg == SojornColors.darkScaffoldBg;
     return BottomNavigationBarThemeData(
       backgroundColor: brand.cardSurface,
       selectedItemColor: brand.royalPurple,
-      unselectedItemColor: SojornColors.bottomNavUnselected,
+      unselectedItemColor: isDarkBrand ? SojornColors.darkTextTertiary : SojornColors.bottomNavUnselected,
       type: BottomNavigationBarType.fixed,
       showSelectedLabels: options.showBottomNavLabels,
       showUnselectedLabels: options.showBottomNavLabels,
@@ -312,8 +374,9 @@ class AppTheme {
     SojornBrandColors brand,
     SojornFlowLines lines,
   ) {
+    final isDarkBrand = brand.scaffoldBg == SojornColors.darkScaffoldBg;
     return DividerThemeData(
-      color: brand.queenPink,
+      color: isDarkBrand ? SojornColors.darkBorder : brand.queenPink,
       thickness: lines.divider,
       space: SojornSpacing.lg,
     );
@@ -323,21 +386,25 @@ class AppTheme {
     SojornBrandColors brand,
     SojornFlowLines lines,
   ) {
+    final isDarkBrand = brand.scaffoldBg == SojornColors.darkScaffoldBg;
+    final fillColor = isDarkBrand ? SojornColors.darkInputBg : brand.cardSurface;
+    final borderColor = isDarkBrand ? SojornColors.darkBorder : brand.egyptianBlue;
+    final focusColor = isDarkBrand ? SojornColors.darkBrand : brand.royalPurple;
     return InputDecorationTheme(
       filled: true,
-      fillColor: brand.cardSurface,
+      fillColor: fillColor,
       contentPadding: const EdgeInsets.all(SojornSpacing.md),
       border: OutlineInputBorder(
         borderRadius: BorderRadius.circular(SojornRadii.md),
-        borderSide: BorderSide(color: brand.egyptianBlue, width: lines.inputBorder),
+        borderSide: BorderSide(color: borderColor, width: lines.inputBorder),
       ),
       enabledBorder: OutlineInputBorder(
         borderRadius: BorderRadius.circular(SojornRadii.md),
-        borderSide: BorderSide(color: brand.egyptianBlue, width: lines.inputBorder),
+        borderSide: BorderSide(color: borderColor, width: lines.inputBorder),
       ),
       focusedBorder: OutlineInputBorder(
         borderRadius: BorderRadius.circular(SojornRadii.md),
-        borderSide: BorderSide(color: brand.royalPurple, width: lines.inputFocusBorder),
+        borderSide: BorderSide(color: focusColor, width: lines.inputFocusBorder),
       ),
     );
   }

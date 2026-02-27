@@ -109,9 +109,10 @@ class _ToastWidgetState extends State<_ToastWidget>
   void initState() {
     super.initState();
 
+    final reduceMotion = WidgetsBinding.instance.platformDispatcher.accessibilityFeatures.disableAnimations;
     _controller = AnimationController(
       vsync: this,
-      duration: const Duration(milliseconds: 200),
+      duration: reduceMotion ? Duration.zero : const Duration(milliseconds: 200),
     );
 
     _slideAnimation = Tween<Offset>(

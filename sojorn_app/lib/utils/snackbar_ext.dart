@@ -3,6 +3,8 @@
 // See LICENSE file in the project root for full license text.
 
 import 'package:flutter/material.dart';
+import 'package:flutter/semantics.dart' show SemanticsService;
+
 import '../theme/app_theme.dart';
 import '../widgets/desktop/desktop_toast.dart';
 
@@ -20,7 +22,16 @@ import '../widgets/desktop/desktop_toast.dart';
 extension SnackbarExt on BuildContext {
   bool get _isDesktop => MediaQuery.of(this).size.width >= 900;
 
+  /// Announce a message to screen readers via the semantics service.
+  void _announceToScreenReader(String message) {
+    final view = View.maybeOf(this);
+    if (view != null) {
+      SemanticsService.sendAnnouncement(view, message, TextDirection.ltr);
+    }
+  }
+
   void showSuccess(String message, {Duration duration = const Duration(seconds: 3)}) {
+    _announceToScreenReader(message);
     if (_isDesktop) {
       DesktopToast.success(this, message);
       return;
@@ -36,6 +47,7 @@ extension SnackbarExt on BuildContext {
   }
 
   void showError(String message, {Duration duration = const Duration(seconds: 4)}) {
+    _announceToScreenReader(message);
     if (_isDesktop) {
       DesktopToast.error(this, message);
       return;
@@ -51,6 +63,7 @@ extension SnackbarExt on BuildContext {
   }
 
   void showInfo(String message, {Duration duration = const Duration(seconds: 3)}) {
+    _announceToScreenReader(message);
     if (_isDesktop) {
       DesktopToast.info(this, message);
       return;
@@ -66,6 +79,7 @@ extension SnackbarExt on BuildContext {
   }
 
   void showWarning(String message, {Duration duration = const Duration(seconds: 3)}) {
+    _announceToScreenReader(message);
     if (_isDesktop) {
       DesktopToast.show(this, message: message, icon: Icons.warning, color: AppTheme.warning, duration: duration);
       return;

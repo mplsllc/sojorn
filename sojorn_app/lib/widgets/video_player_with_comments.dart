@@ -429,7 +429,7 @@ class _VideoPlayerWithCommentsState extends State<VideoPlayerWithComments> {
               height: 4,
               margin: const EdgeInsets.symmetric(vertical: 12),
               decoration: BoxDecoration(
-                color: Colors.grey[600],
+                color: AppTheme.textDisabled,
                 borderRadius: BorderRadius.circular(2),
               ),
             ),

@@ -10,6 +10,7 @@ import 'package:video_player/video_player.dart';
 import '../../../services/media/ffmpeg.dart';
 import 'package:path_provider/path_provider.dart';
 import '../../../providers/quip_upload_provider.dart';
+import '../../../services/analytics_service.dart';
 import '../../../services/image_upload_service.dart';
 import '../../../providers/api_provider.dart';
 import '../../../theme/tokens.dart';
@@ -54,6 +55,7 @@ class _QuipMetadataScreenState extends ConsumerState<QuipMetadataScreen> {
     // or just pass the timestamp to the provider.
     // Let's pass the chosen timestamp to startUpload.
     
+    AnalyticsService.instance.event('quip_created');
     uploadNotifier.startUpload(
       XFile(widget.videoFile.path),
       _captionController.text.trim(),

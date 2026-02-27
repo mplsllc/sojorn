@@ -453,7 +453,7 @@ func (h *PostHandler) CreatePost(c *gin.Context) {
 
 	var req struct {
 		CategoryID    *string  `json:"category_id"`
-		Body          string   `json:"body" binding:"required,max=500"`
+		Body          string   `json:"body" binding:"max=500"`
 		ImageURL      *string  `json:"image_url"`
 		VideoURL      *string  `json:"video_url"`
 		Thumbnail     *string  `json:"thumbnail_url"`
@@ -475,6 +475,13 @@ func (h *PostHandler) CreatePost(c *gin.Context) {
 
 	if err := c.ShouldBindJSON(&req); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+
+	// Require either text body or media
+	hasMedia := (req.ImageURL != nil && *req.ImageURL != "") || (req.VideoURL != nil && *req.VideoURL != "")
+	if strings.TrimSpace(req.Body) == "" && !hasMedia {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Post must have text or media"})
 		return
 	}
 

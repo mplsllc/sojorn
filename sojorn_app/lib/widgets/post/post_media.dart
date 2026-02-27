@@ -107,16 +107,28 @@ class PostMedia extends StatelessWidget {
                 : null;
 
     if (displayUrl != null) {
+      // Detect GIF type by URL
+      final isGif = _isGifUrl(displayUrl);
+      final isRetroGif = isGif && displayUrl.contains('web.archive.org');
+
       // Choose image layout strategy:
       // - Video in feed: 4:5 aspect ratio (TikTok-style)
+      // - Retro GIF: natural size (small 90s-era GIFs), centered
+      // - Regular GIF: contained within standard height, no crop
       // - Desktop non-video: natural ratio (full width, height = natural)
-      // - Everything else: constrained max-height
+      // - Everything else: constrained max-height with cover
       Widget imageContent;
       if (isVideo && mode == PostViewMode.feed) {
         imageContent = AspectRatio(
           aspectRatio: 4 / 5,
           child: _buildMediaContent(displayUrl, true),
         );
+      } else if (isRetroGif) {
+        // Retro GIFs: show at actual size, centered, with subtle bg
+        imageContent = _buildRetroGifContent(displayUrl);
+      } else if (isGif) {
+        // Regular GIFs: contained (no crop), standard max height
+        imageContent = _buildGifContent(displayUrl);
       } else if (!isVideo && isDesktop) {
         imageContent = _buildDesktopNaturalImage(displayUrl);
       } else {
@@ -162,6 +174,77 @@ class PostMedia extends StatelessWidget {
       child: ClipRRect(
         borderRadius: BorderRadius.circular(AppTheme.radiusMd),
         child: child,
+      ),
+    );
+  }
+
+  /// Check if a URL points to a GIF image.
+  bool _isGifUrl(String url) {
+    final lower = url.toLowerCase();
+    // Check extension (before query params)
+    final path = Uri.tryParse(lower)?.path ?? lower;
+    if (path.endsWith('.gif')) return true;
+    // Known GIF sources
+    if (lower.contains('giphy.com') || lower.contains('tenor.com') ||
+        lower.contains('gifcities.archive.org') || lower.contains('web.archive.org')) {
+      return true;
+    }
+    return false;
+  }
+
+  /// Regular GIF: contained within standard height, no cropping.
+  /// Uses BoxFit.contain so the full GIF is visible.
+  Widget _buildGifContent(String displayUrl) {
+    final maxH = mode == PostViewMode.feed || mode == PostViewMode.sponsored
+        ? 350.0
+        : mode == PostViewMode.detail
+            ? 450.0
+            : mode == PostViewMode.compact
+                ? 180.0
+                : 130.0;
+    return ConstrainedBox(
+      constraints: BoxConstraints(maxHeight: maxH),
+      child: SignedMediaImage(
+        url: displayUrl,
+        fit: BoxFit.contain,
+        loadingBuilder: (context) => Container(
+          height: 200,
+          color: AppTheme.mediaLoadingBg,
+          child: const Center(child: CircularProgressIndicator()),
+        ),
+        errorBuilder: (context, error, stackTrace) => Container(
+          height: 100,
+          color: AppTheme.mediaErrorBg,
+          child: const Center(
+            child: Icon(Icons.broken_image, size: 32, color: SojornColors.basicWhite),
+          ),
+        ),
+      ),
+    );
+  }
+
+  /// Retro GIF (Internet Archive): display at natural size, centered.
+  /// These are tiny 90s-era GIFs that look best at their actual pixel size.
+  Widget _buildRetroGifContent(String displayUrl) {
+    return Container(
+      constraints: const BoxConstraints(minHeight: 40, maxHeight: 300),
+      alignment: Alignment.center,
+      child: SignedMediaImage(
+        url: displayUrl,
+        fit: BoxFit.none,
+        alignment: Alignment.center,
+        loadingBuilder: (context) => Container(
+          height: 80,
+          color: AppTheme.mediaLoadingBg,
+          child: const Center(child: CircularProgressIndicator()),
+        ),
+        errorBuilder: (context, error, stackTrace) => Container(
+          height: 60,
+          color: AppTheme.mediaErrorBg,
+          child: const Center(
+            child: Icon(Icons.broken_image, size: 24, color: SojornColors.basicWhite),
+          ),
+        ),
       ),
     );
   }

@@ -521,9 +521,13 @@ class _TraditionalQuipsSheetState extends ConsumerState<TraditionalQuipsSheet> {
                     ],
                   ),
                 ),
-                GestureDetector(
-                  onTap: _cancelReply,
-                  child: Icon(Icons.close, size: 14, color: AppTheme.textSecondary),
+                Semantics(
+                  button: true,
+                  label: 'Cancel reply',
+                  child: GestureDetector(
+                    onTap: _cancelReply,
+                    child: Icon(Icons.close, size: 14, color: AppTheme.textSecondary),
+                  ),
                 ),
               ],
             ),

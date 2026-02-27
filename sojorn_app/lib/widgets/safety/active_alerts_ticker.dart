@@ -72,7 +72,7 @@ class ActiveAlertsTicker extends StatelessWidget {
               if (totalActive > highPriority.length) ...[
                 const SizedBox(width: 8),
                 Text('· +${totalActive - highPriority.length} more below',
-                  style: TextStyle(color: SojornColors.textDisabled, fontSize: 11)),
+                  style: TextStyle(color: AppTheme.textDisabled, fontSize: 11)),
               ],
             ],
           ),
