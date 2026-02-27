@@ -372,11 +372,20 @@ class ApiClient {
     return this.request<any>('/api/v1/admin/health');
   }
 
-  async getAuditLog(params: { limit?: number; offset?: number } = {}) {
+  async getAuditLog(params: { limit?: number; offset?: number; action?: string; actor?: string; search?: string; from?: string; to?: string } = {}) {
     const qs = new URLSearchParams();
     if (params.limit) qs.set('limit', String(params.limit));
     if (params.offset) qs.set('offset', String(params.offset));
+    if (params.action) qs.set('action', params.action);
+    if (params.actor) qs.set('actor', params.actor);
+    if (params.search) qs.set('search', params.search);
+    if (params.from) qs.set('from', params.from);
+    if (params.to) qs.set('to', params.to);
     return this.request<any>(`/api/v1/admin/audit-log?${qs}`);
+  }
+
+  async purgeAuditLog(olderThanDays: number) {
+    return this.request<any>(`/api/v1/admin/audit-log/purge?older_than_days=${olderThanDays}`, { method: 'DELETE' });
   }
 
   // R2 Storage

@@ -856,6 +856,9 @@ func main() {
 			// Admin Content Creation & Import
 			adminOnly.POST("/content/import", adminHandler.AdminImportContent)
 
+			// Audit Log Retention
+			adminOnly.DELETE("/audit-log/purge", adminHandler.PurgeAuditLog)
+
 			// Social Media Import
 			adminOnly.POST("/social/fetch", adminHandler.FetchSocialContent)
 			adminOnly.POST("/social/download", adminHandler.DownloadSocialMedia)
@@ -977,6 +980,21 @@ func main() {
 				} else {
 					log.Info().Str("user_id", id).Msg("[Purge] Account permanently destroyed")
 				}
+			}
+		}
+	}()
+
+	// Background job: audit log retention — purge entries older than 90 days, runs daily at 3 AM UTC
+	go func() {
+		for {
+			now := time.Now().UTC()
+			next := time.Date(now.Year(), now.Month(), now.Day()+1, 3, 0, 0, 0, time.UTC)
+			time.Sleep(time.Until(next))
+			tag, err := dbPool.Exec(context.Background(), "DELETE FROM audit_log WHERE created_at < NOW() - INTERVAL '90 days'")
+			if err != nil {
+				log.Error().Err(err).Msg("[AuditRetention] Failed to purge old audit log entries")
+			} else {
+				log.Info().Int64("purged", tag.RowsAffected()).Msg("[AuditRetention] Daily cleanup complete")
 			}
 		}
 	}()

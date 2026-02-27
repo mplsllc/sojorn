@@ -2138,17 +2138,65 @@ func (h *AdminHandler) GetAuditLog(c *gin.Context) {
 	ctx := c.Request.Context()
 	limit, _ := strconv.Atoi(c.DefaultQuery("limit", "50"))
 	offset, _ := strconv.Atoi(c.DefaultQuery("offset", "0"))
+	action := c.Query("action")
+	actor := c.Query("actor")
+	search := c.Query("search")
+	from := c.Query("from")
+	to := c.Query("to")
 
-	rows, err := h.pool.Query(ctx, `
+	// Build dynamic WHERE clause
+	where := ""
+	args := []interface{}{}
+	argIdx := 1
+
+	if action != "" {
+		where += fmt.Sprintf(" AND al.action = $%d", argIdx)
+		args = append(args, action)
+		argIdx++
+	}
+	if actor != "" {
+		where += fmt.Sprintf(" AND al.actor_id = $%d", argIdx)
+		args = append(args, actor)
+		argIdx++
+	}
+	if search != "" {
+		where += fmt.Sprintf(" AND al.details ILIKE $%d", argIdx)
+		args = append(args, "%"+search+"%")
+		argIdx++
+	}
+	if from != "" {
+		where += fmt.Sprintf(" AND al.created_at >= $%d", argIdx)
+		args = append(args, from)
+		argIdx++
+	}
+	if to != "" {
+		where += fmt.Sprintf(" AND al.created_at <= $%d::date + INTERVAL '1 day'", argIdx)
+		args = append(args, to)
+		argIdx++
+	}
+
+	// Count total matching entries
+	var total int
+	countQuery := "SELECT COUNT(*) FROM audit_log al WHERE 1=1" + where
+	if err := h.pool.QueryRow(ctx, countQuery, args...).Scan(&total); err != nil {
+		c.JSON(http.StatusOK, gin.H{"entries": []gin.H{}, "total": 0})
+		return
+	}
+
+	// Fetch page
+	dataQuery := fmt.Sprintf(`
 		SELECT al.id, al.actor_id, al.action, al.target_type, al.target_id, al.details, al.created_at,
 		       pr.handle as actor_handle
 		FROM audit_log al
 		LEFT JOIN profiles pr ON al.actor_id = pr.id
+		WHERE 1=1%s
 		ORDER BY al.created_at DESC
-		LIMIT $1 OFFSET $2
-	`, limit, offset)
+		LIMIT $%d OFFSET $%d
+	`, where, argIdx, argIdx+1)
+	args = append(args, limit, offset)
+
+	rows, err := h.pool.Query(ctx, dataQuery, args...)
 	if err != nil {
-		// Table may not exist
 		c.JSON(http.StatusOK, gin.H{"entries": []gin.H{}, "total": 0})
 		return
 	}
@@ -2158,15 +2206,15 @@ func (h *AdminHandler) GetAuditLog(c *gin.Context) {
 	for rows.Next() {
 		var id uuid.UUID
 		var actorID *uuid.UUID
-		var action, targetType string
+		var actionVal, targetType string
 		var targetID *uuid.UUID
 		var details *string
 		var createdAt time.Time
 		var actorHandle *string
 
-		if err := rows.Scan(&id, &actorID, &action, &targetType, &targetID, &details, &createdAt, &actorHandle); err == nil {
+		if err := rows.Scan(&id, &actorID, &actionVal, &targetType, &targetID, &details, &createdAt, &actorHandle); err == nil {
 			entries = append(entries, gin.H{
-				"id": id, "actor_id": actorID, "action": action,
+				"id": id, "actor_id": actorID, "action": actionVal,
 				"target_type": targetType, "target_id": targetID,
 				"details": details, "created_at": createdAt, "actor_handle": actorHandle,
 			})
@@ -2177,7 +2225,25 @@ func (h *AdminHandler) GetAuditLog(c *gin.Context) {
 		entries = []gin.H{}
 	}
 
-	c.JSON(http.StatusOK, gin.H{"entries": entries, "limit": limit, "offset": offset})
+	c.JSON(http.StatusOK, gin.H{"entries": entries, "total": total, "limit": limit, "offset": offset})
+}
+
+func (h *AdminHandler) PurgeAuditLog(c *gin.Context) {
+	ctx := c.Request.Context()
+	days, _ := strconv.Atoi(c.DefaultQuery("older_than_days", "90"))
+	if days < 30 {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Minimum retention is 30 days"})
+		return
+	}
+	cutoff := time.Now().AddDate(0, 0, -days)
+	tag, err := h.pool.Exec(ctx, "DELETE FROM audit_log WHERE created_at < $1", cutoff)
+	if err != nil {
+		internalError(c, "Failed to purge audit log", err)
+		return
+	}
+
+	log.Info().Int64("purged", tag.RowsAffected()).Time("cutoff", cutoff).Msg("manual audit log purge")
+	c.JSON(http.StatusOK, gin.H{"deleted": tag.RowsAffected(), "cutoff": cutoff})
 }
 
 // ──────────────────────────────────────────────
