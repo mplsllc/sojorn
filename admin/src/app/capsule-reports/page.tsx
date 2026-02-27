@@ -29,7 +29,7 @@ export default function CapsuleReportsPage() {
 
   useEffect(() => { fetchReports(); }, [statusFilter]);
 
-  const violationTypes = [...new Set(reports.map((r) => r.reason).filter(Boolean))];
+  const violationTypes = Array.from(new Set(reports.map((r) => r.reason).filter(Boolean)));
 
   const filteredReports = (() => {
     let result = reports;
