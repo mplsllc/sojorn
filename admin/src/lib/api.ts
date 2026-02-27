@@ -60,13 +60,14 @@ class ApiClient {
   }
 
   // Users
-  async listUsers(params: { limit?: number; offset?: number; search?: string; status?: string; role?: string } = {}) {
+  async listUsers(params: { limit?: number; offset?: number; search?: string; status?: string; role?: string; sort?: string } = {}) {
     const qs = new URLSearchParams();
     if (params.limit) qs.set('limit', String(params.limit));
     if (params.offset) qs.set('offset', String(params.offset));
     if (params.search) qs.set('search', params.search);
     if (params.status) qs.set('status', params.status);
     if (params.role) qs.set('role', params.role);
+    if (params.sort) qs.set('sort', params.sort);
     return this.request<any>(`/api/v1/admin/users?${qs}`);
   }
 
@@ -136,13 +137,15 @@ class ApiClient {
   }
 
   // Posts
-  async listPosts(params: { limit?: number; offset?: number; search?: string; status?: string; author_id?: string } = {}) {
+  async listPosts(params: { limit?: number; offset?: number; search?: string; status?: string; author_id?: string; visibility?: string; sort?: string } = {}) {
     const qs = new URLSearchParams();
     if (params.limit) qs.set('limit', String(params.limit));
     if (params.offset) qs.set('offset', String(params.offset));
     if (params.search) qs.set('search', params.search);
     if (params.status) qs.set('status', params.status);
     if (params.author_id) qs.set('author_id', params.author_id);
+    if (params.visibility) qs.set('visibility', params.visibility);
+    if (params.sort) qs.set('sort', params.sort);
     return this.request<any>(`/api/v1/admin/posts?${qs}`);
   }
 
@@ -745,11 +748,13 @@ class ApiClient {
   }
 
   // Groups admin
-  async listGroups(params: { search?: string; limit?: number; offset?: number } = {}) {
+  async listGroups(params: { search?: string; limit?: number; offset?: number; privacy?: string; sort?: string } = {}) {
     const qs = new URLSearchParams();
     if (params.search) qs.set('search', params.search);
     if (params.limit) qs.set('limit', String(params.limit));
     if (params.offset) qs.set('offset', String(params.offset));
+    if (params.privacy) qs.set('privacy', params.privacy);
+    if (params.sort) qs.set('sort', params.sort);
     return this.request<any>(`/api/v1/admin/groups?${qs}`);
   }
 

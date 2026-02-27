@@ -15,17 +15,28 @@ export default function CapsuleReportsPage() {
   const [total, setTotal] = useState(0);
   const [loading, setLoading] = useState(true);
   const [statusFilter, setStatusFilter] = useState('pending');
+  const [violationFilter, setViolationFilter] = useState('');
+  const [sortOrder, setSortOrder] = useState('');
   const [expanded, setExpanded] = useState<Set<string>>(new Set());
 
   const fetchReports = () => {
     setLoading(true);
-    api.listCapsuleReports({ limit: 50, status: statusFilter })
+    api.listCapsuleReports({ limit: 50, status: statusFilter || undefined })
       .then((data) => { setReports(data.reports); setTotal(data.total); })
       .catch(() => {})
       .finally(() => setLoading(false));
   };
 
   useEffect(() => { fetchReports(); }, [statusFilter]);
+
+  const violationTypes = [...new Set(reports.map((r) => r.reason).filter(Boolean))];
+
+  const filteredReports = (() => {
+    let result = reports;
+    if (violationFilter) result = result.filter((r) => r.reason === violationFilter);
+    if (sortOrder === 'oldest') result = [...result].sort((a, b) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime());
+    return result;
+  })();
 
   const handleUpdate = async (id: string, status: string) => {
     try {
@@ -51,16 +62,29 @@ export default function CapsuleReportsPage() {
             <h1 className="text-2xl font-bold text-gray-900">Capsule Reports</h1>
           </div>
           <p className="text-sm text-gray-500 mt-1">
-            {total} {statusFilter} reports from encrypted private groups.
+            {total} {statusFilter || 'total'} reports from encrypted private groups.
             Members voluntarily submitted decrypted evidence.
           </p>
         </div>
-        <select className="input w-auto" value={statusFilter} onChange={(e) => setStatusFilter(e.target.value)}>
-          <option value="pending">Pending</option>
-          <option value="reviewed">Reviewed</option>
-          <option value="actioned">Actioned</option>
-          <option value="dismissed">Dismissed</option>
-        </select>
+        <div className="flex gap-3">
+          <select className="input w-auto" title="Filter by status" value={statusFilter} onChange={(e) => setStatusFilter(e.target.value)}>
+            <option value="">All Statuses</option>
+            <option value="pending">Pending</option>
+            <option value="reviewed">Reviewed</option>
+            <option value="actioned">Actioned</option>
+            <option value="dismissed">Dismissed</option>
+          </select>
+          {violationTypes.length > 1 && (
+            <select className="input w-auto" title="Filter by violation type" value={violationFilter} onChange={(e) => setViolationFilter(e.target.value)}>
+              <option value="">All Violations</option>
+              {violationTypes.map((v) => <option key={v} value={v}>{v}</option>)}
+            </select>
+          )}
+          <select className="input w-auto" title="Sort order" value={sortOrder} onChange={(e) => setSortOrder(e.target.value)}>
+            <option value="">Newest</option>
+            <option value="oldest">Oldest</option>
+          </select>
+        </div>
       </div>
 
       {loading ? (
@@ -71,10 +95,10 @@ export default function CapsuleReportsPage() {
             </div>
           ))}
         </div>
-      ) : reports.length === 0 ? (
+      ) : filteredReports.length === 0 ? (
         <div className="card p-12 text-center">
           <ShieldAlert className="w-12 h-12 text-green-400 mx-auto mb-3" />
-          <p className="text-gray-500 font-medium">No {statusFilter} capsule reports</p>
+          <p className="text-gray-500 font-medium">No {statusFilter || ''} capsule reports</p>
         </div>
       ) : (
         <div className="card overflow-hidden">
@@ -91,7 +115,7 @@ export default function CapsuleReportsPage() {
               </tr>
             </thead>
             <tbody className="divide-y divide-warm-300">
-              {reports.map((report) => {
+              {filteredReports.map((report) => {
                 const isExpanded = expanded.has(report.id);
                 const sample = report.decrypted_sample as string | null;
                 return (

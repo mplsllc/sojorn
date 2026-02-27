@@ -9,29 +9,45 @@ import SelectionBar from '@/components/SelectionBar';
 import { api } from '@/lib/api';
 import { statusColor, formatDate, truncate } from '@/lib/utils';
 import { useEffect, useState } from 'react';
-import { Search, ChevronLeft, ChevronRight, Ban, CheckCircle, PauseCircle } from 'lucide-react';
+import { Search, ChevronLeft, ChevronRight, Ban, CheckCircle, PauseCircle, Trash2 } from 'lucide-react';
+import { useSearchParams } from 'next/navigation';
 import Link from 'next/link';
 
 export default function UsersPage() {
+  const searchParams = useSearchParams();
   const [users, setUsers] = useState<any[]>([]);
   const [total, setTotal] = useState(0);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState('');
+  const [roleFilter, setRoleFilter] = useState('');
+  const [sort, setSort] = useState('newest');
   const [offset, setOffset] = useState(0);
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [bulkLoading, setBulkLoading] = useState(false);
   const limit = 25;
 
+  useEffect(() => {
+    const urlStatus = searchParams.get('status');
+    if (urlStatus) setStatusFilter(urlStatus);
+  }, []);
+
   const fetchUsers = () => {
     setLoading(true);
-    api.listUsers({ limit, offset, search: search || undefined, status: statusFilter || undefined })
+    api.listUsers({
+      limit,
+      offset,
+      search: search || undefined,
+      status: statusFilter || undefined,
+      role: roleFilter || undefined,
+      sort: sort || undefined,
+    })
       .then((data) => { setUsers(data.users); setTotal(data.total); })
       .catch(() => {})
       .finally(() => setLoading(false));
   };
 
-  useEffect(() => { fetchUsers(); }, [offset, statusFilter]);
+  useEffect(() => { fetchUsers(); }, [offset, statusFilter, roleFilter, sort]);
 
   const handleSearch = (e: React.FormEvent) => {
     e.preventDefault();
@@ -57,6 +73,26 @@ export default function UsersPage() {
       alert(`Bulk action failed: ${e.message}`);
     }
     setBulkLoading(false);
+  };
+
+  const handleBanUser = async (userId: string) => {
+    if (!confirm('Are you sure you want to ban this user?')) return;
+    try {
+      await api.bulkUpdateUsers([userId], 'ban', 'Admin quick action');
+      fetchUsers();
+    } catch (e: any) {
+      alert(`Ban failed: ${e.message}`);
+    }
+  };
+
+  const handleDeleteUser = async (userId: string) => {
+    if (!confirm('Are you sure you want to permanently delete this user? This cannot be undone.')) return;
+    try {
+      await api.hardDeleteUser(userId);
+      fetchUsers();
+    } catch (e: any) {
+      alert(`Delete failed: ${e.message}`);
+    }
   };
 
   return (
@@ -87,6 +123,18 @@ export default function UsersPage() {
           <option value="banned">Banned</option>
           <option value="deactivated">Deactivated</option>
         </select>
+        <select className="input w-auto" value={roleFilter} onChange={(e) => { setRoleFilter(e.target.value); setOffset(0); }}>
+          <option value="">All Roles</option>
+          <option value="user">User</option>
+          <option value="moderator">Moderator</option>
+          <option value="admin">Admin</option>
+        </select>
+        <select className="input w-auto" value={sort} onChange={(e) => { setSort(e.target.value); setOffset(0); }}>
+          <option value="newest">Newest</option>
+          <option value="oldest">Oldest</option>
+          <option value="most_strikes">Most Strikes</option>
+          <option value="handle_az">Handle A-Z</option>
+        </select>
       </div>
 
       <SelectionBar
@@ -99,6 +147,7 @@ export default function UsersPage() {
           { label: 'Activate', action: 'activate', color: 'bg-green-50 text-green-700 hover:bg-green-100', icon: <CheckCircle className="w-3.5 h-3.5" /> },
           { label: 'Suspend', action: 'suspend', confirm: true, color: 'bg-yellow-50 text-yellow-700 hover:bg-yellow-100', icon: <PauseCircle className="w-3.5 h-3.5" /> },
           { label: 'Ban', action: 'ban', confirm: true, color: 'bg-red-100 text-red-800 hover:bg-red-200', icon: <Ban className="w-3.5 h-3.5" /> },
+          { label: 'Delete', action: 'delete', confirm: true, color: 'bg-red-200 text-red-900 hover:bg-red-300', icon: <Trash2 className="w-3.5 h-3.5" /> },
         ]}
         onAction={handleBulkAction}
       />
@@ -161,9 +210,27 @@ export default function UsersPage() {
                     <td className="table-cell">{user.strikes ?? 0}</td>
                     <td className="table-cell text-gray-500">{formatDate(user.created_at)}</td>
                     <td className="table-cell">
-                      <Link href={`/users/${user.id}`} className="text-brand-500 hover:text-brand-700 text-sm font-medium">
-                        View
-                      </Link>
+                      <div className="flex items-center gap-2">
+                        <Link href={`/users/${user.id}`} className="text-brand-500 hover:text-brand-700 text-sm font-medium">
+                          View
+                        </Link>
+                        <button
+                          type="button"
+                          onClick={() => handleBanUser(user.id)}
+                          className="text-yellow-600 hover:text-yellow-800 text-sm font-medium"
+                          title="Ban user"
+                        >
+                          <Ban className="w-3.5 h-3.5" />
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => handleDeleteUser(user.id)}
+                          className="text-red-600 hover:text-red-800 text-sm font-medium"
+                          title="Delete user"
+                        >
+                          <Trash2 className="w-3.5 h-3.5" />
+                        </button>
+                      </div>
                     </td>
                   </tr>
                 ))

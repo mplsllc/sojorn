@@ -28,6 +28,9 @@ function PostsPageInner() {
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState('');
+  const [visibilityFilter, setVisibilityFilter] = useState('');
+  const [mediaFilter, setMediaFilter] = useState('');
+  const [sortOrder, setSortOrder] = useState('');
   const [offset, setOffset] = useState(0);
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [bulkLoading, setBulkLoading] = useState(false);
@@ -36,13 +39,22 @@ function PostsPageInner() {
 
   const fetchPosts = () => {
     setLoading(true);
-    api.listPosts({ limit, offset, search: search || undefined, status: statusFilter || undefined, author_id: authorId })
+    api.listPosts({ limit, offset, search: search || undefined, status: statusFilter || undefined, author_id: authorId, visibility: visibilityFilter || undefined, sort: sortOrder || undefined })
       .then((data) => { setPosts(data.posts); setTotal(data.total); })
       .catch(() => {})
       .finally(() => setLoading(false));
   };
 
-  useEffect(() => { fetchPosts(); }, [offset, statusFilter]);
+  useEffect(() => { fetchPosts(); }, [offset, statusFilter, visibilityFilter, sortOrder]);
+
+  const filteredPosts = mediaFilter
+    ? posts.filter((p) => {
+        if (mediaFilter === 'has_media') return p.image_url || p.video_url;
+        if (mediaFilter === 'video') return !!p.video_url;
+        if (mediaFilter === 'image') return !!p.image_url;
+        return true;
+      })
+    : posts;
 
   const handleSearch = (e: React.FormEvent) => {
     e.preventDefault();
@@ -61,8 +73,8 @@ function PostsPageInner() {
     setSelected((prev) => { const s = new Set(prev); s.has(id) ? s.delete(id) : s.add(id); return s; });
   };
   const toggleAll = () => {
-    if (selected.size === posts.length) setSelected(new Set());
-    else setSelected(new Set(posts.map((p) => p.id)));
+    if (selected.size === filteredPosts.length) setSelected(new Set());
+    else setSelected(new Set(filteredPosts.map((p) => p.id)));
   };
 
   const handleBulkAction = async (action: string) => {
@@ -88,18 +100,35 @@ function PostsPageInner() {
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
           <input className="input pl-10" placeholder="Search post content..." value={search} onChange={(e) => setSearch(e.target.value)} />
         </form>
-        <select className="input w-auto" value={statusFilter} onChange={(e) => { setStatusFilter(e.target.value); setOffset(0); }}>
+        <select className="input w-auto" title="Filter by status" value={statusFilter} onChange={(e) => { setStatusFilter(e.target.value); setOffset(0); }}>
           <option value="">All Statuses</option>
           <option value="active">Active</option>
           <option value="flagged">Flagged</option>
           <option value="removed">Removed</option>
         </select>
+        <select className="input w-auto" title="Filter by visibility" value={visibilityFilter} onChange={(e) => { setVisibilityFilter(e.target.value); setOffset(0); }}>
+          <option value="">All Visibility</option>
+          <option value="public">Public</option>
+          <option value="followers">Followers</option>
+          <option value="private">Private</option>
+        </select>
+        <select className="input w-auto" title="Filter by media type" value={mediaFilter} onChange={(e) => { setMediaFilter(e.target.value); setOffset(0); }}>
+          <option value="">All Media</option>
+          <option value="has_media">Has Media</option>
+          <option value="video">Video</option>
+          <option value="image">Image</option>
+        </select>
+        <select className="input w-auto" title="Sort order" value={sortOrder} onChange={(e) => { setSortOrder(e.target.value); setOffset(0); }}>
+          <option value="">Newest</option>
+          <option value="oldest">Oldest</option>
+          <option value="most_comments">Most Comments</option>
+        </select>
       </div>
 
       <SelectionBar
         count={selected.size}
-        total={posts.length}
-        onSelectAll={() => setSelected(new Set(posts.map((p) => p.id)))}
+        total={filteredPosts.length}
+        onSelectAll={() => setSelected(new Set(filteredPosts.map((p) => p.id)))}
         onClearSelection={() => setSelected(new Set())}
         loading={bulkLoading}
         actions={[
@@ -117,7 +146,7 @@ function PostsPageInner() {
             <thead className="bg-warm-200">
               <tr>
                 <th className="table-header w-10">
-                  <input type="checkbox" className="rounded border-gray-300" checked={posts.length > 0 && selected.size === posts.length} onChange={toggleAll} />
+                  <input type="checkbox" className="rounded border-gray-300" checked={filteredPosts.length > 0 && selected.size === filteredPosts.length} onChange={toggleAll} />
                 </th>
                 <th className="table-header">Content</th>
                 <th className="table-header">Author</th>
@@ -133,10 +162,10 @@ function PostsPageInner() {
                 [...Array(5)].map((_, i) => (
                   <tr key={i}>{[...Array(8)].map((_, j) => <td key={j} className="table-cell"><div className="h-4 bg-warm-300 rounded animate-pulse w-20" /></td>)}</tr>
                 ))
-              ) : posts.length === 0 ? (
+              ) : filteredPosts.length === 0 ? (
                 <tr><td colSpan={8} className="table-cell text-center text-gray-400 py-8">No posts found</td></tr>
               ) : (
-                posts.map((post) => (
+                filteredPosts.map((post) => (
                   <tr key={post.id} className={`hover:bg-warm-50 transition-colors ${selected.has(post.id) ? 'bg-brand-50' : ''}`}>
                     <td className="table-cell">
                       <input type="checkbox" className="rounded border-gray-300" checked={selected.has(post.id)} onChange={() => toggleSelect(post.id)} />

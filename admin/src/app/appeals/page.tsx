@@ -5,6 +5,7 @@
 'use client';
 
 import AdminShell from '@/components/AdminShell';
+import SelectionBar from '@/components/SelectionBar';
 import { api } from '@/lib/api';
 import { statusColor, formatDateTime } from '@/lib/utils';
 import { useEffect, useState } from 'react';
@@ -15,6 +16,9 @@ export default function AppealsPage() {
   const [total, setTotal] = useState(0);
   const [loading, setLoading] = useState(true);
   const [statusFilter, setStatusFilter] = useState('pending');
+  const [sortOrder, setSortOrder] = useState('');
+  const [selected, setSelected] = useState<Set<string>>(new Set());
+  const [bulkLoading, setBulkLoading] = useState(false);
   const [reviewingId, setReviewingId] = useState<string | null>(null);
   const [reviewDecision, setReviewDecision] = useState('');
   const [restoreContent, setRestoreContent] = useState(false);
@@ -23,7 +27,7 @@ export default function AppealsPage() {
 
   const fetchAppeals = () => {
     setLoading(true);
-    api.listAppeals({ limit: 50, status: statusFilter })
+    api.listAppeals({ limit: 50, status: statusFilter || undefined })
       .then((data) => { setAppeals(data.appeals); setTotal(data.total); })
       .catch(() => {})
       .finally(() => setLoading(false));
@@ -31,13 +35,35 @@ export default function AppealsPage() {
 
   const loadMore = () => {
     setLoadingMore(true);
-    api.listAppeals({ limit: 50, status: statusFilter, offset: appeals.length })
+    api.listAppeals({ limit: 50, status: statusFilter || undefined, offset: appeals.length })
       .then((data) => { setAppeals((prev) => [...prev, ...(data.appeals || [])]); setTotal(data.total || 0); })
       .catch(() => {})
       .finally(() => setLoadingMore(false));
   };
 
   useEffect(() => { fetchAppeals(); }, [statusFilter]);
+
+  const sortedAppeals = sortOrder === 'oldest'
+    ? [...appeals].sort((a, b) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime())
+    : appeals;
+
+  const toggleSelect = (id: string) => {
+    setSelected((prev) => { const s = new Set(prev); s.has(id) ? s.delete(id) : s.add(id); return s; });
+  };
+
+  const handleBulkAction = async (action: string) => {
+    const decision = action as 'approved' | 'rejected';
+    if (!confirm(`Are you sure you want to ${decision === 'approved' ? 'approve' : 'deny'} ${selected.size} appeal(s)?`)) return;
+    setBulkLoading(true);
+    try {
+      for (const id of selected) {
+        await api.reviewAppeal(id, decision, `Bulk ${decision} by admin`, decision === 'approved');
+      }
+      setSelected(new Set());
+      fetchAppeals();
+    } catch {}
+    setBulkLoading(false);
+  };
 
   const handleReview = async (id: string, decision: 'approved' | 'rejected') => {
     if (!reviewDecision.trim()) return;
@@ -55,30 +81,51 @@ export default function AppealsPage() {
       <div className="mb-6 flex items-center justify-between">
         <div>
           <h1 className="text-2xl font-bold text-gray-900">Appeals</h1>
-          <p className="text-sm text-gray-500 mt-1">{total} {statusFilter} appeals</p>
+          <p className="text-sm text-gray-500 mt-1">{total} {statusFilter || 'total'} appeals</p>
         </div>
-        <select className="input w-auto" value={statusFilter} onChange={(e) => setStatusFilter(e.target.value)}>
-          <option value="pending">Pending</option>
-          <option value="approved">Approved</option>
-          <option value="rejected">Rejected</option>
-        </select>
+        <div className="flex gap-3">
+          <select className="input w-auto" title="Filter by status" value={statusFilter} onChange={(e) => { setStatusFilter(e.target.value); setSelected(new Set()); }}>
+            <option value="">All Statuses</option>
+            <option value="pending">Pending</option>
+            <option value="approved">Approved</option>
+            <option value="rejected">Rejected</option>
+          </select>
+          <select className="input w-auto" title="Sort order" value={sortOrder} onChange={(e) => setSortOrder(e.target.value)}>
+            <option value="">Newest</option>
+            <option value="oldest">Oldest</option>
+          </select>
+        </div>
       </div>
+
+      <SelectionBar
+        count={selected.size}
+        total={sortedAppeals.length}
+        onSelectAll={() => setSelected(new Set(sortedAppeals.map((a) => a.id)))}
+        onClearSelection={() => setSelected(new Set())}
+        loading={bulkLoading}
+        actions={[
+          { label: 'Approve', action: 'approved', confirm: true, color: 'bg-green-50 text-green-700 hover:bg-green-100', icon: <CheckCircle className="w-3.5 h-3.5" /> },
+          { label: 'Deny', action: 'rejected', confirm: true, color: 'bg-red-50 text-red-700 hover:bg-red-100', icon: <XCircle className="w-3.5 h-3.5" /> },
+        ]}
+        onAction={handleBulkAction}
+      />
 
       {loading ? (
         <div className="space-y-4">
           {[...Array(3)].map((_, i) => <div key={i} className="card p-6 animate-pulse"><div className="h-24 bg-warm-300 rounded" /></div>)}
         </div>
-      ) : appeals.length === 0 ? (
+      ) : sortedAppeals.length === 0 ? (
         <div className="card p-12 text-center">
           <Scale className="w-12 h-12 text-green-400 mx-auto mb-3" />
-          <p className="text-gray-500 font-medium">No {statusFilter} appeals</p>
+          <p className="text-gray-500 font-medium">No {statusFilter || ''} appeals</p>
         </div>
       ) : (
         <div className="space-y-4">
-          {appeals.map((appeal) => (
-            <div key={appeal.id} className="card p-5">
+          {sortedAppeals.map((appeal) => (
+            <div key={appeal.id} className={`card p-5 ${selected.has(appeal.id) ? 'ring-2 ring-brand-300' : ''}`}>
               {/* Header */}
               <div className="flex items-center gap-2 mb-3">
+                <input type="checkbox" title="Select appeal" className="rounded border-gray-300" checked={selected.has(appeal.id)} onChange={() => toggleSelect(appeal.id)} />
                 <span className={`badge ${statusColor(appeal.status)}`}>{appeal.status}</span>
                 <span className="badge bg-orange-50 text-orange-700">{appeal.violation_type}</span>
                 <span className="text-xs text-gray-400">{formatDateTime(appeal.created_at)}</span>

@@ -15,6 +15,8 @@ export default function GroupsPage() {
   const [groups, setGroups] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');
+  const [privacy, setPrivacy] = useState('');
+  const [sort, setSort] = useState('newest');
   const [offset, setOffset] = useState(0);
   const [selectedGroup, setSelectedGroup] = useState<any | null>(null);
   const [members, setMembers] = useState<any[]>([]);
@@ -26,7 +28,7 @@ export default function GroupsPage() {
 
   const fetchGroups = () => {
     setLoading(true);
-    api.listGroups({ search: search || undefined, limit, offset })
+    api.listGroups({ search: search || undefined, limit, offset, privacy: privacy || undefined, sort: sort || undefined })
       .then((data) => setGroups(data.groups ?? []))
       .catch(() => {})
       .finally(() => setLoading(false));
@@ -114,7 +116,7 @@ export default function GroupsPage() {
         </div>
       </div>
 
-      <form onSubmit={handleSearch} className="mb-4 flex gap-2">
+      <form onSubmit={handleSearch} className="mb-4 flex gap-2 flex-wrap items-center">
         <div className="relative flex-1 max-w-md">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 w-4 h-4" />
           <input
@@ -124,6 +126,17 @@ export default function GroupsPage() {
             onChange={(e) => setSearch(e.target.value)}
           />
         </div>
+        <select className="input w-auto" title="Filter by privacy" value={privacy} onChange={(e) => { setPrivacy(e.target.value); setOffset(0); }}>
+          <option value="">All Privacy</option>
+          <option value="public">Public</option>
+          <option value="private">Private</option>
+        </select>
+        <select className="input w-auto" title="Sort groups" value={sort} onChange={(e) => { setSort(e.target.value); setOffset(0); }}>
+          <option value="newest">Newest</option>
+          <option value="oldest">Oldest</option>
+          <option value="most_members">Most Members</option>
+          <option value="name_asc">Name A-Z</option>
+        </select>
         <button type="submit" className="px-4 py-2 bg-navy-600 text-white rounded-lg text-sm font-medium bg-blue-700 hover:bg-blue-800">
           Search
         </button>
