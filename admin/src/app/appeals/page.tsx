@@ -56,7 +56,7 @@ export default function AppealsPage() {
     if (!confirm(`Are you sure you want to ${decision === 'approved' ? 'approve' : 'deny'} ${selected.size} appeal(s)?`)) return;
     setBulkLoading(true);
     try {
-      for (const id of selected) {
+      for (const id of Array.from(selected)) {
         await api.reviewAppeal(id, decision, `Bulk ${decision} by admin`, decision === 'approved');
       }
       setSelected(new Set());
