@@ -7,7 +7,7 @@
 import AdminShell from '@/components/AdminShell';
 import { api } from '@/lib/api';
 import { formatDateTime } from '@/lib/utils';
-import { useCallback, useEffect, useState } from 'react';
+import { useEffect, useState } from 'react';
 import { ScrollText, RefreshCw, ChevronLeft, ChevronRight, Download, Trash2, Filter, X, Info, AlertTriangle, Search } from 'lucide-react';
 
 const ACTION_TYPES = [
@@ -61,7 +61,10 @@ export default function AuditLogPage() {
 
   const hasFilters = actionFilter || searchFilter || fromDate || toDate;
 
-  const fetchLog = useCallback((p: number) => {
+  // Stable ref for current filter values — avoids useCallback/useEffect dependency loops
+  const [trigger, setTrigger] = useState(0);
+
+  const fetchLog = (p: number) => {
     setLoading(true);
     api.getAuditLog({
       limit,
@@ -77,13 +80,13 @@ export default function AuditLogPage() {
       })
       .catch(() => {})
       .finally(() => setLoading(false));
-  }, [actionFilter, searchFilter, fromDate, toDate]);
+  };
 
-  useEffect(() => { fetchLog(page); }, [page, fetchLog]);
+  useEffect(() => { fetchLog(page); }, [page, trigger]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const applyFilters = () => {
     setPage(0);
-    fetchLog(0);
+    setTrigger((t) => t + 1);
   };
 
   const clearFilters = () => {
@@ -92,7 +95,7 @@ export default function AuditLogPage() {
     setFromDate('');
     setToDate('');
     setPage(0);
-    // fetchLog will run via useEffect when filters reset
+    setTrigger((t) => t + 1);
   };
 
   const handleExport = async () => {
