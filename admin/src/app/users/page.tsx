@@ -8,12 +8,20 @@ import AdminShell from '@/components/AdminShell';
 import SelectionBar from '@/components/SelectionBar';
 import { api } from '@/lib/api';
 import { statusColor, formatDate, truncate } from '@/lib/utils';
-import { useEffect, useState } from 'react';
+import { Suspense, useEffect, useState } from 'react';
 import { Search, ChevronLeft, ChevronRight, Ban, CheckCircle, PauseCircle, Trash2 } from 'lucide-react';
 import { useSearchParams } from 'next/navigation';
 import Link from 'next/link';
 
 export default function UsersPage() {
+  return (
+    <Suspense fallback={<AdminShell><div className="card p-8 animate-pulse"><div className="h-40 bg-warm-300 rounded" /></div></AdminShell>}>
+      <UsersPageInner />
+    </Suspense>
+  );
+}
+
+function UsersPageInner() {
   const searchParams = useSearchParams();
   const [users, setUsers] = useState<any[]>([]);
   const [total, setTotal] = useState(0);
