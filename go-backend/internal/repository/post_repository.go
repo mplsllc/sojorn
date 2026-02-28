@@ -258,6 +258,102 @@ func (r *PostRepository) GetFeed(ctx context.Context, userID string, categorySlu
 	return posts, nil
 }
 
+// GetPostsByIDs fetches posts by a list of IDs, preserving the input order.
+// Applies the same visibility/block/hide filters as GetFeed.
+func (r *PostRepository) GetPostsByIDs(ctx context.Context, postIDs []string, viewerID string) ([]models.Post, error) {
+	if len(postIDs) == 0 {
+		return []models.Post{}, nil
+	}
+
+	query := `
+		SELECT
+			p.id, p.author_id, p.category_id, p.body,
+			COALESCE(p.image_url, ''),
+			CASE
+				WHEN COALESCE(p.video_url, '') <> '' THEN p.video_url
+				WHEN COALESCE(p.image_url, '') ILIKE '%.mp4' THEN p.image_url
+				ELSE ''
+			END AS resolved_video_url,
+			COALESCE(NULLIF(p.thumbnail_url, ''), p.image_url, '') AS resolved_thumbnail_url,
+			COALESCE(p.duration_ms, 0),
+			COALESCE(p.tags, ARRAY[]::text[]),
+			p.created_at,
+			pr.handle as author_handle, pr.display_name as author_display_name, COALESCE(pr.avatar_url, '') as author_avatar_url,
+			COALESCE(m.like_count, 0) as like_count, COALESCE(m.comment_count, 0) as comment_count,
+			CASE WHEN ($2::text) != '' THEN EXISTS(SELECT 1 FROM public.post_likes WHERE post_id = p.id AND user_id = $2::text::uuid) ELSE FALSE END as is_liked,
+			p.allow_chain, p.visibility,
+			COALESCE((SELECT jsonb_object_agg(emoji, count) FROM (SELECT emoji, COUNT(*) as count FROM public.post_reactions WHERE post_id = p.id GROUP BY emoji) r), '{}'::jsonb) as reaction_counts,
+			CASE WHEN ($2::text) != '' THEN COALESCE((SELECT jsonb_agg(emoji) FROM public.post_reactions WHERE post_id = p.id AND user_id = $2::text::uuid), '[]'::jsonb) ELSE '[]'::jsonb END as my_reactions,
+			COALESCE(p.is_nsfw, FALSE) as is_nsfw,
+			COALESCE(p.nsfw_reason, '') as nsfw_reason,
+			p.link_preview_url, p.link_preview_title, p.link_preview_description, p.link_preview_image_url, p.link_preview_site_name,
+			p.overlay_json,
+			COALESCE(t.tier, 'new_user') as author_trust_tier
+		FROM public.posts p
+		JOIN public.profiles pr ON p.author_id = pr.id
+		JOIN public.users au ON p.author_id = au.id AND au.status NOT IN ('banned', 'suspended')
+		LEFT JOIN public.post_metrics m ON p.id = m.post_id
+		LEFT JOIN public.trust_state t ON p.author_id = t.user_id
+		WHERE p.id = ANY($1::uuid[])
+		  AND p.deleted_at IS NULL
+		  AND p.status = 'active'
+		  AND (
+		      p.author_id = CASE WHEN $2::text != '' THEN $2::text::uuid ELSE NULL END
+		      OR (
+		          (pr.is_private = FALSE OR EXISTS (
+		              SELECT 1 FROM public.follows f
+		              WHERE f.follower_id = CASE WHEN $2::text != '' THEN $2::text::uuid ELSE NULL END
+		                AND f.following_id = p.author_id AND f.status = 'accepted'
+		          ))
+		          AND
+		          (
+		              COALESCE(p.visibility, 'public') = 'public'
+		              OR (p.visibility = 'followers' AND EXISTS (
+		                  SELECT 1 FROM public.follows f2
+		                  WHERE f2.follower_id = CASE WHEN $2::text != '' THEN $2::text::uuid ELSE NULL END
+		                    AND f2.following_id = p.author_id AND f2.status = 'accepted'
+		              ))
+		          )
+		      )
+		  )
+		  AND NOT public.has_block_between(p.author_id, CASE WHEN $2::text != '' THEN $2::text::uuid ELSE NULL END)
+		ORDER BY array_position($1::uuid[], p.id)
+	`
+
+	rows, err := r.pool.Query(ctx, query, postIDs, viewerID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	posts := []models.Post{}
+	for rows.Next() {
+		var p models.Post
+		err := rows.Scan(
+			&p.ID, &p.AuthorID, &p.CategoryID, &p.Body, &p.ImageURL, &p.VideoURL, &p.ThumbnailURL, &p.DurationMS, &p.Tags, &p.CreatedAt,
+			&p.AuthorHandle, &p.AuthorDisplayName, &p.AuthorAvatarURL,
+			&p.LikeCount, &p.CommentCount, &p.IsLiked,
+			&p.AllowChain, &p.Visibility, &p.Reactions, &p.MyReactions,
+			&p.IsNSFW, &p.NSFWReason,
+			&p.LinkPreviewURL, &p.LinkPreviewTitle, &p.LinkPreviewDescription, &p.LinkPreviewImageURL, &p.LinkPreviewSiteName,
+			&p.OverlayJSON,
+			&p.AuthorTrustTier,
+		)
+		if err != nil {
+			return nil, err
+		}
+		p.Author = &models.AuthorProfile{
+			ID:          p.AuthorID,
+			Handle:      p.AuthorHandle,
+			DisplayName: p.AuthorDisplayName,
+			AvatarURL:   p.AuthorAvatarURL,
+			TrustTier:   p.AuthorTrustTier,
+		}
+		posts = append(posts, p)
+	}
+	return posts, nil
+}
+
 func (r *PostRepository) GetCategories(ctx context.Context) ([]models.Category, error) {
 	query := `SELECT id, slug, name, description, is_sensitive, created_at FROM public.categories ORDER BY name ASC`
 	rows, err := r.pool.Query(ctx, query)
@@ -727,6 +823,7 @@ func (r *PostRepository) GetSavedPosts(ctx context.Context, userID string, limit
 		LEFT JOIN public.trust_state t ON p.author_id = t.user_id
 		WHERE ps.user_id = $1::uuid AND p.deleted_at IS NULL AND p.status = 'active'
 		  AND (COALESCE(p.is_nsfw, FALSE) = FALSE OR $4 = TRUE)
+		  AND (COALESCE(p.visibility, 'public') = 'public' OR p.author_id = $1::uuid)
 		ORDER BY ps.created_at DESC
 		LIMIT $2 OFFSET $3
 	`

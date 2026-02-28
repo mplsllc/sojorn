@@ -28,6 +28,16 @@ import (
 	"golang.org/x/crypto/bcrypt"
 )
 
+// mustMarshal returns a JSON string from a map, safe from injection.
+// Falls back to "{}" on error (should never happen with simple maps).
+func mustMarshal(v interface{}) string {
+	b, err := json.Marshal(v)
+	if err != nil {
+		return "{}"
+	}
+	return string(b)
+}
+
 type AdminHandler struct {
 	pool                    *pgxpool.Pool
 	moderationService       *services.ModerationService
@@ -1069,7 +1079,7 @@ func (h *AdminHandler) UpdatePostStatus(c *gin.Context) {
 	h.pool.Exec(ctx, `
 		INSERT INTO audit_log (actor_id, action, target_type, target_id, details)
 		VALUES ($1, $2, 'post', $3::uuid, $4)
-	`, adminUUID, "post_status_change", postID, fmt.Sprintf(`{"status":"%s","reason":"%s"}`, req.Status, req.Reason))
+	`, adminUUID, "post_status_change", postID, mustMarshal(map[string]interface{}{"status": req.Status, "reason": req.Reason}))
 
 	// If post was removed, record a strike and notify the author
 	if req.Status == "removed" || req.Status == "flagged" {
@@ -1218,7 +1228,7 @@ func (h *AdminHandler) BulkUpdatePosts(c *gin.Context) {
 
 	adminUUID, _ := uuid.Parse(adminID.(string))
 	h.pool.Exec(ctx, `INSERT INTO audit_log (actor_id, action, target_type, details) VALUES ($1, $2, 'post', $3)`,
-		adminUUID, "bulk_"+req.Action+"_posts", fmt.Sprintf(`{"count":%d,"reason":"%s"}`, affected, req.Reason))
+		adminUUID, "bulk_"+req.Action+"_posts", mustMarshal(map[string]interface{}{"count": affected, "reason": req.Reason}))
 
 	c.JSON(http.StatusOK, gin.H{"message": fmt.Sprintf("%d posts updated", affected), "affected": affected})
 }
@@ -1268,7 +1278,7 @@ func (h *AdminHandler) BulkUpdateUsers(c *gin.Context) {
 
 	adminUUID, _ := uuid.Parse(adminID.(string))
 	h.pool.Exec(ctx, `INSERT INTO audit_log (actor_id, action, target_type, details) VALUES ($1, $2, 'user', $3)`,
-		adminUUID, "bulk_"+req.Action+"_users", fmt.Sprintf(`{"count":%d,"reason":"%s"}`, affected, req.Reason))
+		adminUUID, "bulk_"+req.Action+"_users", mustMarshal(map[string]interface{}{"count": affected, "reason": req.Reason}))
 
 	c.JSON(http.StatusOK, gin.H{"message": fmt.Sprintf("%d users updated", affected), "affected": affected})
 }
@@ -2481,7 +2491,7 @@ func (h *AdminHandler) DeleteStorageObject(c *gin.Context) {
 	h.pool.Exec(ctx, `
 		INSERT INTO audit_log (actor_id, action, target_type, target_id, details)
 		VALUES ($1, 'admin_delete_storage_object', 'storage', NULL, $2)
-	`, adminUUID, fmt.Sprintf(`{"bucket":"%s","key":"%s"}`, req.Bucket, req.Key))
+	`, adminUUID, mustMarshal(map[string]interface{}{"bucket": req.Bucket, "key": req.Key}))
 
 	c.JSON(http.StatusOK, gin.H{"message": "Object deleted"})
 }
@@ -2587,7 +2597,7 @@ func (h *AdminHandler) AddReservedUsername(c *gin.Context) {
 	h.pool.Exec(ctx, `
 		INSERT INTO audit_log (actor_id, action, target_type, details)
 		VALUES ($1, 'admin_reserve_username', 'username', $2)
-	`, adminUUID, fmt.Sprintf(`{"username":"%s","category":"%s"}`, req.Username, req.Category))
+	`, adminUUID, mustMarshal(map[string]interface{}{"username": req.Username, "category": req.Category}))
 
 	c.JSON(http.StatusOK, gin.H{"message": "Username reserved"})
 }
@@ -2610,7 +2620,7 @@ func (h *AdminHandler) RemoveReservedUsername(c *gin.Context) {
 	h.pool.Exec(ctx, `
 		INSERT INTO audit_log (actor_id, action, target_type, details)
 		VALUES ($1, 'admin_unreserve_username', 'username', $2)
-	`, adminUUID, fmt.Sprintf(`{"username":"%s"}`, username))
+	`, adminUUID, mustMarshal(map[string]interface{}{"username": username}))
 
 	c.JSON(http.StatusOK, gin.H{"message": "Reserved username removed"})
 }
@@ -2764,7 +2774,7 @@ func (h *AdminHandler) ReviewClaimRequest(c *gin.Context) {
 	h.pool.Exec(ctx, `
 		INSERT INTO audit_log (actor_id, action, target_type, target_id, details)
 		VALUES ($1, 'admin_review_claim', 'claim_request', $2, $3)
-	`, adminUUID, id, fmt.Sprintf(`{"decision":"%s"}`, req.Decision))
+	`, adminUUID, id, mustMarshal(map[string]interface{}{"decision": req.Decision}))
 
 	c.JSON(http.StatusOK, gin.H{"message": "Claim request " + req.Decision})
 }
@@ -2912,7 +2922,7 @@ func (h *AdminHandler) SetAIModerationConfig(c *gin.Context) {
 	h.pool.Exec(c.Request.Context(), `
 		INSERT INTO audit_log (admin_id, action, target_type, details)
 		VALUES ($1, 'update_ai_moderation', 'ai_config', $2)
-	`, adminID, fmt.Sprintf("Set %s moderation model to %s (enabled=%v)", req.ModerationType, req.ModelID, req.Enabled))
+	`, adminID, mustMarshal(map[string]interface{}{"moderation_type": req.ModerationType, "model_id": req.ModelID, "enabled": req.Enabled}))
 
 	c.JSON(http.StatusOK, gin.H{"message": "Configuration updated"})
 }
@@ -3097,7 +3107,7 @@ func (h *AdminHandler) SubmitAIModerationFeedback(c *gin.Context) {
 
 	// Audit log
 	h.pool.Exec(ctx, `INSERT INTO audit_log (actor_id, action, target_type, target_id, details) VALUES ($1, 'ai_moderation_feedback', 'ai_moderation_log', $2, $3)`,
-		adminUUID, logID, fmt.Sprintf(`{"correct":%v,"reason":"%s"}`, req.Correct, req.Reason))
+		adminUUID, logID, mustMarshal(map[string]interface{}{"correct": req.Correct, "reason": req.Reason}))
 
 	c.JSON(http.StatusOK, gin.H{"message": "Feedback submitted"})
 }
@@ -3217,7 +3227,7 @@ func (h *AdminHandler) AdminCreateUser(c *gin.Context) {
 
 	// Audit log
 	h.pool.Exec(ctx, `INSERT INTO audit_log (actor_id, action, target_type, target_id, details) VALUES ($1, 'admin_create_user', 'user', $2, $3)`,
-		adminID, userID.String(), fmt.Sprintf(`{"email":"%s","handle":"%s"}`, req.Email, req.Handle))
+		adminID, userID.String(), mustMarshal(map[string]interface{}{"email": req.Email, "handle": req.Handle}))
 
 	log.Info().Str("admin", adminID.(string)).Str("new_user", userID.String()).Str("handle", req.Handle).Msg("Admin created user")
 
@@ -3497,7 +3507,7 @@ func (h *AdminHandler) AdminImportContent(c *gin.Context) {
 
 	// Audit log
 	h.pool.Exec(ctx, `INSERT INTO audit_log (actor_id, action, target_type, target_id, details) VALUES ($1, 'admin_import_content', 'post', $2, $3)`,
-		adminID, req.AuthorID, fmt.Sprintf(`{"type":"%s","created":%d,"updated":%d,"errors":%d}`, req.ContentType, len(created), len(updated), len(errors)))
+		adminID, req.AuthorID, mustMarshal(map[string]interface{}{"type": req.ContentType, "created": len(created), "updated": len(updated), "errors": len(errors)}))
 
 	log.Info().Str("admin", adminID.(string)).Str("type", req.ContentType).Int("created", len(created)).Int("updated", len(updated)).Int("errors", len(errors)).Msg("Admin import content")
 
@@ -3627,7 +3637,7 @@ func (h *AdminHandler) UpsertOfficialAccount(c *gin.Context) {
 
 	adminID, _ := c.Get("user_id")
 	h.pool.Exec(ctx, `INSERT INTO audit_log (actor_id, action, target_type, target_id, details) VALUES ($1, 'admin_upsert_official_account', 'official_account', $2, $3)`,
-		adminID, result.ID, fmt.Sprintf(`{"profile_id":"%s","type":"%s"}`, profileID, req.AccountType))
+		adminID, result.ID, mustMarshal(map[string]interface{}{"profile_id": profileID, "type": req.AccountType}))
 
 	c.JSON(http.StatusOK, result)
 }
@@ -4279,7 +4289,7 @@ func (h *AdminHandler) UpdateEmailTemplate(c *gin.Context) {
 	adminID, _ := c.Get("user_id")
 	_, _ = h.pool.Exec(c.Request.Context(),
 		`INSERT INTO audit_log (admin_id, action, target_type, target_id, details) VALUES ($1, 'update_email_template', 'email_template', $2, $3)`,
-		adminID, id, fmt.Sprintf("Updated email template %s", id))
+		adminID, id, mustMarshal(map[string]interface{}{"action": "updated", "template_id": id}))
 
 	c.JSON(http.StatusOK, gin.H{"message": "Template updated", "id": returnedID})
 }
@@ -4725,7 +4735,7 @@ func (h *AdminHandler) AdminUpdateWaitlist(c *gin.Context) {
 
 	adminID, _ := c.Get("user_id")
 	h.pool.Exec(ctx, `INSERT INTO audit_log (actor_id, action, target_type, target_id, details) VALUES ($1, 'waitlist_update', 'waitlist', $2, $3)`,
-		adminID, id, fmt.Sprintf("status=%s", req.Status))
+		adminID, id, mustMarshal(map[string]interface{}{"status": req.Status}))
 
 	c.JSON(http.StatusOK, gin.H{"message": "Updated"})
 }
@@ -4776,7 +4786,7 @@ func (h *AdminHandler) AdminGetFeedScores(c *gin.Context) {
 	}
 	rows, err := h.pool.Query(c.Request.Context(), `
 		SELECT pfs.post_id,
-		       LEFT(p.content, 80)  AS excerpt,
+		       LEFT(p.body, 80)  AS excerpt,
 		       pfs.engagement_score,
 		       pfs.quality_score,
 		       pfs.recency_score,
@@ -5046,7 +5056,7 @@ func (h *AdminHandler) AdminCreateNeighborhood(c *gin.Context) {
 	h.pool.Exec(ctx, `
 		INSERT INTO audit_log (actor_id, action, target_type, target_id, details)
 		VALUES ($1, 'neighborhood_create', 'neighborhood', $2, $3)
-	`, adminUUID, id, fmt.Sprintf(`{"name":"%s","city":"%s"}`, req.Name, req.City))
+	`, adminUUID, id, mustMarshal(map[string]interface{}{"name": req.Name, "city": req.City}))
 
 	c.JSON(http.StatusCreated, gin.H{"id": id, "message": "Neighborhood created"})
 }
@@ -5194,7 +5204,7 @@ func (h *AdminHandler) AdminUpdateUserEmail(c *gin.Context) {
 	h.pool.Exec(ctx, `
 		INSERT INTO audit_log (actor_id, action, target_type, target_id, details)
 		VALUES ($1, 'user_email_change', 'user', $2::uuid, $3)
-	`, adminUUID, targetUserID, fmt.Sprintf(`{"new_email":"%s"}`, req.Email))
+	`, adminUUID, targetUserID, mustMarshal(map[string]interface{}{"new_email": req.Email}))
 
 	c.JSON(http.StatusOK, gin.H{"message": "Email updated"})
 }

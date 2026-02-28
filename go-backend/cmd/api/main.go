@@ -76,17 +76,20 @@ func main() {
 		allowedOriginSet[trimmed] = struct{}{}
 	}
 
+	isProduction := cfg.Env == "production"
 	r.Use(cors.New(cors.Config{
 		AllowOriginFunc: func(origin string) bool {
-			log.Debug().Msgf("CORS origin: %s", origin)
 			if allowAllOrigins {
 				return true
 			}
-			if strings.HasPrefix(origin, "http://localhost") ||
-				strings.HasPrefix(origin, "https://localhost") ||
-				strings.HasPrefix(origin, "http://127.0.0.1") ||
-				strings.HasPrefix(origin, "https://127.0.0.1") {
-				return true
+			// Only allow localhost origins in non-production environments
+			if !isProduction {
+				if strings.HasPrefix(origin, "http://localhost") ||
+					strings.HasPrefix(origin, "https://localhost") ||
+					strings.HasPrefix(origin, "http://127.0.0.1") ||
+					strings.HasPrefix(origin, "https://127.0.0.1") {
+					return true
+				}
 			}
 			_, ok := allowedOriginSet[origin]
 			return ok
@@ -138,7 +141,8 @@ func main() {
 	}()
 
 	assetService := services.NewAssetService(cfg.R2SigningSecret, cfg.R2PublicBaseURL, cfg.R2ImgDomain, cfg.R2VidDomain)
-	feedService := services.NewFeedService(postRepo, assetService)
+	feedAlgorithmService := services.NewFeedAlgorithmService(dbPool)
+	feedService := services.NewFeedService(postRepo, assetService, feedAlgorithmService)
 
 	pushService, err := services.NewPushService(userRepo, cfg.FirebaseCredentialsFile)
 	if err != nil {
@@ -256,9 +260,6 @@ func main() {
 		cfg.R2ImgDomain,
 		cfg.R2VidDomain,
 	)
-
-	// Feed algorithm service (scores posts for ranked feed)
-	feedAlgorithmService := services.NewFeedAlgorithmService(dbPool)
 
 	// Health check service
 	hcService := monitoring.NewHealthCheckService(dbPool)
@@ -434,6 +435,7 @@ func main() {
 			authorized.POST("/posts/:id/comments", postHandler.CreateComment)
 			authorized.GET("/feed", postHandler.GetFeed)
 			authorized.GET("/feed/personal", postHandler.GetFeed)
+			authorized.GET("/feed/sojorn", postHandler.GetSojornFeed)
 			authorized.POST("/beacons", middleware.UserRateLimit(3.0/3600.0, 3), postHandler.CreateBeacon)
 			authorized.GET("/beacons/nearby", postHandler.GetNearbyBeacons)
 			authorized.GET("/beacons/unified", beaconUnifiedHandler.GetUnifiedBeacons)
@@ -953,11 +955,15 @@ func main() {
 
 	// Background job: update feed algorithm scores every 15 minutes
 	go func() {
+		// Run initial score refresh 30 seconds after startup
+		time.Sleep(30 * time.Second)
+		if err := feedAlgorithmService.RefreshAllScores(context.Background()); err != nil {
+			log.Error().Err(err).Msg("[FeedAlgorithm] Initial score refresh failed")
+		}
 		ticker := time.NewTicker(15 * time.Minute)
 		defer ticker.Stop()
 		for range ticker.C {
-			log.Debug().Msg("[FeedAlgorithm] Refreshing feed scores")
-			if err := feedAlgorithmService.UpdateFeedScores(context.Background(), []string{}, ""); err != nil {
+			if err := feedAlgorithmService.RefreshAllScores(context.Background()); err != nil {
 				log.Error().Err(err).Msg("[FeedAlgorithm] Failed to refresh feed scores")
 			}
 		}

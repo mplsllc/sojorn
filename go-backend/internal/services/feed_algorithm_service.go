@@ -88,17 +88,18 @@ func (s *FeedAlgorithmService) GetDefaultWeights() EngagementWeight {
 // Calculate engagement score for a post
 func (s *FeedAlgorithmService) CalculateEngagementScore(ctx context.Context, postID string, weights EngagementWeight) (float64, error) {
 	query := `
-		SELECT 
-			COALESCE(like_count, 0) as likes,
-			COALESCE(comment_count, 0) as comments,
-			COALESCE(share_count, 0) as shares,
-			COALESCE(repost_count, 0) as reposts,
-			COALESCE(boost_count, 0) as boosts,
-			COALESCE(amplify_count, 0) as amplifies,
-			COALESCE(view_count, 0) as views,
-			created_at
-		FROM posts 
-		WHERE id = $1
+		SELECT
+			COALESCE(m.like_count, 0) as likes,
+			COALESCE(m.comment_count, 0) as comments,
+			COALESCE(p.share_count, 0) as shares,
+			(SELECT COUNT(*) FROM reposts WHERE original_post_id = p.id) as reposts,
+			COALESCE(p.boost_count, 0) as boosts,
+			COALESCE(p.amplify_count, 0) as amplifies,
+			COALESCE(m.view_count, 0) as views,
+			p.created_at
+		FROM posts p
+		LEFT JOIN post_metrics m ON m.post_id = p.id
+		WHERE p.id = $1
 	`
 
 	var likes, comments, shares, reposts, boosts, amplifies, views int
@@ -132,16 +133,17 @@ func (s *FeedAlgorithmService) CalculateEngagementScore(ctx context.Context, pos
 // Calculate content quality score
 func (s *FeedAlgorithmService) CalculateContentQualityScore(ctx context.Context, postID string) (ContentQualityScore, error) {
 	query := `
-		SELECT 
+		SELECT
 			p.body,
 			p.image_url,
 			p.video_url,
 			p.created_at,
-			COALESCE(p.like_count, 0) as likes,
-			COALESCE(p.comment_count, 0) as comments,
-			COALESCE(p.view_count, 0) as views,
+			COALESCE(m.like_count, 0) as likes,
+			COALESCE(m.comment_count, 0) as comments,
+			COALESCE(m.view_count, 0) as views,
 			p.author_id
 		FROM posts p
+		LEFT JOIN post_metrics m ON m.post_id = p.id
 		WHERE p.id = $1
 	`
 
@@ -232,44 +234,39 @@ func (s *FeedAlgorithmService) CalculateRecencyScore(createdAt time.Time, weight
 
 // Calculate network score based on user connections
 func (s *FeedAlgorithmService) CalculateNetworkScore(ctx context.Context, postID string, viewerID string) (float64, error) {
+	if viewerID == "" {
+		return 0, nil
+	}
+
+	// Check if viewer follows the post author (strong signal)
 	query := `
-		SELECT 
-			COUNT(DISTINCT CASE 
-				WHEN f.following_id = $2 THEN 1 
-				WHEN f.follower_id = $2 THEN 1 
-			END) as connection_interactions,
-			COUNT(DISTINCT l.user_id) as like_connections,
-			COUNT(DISTINCT c.user_id) as comment_connections
+		SELECT
+			CASE WHEN EXISTS(
+				SELECT 1 FROM follows
+				WHERE follower_id = $2::uuid AND following_id = p.author_id AND status = 'accepted'
+			) THEN 1 ELSE 0 END as is_following,
+			(SELECT COUNT(*) FROM post_likes l
+			 WHERE l.post_id = $1
+			   AND l.user_id IN (SELECT following_id FROM follows WHERE follower_id = $2::uuid AND status = 'accepted')
+			) as like_connections
 		FROM posts p
-		LEFT JOIN follows f ON (f.following_id = p.author_id OR f.follower_id = p.author_id)
-		LEFT JOIN post_likes l ON l.post_id = p.id AND l.user_id IN (
-			SELECT following_id FROM follows WHERE follower_id = $2
-			UNION
-			SELECT follower_id FROM follows WHERE following_id = $2
-		)
-		LEFT JOIN post_comments c ON c.post_id = p.id AND c.user_id IN (
-			SELECT following_id FROM follows WHERE follower_id = $2
-			UNION
-			SELECT follower_id FROM follows WHERE following_id = $2
-		)
 		WHERE p.id = $1
 	`
 
-	var connectionInteractions, likeConnections, commentConnections int
+	var isFollowing, likeConnections int
 	err := s.db.QueryRow(ctx, query, postID, viewerID).Scan(
-		&connectionInteractions, &likeConnections, &commentConnections,
+		&isFollowing, &likeConnections,
 	)
 	if err != nil {
 		return 0, fmt.Errorf("failed to calculate network score: %w", err)
 	}
 
-	// Network score based on connections
-	networkScore := float64(connectionInteractions)*0.3 +
-		float64(likeConnections)*0.4 +
-		float64(commentConnections)*0.3
+	// Network score: following author = 0.5 base, plus friend-likes bonus
+	networkScore := float64(isFollowing)*0.5 +
+		float64(likeConnections)*0.4
 
 	// Normalize to 0-1 range
-	networkScore = math.Min(networkScore/10.0, 1.0)
+	networkScore = math.Min(networkScore/5.0, 1.0)
 
 	return networkScore, nil
 }
@@ -278,12 +275,13 @@ func (s *FeedAlgorithmService) CalculateNetworkScore(ctx context.Context, postID
 func (s *FeedAlgorithmService) CalculatePersonalizationScore(ctx context.Context, postID string, userProfile UserInterestProfile) (float64, error) {
 	// Get post category and content analysis
 	query := `
-		SELECT 
-			p.category,
+		SELECT
+			COALESCE(c.slug, '') as category_slug,
 			p.body,
 			p.author_id,
 			p.tags
 		FROM posts p
+		LEFT JOIN categories c ON c.id = p.category_id
 		WHERE p.id = $1
 	`
 
@@ -461,25 +459,30 @@ func (s *FeedAlgorithmService) GetAlgorithmicFeed(ctx context.Context, viewerID 
 	// ── 1. Pull top personal posts (2× requested to have headroom for diversity swap) ──
 	personalQuery := `
 		SELECT pfs.post_id, pfs.score,
-		       COALESCE(ufi.shown_at, NULL) AS last_shown,
-		       p.category,
-		       p.user_id AS author_id
+		       ufi.shown_at AS last_shown,
+		       COALESCE(cat.slug, '') AS category_slug,
+		       p.author_id
 		FROM post_feed_scores pfs
 		JOIN posts p ON p.id = pfs.post_id
+		LEFT JOIN categories cat ON cat.id = p.category_id
 		LEFT JOIN user_feed_impressions ufi
-		       ON ufi.post_id = pfs.post_id AND ufi.user_id = $1
+		       ON ufi.post_id = pfs.post_id AND ufi.user_id = $1::uuid
 		WHERE p.status = 'active'
+		  AND p.deleted_at IS NULL
+		  AND COALESCE(p.is_beacon, FALSE) = FALSE
+		  AND p.chain_parent_id IS NULL
 		  AND pfs.post_id NOT IN (SELECT post_id FROM public.post_hides WHERE user_id = $1::uuid)
-		  AND p.user_id NOT IN (
+		  AND p.author_id NOT IN (
 		      SELECT author_id FROM public.post_hides
 		      WHERE user_id = $1::uuid GROUP BY author_id HAVING COUNT(*) >= 2
 		  )
+		  AND NOT public.has_block_between(p.author_id, $1::uuid)
 	`
 	personalArgs := []interface{}{viewerID}
 	argIdx := 2
 
 	if category != "" {
-		personalQuery += fmt.Sprintf(" AND p.category = $%d", argIdx)
+		personalQuery += fmt.Sprintf(" AND cat.slug = $%d", argIdx)
 		personalArgs = append(personalArgs, category)
 		argIdx++
 	}
@@ -574,12 +577,14 @@ func (s *FeedAlgorithmService) GetAlgorithmicFeed(ctx context.Context, viewerID 
 		crossQuery := fmt.Sprintf(`
 			SELECT p.id FROM posts p
 			JOIN post_feed_scores pfs ON pfs.post_id = p.id
+			LEFT JOIN categories cat ON cat.id = p.category_id
 			WHERE p.status = 'active'
-			  AND p.category NOT IN (%s)
-			  AND p.id NOT IN (SELECT post_id FROM public.post_hides WHERE user_id = $1)
-			  AND p.user_id NOT IN (
+			  AND p.deleted_at IS NULL
+			  AND COALESCE(cat.slug, '') NOT IN (%s)
+			  AND p.id NOT IN (SELECT post_id FROM public.post_hides WHERE user_id = $1::uuid)
+			  AND p.author_id NOT IN (
 			      SELECT author_id FROM public.post_hides
-			      WHERE user_id = $1 GROUP BY author_id HAVING COUNT(*) >= 2
+			      WHERE user_id = $1::uuid GROUP BY author_id HAVING COUNT(*) >= 2
 			  )
 			ORDER BY random()
 			LIMIT $2
@@ -603,9 +608,10 @@ func (s *FeedAlgorithmService) GetAlgorithmicFeed(ctx context.Context, viewerID 
 			SELECT p.id FROM posts p
 			JOIN post_feed_scores pfs ON pfs.post_id = p.id
 			WHERE p.status = 'active'
-			  AND p.user_id != $1
-			  AND p.user_id NOT IN (
-			        SELECT following_id FROM follows WHERE follower_id = $1
+			  AND p.deleted_at IS NULL
+			  AND p.author_id != $1::uuid
+			  AND p.author_id NOT IN (
+			        SELECT following_id FROM follows WHERE follower_id = $1::uuid
 			      )
 			ORDER BY random()
 			LIMIT $2
@@ -669,6 +675,67 @@ func topN(m map[string]int, n int) []string {
 		result = append(result, pairs[i].k)
 	}
 	return result
+}
+
+// RefreshAllScores recalculates feed scores for all active posts from the last 7 days.
+// Called by the background job every 15 minutes.
+func (s *FeedAlgorithmService) RefreshAllScores(ctx context.Context) error {
+	rows, err := s.db.Query(ctx, `
+		SELECT id FROM posts
+		WHERE status = 'active'
+		  AND deleted_at IS NULL
+		  AND COALESCE(is_beacon, FALSE) = FALSE
+		  AND chain_parent_id IS NULL
+		  AND created_at >= NOW() - INTERVAL '7 days'
+		ORDER BY created_at DESC
+		LIMIT 500
+	`)
+	if err != nil {
+		return fmt.Errorf("failed to query posts for scoring: %w", err)
+	}
+	defer rows.Close()
+
+	var postIDs []string
+	for rows.Next() {
+		var id string
+		if err := rows.Scan(&id); err != nil {
+			continue
+		}
+		postIDs = append(postIDs, id)
+	}
+	rows.Close()
+
+	if len(postIDs) == 0 {
+		log.Debug().Msg("[FeedAlgorithm] No posts to score")
+		return nil
+	}
+
+	log.Info().Int("count", len(postIDs)).Msg("[FeedAlgorithm] Scoring posts")
+
+	weights := s.GetDefaultWeights()
+	// Use empty profile for global scoring (personalization is viewer-specific)
+	emptyProfile := UserInterestProfile{
+		Interests:        make(map[string]float64),
+		CategoryWeights:  make(map[string]float64),
+		InteractionHistory: make(map[string]int),
+	}
+
+	scored := 0
+	for _, postID := range postIDs {
+		score, err := s.CalculateFeedScore(ctx, postID, "", weights, emptyProfile)
+		if err != nil {
+			log.Warn().Err(err).Str("post_id", postID).Msg("[FeedAlgorithm] Failed to score post")
+			continue
+		}
+		if err := s.updatePostScore(ctx, score); err != nil {
+			log.Warn().Err(err).Str("post_id", postID).Msg("[FeedAlgorithm] Failed to persist score")
+			continue
+		}
+		scored++
+	}
+
+	log.Info().Int("scored", scored).Int("total", len(postIDs)).Msg("[FeedAlgorithm] Score refresh complete")
+	return nil
 }
 
 // Helper functions

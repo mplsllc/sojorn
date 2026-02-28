@@ -782,6 +782,24 @@ func (h *PostHandler) GetFeed(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{"posts": posts})
 }
 
+// GetSojornFeed returns an algorithmically-ranked feed for the Sojorn discovery tab.
+func (h *PostHandler) GetSojornFeed(c *gin.Context) {
+	userIDStr, _ := c.Get("user_id")
+
+	limit := utils.GetQueryInt(c, "limit", 20)
+	offset := utils.GetQueryInt(c, "offset", 0)
+	category := c.Query("category")
+
+	posts, err := h.feedService.GetSojornFeed(c.Request.Context(), userIDStr.(string), limit, offset, category)
+	if err != nil {
+		internalError(c, "Failed to fetch sojorn feed", err)
+		return
+	}
+
+	h.enrichLinkPreviews(c.Request.Context(), posts)
+	c.JSON(http.StatusOK, gin.H{"posts": posts})
+}
+
 func (h *PostHandler) GetProfilePosts(c *gin.Context) {
 	authorID := c.Param("id")
 	if authorID == "" {
