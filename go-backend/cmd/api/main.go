@@ -958,10 +958,10 @@ func main() {
 
 	// Background job: update feed algorithm scores every 15 minutes
 	go func() {
-		// Run initial score refresh 30 seconds after startup
+		// Run full backfill on startup (one-time), then switch to regular 7-day refresh
 		time.Sleep(30 * time.Second)
-		if err := feedAlgorithmService.RefreshAllScores(context.Background()); err != nil {
-			log.Error().Err(err).Msg("[FeedAlgorithm] Initial score refresh failed")
+		if err := feedAlgorithmService.RefreshAllScoresFull(context.Background()); err != nil {
+			log.Error().Err(err).Msg("[FeedAlgorithm] Full backfill failed")
 		}
 		ticker := time.NewTicker(15 * time.Minute)
 		defer ticker.Stop()
