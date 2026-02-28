@@ -1,0 +1,25 @@
+---
+// Copyright (c) 2026 MPLS LLC
+// Licensed under the GNU Affero General Public License v3.0
+// See LICENSE file for details
+import Layout from '../layouts/Layout.astro';
+---
+
+<Layout title="Email Verified - Sojorn" description="Your Sojorn email has been verified">
+  <div class="max-w-lg mx-auto px-6 py-24 text-center">
+    <div class="inline-flex items-center justify-center w-20 h-20 rounded-full bg-green-50 mb-8">
+      <svg class="w-10 h-10 text-green-500" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+        <path stroke-linecap="round" stroke-linejoin="round" d="M5 13l4 4L19 7" />
+      </svg>
+    </div>
+
+    <h1 class="text-3xl font-serif font-bold text-egyptianBlue mb-4">Email Verified</h1>
+    <p class="text-gray-600 text-lg mb-8">Your account is now active. You can close this page and sign in to the Sojorn app.</p>
+
+    <div class="bg-blue-50 border border-blue-100 rounded-xl p-5 text-left">
+      <p class="text-sm text-gray-600 leading-relaxed">
+        <strong class="text-egyptianBlue">Next step:</strong> Open the Sojorn app and sign in with your email and password. You'll be guided through choosing your interests and setting up encryption for your messages.
+      </p>
+    </div>
+  </div>
+</Layout>

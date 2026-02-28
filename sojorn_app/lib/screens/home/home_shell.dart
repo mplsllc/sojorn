@@ -30,6 +30,7 @@ import '../../services/api_service.dart';
 import '../../services/analytics_service.dart';
 import '../../providers/quip_upload_provider.dart';
 import '../../providers/notification_provider.dart';
+import '../../providers/vault_provider.dart';
 import '../../models/profile.dart';
 import '../../models/dashboard_widgets.dart';
 import '../../widgets/dashboard/dashboard_editor_panel.dart';
@@ -70,6 +71,9 @@ class _HomeShellState extends ConsumerState<HomeShell> with WidgetsBindingObserv
   Timer? _logoTapTimer;
   bool _logoInverted = false;
 
+  // Guard: only run neighborhood/onboarding checks after vault is confirmed set up
+  bool _postVaultChecksRan = false;
+
   // Nav helper badges — show descriptive subtitle for first N taps
   static const _maxHelperShows = 3;
   Map<int, int> _navTapCounts = {};
@@ -102,8 +106,8 @@ class _HomeShellState extends ConsumerState<HomeShell> with WidgetsBindingObserv
     _loadNavTapCounts();
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (mounted) {
-        OnboardingModal.showIfNeeded(context);
-        _checkNeighborhoodOnboarding();
+        // Neighborhood and onboarding checks are deferred until vault setup
+        // completes — see _runPostVaultChecks() triggered via ref.listen.
         _loadDesktopSidebarData();
       }
     });
@@ -373,8 +377,31 @@ class _HomeShellState extends ConsumerState<HomeShell> with WidgetsBindingObserv
     }
   }
 
+  /// Runs onboarding + neighborhood checks exactly once, after the vault
+  /// is confirmed set up. Called via ref.listen on vaultSetupProvider.
+  void _runPostVaultChecks() {
+    if (_postVaultChecksRan) return;
+    _postVaultChecksRan = true;
+    if (kDebugMode) debugPrint('[SHELL] Vault confirmed — running post-vault checks');
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) {
+        OnboardingModal.showIfNeeded(context);
+        _checkNeighborhoodOnboarding();
+      }
+    });
+  }
+
   @override
   Widget build(BuildContext context) {
+    // Defer neighborhood/onboarding modals until vault setup is complete.
+    // This prevents the neighborhood picker from opening on top of (or
+    // instead of) the VaultSetupGate's password screen for new users.
+    ref.listen<AsyncValue<bool>>(vaultSetupProvider, (prev, next) {
+      next.whenData((isSetup) {
+        if (isSetup) _runPostVaultChecks();
+      });
+    });
+
     return LayoutBuilder(
       builder: (context, constraints) {
         final isDesktop = SojornBreakpoints.isDesktop(constraints.maxWidth);

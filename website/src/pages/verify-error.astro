@@ -1,0 +1,46 @@
+---
+// Copyright (c) 2026 MPLS LLC
+// Licensed under the GNU Affero General Public License v3.0
+// See LICENSE file for details
+import Layout from '../layouts/Layout.astro';
+
+const reason = Astro.url.searchParams.get('reason') ?? 'unknown';
+
+const messages: Record<string, { title: string; body: string }> = {
+  invalid_token: {
+    title: 'Invalid Link',
+    body: 'This verification link is not valid. It may have already been used. Try signing in — if your account is already verified, you\'re all set.',
+  },
+  expired: {
+    title: 'Link Expired',
+    body: 'This verification link has expired. Sign in to the app and request a new verification email from your account settings.',
+  },
+  server_error: {
+    title: 'Something Went Wrong',
+    body: 'We ran into a problem verifying your email. Please try again in a few minutes, or contact us if the issue persists.',
+  },
+  unknown: {
+    title: 'Verification Failed',
+    body: 'Something went wrong with the verification. Try signing in — if your account is already verified, you\'re all set.',
+  },
+};
+
+const msg = messages[reason] ?? messages.unknown;
+---
+
+<Layout title="Verification Error - Sojorn" description="Email verification error">
+  <div class="max-w-lg mx-auto px-6 py-24 text-center">
+    <div class="inline-flex items-center justify-center w-20 h-20 rounded-full bg-red-50 mb-8">
+      <svg class="w-10 h-10 text-red-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+        <path stroke-linecap="round" stroke-linejoin="round" d="M12 9v3.75m9-.75a9 9 0 11-18 0 9 9 0 0118 0zm-9 3.75h.008v.008H12v-.008z" />
+      </svg>
+    </div>
+
+    <h1 class="text-3xl font-serif font-bold text-egyptianBlue mb-4">{msg.title}</h1>
+    <p class="text-gray-600 text-lg mb-8">{msg.body}</p>
+
+    <a href="mailto:contact@sojorn.net" class="text-egyptianBlue font-semibold hover:underline text-sm">
+      Need help? Contact us
+    </a>
+  </div>
+</Layout>
