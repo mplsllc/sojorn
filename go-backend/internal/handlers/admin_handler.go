@@ -49,6 +49,7 @@ type AdminHandler struct {
 	localAIService          *services.LocalAIService
 	beaconAlertRepo         *repository.BeaconAlertRepository
 	beaconIngestion         *services.BeaconIngestionService
+	feedAlgorithmService    *services.FeedAlgorithmService
 	jwtSecret               string
 	isProduction            bool
 	s3Client                *s3.Client
@@ -58,7 +59,7 @@ type AdminHandler struct {
 	vidDomain               string
 }
 
-func NewAdminHandler(pool *pgxpool.Pool, moderationService *services.ModerationService, appealService *services.AppealService, emailService *services.EmailService, sightEngineService *services.SightEngineService, officialAccountsService *services.OfficialAccountsService, linkPreviewService *services.LinkPreviewService, localAIService *services.LocalAIService, beaconAlertRepo *repository.BeaconAlertRepository, beaconIngestion *services.BeaconIngestionService, jwtSecret string, isProduction bool, s3Client *s3.Client, mediaBucket string, videoBucket string, imgDomain string, vidDomain string) *AdminHandler {
+func NewAdminHandler(pool *pgxpool.Pool, moderationService *services.ModerationService, appealService *services.AppealService, emailService *services.EmailService, sightEngineService *services.SightEngineService, officialAccountsService *services.OfficialAccountsService, linkPreviewService *services.LinkPreviewService, localAIService *services.LocalAIService, beaconAlertRepo *repository.BeaconAlertRepository, beaconIngestion *services.BeaconIngestionService, feedAlgorithmService *services.FeedAlgorithmService, jwtSecret string, isProduction bool, s3Client *s3.Client, mediaBucket string, videoBucket string, imgDomain string, vidDomain string) *AdminHandler {
 	return &AdminHandler{
 		pool:                    pool,
 		moderationService:       moderationService,
@@ -70,6 +71,7 @@ func NewAdminHandler(pool *pgxpool.Pool, moderationService *services.ModerationS
 		localAIService:          localAIService,
 		beaconAlertRepo:         beaconAlertRepo,
 		beaconIngestion:         beaconIngestion,
+		feedAlgorithmService:    feedAlgorithmService,
 		jwtSecret:               jwtSecret,
 		isProduction:            isProduction,
 		s3Client:                s3Client,
@@ -4792,6 +4794,10 @@ func (h *AdminHandler) AdminGetFeedScores(c *gin.Context) {
 		       pfs.recency_score,
 		       pfs.network_score,
 		       pfs.personalization,
+		       COALESCE(pfs.tone_score, 0)         AS tone_score,
+		       COALESCE(pfs.video_boost_score, 0)  AS video_boost_score,
+		       COALESCE(pfs.harmony_score, 0)       AS harmony_score,
+		       COALESCE(pfs.moderation_penalty, 0)  AS moderation_penalty,
 		       pfs.score            AS total_score,
 		       pfs.updated_at
 		FROM post_feed_scores pfs
@@ -4807,26 +4813,49 @@ func (h *AdminHandler) AdminGetFeedScores(c *gin.Context) {
 	defer rows.Close()
 
 	type scoreRow struct {
-		PostID          string    `json:"post_id"`
-		Excerpt         string    `json:"excerpt"`
-		EngagementScore float64   `json:"engagement_score"`
-		QualityScore    float64   `json:"quality_score"`
-		RecencyScore    float64   `json:"recency_score"`
-		NetworkScore    float64   `json:"network_score"`
-		Personalization float64   `json:"personalization"`
-		TotalScore      float64   `json:"total_score"`
-		UpdatedAt       time.Time `json:"updated_at"`
+		PostID            string    `json:"post_id"`
+		Excerpt           string    `json:"excerpt"`
+		EngagementScore   float64   `json:"engagement_score"`
+		QualityScore      float64   `json:"quality_score"`
+		RecencyScore      float64   `json:"recency_score"`
+		NetworkScore      float64   `json:"network_score"`
+		Personalization   float64   `json:"personalization"`
+		ToneScore         float64   `json:"tone_score"`
+		VideoBoostScore   float64   `json:"video_boost_score"`
+		HarmonyScore      float64   `json:"harmony_score"`
+		ModerationPenalty float64   `json:"moderation_penalty"`
+		TotalScore        float64   `json:"total_score"`
+		UpdatedAt         time.Time `json:"updated_at"`
 	}
 	var scores []scoreRow
 	for rows.Next() {
 		var s scoreRow
 		if err := rows.Scan(&s.PostID, &s.Excerpt, &s.EngagementScore, &s.QualityScore,
-			&s.RecencyScore, &s.NetworkScore, &s.Personalization, &s.TotalScore, &s.UpdatedAt); err != nil {
+			&s.RecencyScore, &s.NetworkScore, &s.Personalization,
+			&s.ToneScore, &s.VideoBoostScore, &s.HarmonyScore, &s.ModerationPenalty,
+			&s.TotalScore, &s.UpdatedAt); err != nil {
 			continue
 		}
 		scores = append(scores, s)
 	}
 	c.JSON(http.StatusOK, gin.H{"scores": scores})
+}
+
+// AdminRefreshFeedScores POST /admin/feed-scores/refresh — trigger manual rescore
+func (h *AdminHandler) AdminRefreshFeedScores(c *gin.Context) {
+	if h.feedAlgorithmService == nil {
+		c.JSON(http.StatusServiceUnavailable, gin.H{"error": "Feed algorithm service not available"})
+		return
+	}
+	go func() {
+		ctx := context.Background()
+		if err := h.feedAlgorithmService.RefreshAllScores(ctx); err != nil {
+			log.Error().Err(err).Msg("[Admin] Manual feed score refresh failed")
+		} else {
+			log.Info().Msg("[Admin] Manual feed score refresh completed")
+		}
+	}()
+	c.JSON(http.StatusOK, gin.H{"status": "refresh_started"})
 }
 
 // ──────────────────────────────────────────────

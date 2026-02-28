@@ -234,7 +234,7 @@ func main() {
 	beaconIngestion.Start()
 	defer beaconIngestion.Stop()
 
-	adminHandler := handlers.NewAdminHandler(dbPool, moderationService, appealService, emailService, sightEngineService, officialAccountsService, linkPreviewService, localAIService, beaconAlertRepo, beaconIngestion, cfg.JWTSecret, cfg.Env == "production", s3Client, cfg.R2MediaBucket, cfg.R2VideoBucket, cfg.R2ImgDomain, cfg.R2VidDomain)
+	adminHandler := handlers.NewAdminHandler(dbPool, moderationService, appealService, emailService, sightEngineService, officialAccountsService, linkPreviewService, localAIService, beaconAlertRepo, beaconIngestion, feedAlgorithmService, cfg.JWTSecret, cfg.Env == "production", s3Client, cfg.R2MediaBucket, cfg.R2VideoBucket, cfg.R2ImgDomain, cfg.R2VidDomain)
 
 	accountHandler := handlers.NewAccountHandler(userRepo, emailService, cfg)
 
@@ -801,6 +801,7 @@ func main() {
 			adminOnly.GET("/algorithm", adminHandler.GetAlgorithmConfig)
 			adminOnly.PUT("/algorithm", adminHandler.UpdateAlgorithmConfig)
 			adminOnly.GET("/feed-scores", adminHandler.AdminGetFeedScores)
+			adminOnly.POST("/feed-scores/refresh", adminHandler.AdminRefreshFeedScores)
 
 			// Categories
 			adminOnly.GET("/categories", adminHandler.ListCategories)

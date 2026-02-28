@@ -802,6 +802,10 @@ class ApiClient {
     return this.request<any>(`/api/v1/admin/feed-scores?limit=${limit}`);
   }
 
+  async refreshFeedScores() {
+    return this.request<any>(`/api/v1/admin/feed-scores/refresh`, { method: 'POST' });
+  }
+
   // Waitlist
   async listWaitlist(params: { status?: string; limit?: number; offset?: number } = {}) {
     const qs = new URLSearchParams();
