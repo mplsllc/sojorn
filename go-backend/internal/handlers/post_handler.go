@@ -658,6 +658,88 @@ func (h *PostHandler) CreatePost(c *gin.Context) {
 		}
 	}
 
+	// 6. Video Frame Moderation — extract keyframes and run through SightEngine (fail-open)
+	if req.VideoURL != nil && *req.VideoURL != "" && h.videoProcessor != nil && h.contentModerator != nil {
+		frameCount := 5 // default; could read from algorithm_config
+		frames, frameErr := h.videoProcessor.ExtractFrames(ctx, *req.VideoURL, frameCount)
+		if frameErr != nil {
+			log.Warn().Err(frameErr).Str("video_url", *req.VideoURL).Msg("[VideoModeration] Frame extraction failed (fail-open)")
+		} else if len(frames) > 0 {
+			// Track worst scores across all frames (max-of-max)
+			var maxHate, maxGreed, maxDelusion float64
+			worstAction := "clean"
+
+			for _, frameURL := range frames {
+				frameResult := h.contentModerator.ModerateImage(ctx, "video_frames", frameURL)
+				if frameResult.Action == "flag" {
+					worstAction = "flag"
+				} else if frameResult.Action == "nsfw" && worstAction != "flag" {
+					worstAction = "nsfw"
+					if frameResult.NSFWReason != "" {
+						post.NSFWReason = frameResult.NSFWReason
+					}
+				}
+				if frameResult.Scores != nil {
+					if frameResult.Scores.Hate > maxHate {
+						maxHate = frameResult.Scores.Hate
+					}
+					if frameResult.Scores.Greed > maxGreed {
+						maxGreed = frameResult.Scores.Greed
+					}
+					if frameResult.Scores.Delusion > maxDelusion {
+						maxDelusion = frameResult.Scores.Delusion
+					}
+				}
+			}
+
+			// Merge with text moderation scores (worst wins)
+			if cachedScores != nil {
+				if cachedScores.Hate > maxHate {
+					maxHate = cachedScores.Hate
+				}
+				if cachedScores.Greed > maxGreed {
+					maxGreed = cachedScores.Greed
+				}
+				if cachedScores.Delusion > maxDelusion {
+					maxDelusion = cachedScores.Delusion
+				}
+			}
+
+			// Recompute CIS from merged scores
+			cis = 1.0 - (maxHate+maxGreed+maxDelusion)/3.0
+			post.CISScore = &cis
+
+			// Re-derive tone label from merged CIS
+			switch {
+			case cis >= 0.90:
+				tone = "positive"
+			case cis >= 0.70:
+				tone = "neutral"
+			case cis >= 0.50:
+				tone = "mixed"
+			case cis >= 0.30:
+				tone = "negative"
+			default:
+				tone = "hostile"
+			}
+			post.ToneLabel = &tone
+
+			// Apply worst action from frames
+			switch worstAction {
+			case "flag":
+				post.Status = "removed"
+				orDecision = "flag"
+				log.Info().Str("video_url", *req.VideoURL).Msg("[VideoModeration] Video flagged by frame analysis")
+			case "nsfw":
+				post.IsNSFW = true
+				log.Info().Str("video_url", *req.VideoURL).Msg("[VideoModeration] Video marked NSFW by frame analysis")
+			}
+
+			// Clean up temp frames from R2
+			go h.videoProcessor.DeleteFrames(context.Background(), frames)
+		}
+	}
+
 	// Create post
 	err = h.postRepo.CreatePost(c.Request.Context(), post)
 	if err != nil {

@@ -4871,6 +4871,203 @@ func (h *AdminHandler) AdminRefreshFeedScores(c *gin.Context) {
 }
 
 // ──────────────────────────────────────────────
+// Video Frame Moderation Backfill
+// ──────────────────────────────────────────────
+
+// AdminBackfillVideoModeration POST /admin/video-moderation/backfill
+// Extracts keyframes from all unmoderated video posts and runs them through SightEngine.
+// Idempotent: posts with frames_moderated_at set are skipped.
+func (h *AdminHandler) AdminBackfillVideoModeration(c *gin.Context) {
+	ctx := c.Request.Context()
+
+	// Count total and already-moderated video posts
+	var totalVideos, alreadyModerated int
+	err := h.pool.QueryRow(ctx, `
+		SELECT COUNT(*) FROM posts
+		WHERE video_url IS NOT NULL AND video_url != '' AND deleted_at IS NULL AND status != 'removed'
+	`).Scan(&totalVideos)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to count video posts"})
+		return
+	}
+
+	_ = h.pool.QueryRow(ctx, `
+		SELECT COUNT(*) FROM posts
+		WHERE video_url IS NOT NULL AND video_url != '' AND deleted_at IS NULL AND status != 'removed'
+		  AND frames_moderated_at IS NOT NULL
+	`).Scan(&alreadyModerated)
+
+	toProcess := totalVideos - alreadyModerated
+	if toProcess == 0 {
+		c.JSON(http.StatusOK, gin.H{
+			"status":            "nothing_to_do",
+			"total_video_posts": totalVideos,
+			"already_moderated": alreadyModerated,
+			"to_process":        0,
+		})
+		return
+	}
+
+	// Build services for backfill
+	vp := services.NewVideoProcessor(h.s3Client, h.videoBucket, h.vidDomain)
+	cm := services.NewContentModerator(h.localAIService, h.sightEngineService, h.moderationService)
+
+	go func() {
+		bgCtx := context.Background()
+
+		rows, err := h.pool.Query(bgCtx, `
+			SELECT id, video_url, cis_score, tone_label, is_nsfw, nsfw_reason, status
+			FROM posts
+			WHERE video_url IS NOT NULL AND video_url != '' AND deleted_at IS NULL AND status != 'removed'
+			  AND frames_moderated_at IS NULL
+			ORDER BY created_at DESC
+		`)
+		if err != nil {
+			log.Error().Err(err).Msg("[VideoModeration] Backfill query failed")
+			return
+		}
+		defer rows.Close()
+
+		type videoPost struct {
+			id         string
+			videoURL   string
+			cisScore   *float64
+			toneLabel  *string
+			isNSFW     bool
+			nsfwReason string
+			status     string
+		}
+		var posts []videoPost
+		for rows.Next() {
+			var vp videoPost
+			if err := rows.Scan(&vp.id, &vp.videoURL, &vp.cisScore, &vp.toneLabel, &vp.isNSFW, &vp.nsfwReason, &vp.status); err != nil {
+				continue
+			}
+			posts = append(posts, vp)
+		}
+		rows.Close()
+
+		log.Info().Int("count", len(posts)).Msg("[VideoModeration] Backfill starting")
+
+		processed, flagged, nsfw := 0, 0, 0
+		for _, p := range posts {
+			frames, frameErr := vp.ExtractFrames(bgCtx, p.videoURL, 5)
+			if frameErr != nil {
+				log.Warn().Err(frameErr).Str("post_id", p.id).Msg("[VideoModeration] Frame extraction failed, skipping")
+				processed++
+				continue
+			}
+
+			// Track worst scores across all frames
+			var maxHate, maxGreed, maxDelusion float64
+			worstAction := "clean"
+
+			for _, frameURL := range frames {
+				result := cm.ModerateImage(bgCtx, "video_frames", frameURL)
+				if result.Action == "flag" {
+					worstAction = "flag"
+				} else if result.Action == "nsfw" && worstAction != "flag" {
+					worstAction = "nsfw"
+					if result.NSFWReason != "" {
+						p.nsfwReason = result.NSFWReason
+					}
+				}
+				if result.Scores != nil {
+					if result.Scores.Hate > maxHate {
+						maxHate = result.Scores.Hate
+					}
+					if result.Scores.Greed > maxGreed {
+						maxGreed = result.Scores.Greed
+					}
+					if result.Scores.Delusion > maxDelusion {
+						maxDelusion = result.Scores.Delusion
+					}
+				}
+			}
+
+			// Merge with existing text CIS scores (worst wins)
+			if p.cisScore != nil {
+				existingHate := 1.0 - *p.cisScore // approximate: reverse CIS
+				// We only have the aggregate CIS, not individual poisons from text.
+				// If existing CIS is worse (lower), keep the existing poisons dominant.
+				// Otherwise, frame scores dominate.
+				if existingHate > maxHate {
+					// Existing text moderation was worse — keep existing CIS as floor
+					// by not overwriting with frame-only scores.
+				}
+			}
+
+			// Compute new CIS
+			newCIS := 1.0 - (maxHate+maxGreed+maxDelusion)/3.0
+
+			// If existing CIS was worse (lower), keep it
+			if p.cisScore != nil && *p.cisScore < newCIS {
+				newCIS = *p.cisScore
+			}
+
+			// Derive tone
+			var newTone string
+			switch {
+			case newCIS >= 0.90:
+				newTone = "positive"
+			case newCIS >= 0.70:
+				newTone = "neutral"
+			case newCIS >= 0.50:
+				newTone = "mixed"
+			case newCIS >= 0.30:
+				newTone = "negative"
+			default:
+				newTone = "hostile"
+			}
+
+			newNSFW := p.isNSFW
+			newStatus := p.status
+			switch worstAction {
+			case "flag":
+				newStatus = "removed"
+				flagged++
+			case "nsfw":
+				newNSFW = true
+				nsfw++
+			}
+
+			// Update post
+			_, updateErr := h.pool.Exec(bgCtx, `
+				UPDATE posts SET cis_score = $1, tone_label = $2, is_nsfw = $3, nsfw_reason = $4,
+				       status = $5, frames_moderated_at = NOW()
+				WHERE id = $6::uuid
+			`, newCIS, newTone, newNSFW, p.nsfwReason, newStatus, p.id)
+			if updateErr != nil {
+				log.Warn().Err(updateErr).Str("post_id", p.id).Msg("[VideoModeration] Failed to update post")
+			}
+
+			// Clean up temp frames
+			vp.DeleteFrames(bgCtx, frames)
+
+			processed++
+			if processed%10 == 0 {
+				log.Info().Int("processed", processed).Int("total", len(posts)).
+					Int("flagged", flagged).Int("nsfw", nsfw).
+					Msg("[VideoModeration] Backfill progress")
+			}
+
+			// Rate limit: 200ms between posts (~5/sec, 25 SightEngine calls/sec)
+			time.Sleep(200 * time.Millisecond)
+		}
+
+		log.Info().Int("processed", processed).Int("flagged", flagged).Int("nsfw", nsfw).
+			Msg("[VideoModeration] Backfill complete")
+	}()
+
+	c.JSON(http.StatusOK, gin.H{
+		"status":            "backfill_started",
+		"total_video_posts": totalVideos,
+		"already_moderated": alreadyModerated,
+		"to_process":        toProcess,
+	})
+}
+
+// ──────────────────────────────────────────────
 // Post Content Editing
 // ──────────────────────────────────────────────
 

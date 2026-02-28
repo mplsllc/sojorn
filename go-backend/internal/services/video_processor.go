@@ -127,6 +127,31 @@ func (vp *VideoProcessor) uploadFrame(ctx context.Context, localPath string) (st
 	return fmt.Sprintf("%s/%s", base, r2Key), nil
 }
 
+// DeleteFrames removes previously extracted frame objects from R2.
+// Best-effort: logs errors but does not fail the calling flow.
+func (vp *VideoProcessor) DeleteFrames(ctx context.Context, frameURLs []string) {
+	if vp.s3Client == nil || vp.videoBucket == "" {
+		return
+	}
+	for _, u := range frameURLs {
+		// Extract the R2 key from the URL (strip domain + query params)
+		key := u
+		if idx := strings.Index(u, "videos/frames/"); idx >= 0 {
+			key = u[idx:]
+		}
+		if qIdx := strings.Index(key, "?"); qIdx >= 0 {
+			key = key[:qIdx]
+		}
+		_, err := vp.s3Client.DeleteObject(ctx, &s3.DeleteObjectInput{
+			Bucket: aws.String(vp.videoBucket),
+			Key:    aws.String(key),
+		})
+		if err != nil {
+			fmt.Printf("[VideoProcessor] Failed to delete frame %s: %v\n", key, err)
+		}
+	}
+}
+
 // GetVideoDuration returns the duration of a video in seconds
 func (vp *VideoProcessor) GetVideoDuration(ctx context.Context, videoURL string) (float64, error) {
 	if vp.ffmpegPath == "" {

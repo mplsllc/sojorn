@@ -629,6 +629,19 @@ func (r *PostRepository) UpdatePost(ctx context.Context, postID string, authorID
 	return nil
 }
 
+// UpdatePostModeration updates moderation-related fields on a post.
+// Used by video frame moderation backfill and inline moderation.
+func (r *PostRepository) UpdatePostModeration(ctx context.Context, postID string, cisScore float64, toneLabel string, isNSFW bool, nsfwReason string, status string) error {
+	query := `
+		UPDATE public.posts
+		SET cis_score = $1, tone_label = $2, is_nsfw = $3, nsfw_reason = $4, status = $5,
+		    frames_moderated_at = NOW()
+		WHERE id = $6::uuid AND deleted_at IS NULL
+	`
+	_, err := r.pool.Exec(ctx, query, cisScore, toneLabel, isNSFW, nsfwReason, status, postID)
+	return err
+}
+
 func (r *PostRepository) DeletePost(ctx context.Context, postID string, authorID string) error {
 	query := `UPDATE public.posts SET deleted_at = NOW() WHERE id = $1::uuid AND author_id = $2::uuid AND deleted_at IS NULL`
 	res, err := r.pool.Exec(ctx, query, postID, authorID)

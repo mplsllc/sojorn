@@ -803,6 +803,7 @@ func main() {
 			adminOnly.PUT("/algorithm", adminHandler.UpdateAlgorithmConfig)
 			adminOnly.GET("/feed-scores", adminHandler.AdminGetFeedScores)
 			adminOnly.POST("/feed-scores/refresh", adminHandler.AdminRefreshFeedScores)
+			adminOnly.POST("/video-moderation/backfill", adminHandler.AdminBackfillVideoModeration)
 
 			// Categories
 			adminOnly.GET("/categories", adminHandler.ListCategories)
