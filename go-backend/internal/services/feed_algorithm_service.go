@@ -50,6 +50,10 @@ type FeedScore struct {
 	RecencyScore     float64   `json:"recency_score"`
 	NetworkScore     float64   `json:"network_score"`
 	Personalization  float64   `json:"personalization"`
+	ToneScore        float64   `json:"tone_score"`
+	VideoBoostScore  float64   `json:"video_boost_score"`
+	HarmonyScore     float64   `json:"harmony_score"`
+	ModerationPenalty float64  `json:"moderation_penalty"`
 	LastUpdated      time.Time `json:"last_updated"`
 }
 
@@ -338,6 +342,146 @@ func (s *FeedAlgorithmService) CalculatePersonalizationScore(ctx context.Context
 	return personalizationScore, nil
 }
 
+// getConfigFloat reads a float64 from algorithm_config, returning defaultVal if missing.
+func (s *FeedAlgorithmService) getConfigFloat(ctx context.Context, key string, defaultVal float64) float64 {
+	var val string
+	err := s.db.QueryRow(ctx, `SELECT value FROM algorithm_config WHERE key = $1`, key).Scan(&val)
+	if err != nil {
+		return defaultVal
+	}
+	var f float64
+	if _, err := fmt.Sscanf(val, "%f", &f); err != nil {
+		return defaultVal
+	}
+	return f
+}
+
+// CalculateToneScore returns a tone-based score adjustment for a post.
+// Positive content gets boosted, hostile content gets demoted.
+func (s *FeedAlgorithmService) CalculateToneScore(ctx context.Context, postID string) (float64, error) {
+	var toneLabel sql.NullString
+	var cisScore sql.NullFloat64
+	err := s.db.QueryRow(ctx,
+		`SELECT COALESCE(detected_tone, 'neutral'), content_integrity_score FROM posts WHERE id = $1`, postID,
+	).Scan(&toneLabel, &cisScore)
+	if err != nil {
+		return 0, fmt.Errorf("failed to get tone for post: %w", err)
+	}
+
+	// Read configurable tone boosts/penalties
+	positiveBoost := s.getConfigFloat(ctx, "tone_positive_boost", 0.15)
+	negativePenalty := s.getConfigFloat(ctx, "tone_negative_penalty", 0.15)
+	hostilePenalty := s.getConfigFloat(ctx, "tone_hostile_penalty", 0.40)
+
+	toneBoost := 0.0
+	if toneLabel.Valid {
+		switch toneLabel.String {
+		case "positive":
+			toneBoost = positiveBoost
+		case "neutral":
+			toneBoost = 0.0
+		case "mixed":
+			toneBoost = -0.03
+		case "negative":
+			toneBoost = -negativePenalty
+		case "hostile":
+			toneBoost = -hostilePenalty
+		}
+	}
+
+	// CIS (Content Integrity Score) factor: 0-1, higher = more constructive
+	cisFactor := 0.0
+	if cisScore.Valid {
+		cisFactor = (cisScore.Float64 - 0.5) * 0.2 // maps [0,1] -> [-0.1, +0.1]
+	}
+
+	return toneBoost + cisFactor, nil
+}
+
+// CalculateVideoBoostScore returns a score bonus for video posts with good watch completion.
+func (s *FeedAlgorithmService) CalculateVideoBoostScore(ctx context.Context, postID string) (float64, error) {
+	var videoURL sql.NullString
+	err := s.db.QueryRow(ctx,
+		`SELECT COALESCE(video_url, '') FROM posts WHERE id = $1`, postID,
+	).Scan(&videoURL)
+	if err != nil || !videoURL.Valid || videoURL.String == "" {
+		return 0, nil // not a video post
+	}
+
+	baseBoost := s.getConfigFloat(ctx, "video_base_boost", 0.05)
+
+	// Average watch percentage from post_views
+	var avgWatchPct sql.NullFloat64
+	s.db.QueryRow(ctx,
+		`SELECT AVG(last_watch_pct) FROM post_views WHERE post_id = $1 AND last_watch_pct > 0`, postID,
+	).Scan(&avgWatchPct)
+
+	watchBonus := 0.0
+	if avgWatchPct.Valid && avgWatchPct.Float64 > 0 {
+		// Scale: 75%+ watched = full 0.15 bonus
+		watchBonus = math.Min(avgWatchPct.Float64/75.0, 1.0) * 0.15
+	}
+
+	return baseBoost + watchBonus, nil
+}
+
+// CalculateAuthorHarmonyScore returns a normalized harmony factor for the post's author.
+// Harmony score (0-100) is normalized to [floor, 1.0] so new users aren't invisible.
+func (s *FeedAlgorithmService) CalculateAuthorHarmonyScore(ctx context.Context, postID string) (float64, error) {
+	var harmonyScore sql.NullFloat64
+	err := s.db.QueryRow(ctx, `
+		SELECT ts.harmony_score
+		FROM posts p
+		LEFT JOIN trust_state ts ON p.author_id = ts.user_id
+		WHERE p.id = $1
+	`, postID).Scan(&harmonyScore)
+	if err != nil {
+		return 0, fmt.Errorf("failed to get harmony score: %w", err)
+	}
+
+	floor := s.getConfigFloat(ctx, "harmony_floor", 0.2)
+
+	if !harmonyScore.Valid {
+		return floor, nil // new user with no harmony data gets floor
+	}
+
+	// Normalize 0-100 to [floor, 1.0]
+	normalized := floor + (harmonyScore.Float64/100.0)*(1.0-floor)
+	return normalized, nil
+}
+
+// CalculateModerationPenalty returns a negative score for users with strikes or flagged posts.
+func (s *FeedAlgorithmService) CalculateModerationPenalty(ctx context.Context, postID string) (float64, error) {
+	strikePenaltyPer := s.getConfigFloat(ctx, "moderation_strike_penalty", 0.15)
+	flagPenaltyPer := s.getConfigFloat(ctx, "moderation_flag_penalty", 0.10)
+	flagPenaltyCap := s.getConfigFloat(ctx, "moderation_flag_penalty_cap", 0.30)
+
+	// Author strikes
+	var strikes int
+	err := s.db.QueryRow(ctx, `
+		SELECT COALESCE(pr.strikes, 0)
+		FROM posts p
+		JOIN profiles pr ON p.author_id = pr.id
+		WHERE p.id = $1
+	`, postID).Scan(&strikes)
+	if err != nil {
+		return 0, fmt.Errorf("failed to get author strikes: %w", err)
+	}
+
+	strikePenalty := float64(strikes) * strikePenaltyPer
+
+	// Pending moderation flags on this post
+	var flagCount int
+	s.db.QueryRow(ctx, `
+		SELECT COUNT(*) FROM moderation_flags
+		WHERE post_id = $1 AND status = 'pending'
+	`, postID).Scan(&flagCount)
+
+	flagPenalty := math.Min(float64(flagCount)*flagPenaltyPer, flagPenaltyCap)
+
+	return -(strikePenalty + flagPenalty), nil // always <= 0
+}
+
 // Calculate overall feed score for a post
 func (s *FeedAlgorithmService) CalculateFeedScore(ctx context.Context, postID string, viewerID string, weights EngagementWeight, userProfile UserInterestProfile) (FeedScore, error) {
 	// Calculate individual components
@@ -370,22 +514,64 @@ func (s *FeedAlgorithmService) CalculateFeedScore(ctx context.Context, postID st
 		return FeedScore{}, fmt.Errorf("failed to calculate personalization score: %w", err)
 	}
 
-	// Calculate overall score with weights
-	finalScore := engagementScore*0.3 +
-		qualityData.QualityScore*weights.QualityWeight*0.2 +
-		recencyScore*0.2 +
-		networkScore*0.15 +
-		personalizationScore*0.15
+	toneScore, err := s.CalculateToneScore(ctx, postID)
+	if err != nil {
+		log.Warn().Err(err).Str("post_id", postID).Msg("tone score calculation failed")
+		toneScore = 0
+	}
+
+	videoBoost, err := s.CalculateVideoBoostScore(ctx, postID)
+	if err != nil {
+		log.Warn().Err(err).Str("post_id", postID).Msg("video boost calculation failed")
+		videoBoost = 0
+	}
+
+	harmonyScore, err := s.CalculateAuthorHarmonyScore(ctx, postID)
+	if err != nil {
+		log.Warn().Err(err).Str("post_id", postID).Msg("harmony score calculation failed")
+		harmonyScore = 0
+	}
+
+	modPenalty, err := s.CalculateModerationPenalty(ctx, postID)
+	if err != nil {
+		log.Warn().Err(err).Str("post_id", postID).Msg("moderation penalty calculation failed")
+		modPenalty = 0
+	}
+
+	// Read weights from admin-configurable algorithm_config (with defaults)
+	wEngagement := s.getConfigFloat(ctx, "feed_engagement_weight", 0.22)
+	wQuality := s.getConfigFloat(ctx, "feed_quality_weight", 0.15)
+	wRecency := s.getConfigFloat(ctx, "feed_recency_weight", 0.18)
+	wNetwork := s.getConfigFloat(ctx, "feed_network_weight", 0.10)
+	wPersonalization := s.getConfigFloat(ctx, "feed_personalization_weight", 0.07)
+	wTone := s.getConfigFloat(ctx, "feed_tone_weight", 0.10)
+	wVideo := s.getConfigFloat(ctx, "feed_video_boost_weight", 0.08)
+	wHarmony := s.getConfigFloat(ctx, "feed_harmony_weight", 0.10)
+	wModeration := s.getConfigFloat(ctx, "feed_moderation_penalty_weight", 0.10)
+
+	finalScore := engagementScore*wEngagement +
+		qualityData.QualityScore*wQuality +
+		recencyScore*wRecency +
+		networkScore*wNetwork +
+		personalizationScore*wPersonalization +
+		toneScore*wTone +
+		videoBoost*wVideo +
+		harmonyScore*wHarmony +
+		modPenalty*wModeration // modPenalty is always <= 0
 
 	return FeedScore{
-		PostID:          postID,
-		Score:           finalScore,
-		EngagementScore: engagementScore,
-		QualityScore:    qualityData.QualityScore,
-		RecencyScore:    recencyScore,
-		NetworkScore:    networkScore,
-		Personalization: personalizationScore,
-		LastUpdated:     time.Now(),
+		PostID:            postID,
+		Score:             finalScore,
+		EngagementScore:   engagementScore,
+		QualityScore:      qualityData.QualityScore,
+		RecencyScore:      recencyScore,
+		NetworkScore:      networkScore,
+		Personalization:   personalizationScore,
+		ToneScore:         toneScore,
+		VideoBoostScore:   videoBoost,
+		HarmonyScore:      harmonyScore,
+		ModerationPenalty: modPenalty,
+		LastUpdated:       time.Now(),
 	}, nil
 }
 
@@ -424,22 +610,27 @@ func (s *FeedAlgorithmService) UpdateFeedScores(ctx context.Context, postIDs []s
 // Update individual post score in database
 func (s *FeedAlgorithmService) updatePostScore(ctx context.Context, score FeedScore) error {
 	query := `
-		INSERT INTO post_feed_scores (post_id, score, engagement_score, quality_score, recency_score, network_score, personalization, updated_at)
-		VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
-		ON CONFLICT (post_id) 
-		DO UPDATE SET 
+		INSERT INTO post_feed_scores (post_id, score, engagement_score, quality_score, recency_score, network_score, personalization, tone_score, video_boost_score, harmony_score, moderation_penalty, updated_at)
+		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
+		ON CONFLICT (post_id)
+		DO UPDATE SET
 			score = EXCLUDED.score,
 			engagement_score = EXCLUDED.engagement_score,
 			quality_score = EXCLUDED.quality_score,
 			recency_score = EXCLUDED.recency_score,
 			network_score = EXCLUDED.network_score,
 			personalization = EXCLUDED.personalization,
+			tone_score = EXCLUDED.tone_score,
+			video_boost_score = EXCLUDED.video_boost_score,
+			harmony_score = EXCLUDED.harmony_score,
+			moderation_penalty = EXCLUDED.moderation_penalty,
 			updated_at = EXCLUDED.updated_at
 	`
 
 	_, err := s.db.Exec(ctx, query,
 		score.PostID, score.Score, score.EngagementScore, score.QualityScore,
-		score.RecencyScore, score.NetworkScore, score.Personalization, score.LastUpdated,
+		score.RecencyScore, score.NetworkScore, score.Personalization, score.ToneScore,
+		score.VideoBoostScore, score.HarmonyScore, score.ModerationPenalty, score.LastUpdated,
 	)
 
 	return err

@@ -782,6 +782,27 @@ func (h *PostHandler) GetFeed(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{"posts": posts})
 }
 
+// RecordView records a post view with optional watch-time data.
+func (h *PostHandler) RecordView(c *gin.Context) {
+	postID := c.Param("id")
+	userIDStr, _ := c.Get("user_id")
+
+	var req struct {
+		DurationMS int `json:"duration_ms"`
+		WatchPct   int `json:"watch_pct"`
+	}
+	if err := c.ShouldBindJSON(&req); err != nil {
+		req.DurationMS = 0
+		req.WatchPct = 0
+	}
+
+	if err := h.postRepo.RecordView(c.Request.Context(), postID, userIDStr.(string), req.DurationMS, req.WatchPct); err != nil {
+		log.Error().Err(err).Str("post_id", postID).Msg("failed to record view")
+	}
+
+	c.JSON(http.StatusOK, gin.H{"ok": true})
+}
+
 // GetSojornFeed returns an algorithmically-ranked feed for the Sojorn discovery tab.
 func (h *PostHandler) GetSojornFeed(c *gin.Context) {
 	userIDStr, _ := c.Get("user_id")

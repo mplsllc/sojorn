@@ -40,6 +40,9 @@ class _FeedsojornScreenState extends ConsumerState<FeedsojornScreen> {
   final PageController _pageController = PageController();
   late final AdIntegrationService _adService;
 
+  // Dwell-time tracking for view recording
+  final Stopwatch _dwellTimer = Stopwatch();
+
   // Positions in the feed where beacon alert cards are injected.
   static const List<int> _alertInjectionPositions = [2, 7];
 
@@ -47,6 +50,7 @@ class _FeedsojornScreenState extends ConsumerState<FeedsojornScreen> {
   void initState() {
     super.initState();
     _adService = AdIntegrationService(ref.read);
+    _dwellTimer.start();
     _loadPosts();
     _loadNearbyAlerts();
   }
@@ -110,6 +114,9 @@ class _FeedsojornScreenState extends ConsumerState<FeedsojornScreen> {
 
   @override
   void dispose() {
+    // Record view for the post the user was looking at when leaving
+    _recordDwellView(_currentPage);
+    _dwellTimer.stop();
     _pageController.dispose();
     super.dispose();
   }
@@ -185,11 +192,34 @@ class _FeedsojornScreenState extends ConsumerState<FeedsojornScreen> {
   }
 
   void _onPageChanged(int page) {
+    // Record view for the post we just left (if dwelt > 2 seconds)
+    _recordDwellView(_currentPage);
+
     _currentPage = page;
+    _dwellTimer.reset();
+    _dwellTimer.start();
+
     // Load more when approaching the end
     if (page >= _feedItems.length - 3 && _hasMore && !_isLoading) {
       _loadPosts();
     }
+  }
+
+  /// Fires a view record if the user spent ≥ 2 seconds on the post.
+  /// Fire-and-forget — never blocks the UI.
+  void _recordDwellView(int pageIndex) {
+    final dwellMs = _dwellTimer.elapsedMilliseconds;
+    if (dwellMs < 2000) return;
+    if (pageIndex < 0 || pageIndex >= _feedItems.length) return;
+
+    final post = _feedItems[pageIndex];
+    // Skip sponsored/beacon posts — not organic content
+    if (post.isSponsored || post.isBeaconPost) return;
+
+    final apiService = ref.read(apiServiceProvider);
+    apiService
+        .recordPostView(post.id, durationMs: dwellMs, watchPct: 0)
+        .catchError((e) => debugPrint('view record failed: $e'));
   }
 
   void _openPostDetail(Post post) {

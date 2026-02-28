@@ -354,6 +354,33 @@ func (r *PostRepository) GetPostsByIDs(ctx context.Context, postIDs []string, vi
 	return posts, nil
 }
 
+// RecordView upserts a post view record and increments the view count in post_metrics.
+func (r *PostRepository) RecordView(ctx context.Context, postID, userID string, durationMS, watchPct int) error {
+	_, err := r.pool.Exec(ctx, `
+		INSERT INTO post_views (post_id, user_id, view_count, total_duration_ms, last_watch_pct, viewed_at)
+		VALUES ($1::uuid, $2::uuid, 1, $3, $4, NOW())
+		ON CONFLICT (post_id, user_id) DO UPDATE SET
+			view_count = post_views.view_count + 1,
+			total_duration_ms = post_views.total_duration_ms + $3,
+			last_watch_pct = GREATEST(post_views.last_watch_pct, $4),
+			viewed_at = NOW()
+	`, postID, userID, durationMS, watchPct)
+	if err != nil {
+		return err
+	}
+
+	// Also increment post_metrics.view_count
+	r.pool.Exec(ctx, `
+		INSERT INTO post_metrics (post_id, view_count, updated_at)
+		VALUES ($1::uuid, 1, NOW())
+		ON CONFLICT (post_id) DO UPDATE SET
+			view_count = post_metrics.view_count + 1,
+			updated_at = NOW()
+	`, postID)
+
+	return nil
+}
+
 func (r *PostRepository) GetCategories(ctx context.Context) ([]models.Category, error) {
 	query := `SELECT id, slug, name, description, is_sensitive, created_at FROM public.categories ORDER BY name ASC`
 	rows, err := r.pool.Query(ctx, query)

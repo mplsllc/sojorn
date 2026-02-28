@@ -1519,7 +1519,33 @@ class ApiService {
   }
 
   Future<List<Post>> getSojornFeed({int limit = 20, int offset = 0}) async {
-    return getPersonalFeed(limit: limit, offset: offset);
+    final data = await _callGoApi(
+      '/feed/sojorn',
+      method: 'GET',
+      queryParams: {
+        'limit': '$limit',
+        'offset': '$offset',
+      },
+    );
+    if (data['posts'] != null) {
+      return (data['posts'] as List)
+          .map((json) => Post.fromJson(json))
+          .toList();
+    }
+    return [];
+  }
+
+  /// Records a post view for feed ranking signals.
+  /// Fire-and-forget — caller should not await this.
+  Future<void> recordPostView(String postId, {int durationMs = 0, int watchPct = 0}) async {
+    await _callGoApi(
+      '/posts/$postId/view',
+      method: 'POST',
+      body: {
+        'duration_ms': durationMs,
+        'watch_pct': watchPct,
+      },
+    );
   }
 
   Future<List<AppNotification>> getNotifications({
