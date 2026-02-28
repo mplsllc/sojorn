@@ -82,18 +82,19 @@ export default function AlgorithmPage() {
     }
   };
 
+  const safeConfigs = Array.isArray(configs) ? configs : [];
   const groupedConfigs = {
-    feed: configs.filter((c: any) => c.key.startsWith('feed_')),
-    tone: configs.filter((c: any) => c.key.startsWith('tone_')),
-    video: configs.filter((c: any) => c.key.startsWith('video_')),
-    harmony: configs.filter((c: any) => c.key.startsWith('harmony_')),
-    moderation: configs.filter((c: any) => c.key.startsWith('moderation_')),
-    other: configs.filter((c: any) =>
-      !c.key.startsWith('feed_') &&
-      !c.key.startsWith('moderation_') &&
-      !c.key.startsWith('tone_') &&
-      !c.key.startsWith('video_') &&
-      !c.key.startsWith('harmony_')
+    feed: safeConfigs.filter((c: any) => c.key?.startsWith('feed_')),
+    tone: safeConfigs.filter((c: any) => c.key?.startsWith('tone_')),
+    video: safeConfigs.filter((c: any) => c.key?.startsWith('video_')),
+    harmony: safeConfigs.filter((c: any) => c.key?.startsWith('harmony_')),
+    moderation: safeConfigs.filter((c: any) => c.key?.startsWith('moderation_')),
+    other: safeConfigs.filter((c: any) =>
+      !c.key?.startsWith('feed_') &&
+      !c.key?.startsWith('moderation_') &&
+      !c.key?.startsWith('tone_') &&
+      !c.key?.startsWith('video_') &&
+      !c.key?.startsWith('harmony_')
     ),
   };
 
