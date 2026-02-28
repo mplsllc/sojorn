@@ -957,6 +957,14 @@ func main() {
 		}
 	}()
 
+	// One-time video frame moderation backfill — will revert after deploy
+	go func() {
+		time.Sleep(35 * time.Second)
+		vp := services.NewVideoProcessor(s3Client, cfg.R2VideoBucket, cfg.R2VidDomain)
+		cm := services.NewContentModerator(localAIService, sightEngineService, moderationService)
+		runVideoModerationBackfill(context.Background(), dbPool, vp, cm)
+	}()
+
 	// Background job: update feed algorithm scores every 15 minutes
 	go func() {
 		// Run initial score refresh 30 seconds after startup
@@ -1023,4 +1031,122 @@ func main() {
 	}
 
 	log.Info().Msg("Server exiting")
+}
+
+// runVideoModerationBackfill scores all unmoderated video posts via frame extraction.
+// One-time use — triggered at startup, will be removed after backfill completes.
+func runVideoModerationBackfill(ctx context.Context, pool *pgxpool.Pool, vp *services.VideoProcessor, cm *services.ContentModerator) {
+	rows, err := pool.Query(ctx, `
+		SELECT id, video_url, cis_score FROM posts
+		WHERE video_url IS NOT NULL AND video_url != ''
+		  AND deleted_at IS NULL AND status != 'removed'
+		  AND frames_moderated_at IS NULL
+		ORDER BY created_at DESC
+	`)
+	if err != nil {
+		log.Error().Err(err).Msg("[VideoBackfill] Query failed")
+		return
+	}
+	defer rows.Close()
+
+	type row struct {
+		id       string
+		videoURL string
+		cisScore *float64
+	}
+	var posts []row
+	for rows.Next() {
+		var r row
+		if err := rows.Scan(&r.id, &r.videoURL, &r.cisScore); err != nil {
+			continue
+		}
+		posts = append(posts, r)
+	}
+	rows.Close()
+
+	log.Info().Int("count", len(posts)).Msg("[VideoBackfill] Starting")
+
+	processed, flagged, nsfw := 0, 0, 0
+	for _, p := range posts {
+		frames, err := vp.ExtractFrames(ctx, p.videoURL, 5)
+		if err != nil {
+			log.Warn().Err(err).Str("post_id", p.id).Msg("[VideoBackfill] Frame extraction failed, skipping")
+			processed++
+			continue
+		}
+
+		var maxHate, maxGreed, maxDelusion float64
+		worstAction := "clean"
+		worstNSFWReason := ""
+
+		for _, frameURL := range frames {
+			result := cm.ModerateImage(ctx, "video_frames", frameURL)
+			if result.Action == "flag" {
+				worstAction = "flag"
+			} else if result.Action == "nsfw" && worstAction != "flag" {
+				worstAction = "nsfw"
+				if result.NSFWReason != "" {
+					worstNSFWReason = result.NSFWReason
+				}
+			}
+			if result.Scores != nil {
+				if result.Scores.Hate > maxHate {
+					maxHate = result.Scores.Hate
+				}
+				if result.Scores.Greed > maxGreed {
+					maxGreed = result.Scores.Greed
+				}
+				if result.Scores.Delusion > maxDelusion {
+					maxDelusion = result.Scores.Delusion
+				}
+			}
+		}
+
+		newCIS := 1.0 - (maxHate+maxGreed+maxDelusion)/3.0
+		// Keep existing CIS if it was worse (lower)
+		if p.cisScore != nil && *p.cisScore < newCIS {
+			newCIS = *p.cisScore
+		}
+
+		var newTone string
+		switch {
+		case newCIS >= 0.90:
+			newTone = "positive"
+		case newCIS >= 0.70:
+			newTone = "neutral"
+		case newCIS >= 0.50:
+			newTone = "mixed"
+		case newCIS >= 0.30:
+			newTone = "negative"
+		default:
+			newTone = "hostile"
+		}
+
+		newNSFW := worstAction == "nsfw" || worstAction == "flag"
+		newStatus := "active"
+		if worstAction == "flag" {
+			newStatus = "removed"
+			flagged++
+		} else if worstAction == "nsfw" {
+			nsfw++
+		}
+
+		_, _ = pool.Exec(ctx, `
+			UPDATE posts SET cis_score=$1, tone_label=$2, is_nsfw=$3, nsfw_reason=$4,
+			       status=$5, frames_moderated_at=NOW()
+			WHERE id=$6::uuid
+		`, newCIS, newTone, newNSFW, worstNSFWReason, newStatus, p.id)
+
+		vp.DeleteFrames(ctx, frames)
+
+		processed++
+		if processed%10 == 0 {
+			log.Info().Int("processed", processed).Int("total", len(posts)).
+				Int("flagged", flagged).Int("nsfw", nsfw).Msg("[VideoBackfill] Progress")
+		}
+		time.Sleep(200 * time.Millisecond)
+	}
+
+	log.Info().Int("processed", processed).Int("flagged", flagged).Int("nsfw", nsfw).
+		Msg("[VideoBackfill] Complete")
 }
