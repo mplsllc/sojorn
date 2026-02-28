@@ -152,6 +152,8 @@ verify-error.html
 *.ps1
 go-backend/.env
 go-backend/bin/
+go-backend/api
+go-backend/api.new
 go-backend/sojorn-api*
 go-backend/*linux
 go-backend/seeder*
