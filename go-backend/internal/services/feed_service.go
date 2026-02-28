@@ -47,11 +47,13 @@ func (s *FeedService) GetSojornFeed(ctx context.Context, userID string, limit in
 		return s.GetFeed(ctx, userID, category, false, limit, offset, false)
 	}
 
-	// Cold-start fallback: if algorithm returned fewer than limit, supplement with chronological
-	if len(postIDs) < limit {
-		log.Debug().Int("algo_count", len(postIDs)).Int("limit", limit).Msg("[SojornFeed] Cold start — falling back to chronological")
+	// Cold-start: only fall back if algorithm returned nothing at all.
+	// Partial results are fine — serve what the algorithm scored.
+	if len(postIDs) == 0 {
+		log.Debug().Msg("[SojornFeed] No scored posts — falling back to chronological")
 		return s.GetFeed(ctx, userID, category, false, limit, offset, false)
 	}
+	log.Debug().Int("algo_count", len(postIDs)).Int("limit", limit).Msg("[SojornFeed] Serving algorithmic feed")
 
 	posts, err := s.postRepo.GetPostsByIDs(ctx, postIDs, userID)
 	if err != nil {
