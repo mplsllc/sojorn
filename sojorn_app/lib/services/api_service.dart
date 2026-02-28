@@ -1548,6 +1548,11 @@ class ApiService {
     );
   }
 
+  /// Fetch algorithmic score breakdown for a post (author-only).
+  Future<Map<String, dynamic>> getPostScore(String postId) async {
+    return await _callGoApi('/posts/$postId/score', method: 'GET');
+  }
+
   Future<List<AppNotification>> getNotifications({
     int limit = 20,
     int offset = 0,

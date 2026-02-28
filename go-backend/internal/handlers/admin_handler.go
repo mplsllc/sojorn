@@ -4842,20 +4842,32 @@ func (h *AdminHandler) AdminGetFeedScores(c *gin.Context) {
 }
 
 // AdminRefreshFeedScores POST /admin/feed-scores/refresh — trigger manual rescore
+// Query params: ?full=true for full backfill (all posts, no date/limit constraint)
 func (h *AdminHandler) AdminRefreshFeedScores(c *gin.Context) {
 	if h.feedAlgorithmService == nil {
 		c.JSON(http.StatusServiceUnavailable, gin.H{"error": "Feed algorithm service not available"})
 		return
 	}
+	full := c.Query("full") == "true"
 	go func() {
 		ctx := context.Background()
-		if err := h.feedAlgorithmService.RefreshAllScores(ctx); err != nil {
-			log.Error().Err(err).Msg("[Admin] Manual feed score refresh failed")
+		var err error
+		if full {
+			err = h.feedAlgorithmService.RefreshAllScoresFull(ctx)
 		} else {
-			log.Info().Msg("[Admin] Manual feed score refresh completed")
+			err = h.feedAlgorithmService.RefreshAllScores(ctx)
+		}
+		if err != nil {
+			log.Error().Err(err).Bool("full", full).Msg("[Admin] Manual feed score refresh failed")
+		} else {
+			log.Info().Bool("full", full).Msg("[Admin] Manual feed score refresh completed")
 		}
 	}()
-	c.JSON(http.StatusOK, gin.H{"status": "refresh_started"})
+	mode := "refresh_started"
+	if full {
+		mode = "full_backfill_started"
+	}
+	c.JSON(http.StatusOK, gin.H{"status": mode})
 }
 
 // ──────────────────────────────────────────────

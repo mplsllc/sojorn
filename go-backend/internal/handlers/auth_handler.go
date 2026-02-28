@@ -13,11 +13,10 @@ import (
 	"sync"
 	"time"
 
-	"log"
-
 	"strings"
 
 	"github.com/gin-gonic/gin"
+	"github.com/rs/zerolog/log"
 	"github.com/golang-jwt/jwt/v5"
 	"github.com/google/uuid"
 	"gitlab.com/patrickbritton3/sojorn/go-backend/internal/config"
@@ -136,14 +135,14 @@ func (h *AuthHandler) Register(c *gin.Context) {
 	remoteIP := c.ClientIP()
 	altchaResp, err := altchaService.VerifyToken(req.AltchaToken, remoteIP)
 	if err != nil {
-		log.Printf("[Auth] ALTCHA verification failed: %v", err)
+		log.Error().Err(err).Msg("ALTCHA verification failed")
 		c.JSON(http.StatusBadRequest, gin.H{"error": "Security verification failed"})
 		return
 	}
 
 	if !altchaResp.Verified {
 		errorMsg := altchaService.GetErrorMessage(altchaResp.Error)
-		log.Printf("[Auth] ALTCHA validation failed: %s", errorMsg)
+		log.Warn().Str("error_msg", errorMsg).Msg("ALTCHA validation failed")
 		c.JSON(http.StatusBadRequest, gin.H{"error": errorMsg})
 		return
 	}
@@ -151,7 +150,7 @@ func (h *AuthHandler) Register(c *gin.Context) {
 	// Check if this IP is banned (ban evasion prevention)
 	ipBanned, _ := h.repo.IsIPBanned(c.Request.Context(), remoteIP)
 	if ipBanned {
-		log.Printf("[Auth] Registration blocked for banned IP: %s", remoteIP)
+		log.Warn().Str("ip", remoteIP).Msg("Registration blocked for banned IP")
 		c.JSON(http.StatusForbidden, gin.H{"error": "Registration is not available from this network."})
 		return
 	}
@@ -221,9 +220,9 @@ func (h *AuthHandler) Register(c *gin.Context) {
 		UpdatedAt:       time.Now(),
 	}
 
-	log.Printf("[Auth] Registering user: %s", req.Email)
+	log.Info().Str("email", req.Email).Msg("Registering user")
 	if err := h.repo.CreateUser(c.Request.Context(), user); err != nil {
-		log.Printf("[Auth] Failed to create user %s: %v", req.Email, err)
+		log.Error().Err(err).Str("email", req.Email).Msg("Failed to create user")
 		internalError(c, "Failed to create user", err)
 		return
 	}
@@ -236,7 +235,7 @@ func (h *AuthHandler) Register(c *gin.Context) {
 		BirthYear:   req.BirthYear,
 	}
 	if err := h.repo.CreateProfile(c.Request.Context(), profile); err != nil {
-		log.Printf("[Auth] Failed to create profile for %s: %v. Rolling back user.", user.ID, err)
+		log.Error().Err(err).Str("user_id", user.ID.String()).Msg("Failed to create profile, rolling back user")
 		_ = h.repo.DeleteUser(c.Request.Context(), user.ID)
 
 		if strings.Contains(err.Error(), "23505") && strings.Contains(err.Error(), "profiles_handle_key") {
@@ -252,7 +251,7 @@ func (h *AuthHandler) Register(c *gin.Context) {
 	hashString := hex.EncodeToString(tokenHash[:])
 
 	if err := h.repo.CreateVerificationToken(c.Request.Context(), hashString, userID.String(), 24*time.Hour); err != nil {
-		log.Printf("[Auth] Failed to store verification token: %v. Rolling back user.", err)
+		log.Error().Err(err).Msg("Failed to store verification token, rolling back user")
 		_ = h.repo.DeleteUser(c.Request.Context(), user.ID)
 		internalError(c, "Failed to prepare verification", err)
 		return
@@ -260,7 +259,7 @@ func (h *AuthHandler) Register(c *gin.Context) {
 
 	go func() {
 		if err := h.emailService.SendVerificationEmail(req.Email, req.DisplayName, rawToken); err != nil {
-			log.Printf("[Auth] Failed to send email to %s: %v", req.Email, err)
+			log.Error().Err(err).Str("email", req.Email).Msg("Failed to send verification email")
 		}
 	}()
 
@@ -289,14 +288,14 @@ func (h *AuthHandler) Login(c *gin.Context) {
 	remoteIP := c.ClientIP()
 	altchaResp, err := altchaService.VerifyToken(req.AltchaToken, remoteIP)
 	if err != nil {
-		log.Printf("[Auth] Login ALTCHA verification failed: %v", err)
+		log.Error().Err(err).Msg("Login ALTCHA verification failed")
 		c.JSON(http.StatusBadRequest, gin.H{"error": "Security verification failed"})
 		return
 	}
 
 	if !altchaResp.Verified {
 		errorMsg := altchaService.GetErrorMessage(altchaResp.Error)
-		log.Printf("[Auth] Login ALTCHA validation failed: %s", errorMsg)
+		log.Warn().Str("error_msg", errorMsg).Msg("Login ALTCHA validation failed")
 		c.JSON(http.StatusBadRequest, gin.H{"error": errorMsg})
 		return
 	}
@@ -304,20 +303,20 @@ func (h *AuthHandler) Login(c *gin.Context) {
 	// Check if this IP is banned (ban evasion prevention)
 	ipBanned, _ := h.repo.IsIPBanned(c.Request.Context(), remoteIP)
 	if ipBanned {
-		log.Printf("[Auth] Login blocked for banned IP: %s", remoteIP)
+		log.Warn().Str("ip", remoteIP).Msg("Login blocked for banned IP")
 		c.JSON(http.StatusForbidden, gin.H{"error": "Access is not available from this network."})
 		return
 	}
 
 	user, err := h.repo.GetUserByEmail(c.Request.Context(), req.Email)
 	if err != nil {
-		log.Printf("[Auth] Login failed for %s: user not found", req.Email)
+		log.Warn().Str("email", req.Email).Msg("Login failed: user not found")
 		c.JSON(http.StatusUnauthorized, gin.H{"error": "Invalid credentials"})
 		return
 	}
 
 	if err := bcrypt.CompareHashAndPassword([]byte(user.PasswordHash), []byte(req.Password)); err != nil {
-		log.Printf("[Auth] Login failed for %s: password mismatch", req.Email)
+		log.Warn().Str("email", req.Email).Msg("Login failed: password mismatch")
 		c.JSON(http.StatusUnauthorized, gin.H{"error": "Invalid credentials"})
 		return
 	}
@@ -332,7 +331,7 @@ func (h *AuthHandler) Login(c *gin.Context) {
 			age--
 		}
 		if age < 18 {
-			log.Printf("[Auth] Login blocked for underage user %s (age %d)", req.Email, age)
+			log.Warn().Int("age", age).Msg("Login blocked for underage user")
 			c.JSON(http.StatusForbidden, gin.H{
 				"error": "You must be at least 18 years old to use Sojorn.",
 				"code":  "age_restricted",
@@ -359,7 +358,7 @@ func (h *AuthHandler) Login(c *gin.Context) {
 	var previousStatus string
 	if user.Status == models.UserStatusDeactivated || user.Status == models.UserStatusPendingDeletion {
 		previousStatus = string(user.Status)
-		log.Printf("[Auth] Reactivating %s account for %s", user.Status, req.Email)
+		log.Info().Str("previous_status", string(user.Status)).Str("email", req.Email).Msg("Reactivating account")
 		_ = h.repo.ReactivateUser(c.Request.Context(), user.ID.String())
 		user.Status = models.UserStatusActive
 		reactivated = true
@@ -406,7 +405,7 @@ func (h *AuthHandler) Login(c *gin.Context) {
 		profile, _ = h.repo.GetProfileByID(c.Request.Context(), user.ID.String())
 	}
 	if profile == nil {
-		log.Printf("[Auth] Failed to get profile for %s", user.ID)
+		log.Error().Str("user_id", user.ID.String()).Msg("Failed to get profile")
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to fetch profile"})
 		return
 	}
@@ -429,7 +428,7 @@ func (h *AuthHandler) CompleteOnboarding(c *gin.Context) {
 	userId := c.MustGet("user_id").(string)
 
 	if err := h.repo.MarkOnboardingComplete(c.Request.Context(), userId); err != nil {
-		log.Printf("[Auth] Failed to complete onboarding for %s: %v", userId, err)
+		log.Error().Err(err).Str("user_id", userId).Msg("Failed to complete onboarding")
 		internalError(c, "Failed to update onboarding status", err)
 		return
 	}
@@ -520,11 +519,11 @@ func (h *AuthHandler) ResendVerificationEmail(c *gin.Context) {
 			name = *profile.DisplayName
 		}
 		if err := h.emailService.SendVerificationEmail(user.Email, name, rawToken); err != nil {
-			log.Printf("[Auth] Failed to send email to %s: %v", user.Email, err)
+			log.Error().Err(err).Str("email", user.Email).Msg("Failed to send verification email")
 		}
 	}()
 
-	log.Printf("[Auth] Resent Verification Token for %s: %s", user.Email, rawToken)
+	log.Info().Str("email", user.Email).Msg("Resent verification token")
 
 	c.JSON(http.StatusOK, gin.H{
 		"message": "A new verification link has been sent.",
@@ -625,7 +624,7 @@ func (h *AuthHandler) ForgotPassword(c *gin.Context) {
 	hashString := hex.EncodeToString(tokenHash[:])
 
 	if err := h.repo.CreatePasswordResetToken(c.Request.Context(), hashString, user.ID.String(), 1*time.Hour); err != nil {
-		log.Printf("[Auth] Failed to create reset token: %v", err)
+		log.Error().Err(err).Msg("Failed to create reset token")
 		internalError(c, "Internal error", err)
 		return
 	}
@@ -637,7 +636,7 @@ func (h *AuthHandler) ForgotPassword(c *gin.Context) {
 			name = *profile.DisplayName
 		}
 		if err := h.emailService.SendPasswordResetEmail(user.Email, name, rawToken); err != nil {
-			log.Printf("[Auth] Failed to send reset email to %s: %v", user.Email, err)
+			log.Error().Err(err).Str("email", user.Email).Msg("Failed to send reset email")
 		}
 	}()
 

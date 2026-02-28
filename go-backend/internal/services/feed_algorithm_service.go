@@ -538,16 +538,19 @@ func (s *FeedAlgorithmService) CalculateFeedScore(ctx context.Context, postID st
 		modPenalty = 0
 	}
 
-	// Read weights from admin-configurable algorithm_config (with defaults)
-	wEngagement := s.getConfigFloat(ctx, "feed_engagement_weight", 0.22)
-	wQuality := s.getConfigFloat(ctx, "feed_quality_weight", 0.15)
-	wRecency := s.getConfigFloat(ctx, "feed_recency_weight", 0.18)
-	wNetwork := s.getConfigFloat(ctx, "feed_network_weight", 0.10)
+	// Read weights from admin-configurable algorithm_config (with defaults).
+	// Content-first philosophy: posts are ranked on content merit, not account reputation.
+	// Account-level signals (network, harmony, moderation) default to 0 but can be
+	// re-enabled via admin config if needed.
+	wEngagement := s.getConfigFloat(ctx, "feed_engagement_weight", 0.28)
+	wQuality := s.getConfigFloat(ctx, "feed_quality_weight", 0.22)
+	wRecency := s.getConfigFloat(ctx, "feed_recency_weight", 0.20)
+	wNetwork := s.getConfigFloat(ctx, "feed_network_weight", 0.0)
 	wPersonalization := s.getConfigFloat(ctx, "feed_personalization_weight", 0.07)
-	wTone := s.getConfigFloat(ctx, "feed_tone_weight", 0.10)
+	wTone := s.getConfigFloat(ctx, "feed_tone_weight", 0.15)
 	wVideo := s.getConfigFloat(ctx, "feed_video_boost_weight", 0.08)
-	wHarmony := s.getConfigFloat(ctx, "feed_harmony_weight", 0.10)
-	wModeration := s.getConfigFloat(ctx, "feed_moderation_penalty_weight", 0.10)
+	wHarmony := s.getConfigFloat(ctx, "feed_harmony_weight", 0.0)
+	wModeration := s.getConfigFloat(ctx, "feed_moderation_penalty_weight", 0.0)
 
 	finalScore := engagementScore*wEngagement +
 		qualityData.QualityScore*wQuality +
@@ -558,6 +561,13 @@ func (s *FeedAlgorithmService) CalculateFeedScore(ctx context.Context, postID st
 		videoBoost*wVideo +
 		harmonyScore*wHarmony +
 		modPenalty*wModeration // modPenalty is always <= 0
+
+	// Hard burial: hostile content should never surface regardless of other signals.
+	// Hostile tone produces toneScore <= -0.40 (configurable hostile penalty + CIS factor).
+	hostileThreshold := -s.getConfigFloat(ctx, "tone_hostile_penalty", 0.40)
+	if toneScore <= hostileThreshold {
+		finalScore = -1.0
+	}
 
 	return FeedScore{
 		PostID:            postID,
@@ -929,6 +939,64 @@ func (s *FeedAlgorithmService) RefreshAllScores(ctx context.Context) error {
 	return nil
 }
 
+// RefreshAllScoresFull is a one-time backfill that scores ALL active posts regardless of age.
+// Use sparingly — this can be slow on large datasets.
+func (s *FeedAlgorithmService) RefreshAllScoresFull(ctx context.Context) error {
+	rows, err := s.db.Query(ctx, `
+		SELECT id FROM posts
+		WHERE status = 'active'
+		  AND deleted_at IS NULL
+		  AND COALESCE(is_beacon, FALSE) = FALSE
+		  AND chain_parent_id IS NULL
+		ORDER BY created_at DESC
+	`)
+	if err != nil {
+		return fmt.Errorf("failed to query posts for full backfill: %w", err)
+	}
+	defer rows.Close()
+
+	var postIDs []string
+	for rows.Next() {
+		var id string
+		if err := rows.Scan(&id); err != nil {
+			continue
+		}
+		postIDs = append(postIDs, id)
+	}
+	rows.Close()
+
+	if len(postIDs) == 0 {
+		log.Debug().Msg("[FeedAlgorithm] No posts to score (full backfill)")
+		return nil
+	}
+
+	log.Info().Int("count", len(postIDs)).Msg("[FeedAlgorithm] Full backfill — scoring all posts")
+
+	weights := s.GetDefaultWeights()
+	emptyProfile := UserInterestProfile{
+		Interests:          make(map[string]float64),
+		CategoryWeights:    make(map[string]float64),
+		InteractionHistory: make(map[string]int),
+	}
+
+	scored := 0
+	for _, postID := range postIDs {
+		score, err := s.CalculateFeedScore(ctx, postID, "", weights, emptyProfile)
+		if err != nil {
+			log.Warn().Err(err).Str("post_id", postID).Msg("[FeedAlgorithm] Failed to score post (backfill)")
+			continue
+		}
+		if err := s.updatePostScore(ctx, score); err != nil {
+			log.Warn().Err(err).Str("post_id", postID).Msg("[FeedAlgorithm] Failed to persist score (backfill)")
+			continue
+		}
+		scored++
+	}
+
+	log.Info().Int("scored", scored).Int("total", len(postIDs)).Msg("[FeedAlgorithm] Full backfill complete")
+	return nil
+}
+
 // Helper functions
 func containsKeyword(text, keyword string) bool {
 	return len(text) > 0 && len(keyword) > 0 // Simplified - could use regex or NLP
@@ -941,4 +1009,169 @@ func containsItem(slice []string, item string) bool {
 		}
 	}
 	return false
+}
+
+// PostScoreDetail is the author-facing score breakdown with human-readable explanations.
+type PostScoreDetail struct {
+	PostID   string          `json:"post_id"`
+	Score    float64         `json:"score"`
+	Factors  []ScoreFactor   `json:"factors"`
+	Summary  string          `json:"summary"`
+	ScoredAt string          `json:"scored_at"`
+}
+
+type ScoreFactor struct {
+	Name        string  `json:"name"`
+	Score       float64 `json:"score"`
+	Weight      float64 `json:"weight"`
+	Weighted    float64 `json:"weighted"`
+	Explanation string  `json:"explanation"`
+}
+
+// GetPostScore returns the stored score breakdown for a post.
+func (s *FeedAlgorithmService) GetPostScore(ctx context.Context, postID string) (*PostScoreDetail, error) {
+	var fs FeedScore
+	var updatedAt time.Time
+	err := s.db.QueryRow(ctx, `
+		SELECT score, engagement_score, quality_score, recency_score, network_score,
+		       personalization, tone_score, video_boost_score, harmony_score, moderation_penalty, updated_at
+		FROM post_feed_scores WHERE post_id = $1
+	`, postID).Scan(
+		&fs.Score, &fs.EngagementScore, &fs.QualityScore, &fs.RecencyScore, &fs.NetworkScore,
+		&fs.Personalization, &fs.ToneScore, &fs.VideoBoostScore, &fs.HarmonyScore, &fs.ModerationPenalty, &updatedAt,
+	)
+	if err != nil {
+		return nil, err
+	}
+
+	// Read current weights for context (content-first defaults)
+	wEng := s.getConfigFloat(ctx, "feed_engagement_weight", 0.28)
+	wQual := s.getConfigFloat(ctx, "feed_quality_weight", 0.22)
+	wRec := s.getConfigFloat(ctx, "feed_recency_weight", 0.20)
+	wNet := s.getConfigFloat(ctx, "feed_network_weight", 0.0)
+	wPers := s.getConfigFloat(ctx, "feed_personalization_weight", 0.07)
+	wTone := s.getConfigFloat(ctx, "feed_tone_weight", 0.15)
+	wVid := s.getConfigFloat(ctx, "feed_video_boost_weight", 0.08)
+	wHarm := s.getConfigFloat(ctx, "feed_harmony_weight", 0.0)
+	wMod := s.getConfigFloat(ctx, "feed_moderation_penalty_weight", 0.0)
+
+	// Build all potential factors
+	allFactors := []ScoreFactor{
+		{Name: "engagement", Score: fs.EngagementScore, Weight: wEng, Weighted: fs.EngagementScore * wEng, Explanation: explainEngagement(fs.EngagementScore)},
+		{Name: "quality", Score: fs.QualityScore, Weight: wQual, Weighted: fs.QualityScore * wQual, Explanation: explainQuality(fs.QualityScore)},
+		{Name: "recency", Score: fs.RecencyScore, Weight: wRec, Weighted: fs.RecencyScore * wRec, Explanation: explainRecency(fs.RecencyScore)},
+		{Name: "network", Score: fs.NetworkScore, Weight: wNet, Weighted: fs.NetworkScore * wNet, Explanation: explainNetwork(fs.NetworkScore)},
+		{Name: "personalization", Score: fs.Personalization, Weight: wPers, Weighted: fs.Personalization * wPers, Explanation: explainPersonalization(fs.Personalization)},
+		{Name: "tone", Score: fs.ToneScore, Weight: wTone, Weighted: fs.ToneScore * wTone, Explanation: explainTone(fs.ToneScore)},
+		{Name: "video_boost", Score: fs.VideoBoostScore, Weight: wVid, Weighted: fs.VideoBoostScore * wVid, Explanation: explainVideoBoost(fs.VideoBoostScore)},
+		{Name: "harmony", Score: fs.HarmonyScore, Weight: wHarm, Weighted: fs.HarmonyScore * wHarm, Explanation: explainHarmony(fs.HarmonyScore)},
+		{Name: "moderation", Score: fs.ModerationPenalty, Weight: wMod, Weighted: fs.ModerationPenalty * wMod, Explanation: explainModeration(fs.ModerationPenalty)},
+	}
+
+	// Only include factors that have non-zero weight (content-first: account-level signals
+	// like network, harmony, moderation default to 0 weight and are hidden from authors)
+	var factors []ScoreFactor
+	for _, f := range allFactors {
+		if f.Weight != 0 {
+			factors = append(factors, f)
+		}
+	}
+
+	summary := "Your post is scored on its content — engagement, quality, tone, and recency. Higher scores appear earlier in the Sojorn feed."
+	if fs.Score <= -1.0 {
+		summary = "This post has been buried due to hostile tone detection. It will not appear in anyone's feed."
+	} else if fs.Score < 0 {
+		summary = "This post is scoring below average and will appear lower in feeds."
+	}
+
+	return &PostScoreDetail{
+		PostID:   postID,
+		Score:    fs.Score,
+		Factors:  factors,
+		Summary:  summary,
+		ScoredAt: updatedAt.Format(time.RFC3339),
+	}, nil
+}
+
+func explainEngagement(s float64) string {
+	if s >= 0.5 {
+		return "Strong engagement — likes, comments, and shares are boosting this post"
+	} else if s >= 0.1 {
+		return "Some engagement — a few interactions are helping visibility"
+	}
+	return "Low engagement — more interactions would help this post surface"
+}
+
+func explainQuality(s float64) string {
+	if s >= 0.6 {
+		return "Good content quality — media and text length are in the sweet spot"
+	} else if s >= 0.3 {
+		return "Average quality signal — adding media or more detail could help"
+	}
+	return "Low quality signal — very short text with no media scores lower"
+}
+
+func explainRecency(s float64) string {
+	if s >= 1.0 {
+		return "Fresh post — recent content gets a boost"
+	} else if s >= 0.8 {
+		return "Still recent — posted within the last few days"
+	}
+	return "Older post — recency bonus has faded"
+}
+
+func explainNetwork(s float64) string {
+	if s >= 0.3 {
+		return "Your followers and their connections are seeing this"
+	} else if s > 0 {
+		return "Some network reach — mutual connections help"
+	}
+	return "Limited network signal — this score grows as followers engage"
+}
+
+func explainPersonalization(s float64) string {
+	if s >= 0.3 {
+		return "Matches viewer interests well — category and topics align"
+	} else if s > 0 {
+		return "Some interest overlap with viewers"
+	}
+	return "Broad topic — not strongly matched to any interest category"
+}
+
+func explainTone(s float64) string {
+	if s > 0.1 {
+		return "Positive tone detected — constructive content gets a boost"
+	} else if s >= -0.03 {
+		return "Neutral tone — no boost or penalty"
+	} else if s >= -0.15 {
+		return "Mixed or negative tone detected — this slightly lowers visibility"
+	}
+	return "Hostile tone detected — this post is buried from feeds"
+}
+
+func explainVideoBoost(s float64) string {
+	if s >= 0.15 {
+		return "Viewers are watching this video to completion — strong boost"
+	} else if s > 0 {
+		return "Video post — gets a base boost, watch completion adds more"
+	}
+	return "No video boost — text/image posts don't receive this bonus"
+}
+
+func explainHarmony(s float64) string {
+	if s >= 0.8 {
+		return "High harmony score — your account has strong community trust"
+	} else if s >= 0.4 {
+		return "Average harmony — building trust through positive interactions helps"
+	}
+	return "New or low harmony — this improves as you participate constructively"
+}
+
+func explainModeration(s float64) string {
+	if s == 0 {
+		return "Clean record — no moderation strikes or flags"
+	} else if s >= -0.15 {
+		return "Minor moderation history — a flag or strike is reducing visibility"
+	}
+	return "Significant moderation penalties — multiple strikes are impacting reach"
 }

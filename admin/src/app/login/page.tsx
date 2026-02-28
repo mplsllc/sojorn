@@ -10,14 +10,12 @@ import { useAuth } from '@/lib/auth';
 import Altcha from '@/components/Altcha';
 
 export default function LoginPage() {
-  const [email, setEmail] = useState('');
-  const [password, setPassword] = useState('');
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
   const [altchaToken, setAltchaToken] = useState('');
   const [altchaVerified, setAltchaVerified] = useState(false);
-  const emailRef = useRef('');
-  const passwordRef = useRef('');
+  const emailRef = useRef<HTMLInputElement>(null);
+  const passwordRef = useRef<HTMLInputElement>(null);
   const { login } = useAuth();
   const router = useRouter();
 
@@ -39,7 +37,7 @@ export default function LoginPage() {
 
     setLoading(true);
     try {
-      await login(emailRef.current, passwordRef.current, altchaToken);
+      await login(emailRef.current?.value ?? '', passwordRef.current?.value ?? '', altchaToken);
       router.push('/');
     } catch (err: any) {
       setError(err.message || 'Login failed. Check your credentials.');
@@ -78,14 +76,10 @@ export default function LoginPage() {
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1">Email</label>
               <input
+                ref={emailRef}
                 type="email"
+                autoComplete="email"
                 className="input"
-                value={email}
-                onChange={(e) => {
-                  const v = e.target.value;
-                  emailRef.current = v;
-                  setEmail(v);
-                }}
                 placeholder="admin@sojorn.net"
                 required
               />
@@ -93,14 +87,10 @@ export default function LoginPage() {
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1">Password</label>
               <input
+                ref={passwordRef}
                 type="password"
+                autoComplete="current-password"
                 className="input"
-                value={password}
-                onChange={(e) => {
-                  const v = e.target.value;
-                  passwordRef.current = v;
-                  setPassword(v);
-                }}
                 placeholder="••••••••"
                 required
               />

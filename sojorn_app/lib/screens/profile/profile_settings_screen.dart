@@ -105,15 +105,34 @@ class _ProfileSettingsScreenState extends ConsumerState<ProfileSettingsScreen> {
     }
 
     if (profile == null) {
+      final retryBody = Center(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Text('Failed to load profile', style: TextStyle(color: AppTheme.textSecondary)),
+            const SizedBox(height: 16),
+            ElevatedButton.icon(
+              onPressed: () => ref.read(settingsProvider.notifier).refresh(),
+              icon: const Icon(Icons.refresh, size: 18),
+              label: const Text('Retry'),
+              style: ElevatedButton.styleFrom(
+                backgroundColor: AppTheme.brightNavy,
+                foregroundColor: Colors.white,
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+              ),
+            ),
+          ],
+        ),
+      );
       if (isDesktop) {
         return Scaffold(
           appBar: AppBar(title: const Text('Settings'), leading: IconButton(icon: const Icon(Icons.close), onPressed: () => Navigator.of(context).pop())),
-          body: const Center(child: Text('Failed to load profile')),
+          body: retryBody,
         );
       }
-      return const FullScreenShell(
+      return FullScreenShell(
         titleText: 'Settings',
-        body: Center(child: Text('Failed to load profile')),
+        body: retryBody,
       );
     }
 

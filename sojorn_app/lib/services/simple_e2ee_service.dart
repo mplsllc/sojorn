@@ -78,6 +78,25 @@ class SimpleE2EEService {
     _storage.write(key: 'vault_restore_completed', value: 'true');
   }
 
+  /// Resets all in-memory E2EE state and clears local keys from storage.
+  /// Must be called on sign-out so a different user signing in doesn't
+  /// inherit the previous user's identity keys.
+  Future<void> clearOnSignOut() async {
+    _identityDhKeyPair = null;
+    _identitySigningKeyPair = null;
+    _signedPreKey = null;
+    _oneTimePreKeys = null;
+    _initializedForUserId = null;
+    _initFuture = null;
+    _needsVaultRestore = false;
+    // Clear stored keys — they're user-specific.
+    // The key format is e2ee_keys_<userId> but we may not know userId here,
+    // so we also clear the general flags.
+    await _storage.delete(key: 'vault_restore_completed');
+    // Note: e2ee_keys_<userId> keys will be stale but harmless — they're
+    // only loaded when userId matches, and _doInitialize checks that.
+  }
+
   // DEPRECATED: Old backup PIN was user ID (insecure — server could derive it).
   // KeyVaultService now handles passphrase-based backup. This getter is kept
   // only for legacy cloud restore compatibility.

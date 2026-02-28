@@ -11,6 +11,7 @@ import '../../providers/api_provider.dart';
 import '../../providers/feed_refresh_provider.dart';
 import '../../theme/tokens.dart';
 import '../sojorn_snackbar.dart';
+import 'post_score_sheet.dart';
 
 /// Post menu with kebab menu for owner actions (edit/delete)
 /// and admin moderation actions (warn & remove).
@@ -434,6 +435,8 @@ class _PostMenuState extends ConsumerState<PostMenu> {
             _handlePinToggle();
           case 'delete':
             _handleDelete();
+          case 'score':
+            PostScoreSheet.show(context, widget.post.id);
           case 'admin_warn':
             _handleAdminWarn();
           case 'admin_remove':
@@ -471,6 +474,16 @@ class _PostMenuState extends ConsumerState<PostMenu> {
                 Icon(_isPinned ? Icons.push_pin : Icons.push_pin_outlined, size: 20),
                 const SizedBox(width: 8),
                 Text(_isPinned ? 'Unpin from profile' : 'Pin to profile'),
+              ],
+            ),
+          ),
+          const PopupMenuItem(
+            value: 'score',
+            child: Row(
+              children: [
+                Icon(Icons.insights_outlined, size: 20),
+                SizedBox(width: 8),
+                Text('View Score'),
               ],
             ),
           ),

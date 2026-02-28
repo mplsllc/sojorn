@@ -158,6 +158,20 @@ func (h *PostHandler) CreateComment(c *gin.Context) {
 
 		if cachedScores != nil {
 			cis = 1.0 - (cachedScores.Hate+cachedScores.Greed+cachedScores.Delusion)/3.0
+
+			// Derive tone label from CIS score for feed algorithm
+			switch {
+			case cis >= 0.90:
+				tone = "positive"
+			case cis >= 0.70:
+				tone = "neutral"
+			case cis >= 0.50:
+				tone = "mixed"
+			case cis >= 0.30:
+				tone = "negative"
+			default:
+				tone = "hostile"
+			}
 		}
 	}
 
@@ -626,6 +640,21 @@ func (h *PostHandler) CreatePost(c *gin.Context) {
 		if cachedScores != nil {
 			cis = 1.0 - (cachedScores.Hate+cachedScores.Greed+cachedScores.Delusion)/3.0
 			post.CISScore = &cis
+
+			// Derive tone label from CIS score for feed algorithm
+			switch {
+			case cis >= 0.90:
+				tone = "positive"
+			case cis >= 0.70:
+				tone = "neutral"
+			case cis >= 0.50:
+				tone = "mixed"
+			case cis >= 0.30:
+				tone = "negative"
+			default:
+				tone = "hostile"
+			}
+			post.ToneLabel = &tone
 		}
 	}
 
@@ -819,6 +848,31 @@ func (h *PostHandler) GetSojornFeed(c *gin.Context) {
 
 	h.enrichLinkPreviews(c.Request.Context(), posts)
 	c.JSON(http.StatusOK, gin.H{"posts": posts})
+}
+
+// GetPostScore returns the algorithmic score breakdown for a post. Author-only.
+func (h *PostHandler) GetPostScore(c *gin.Context) {
+	userIDStr, _ := c.Get("user_id")
+	postID := c.Param("id")
+
+	// Verify the requester is the post author
+	post, err := h.postRepo.GetPostByID(c.Request.Context(), postID, userIDStr.(string))
+	if err != nil || post == nil {
+		c.JSON(http.StatusNotFound, gin.H{"error": "Post not found"})
+		return
+	}
+	if post.AuthorID.String() != userIDStr.(string) {
+		c.JSON(http.StatusForbidden, gin.H{"error": "Only the post author can view score details"})
+		return
+	}
+
+	detail, err := h.feedService.GetPostScore(c.Request.Context(), postID)
+	if err != nil {
+		c.JSON(http.StatusNotFound, gin.H{"error": "Score not yet calculated for this post"})
+		return
+	}
+
+	c.JSON(http.StatusOK, detail)
 }
 
 func (h *PostHandler) GetProfilePosts(c *gin.Context) {

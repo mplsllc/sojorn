@@ -42,6 +42,22 @@ class KeyVaultService {
   final _cipher = AesGcm.with256bits();
   final _sha256 = Sha256();
 
+  // ── Lifecycle ──────────────────────────────────────────────────────
+
+  /// Clears all vault-related keys from secure storage.
+  /// Must be called on sign-out so a different user signing in
+  /// doesn't inherit the previous user's vault state.
+  Future<void> clearOnSignOut() async {
+    await _storage.delete(key: _vaultSetupCompleteKey);
+    await _storage.delete(key: _passphraseHashKey);
+    await _storage.delete(key: _vaultSaltKey);
+    await _storage.delete(key: _cachedPassphraseKey);
+    await _storage.delete(key: 'capsule_private_key');
+    await _storage.delete(key: 'capsule_public_key');
+    await _storage.delete(key: 'vault_restore_completed');
+    _syncInProgress = false;
+  }
+
   // ── Status ──────────────────────────────────────────────────────────
 
   /// Whether the user has completed vault setup (set a recovery passphrase)

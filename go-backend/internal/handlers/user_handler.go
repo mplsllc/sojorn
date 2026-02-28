@@ -257,7 +257,11 @@ func (h *UserHandler) GetSavedPosts(c *gin.Context) {
 		targetID = currentUserID
 	}
 
-	// TODO: Add privacy check here if viewing another user's saved posts
+	// Saved posts are private — users can only view their own
+	if targetID != currentUserID {
+		c.JSON(http.StatusForbidden, gin.H{"error": "You can only view your own saved posts"})
+		return
+	}
 
 	limit := utils.GetQueryInt(c, "limit", 20)
 	offset := utils.GetQueryInt(c, "offset", 0)

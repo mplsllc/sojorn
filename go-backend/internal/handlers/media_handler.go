@@ -58,6 +58,19 @@ func (h *MediaHandler) Upload(c *gin.Context) {
 		}
 	}
 
+	// Enforce size limits: 50 MB for images, 500 MB for videos
+	const maxImageSize = 50 << 20  // 50 MB
+	const maxVideoSize = 500 << 20 // 500 MB
+	isVideo := strings.HasPrefix(fileHeader.Header.Get("Content-Type"), "video/") || c.PostForm("type") == "video"
+	maxSize := int64(maxImageSize)
+	if isVideo {
+		maxSize = maxVideoSize
+	}
+	if fileHeader.Size > maxSize {
+		c.JSON(http.StatusRequestEntityTooLarge, gin.H{"error": fmt.Sprintf("File too large (max %d MB)", maxSize>>20)})
+		return
+	}
+
 	mediaType := c.PostForm("type")
 	if mediaType == "" {
 		if strings.HasPrefix(fileHeader.Header.Get("Content-Type"), "video/") {

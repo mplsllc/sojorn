@@ -428,6 +428,7 @@ func main() {
 			authorized.PATCH("/posts/:id/visibility", postHandler.UpdateVisibility)
 			authorized.POST("/posts/:id/hide", postHandler.HidePost)
 			authorized.POST("/posts/:id/view", postHandler.RecordView)
+			authorized.GET("/posts/:id/score", postHandler.GetPostScore)
 			authorized.POST("/posts/:id/like", postHandler.LikePost)
 			authorized.DELETE("/posts/:id/like", postHandler.UnlikePost)
 			authorized.POST("/posts/:id/save", postHandler.SavePost)

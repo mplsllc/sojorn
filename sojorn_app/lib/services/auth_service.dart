@@ -9,6 +9,8 @@ import 'package:http/http.dart' as http;
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import '../config/api_config.dart';
 import '../models/auth_user.dart' as model;
+import 'key_vault_service.dart';
+import 'simple_e2ee_service.dart';
 
 enum AuthChangeEvent { signedIn, signedOut, tokenRefreshed }
 
@@ -459,6 +461,10 @@ class AuthService {
     await _storage.delete(key: 'go_auth_token');
     await _storage.delete(key: 'go_auth_user');
     await _storage.delete(key: 'go_auth_role');
+    // Clear vault & E2EE state so a different user signing in doesn't
+    // inherit the previous user's encryption keys or bypass VaultSetupGate.
+    await KeyVaultService.instance.clearOnSignOut();
+    await SimpleE2EEService().clearOnSignOut();
     _authEventController.add(const AuthState(AuthChangeEvent.signedOut, null));
     if (kDebugMode) debugPrint('[AUTH] Sign out complete');
   }
@@ -484,7 +490,15 @@ class AuthService {
     }
   }
 
+  /// Change password is handled via the forgot-password email flow.
+  /// There's no authenticated change-password endpoint — call resetPassword()
+  /// with the user's email, which sends a reset link.
   Future<void> updatePassword(String newPassword) async {
+    final email = currentUser?.email;
+    if (email == null || email.isEmpty) {
+      throw AuthException('No email found for current user');
+    }
+    await resetPassword(email);
   }
 
   Future<void> markOnboardingCompleteLocally() async {

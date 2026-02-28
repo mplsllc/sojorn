@@ -110,3 +110,8 @@ func (s *FeedService) injectAd(ctx context.Context, posts []models.Post, userID 
 	}
 	return posts
 }
+
+// GetPostScore returns the score breakdown for a post (author-facing transparency).
+func (s *FeedService) GetPostScore(ctx context.Context, postID string) (*PostScoreDetail, error) {
+	return s.feedAlgo.GetPostScore(ctx, postID)
+}

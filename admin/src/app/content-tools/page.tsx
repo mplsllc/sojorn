@@ -197,7 +197,6 @@ export default function ContentToolsPage() {
 function CreateUserPanel() {
   const [form, setForm] = useState({
     email: '',
-    password: '',
     handle: '',
     display_name: '',
     bio: '',
@@ -205,6 +204,7 @@ function CreateUserPanel() {
     verified: false,
     official: false,
   });
+  const passwordRef = useRef<HTMLInputElement>(null);
   const [loading, setLoading] = useState(false);
   const [result, setResult] = useState<{ ok: boolean; message: string } | null>(null);
 
@@ -217,12 +217,14 @@ function CreateUserPanel() {
     try {
       const resp = await api.adminCreateUser({
         ...form,
+        password: passwordRef.current?.value ?? '',
         handle: form.handle.toLowerCase().trim(),
         email: form.email.toLowerCase().trim(),
         skip_email: true,
       });
       setResult({ ok: true, message: `User created: @${resp.handle} (${resp.user_id})` });
-      setForm({ email: '', password: '', handle: '', display_name: '', bio: '', role: 'user', verified: false, official: false });
+      setForm({ email: '', handle: '', display_name: '', bio: '', role: 'user', verified: false, official: false });
+      if (passwordRef.current) passwordRef.current.value = '';
     } catch (e: any) {
       setResult({ ok: false, message: e.message || String(e) });
     }
@@ -251,11 +253,11 @@ function CreateUserPanel() {
         <div>
           <label className="block text-sm font-medium text-gray-700 mb-1">Password *</label>
           <input
+            ref={passwordRef}
             type="password"
+            autoComplete="new-password"
             required
             minLength={8}
-            value={form.password}
-            onChange={(e) => update('password', e.target.value)}
             className="w-full px-3 py-2 border border-warm-300 rounded-lg text-sm focus:ring-2 focus:ring-brand-500 focus:border-brand-500"
             placeholder="Min 8 characters"
           />
