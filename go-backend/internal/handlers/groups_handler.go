@@ -599,10 +599,9 @@ func (h *GroupsHandler) GetGroupFeed(c *gin.Context) {
 		       COALESCE(p.thumbnail_url, ''), p.created_at, p.status,
 		       pr.handle, COALESCE(pr.display_name, pr.handle), COALESCE(pr.avatar_url, '')
 		FROM posts p
-		JOIN group_posts gp ON gp.post_id = p.id
 		JOIN public.profiles pr ON p.author_id = pr.id
 		JOIN public.users au ON p.author_id = au.id AND au.status NOT IN ('banned', 'suspended')
-		WHERE gp.group_id = $1 AND p.status = 'active' AND p.deleted_at IS NULL
+		WHERE p.group_id = $1 AND p.status = 'active' AND p.deleted_at IS NULL
 		ORDER BY p.created_at DESC
 		LIMIT $2 OFFSET $3
 	`, groupID, limit, offset)

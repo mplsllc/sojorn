@@ -85,17 +85,6 @@ func (r *PostRepository) CreatePost(ctx context.Context, post *models.Post) erro
 		return fmt.Errorf("failed to initialize post metrics: %w", err)
 	}
 
-	// group_posts is a junction table kept in sync with posts.group_id for query
-	// performance — GetGroupFeed joins here rather than scanning posts.group_id.
-	if post.GroupID != nil {
-		if _, err := tx.Exec(ctx,
-			`INSERT INTO group_posts (group_id, post_id) VALUES ($1, $2) ON CONFLICT DO NOTHING`,
-			post.GroupID, post.ID,
-		); err != nil {
-			return fmt.Errorf("failed to insert group_posts entry: %w", err)
-		}
-	}
-
 	if err := tx.Commit(ctx); err != nil {
 		return fmt.Errorf("failed to commit post transaction: %w", err)
 	}
