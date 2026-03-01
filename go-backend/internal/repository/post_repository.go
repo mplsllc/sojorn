@@ -45,7 +45,8 @@ func (r *PostRepository) CreatePost(ctx context.Context, post *models.Post) erro
 			is_beacon, beacon_type, location, confidence_score,
 			is_active_beacon, allow_chain, chain_parent_id, visibility, expires_at,
 			is_nsfw, nsfw_reason,
-			severity, incident_status, radius, overlay_json, audio_overlay_url
+			severity, incident_status, radius, overlay_json, audio_overlay_url,
+			group_id
 		) VALUES (
 			$1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13,
 			$14, $15,
@@ -54,7 +55,8 @@ func (r *PostRepository) CreatePost(ctx context.Context, post *models.Post) erro
 				 ELSE NULL END,
 			$18, $19, $20, $21, $22, $23,
 			$24, $25,
-			$26, $27, $28, $29, $30
+			$26, $27, $28, $29, $30,
+			$31
 		) RETURNING id, created_at
 	`
 
@@ -71,6 +73,7 @@ func (r *PostRepository) CreatePost(ctx context.Context, post *models.Post) erro
 		post.IsActiveBeacon, post.AllowChain, post.ChainParentID, post.Visibility, post.ExpiresAt,
 		post.IsNSFW, post.NSFWReason,
 		post.Severity, post.IncidentStatus, post.Radius, post.OverlayJSON, post.AudioOverlayURL,
+		post.GroupID,
 	).Scan(&post.ID, &post.CreatedAt)
 
 	if err != nil {
@@ -80,6 +83,17 @@ func (r *PostRepository) CreatePost(ctx context.Context, post *models.Post) erro
 	// Initialize metrics
 	if _, err := tx.Exec(ctx, "INSERT INTO public.post_metrics (post_id) VALUES ($1)", post.ID); err != nil {
 		return fmt.Errorf("failed to initialize post metrics: %w", err)
+	}
+
+	// group_posts is a junction table kept in sync with posts.group_id for query
+	// performance — GetGroupFeed joins here rather than scanning posts.group_id.
+	if post.GroupID != nil {
+		if _, err := tx.Exec(ctx,
+			`INSERT INTO group_posts (group_id, post_id) VALUES ($1, $2) ON CONFLICT DO NOTHING`,
+			post.GroupID, post.ID,
+		); err != nil {
+			return fmt.Errorf("failed to insert group_posts entry: %w", err)
+		}
 	}
 
 	if err := tx.Commit(ctx); err != nil {
