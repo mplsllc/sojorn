@@ -323,6 +323,8 @@ func main() {
 		c.JSON(200, gin.H{"message": "Route test successful"})
 	})
 
+	notificationHandler := handlers.NewNotificationHandler(notifRepo, notificationService, dbPool, pushService)
+
 	v1 := r.Group("/api/v1")
 	{
 		// Public waitlist signup (no auth required)
@@ -522,7 +524,6 @@ func main() {
 			authorized.GET("/users/suggested", followHandler.GetSuggestedUsers)
 
 			// Notifications
-			notificationHandler := handlers.NewNotificationHandler(notifRepo, notificationService, dbPool)
 			authorized.GET("/notifications", notificationHandler.GetNotifications)
 			authorized.GET("/notifications/unread", notificationHandler.GetUnreadCount)
 			authorized.GET("/notifications/badge", notificationHandler.GetBadgeCount)
@@ -923,6 +924,9 @@ func main() {
 			adminOnly.GET("/sounds", soundsHandler.AdminList)
 			adminOnly.POST("/sounds", soundsHandler.AdminCreate)
 			adminOnly.PATCH("/sounds/:id", soundsHandler.AdminUpdate)
+
+			// Test push
+			adminOnly.POST("/notifications/test", notificationHandler.SendTestPush)
 
 			// Events admin
 			adminOnly.GET("/events", adminHandler.AdminListEvents)

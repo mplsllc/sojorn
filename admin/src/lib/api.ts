@@ -946,6 +946,13 @@ class ApiClient {
     if (!res.ok) throw new Error('Upload failed');
     return res.json() as Promise<{ url: string; key?: string }>;
   }
+
+  async sendTestPush(data: { user_id: string; title?: string; body?: string }) {
+    return this.request<{ sent: boolean; reason?: string; token_count?: number }>(
+      '/api/v1/admin/notifications/test',
+      { method: 'POST', body: JSON.stringify(data) },
+    );
+  }
 }
 
 export const api = new ApiClient();

@@ -12,7 +12,7 @@ import {
   LayoutDashboard, Users, FileText, Shield, ShieldCheck, Scale, Flag,
   Settings, Activity, LogOut, ChevronLeft, ChevronRight, ChevronDown,
   Sliders, FolderTree, HardDrive, AtSign, Brain, ScrollText, Wrench, Bot,
-  UserCog, ShieldAlert, Cog, Mail, MapPinned, Users2, Video, ClipboardList, Clock, Calendar, Cpu, Radio, Music2,
+  UserCog, ShieldAlert, Cog, Mail, MapPinned, Users2, Video, ClipboardList, Clock, Calendar, Cpu, Radio, Music2, Bell,
 } from 'lucide-react';
 import { useMemo, useState } from 'react';
 
@@ -97,6 +97,7 @@ const navigation: NavEntry[] = [
       { href: '/audit-log', label: 'Audit Log', icon: ClipboardList },
       { href: '/quips', label: 'Quip Repair', icon: Video },
       { href: '/sounds', label: 'Soundbank', icon: Music2 },
+      { href: '/notifications', label: 'Notifications', icon: Bell },
       { href: '/settings/emails', label: 'Email Templates', icon: Mail },
       { href: '/settings', label: 'Settings', icon: Settings },
     ],

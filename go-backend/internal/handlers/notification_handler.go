@@ -22,13 +22,15 @@ type NotificationHandler struct {
 	notifRepo    *repository.NotificationRepository
 	notifService *services.NotificationService
 	pool         *pgxpool.Pool
+	pushService  *services.PushService
 }
 
-func NewNotificationHandler(notifRepo *repository.NotificationRepository, notifService *services.NotificationService, pool *pgxpool.Pool) *NotificationHandler {
+func NewNotificationHandler(notifRepo *repository.NotificationRepository, notifService *services.NotificationService, pool *pgxpool.Pool, pushService *services.PushService) *NotificationHandler {
 	return &NotificationHandler{
 		notifRepo:    notifRepo,
 		notifService: notifService,
 		pool:         pool,
+		pushService:  pushService,
 	}
 }
 
@@ -519,6 +521,50 @@ func (h *NotificationHandler) GetActivityLog(c *gin.Context) {
 	}
 
 	c.JSON(http.StatusOK, gin.H{"activities": activities})
+}
+
+// SendTestPush sends a test push notification to all devices for a given user.
+// POST /api/v1/admin/notifications/test — admin only
+func (h *NotificationHandler) SendTestPush(c *gin.Context) {
+	var req struct {
+		UserID string `json:"user_id" binding:"required"`
+		Title  string `json:"title"`
+		Body   string `json:"body"`
+	}
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+	if _, err := uuid.Parse(req.UserID); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid user_id"})
+		return
+	}
+	if req.Title == "" {
+		req.Title = "Test Notification"
+	}
+	if req.Body == "" {
+		req.Body = "This is a test push from Sojorn Admin."
+	}
+
+	// Check token count before sending so we can return a clear reason if none are registered
+	tokens, err := h.notifRepo.GetFCMTokensForUser(c.Request.Context(), req.UserID)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+	if len(tokens) == 0 {
+		c.JSON(http.StatusOK, gin.H{"sent": false, "reason": "no_tokens_found"})
+		return
+	}
+
+	if err := h.pushService.SendPush(c.Request.Context(), req.UserID, req.Title, req.Body,
+		map[string]string{"type": "admin_test"},
+	); err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"sent": false, "reason": err.Error()})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{"sent": true, "token_count": len(tokens)})
 }
 
 

@@ -213,13 +213,24 @@ class _VaultSetupGateState extends ConsumerState<VaultSetupGate> {
             ScaffoldMessenger.of(context).showSnackBar(
               const SnackBar(content: Text('Recovery key saved'), backgroundColor: Color(0xFF4CAF50)));
           }
+          setState(() => _keyCopied = true);
+        } else {
+          // User dismissed the picker without saving — guide them to copy instead
+          if (mounted) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              const SnackBar(content: Text(
+                'Download cancelled — tap your recovery key to copy it instead')));
+          }
         }
+        return; // setState handled above; skip the web branch's setState below
       }
       setState(() => _keyCopied = true);
     } catch (e) {
+      // Covers PlatformException on iOS cancel + write failures
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Save failed: $e'), backgroundColor: SojornColors.destructive));
+          const SnackBar(content: Text(
+            'Download cancelled — tap your recovery key to copy it instead')));
       }
     }
   }
