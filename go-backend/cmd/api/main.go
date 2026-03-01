@@ -271,8 +271,8 @@ func main() {
 	// Image proxy (CORS bypass for web.archive.org, imgur, giphy)
 	imageProxyHandler := handlers.NewImageProxyHandler()
 
-	// Audio library proxy (Freesound — gracefully returns 503 until FREESOUND_API_KEY is set)
-	audioHandler := handlers.NewAudioHandler(cfg.FreesoundAPIKey)
+	// Soundbank handler (in-house audio library replacing Freesound)
+	soundsHandler := handlers.NewSoundsHandler(dbPool, cfg.R2Endpoint, cfg.R2AccessKey, cfg.R2SecretKey, cfg.R2MediaBucket, cfg.R2ImgDomain)
 
 	// Group events handler
 	eventHandler := handlers.NewEventHandler(dbPool)
@@ -711,9 +711,10 @@ func main() {
 			authorized.PUT("/dashboard/layout", dashboardLayoutHandler.SaveDashboardLayout)
 			authorized.GET("/users/:id/dashboard-layout", dashboardLayoutHandler.GetUserDashboardLayout)
 
-			// Audio library (Freesound proxy — returns 503 until FREESOUND_API_KEY is set)
-			authorized.GET("/audio/library", audioHandler.SearchAudioLibrary)
-			authorized.GET("/audio/library/:trackId/listen", audioHandler.GetAudioTrackListen)
+			// Soundbank (in-house audio library)
+			authorized.GET("/sounds", soundsHandler.List)
+			authorized.POST("/sounds/register", soundsHandler.Register)
+			authorized.POST("/sounds/:id/use", soundsHandler.RecordUse)
 
 			// Events (public feed + user's groups)
 			authorized.GET("/events/upcoming", eventHandler.GetUpcomingPublicEvents)
@@ -917,6 +918,11 @@ func main() {
 			// Quip repair
 			adminOnly.GET("/quips/broken", adminHandler.GetBrokenQuips)
 			adminOnly.POST("/quips/:id/repair", adminHandler.RepairQuip)
+
+			// Soundbank management
+			adminOnly.GET("/sounds", soundsHandler.AdminList)
+			adminOnly.POST("/sounds", soundsHandler.AdminCreate)
+			adminOnly.PATCH("/sounds/:id", soundsHandler.AdminUpdate)
 
 			// Events admin
 			adminOnly.GET("/events", adminHandler.AdminListEvents)

@@ -3,14 +3,20 @@
 // See LICENSE file in the project root for full license text.
 
 import 'dart:io';
+import 'package:camera/camera.dart' show XFile;
 import 'package:flutter/material.dart';
 import 'package:video_player/video_player.dart';
-import 'quip_studio_screen.dart'; // Stage 3
-import 'quip_metadata_screen.dart'; // Stage 4
+import 'quip_decorate_screen.dart';
+import 'quip_studio_screen.dart';
 import '../../../models/sojorn_media_result.dart';
 import '../../../theme/app_theme.dart';
 import '../../../theme/tokens.dart';
 
+/// Stage 2 of the Quip creation flow — preview playback and optional trim.
+///
+/// The user sees their recorded/picked video looping. From here they can:
+///   - Open the trim editor ("Studio" button → QuipStudioScreen)
+///   - Proceed to decoration ("Next" → QuipDecorateScreen)
 class QuipPreviewScreen extends StatefulWidget {
   final File videoFile;
   const QuipPreviewScreen({super.key, required this.videoFile});
@@ -22,9 +28,6 @@ class QuipPreviewScreen extends StatefulWidget {
 class _QuipPreviewScreenState extends State<QuipPreviewScreen> {
   late VideoPlayerController _controller;
   File _currentFile;
-  
-  // Simple overlay state
-  final List<OverlayItem> _overlays = [];
   bool _isInitialized = false;
 
   _QuipPreviewScreenState() : _currentFile = File('');
@@ -50,10 +53,9 @@ class _QuipPreviewScreenState extends State<QuipPreviewScreen> {
     if (mounted) setState(() => _isInitialized = true);
   }
 
-  void _openProEditor() async {
+  /// Opens the trim editor. If the user saves, reload the player with the new file.
+  void _openTrimEditor() async {
     _controller.pause();
-    // Navigate to Stage 3: Pro Studio
-    // Expecting QuipStudioScreen to return a File or SojornMediaResult if edits were made.
     final result = await Navigator.push(
       context,
       MaterialPageRoute(builder: (_) => QuipStudioScreen(videoFile: _currentFile)),
@@ -66,67 +68,36 @@ class _QuipPreviewScreenState extends State<QuipPreviewScreen> {
       newFile = File(result.filePath!);
     }
 
-    if (newFile != null) {
-      // User saved edits, reload the player with new file
+    if (newFile != null && mounted) {
       await _controller.dispose();
       setState(() {
         _currentFile = newFile!;
         _isInitialized = false;
-        // Optionally clear simple overlays if deep edits happened, or keep them.
-        _overlays.clear(); 
       });
       _initVideo();
-    } else {
-      _controller.play(); // Just resume if they canceled
+    } else if (mounted) {
+      _controller.play();
     }
   }
 
-  void _addText() {
-    final textController = TextEditingController();
-    showDialog(
-      context: context,
-      builder: (context) => AlertDialog(
-        backgroundColor: const Color(0xDD000000),
-        content: TextField(
-          controller: textController,
-          autofocus: true,
-          style: const TextStyle(color: SojornColors.basicWhite, fontSize: 24),
-          decoration: InputDecoration(
-            border: InputBorder.none, 
-            hintText: 'Type here...',
-            hintStyle: TextStyle(color: SojornColors.basicWhite.withValues(alpha: 0.54)),
-          ),
-        ),
-        actions: [
-          TextButton(
-            onPressed: () {
-              if (textController.text.isNotEmpty) {
-                setState(() {
-                  _overlays.add(OverlayItem(text: textController.text));
-                });
-              }
-              Navigator.pop(context);
-            },
-            child: const Text('Done', style: TextStyle(color: SojornColors.basicWhite)),
-          )
-        ],
-      ),
-    );
-  }
-
+  /// Proceeds to the decoration stage.
   void _next() {
     _controller.pause();
-    // Navigate to Stage 4: Metadata
     Navigator.push(
       context,
-      MaterialPageRoute(builder: (_) => QuipMetadataScreen(videoFile: _currentFile)),
+      MaterialPageRoute(
+        builder: (_) => QuipDecorateScreen(videoXFile: XFile(_currentFile.path)),
+      ),
     );
   }
 
   @override
   Widget build(BuildContext context) {
     if (!_isInitialized) {
-      return const Scaffold(backgroundColor: SojornColors.basicBlack, body: Center(child: CircularProgressIndicator()));
+      return const Scaffold(
+        backgroundColor: SojornColors.basicBlack,
+        body: Center(child: CircularProgressIndicator()),
+      );
     }
 
     return Scaffold(
@@ -134,7 +105,7 @@ class _QuipPreviewScreenState extends State<QuipPreviewScreen> {
       body: Stack(
         fit: StackFit.expand,
         children: [
-          // 1. Video Layer
+          // 1. Video
           Center(
             child: AspectRatio(
               aspectRatio: _controller.value.aspectRatio,
@@ -142,91 +113,12 @@ class _QuipPreviewScreenState extends State<QuipPreviewScreen> {
             ),
           ),
 
-          // 2. Overlay Layer
-          ..._overlays.map((item) => Positioned(
-            left: item.position.dx,
-            top: item.position.dy,
-            child: Draggable(
-              feedback: Material(
-                color: SojornColors.transparent,
-                child: Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-                  decoration: BoxDecoration(
-                    color: SojornColors.overlayDark,
-                    borderRadius: BorderRadius.circular(8),
-                    border: Border.all(color: SojornColors.basicWhite.withValues(alpha: 0.24), width: 1),
-                  ),
-                  child: Text(
-                    item.text,
-                    style: const TextStyle(
-                      color: SojornColors.basicWhite, 
-                      fontSize: 28, 
-                      fontWeight: FontWeight.bold,
-                      shadows: [Shadow(blurRadius: 4, color: SojornColors.basicBlack)],
-                    ),
-                  ),
-                ),
-              ),
-              childWhenDragging: Opacity(
-                opacity: 0.3,
-                child: Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-                  decoration: BoxDecoration(
-                    color: SojornColors.overlayDark,
-                    borderRadius: BorderRadius.circular(8),
-                  ),
-                  child: Text(
-                    item.text,
-                    style: const TextStyle(
-                      color: SojornColors.basicWhite, 
-                      fontSize: 28, 
-                      fontWeight: FontWeight.bold,
-                    ),
-                  ),
-                ),
-              ),
-              onDragEnd: (details) {
-                setState(() {
-                  // Adjust position accounting for app bar height if needed, 
-                  // but simplest is just taking offset.
-                  // Ideally convert global to local, but details.offset is global.
-                  // We need RenderBox of Stack.
-                  final RenderBox box = context.findRenderObject() as RenderBox;
-                  final localOffset = box.globalToLocal(details.offset);
-                  
-                  // Clamp to screen bounds
-                  final x = localOffset.dx.clamp(0.0, box.size.width - 100);
-                  final y = localOffset.dy.clamp(0.0, box.size.height - 100);
-                  
-                  item.position = Offset(x, y);
-                });
-              },
-              child: Container(
-                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-                decoration: BoxDecoration(
-                  color: SojornColors.overlayDark,
-                  borderRadius: BorderRadius.circular(8),
-                ),
-                child: Text(
-                  item.text,
-                  style: const TextStyle(
-                    color: SojornColors.basicWhite, 
-                    fontSize: 28, 
-                    fontWeight: FontWeight.bold,
-                    shadows: [Shadow(blurRadius: 4, color: SojornColors.basicBlack)],
-                  ),
-                ),
-              ),
-            ),
-          )),
-
-          // 3. UI Layer
+          // 2. UI chrome
           SafeArea(
             child: Column(
               children: [
-                // Top Bar
                 Padding(
-                  padding: const EdgeInsets.all(8.0),
+                  padding: const EdgeInsets.all(8),
                   child: Row(
                     children: [
                       IconButton(
@@ -241,20 +133,14 @@ class _QuipPreviewScreenState extends State<QuipPreviewScreen> {
             ),
           ),
 
-          // Right Controls
+          // 3. Right sidebar — Trim only (overlays are handled on the Decorate screen)
           Positioned(
             right: 16,
             top: 100,
-            child: Column(
-              children: [
-                _buildSideButton(Icons.text_fields, "Text", _addText),
-                const SizedBox(height: 20),
-                _buildSideButton(Icons.edit_note, "Studio", _openProEditor),
-              ],
-            ),
+            child: _buildSideButton(Icons.cut, 'Trim', _openTrimEditor),
           ),
 
-          // Bottom Controls
+          // 4. Next FAB
           Positioned(
             bottom: 30,
             right: 20,
@@ -281,14 +167,15 @@ class _QuipPreviewScreenState extends State<QuipPreviewScreen> {
           ),
         ),
         const SizedBox(height: 4),
-        Text(label, style: const TextStyle(color: SojornColors.basicWhite, fontSize: 12, shadows: [Shadow(blurRadius: 2, color: SojornColors.basicBlack)])),
+        Text(
+          label,
+          style: const TextStyle(
+            color: SojornColors.basicWhite,
+            fontSize: 12,
+            shadows: [Shadow(blurRadius: 2, color: SojornColors.basicBlack)],
+          ),
+        ),
       ],
     );
   }
-}
-
-class OverlayItem {
-  String text;
-  Offset position;
-  OverlayItem({required this.text, this.position = const Offset(100, 100)});
 }

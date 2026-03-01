@@ -278,51 +278,6 @@ class _sojornVideoEditorState extends State<sojornVideoEditor> {
                 size: 80,
                 color: _brightNavy,
               ),
-            // Trim handles (basic implementation)
-            Positioned(
-              left: 0,
-              top: 0,
-              bottom: 0,
-              child: GestureDetector(
-                onHorizontalDragUpdate: (details) {
-                  if (!_isTrimming) return;
-                  // Update start trim position
-                },
-                child: Container(
-                  width: 20,
-                  color: _brightNavy.withValues(alpha: 0.3),
-                  child: Center(
-                    child: Container(
-                      width: 4,
-                      height: 40,
-                      color: _brightNavy,
-                    ),
-                  ),
-                ),
-              ),
-            ),
-            Positioned(
-              right: 0,
-              top: 0,
-              bottom: 0,
-              child: GestureDetector(
-                onHorizontalDragUpdate: (details) {
-                  if (!_isTrimming) return;
-                  // Update end trim position
-                },
-                child: Container(
-                  width: 20,
-                  color: _brightNavy.withValues(alpha: 0.3),
-                  child: Center(
-                    child: Container(
-                      width: 4,
-                      height: 40,
-                      color: _brightNavy,
-                    ),
-                  ),
-                ),
-              ),
-            ),
           ],
         ),
       ),

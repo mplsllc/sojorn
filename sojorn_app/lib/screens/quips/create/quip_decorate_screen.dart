@@ -14,6 +14,7 @@ import 'package:video_player/video_player.dart';
 import '../../../models/quip_text_overlay.dart';
 import '../../../providers/quip_upload_provider.dart';
 import '../../../screens/audio/audio_library_screen.dart';
+import '../../quips/sound_picker_sheet.dart';
 import '../../../theme/tokens.dart';
 import '../../../theme/app_theme.dart';
 
@@ -273,10 +274,7 @@ class _QuipDecorateScreenState extends ConsumerState<QuipDecorateScreen> {
   }
 
   Future<void> _pickSound() async {
-    final track = await Navigator.push<AudioTrack>(
-      context,
-      MaterialPageRoute(builder: (_) => const AudioLibraryScreen()),
-    );
+    final track = await showSoundPicker(context);
     if (track != null && mounted) {
       setState(() => _selectedAudio = track);
     }
@@ -285,16 +283,87 @@ class _QuipDecorateScreenState extends ConsumerState<QuipDecorateScreen> {
   Future<void> _postQuip() async {
     _controller.pause();
 
+    // Collect caption before posting
+    final caption = await showModalBottomSheet<String>(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: const Color(0xDD000000),
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      builder: (ctx) {
+        final ctrl = TextEditingController();
+        return Padding(
+          padding: EdgeInsets.only(
+            bottom: MediaQuery.of(ctx).viewInsets.bottom + 16,
+            left: 20,
+            right: 20,
+            top: 20,
+          ),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              const Text(
+                'Add a caption',
+                style: TextStyle(
+                  color: SojornColors.basicWhite,
+                  fontWeight: FontWeight.w600,
+                  fontSize: 16,
+                ),
+              ),
+              const SizedBox(height: 12),
+              TextField(
+                controller: ctrl,
+                autofocus: true,
+                maxLines: 3,
+                maxLength: 150,
+                style: const TextStyle(color: SojornColors.basicWhite),
+                decoration: InputDecoration(
+                  hintText: 'Say something... (optional)',
+                  hintStyle: TextStyle(
+                    color: SojornColors.basicWhite.withValues(alpha: 0.4),
+                  ),
+                  border: InputBorder.none,
+                  counterStyle: TextStyle(
+                    color: SojornColors.basicWhite.withValues(alpha: 0.4),
+                  ),
+                ),
+              ),
+              const SizedBox(height: 8),
+              ElevatedButton(
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: AppTheme.brightNavy,
+                  shape: const StadiumBorder(),
+                ),
+                onPressed: () => Navigator.pop(ctx, ctrl.text),
+                child: const Text(
+                  'Post Quip',
+                  style: TextStyle(color: SojornColors.basicWhite),
+                ),
+              ),
+            ],
+          ),
+        );
+      },
+    );
+
+    if (caption == null || !mounted) {
+      // User dismissed — resume video
+      _controller.play();
+      return;
+    }
+
     // Build overlay + sound JSON payload
     final payload = {
       'overlays': _overlays.map((o) => o.toJson()).toList(),
-      if (_selectedAudio != null) 'sound_id': _selectedAudio!.path,
+      if (_selectedAudio?.id != null) 'sound_id': _selectedAudio!.id,
     };
     final overlayJson = jsonEncode(payload);
 
     ref.read(quipUploadProvider.notifier).startUpload(
       widget.videoXFile,
-      '',
+      caption.trim(),
       overlayJson: overlayJson,
     );
 

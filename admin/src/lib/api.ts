@@ -912,6 +912,40 @@ class ApiClient {
       body: JSON.stringify({ source: source || '' }),
     });
   }
+
+  // Soundbank
+  async listAdminSounds(bucket?: string) {
+    const qs = bucket ? `?bucket=${bucket}` : '';
+    return this.request<any>(`/api/v1/admin/sounds${qs}`);
+  }
+
+  async createLibrarySound(data: { title: string; r2_key: string; duration_ms?: number; bucket?: string }) {
+    return this.request<any>('/api/v1/admin/sounds', {
+      method: 'POST',
+      body: JSON.stringify(data),
+    });
+  }
+
+  async updateSound(id: string, data: { title?: string; is_active?: boolean }) {
+    return this.request<any>(`/api/v1/admin/sounds/${id}`, {
+      method: 'PATCH',
+      body: JSON.stringify(data),
+    });
+  }
+
+  async uploadMedia(file: File, type = 'image') {
+    const form = new FormData();
+    form.append('media', file);
+    form.append('type', type);
+    // Use raw fetch — FormData can't have Content-Type set manually
+    const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL || 'https://api.sojorn.net'}/api/v1/upload`, {
+      method: 'POST',
+      body: form,
+      credentials: 'include',
+    });
+    if (!res.ok) throw new Error('Upload failed');
+    return res.json() as Promise<{ url: string; key?: string }>;
+  }
 }
 
 export const api = new ApiClient();

@@ -16,10 +16,11 @@ import '../../theme/app_theme.dart';
 
 /// Result returned when the user picks an audio track.
 class AudioTrack {
+  final String? id;    // UUID from the sounds table (null for device-local files)
   final String path;   // local file path OR network URL (feed directly to ffmpeg)
   final String title;
 
-  const AudioTrack({required this.path, required this.title});
+  const AudioTrack({this.id, required this.path, required this.title});
 }
 
 /// Two-tab screen for picking background audio.

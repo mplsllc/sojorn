@@ -859,6 +859,33 @@ func (h *PostHandler) CreatePost(c *gin.Context) {
 		}
 	}()
 
+	// Auto-register original audio into the soundbank for discoverability.
+	// Fires only when the client uploads audio separately (audio_overlay_url set).
+	// Uses the author's handle for the sound title: "Original Sound • @handle".
+	if req.AudioOverlayURL != nil && *req.AudioOverlayURL != "" {
+		postRepo := h.postRepo
+		postID := post.ID
+		audioURL := *req.AudioOverlayURL
+		go func() {
+			bgCtx := context.Background()
+			var authorHandle string
+			_ = postRepo.Pool().QueryRow(bgCtx,
+				`SELECT COALESCE(handle, id::text) FROM profiles WHERE id = $1`, userID,
+			).Scan(&authorHandle)
+			title := "Original Sound \u2022 @" + authorHandle
+			// Derive R2 key from CDN URL: strip the https://domain.net/ prefix
+			r2Key := audioURL
+			if idx := strings.Index(audioURL, ".net/"); idx >= 0 {
+				r2Key = audioURL[idx+5:]
+			}
+			_, _ = postRepo.Pool().Exec(bgCtx, `
+				INSERT INTO sounds (uploader_id, source_post_id, title, r2_key, bucket)
+				VALUES ($1, $2, $3, $4, 'user')
+				ON CONFLICT DO NOTHING
+			`, userID, postID, title, r2Key)
+		}()
+	}
+
 	c.JSON(http.StatusCreated, gin.H{
 		"post": post,
 		"tags": tags,
