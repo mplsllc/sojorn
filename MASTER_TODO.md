@@ -7,7 +7,7 @@ Generated 2026-02-23 — carry this into each new session.
 
 ### 1. Deploy Events Migration
 ```bash
-wsl -d Ubuntu -- bash -c "ssh -i ~/.ssh/mpls.pem mpls 'psql \"postgres://postgres:DB_PASS_REDACTED@127.0.0.1:5432/sojorn\" < /dev/stdin'" < go-backend/migrations/20260223_create_events.sql
+wsl -d Ubuntu -- bash -c "ssh -i ~/.ssh/mpls.pem mpls 'psql \"postgres://postgres:\$DB_PASS@127.0.0.1:5432/sojorn\" < /dev/stdin'" < go-backend/migrations/20260223_create_events.sql
 ```
 
 ### 2. Commit + Push + Rebuild Go Binary
