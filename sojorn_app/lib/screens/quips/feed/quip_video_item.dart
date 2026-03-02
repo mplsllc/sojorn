@@ -15,6 +15,8 @@ import '../../../widgets/media/signed_media_image.dart';
 import '../../../services/api_service.dart';
 import '../../../services/auth_service.dart';
 import '../../../theme/tokens.dart';
+import '../../../models/post.dart';
+import '../../../widgets/modals/sanctuary_sheet.dart';
 
 import 'quips_feed_screen.dart';
 
@@ -182,6 +184,8 @@ class _QuipVideoItemState extends State<QuipVideoItem>
       backgroundColor: Colors.transparent,
       builder: (_) => _MoreOptionsSheet(
         quipId: widget.quip.id,
+        authorId: widget.quip.authorId,
+        caption: widget.quip.caption,
         onNotInterested: widget.onNotInterested,
         isAdmin: isAdmin,
         onAdminRemove: isAdmin ? () => _handleAdminRemoveQuip() : null,
@@ -242,9 +246,12 @@ class _QuipVideoItemState extends State<QuipVideoItem>
       );
     }
 
-    if (widget.quip.thumbnailUrl.isNotEmpty) {
+    final thumbUrl = widget.quip.firstFrameUrl?.isNotEmpty == true
+        ? widget.quip.firstFrameUrl!
+        : widget.quip.thumbnailUrl;
+    if (thumbUrl.isNotEmpty) {
       return SignedMediaImage(
-        url: widget.quip.thumbnailUrl,
+        url: thumbUrl,
         fit: BoxFit.cover,
         errorBuilder: (_, __, ___) => Container(color: SojornColors.basicBlack),
         loadingBuilder: (_) => Container(color: SojornColors.basicBlack),
@@ -989,12 +996,16 @@ class _QuipVideoItemState extends State<QuipVideoItem>
 /// Bottom sheet shown when the user taps the "..." (more) button on a quip.
 class _MoreOptionsSheet extends StatelessWidget {
   final String quipId;
+  final String authorId;
+  final String caption;
   final VoidCallback onNotInterested;
   final bool isAdmin;
   final VoidCallback? onAdminRemove;
 
   const _MoreOptionsSheet({
     required this.quipId,
+    required this.authorId,
+    required this.caption,
     required this.onNotInterested,
     this.isAdmin = false,
     this.onAdminRemove,
@@ -1038,13 +1049,16 @@ class _MoreOptionsSheet extends StatelessWidget {
             color: const Color(0xFFFF5252),
             onTap: () {
               Navigator.pop(context);
-              // TODO: Wire to SanctuarySheet.showForPostId(context, quipId)
-              ScaffoldMessenger.of(context).showSnackBar(
-                const SnackBar(
-                  content: Text('Report submitted. Thank you.'),
-                  behavior: SnackBarBehavior.floating,
-                ),
+              final reportPost = Post(
+                id: quipId,
+                authorId: authorId,
+                body: caption,
+                status: PostStatus.active,
+                detectedTone: ToneLabel.neutral,
+                contentIntegrityScore: 0.8,
+                createdAt: DateTime.now(),
               );
+              SanctuarySheet.show(context, reportPost);
             },
           ),
           if (isAdmin && onAdminRemove != null)

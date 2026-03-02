@@ -46,7 +46,7 @@ func (r *PostRepository) CreatePost(ctx context.Context, post *models.Post) erro
 			is_active_beacon, allow_chain, chain_parent_id, visibility, expires_at,
 			is_nsfw, nsfw_reason,
 			severity, incident_status, radius, overlay_json, audio_overlay_url,
-			group_id
+			group_id, first_frame_url
 		) VALUES (
 			$1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13,
 			$14, $15,
@@ -56,7 +56,7 @@ func (r *PostRepository) CreatePost(ctx context.Context, post *models.Post) erro
 			$18, $19, $20, $21, $22, $23,
 			$24, $25,
 			$26, $27, $28, $29, $30,
-			$31
+			$31, $32
 		) RETURNING id, created_at
 	`
 
@@ -73,7 +73,7 @@ func (r *PostRepository) CreatePost(ctx context.Context, post *models.Post) erro
 		post.IsActiveBeacon, post.AllowChain, post.ChainParentID, post.Visibility, post.ExpiresAt,
 		post.IsNSFW, post.NSFWReason,
 		post.Severity, post.IncidentStatus, post.Radius, post.OverlayJSON, post.AudioOverlayURL,
-		post.GroupID,
+		post.GroupID, post.FirstFrameURL,
 	).Scan(&post.ID, &post.CreatedAt)
 
 	if err != nil {
@@ -160,6 +160,7 @@ func (r *PostRepository) GetFeed(ctx context.Context, userID string, categorySlu
 			COALESCE(p.nsfw_reason, '') as nsfw_reason,
 			p.link_preview_url, p.link_preview_title, p.link_preview_description, p.link_preview_image_url, p.link_preview_site_name,
 			p.overlay_json,
+			p.first_frame_url,
 			COALESCE(t.tier, 'new_user') as author_trust_tier
 		FROM public.posts p
 		JOIN public.profiles pr ON p.author_id = pr.id
@@ -244,6 +245,7 @@ func (r *PostRepository) GetFeed(ctx context.Context, userID string, categorySlu
 			&p.IsNSFW, &p.NSFWReason,
 			&p.LinkPreviewURL, &p.LinkPreviewTitle, &p.LinkPreviewDescription, &p.LinkPreviewImageURL, &p.LinkPreviewSiteName,
 			&p.OverlayJSON,
+			&p.FirstFrameURL,
 			&p.AuthorTrustTier,
 		)
 		if err != nil {
@@ -291,6 +293,7 @@ func (r *PostRepository) GetPostsByIDs(ctx context.Context, postIDs []string, vi
 			COALESCE(p.nsfw_reason, '') as nsfw_reason,
 			p.link_preview_url, p.link_preview_title, p.link_preview_description, p.link_preview_image_url, p.link_preview_site_name,
 			p.overlay_json,
+			p.first_frame_url,
 			COALESCE(t.tier, 'new_user') as author_trust_tier
 		FROM public.posts p
 		JOIN public.profiles pr ON p.author_id = pr.id
@@ -340,6 +343,7 @@ func (r *PostRepository) GetPostsByIDs(ctx context.Context, postIDs []string, vi
 			&p.IsNSFW, &p.NSFWReason,
 			&p.LinkPreviewURL, &p.LinkPreviewTitle, &p.LinkPreviewDescription, &p.LinkPreviewImageURL, &p.LinkPreviewSiteName,
 			&p.OverlayJSON,
+			&p.FirstFrameURL,
 			&p.AuthorTrustTier,
 		)
 		if err != nil {
@@ -539,6 +543,7 @@ func (r *PostRepository) GetPostByID(ctx context.Context, postID string, userID 
 			COALESCE(p.nsfw_reason, '') as nsfw_reason,
 			p.link_preview_url, p.link_preview_title, p.link_preview_description, p.link_preview_image_url, p.link_preview_site_name,
 			p.overlay_json,
+			p.first_frame_url,
 			COALESCE(t.tier, 'new_user') as author_trust_tier
 		FROM public.posts p
 		JOIN public.profiles pr ON p.author_id = pr.id
@@ -592,6 +597,7 @@ func (r *PostRepository) GetPostByID(ctx context.Context, postID string, userID 
 		&p.IsNSFW, &p.NSFWReason,
 		&p.LinkPreviewURL, &p.LinkPreviewTitle, &p.LinkPreviewDescription, &p.LinkPreviewImageURL, &p.LinkPreviewSiteName,
 		&p.OverlayJSON,
+		&p.FirstFrameURL,
 		&p.AuthorTrustTier,
 	)
 	if err != nil {

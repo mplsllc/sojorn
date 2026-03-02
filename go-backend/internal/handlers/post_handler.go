@@ -737,6 +737,13 @@ func (h *PostHandler) CreatePost(c *gin.Context) {
 
 			// Clean up temp frames from R2
 			go h.videoProcessor.DeleteFrames(context.Background(), frames)
+
+			// Extract first-frame WebP thumbnail for fast initial render
+			if firstFrameURL, ffErr := h.videoProcessor.ExtractFirstFrameWebP(c.Request.Context(), *req.VideoURL); ffErr == nil {
+				post.FirstFrameURL = &firstFrameURL
+			} else {
+				log.Warn().Err(ffErr).Str("video_url", *req.VideoURL).Msg("[VideoProcessor] ExtractFirstFrameWebP failed")
+			}
 		}
 	}
 

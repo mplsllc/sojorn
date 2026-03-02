@@ -51,6 +51,9 @@ type Post struct {
 	// Audio overlay URL — background music track attached to this post
 	AudioOverlayURL *string `json:"audio_overlay_url,omitempty" db:"audio_overlay_url"`
 
+	// First frame WebP — thumbnail extracted from video at upload time
+	FirstFrameURL *string `json:"first_frame_url,omitempty" db:"first_frame_url"`
+
 	// Link preview (populated via enrichment, not in every query)
 	LinkPreviewURL         *string    `json:"link_preview_url,omitempty" db:"link_preview_url"`
 	LinkPreviewTitle       *string    `json:"link_preview_title,omitempty" db:"link_preview_title"`

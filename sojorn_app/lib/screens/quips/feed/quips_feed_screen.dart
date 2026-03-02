@@ -30,6 +30,7 @@ class Quip {
   final int? durationMs;
   final int commentCount;
   final String? overlayJson;
+  final String? firstFrameUrl;
   final Map<String, int> reactions;
   final Set<String> myReactions;
 
@@ -45,6 +46,7 @@ class Quip {
     this.durationMs,
     this.commentCount = 0,
     this.overlayJson,
+    this.firstFrameUrl,
     this.reactions = const {},
     this.myReactions = const {},
   });
@@ -67,6 +69,7 @@ class Quip {
       durationMs: map['duration_ms'] as int?,
       commentCount: _parseCount(map['comment_count']),
       overlayJson: map['overlay_json'] as String?,
+      firstFrameUrl: map['first_frame_url'] as String?,
       reactions: _parseReactions(map['reactions']),
       myReactions: _parseMyReactions(map['my_reactions']),
     );
