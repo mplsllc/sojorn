@@ -3329,7 +3329,16 @@ func (h *AdminHandler) AdminImportContent(c *gin.Context) {
 		}
 
 		if item.ThumbnailURL != "" {
-			thumbnailURL = &item.ThumbnailURL
+			// Mirror external thumbnails (e.g. TikTok CDN) to R2 before storing.
+			thumbSrc := item.ThumbnailURL
+			if !isOurDomain(thumbSrc) {
+				if mirrored, err := h.mirrorToR2(c.Request.Context(), thumbSrc, "imports/thumbs"); err == nil {
+					thumbSrc = mirrored
+				} else {
+					log.Warn().Err(err).Str("url", thumbSrc).Msg("[Import] thumbnail mirror failed — storing original")
+				}
+			}
+			thumbnailURL = &thumbSrc
 		}
 
 		if item.CategoryID != "" {
@@ -6198,4 +6207,56 @@ func (h *AdminHandler) TriggerBeaconSync(c *gin.Context) {
 
 	h.beaconIngestion.TriggerSync(req.Source)
 	c.JSON(http.StatusOK, gin.H{"status": "triggered", "source": req.Source})
+}
+
+// isOurDomain returns true if the URL is hosted on a Sojorn-controlled domain.
+func isOurDomain(url string) bool {
+	return strings.Contains(url, "img.sojorn.net") ||
+		strings.Contains(url, "quips.sojorn.net") ||
+		strings.Contains(url, "img.gosojorn.com") ||
+		strings.Contains(url, "quips.gosojorn.com")
+}
+
+// mirrorToR2 downloads an external image URL and uploads it to the media bucket.
+// Returns the R2 public URL. Used to ensure no third-party CDN URLs are stored in the DB.
+func (h *AdminHandler) mirrorToR2(ctx context.Context, externalURL string, keyPrefix string) (string, error) {
+	if h.s3Client == nil {
+		return "", fmt.Errorf("s3 client not configured")
+	}
+	resp, err := http.Get(externalURL) //nolint:noctx
+	if err != nil {
+		return "", fmt.Errorf("mirror fetch: %w", err)
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		return "", fmt.Errorf("mirror: remote returned %d", resp.StatusCode)
+	}
+	data, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return "", fmt.Errorf("mirror read: %w", err)
+	}
+
+	// Derive extension from URL path (strip query string first)
+	rawPath := strings.Split(externalURL, "?")[0]
+	ext := filepath.Ext(rawPath)
+	if ext == "" || len(ext) > 5 {
+		ext = ".jpg"
+	}
+	key := fmt.Sprintf("%s/%d%s", keyPrefix, time.Now().UnixNano(), ext)
+
+	contentType := resp.Header.Get("Content-Type")
+	if contentType == "" {
+		contentType = "image/jpeg"
+	}
+
+	_, err = h.s3Client.PutObject(ctx, &s3.PutObjectInput{
+		Bucket:      aws.String(h.mediaBucket),
+		Key:         aws.String(key),
+		Body:        bytes.NewReader(data),
+		ContentType: aws.String(contentType),
+	})
+	if err != nil {
+		return "", fmt.Errorf("mirror upload: %w", err)
+	}
+	return fmt.Sprintf("https://%s/%s", h.imgDomain, key), nil
 }

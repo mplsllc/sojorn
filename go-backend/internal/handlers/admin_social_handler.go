@@ -518,9 +518,10 @@ func (h *AdminHandler) FetchSocialContent(c *gin.Context) {
 // DownloadSocialMedia downloads a single piece of content and uploads to R2.
 func (h *AdminHandler) DownloadSocialMedia(c *gin.Context) {
 	var req struct {
-		URL       string `json:"url" binding:"required"`
-		Platform  string `json:"platform"`
-		MediaType string `json:"media_type"` // video or image
+		URL          string `json:"url" binding:"required"`
+		Platform     string `json:"platform"`
+		MediaType    string `json:"media_type"`    // video or image
+		ThumbnailURL string `json:"thumbnail_url"` // optional: mirror to R2
 	}
 
 	if err := c.ShouldBindJSON(&req); err != nil {
@@ -678,11 +679,25 @@ func (h *AdminHandler) DownloadSocialMedia(c *gin.Context) {
 
 	mediaURL := fmt.Sprintf("https://%s/%s", h.vidDomain, r2Key)
 
-	c.JSON(http.StatusOK, gin.H{
+	// Mirror thumbnail to R2 so we never store third-party CDN URLs in the DB.
+	thumbURL := req.ThumbnailURL
+	if thumbURL != "" && !isOurDomain(thumbURL) {
+		if r2Thumb, err := h.mirrorToR2(c.Request.Context(), thumbURL, "imports/thumbs"); err == nil {
+			thumbURL = r2Thumb
+		} else {
+			log.Warn().Err(err).Str("url", thumbURL).Msg("[SocialImport] thumbnail mirror failed — using original")
+		}
+	}
+
+	resp := gin.H{
 		"media_url": mediaURL,
 		"r2_key":    r2Key,
 		"size":      len(fileData),
-	})
+	}
+	if thumbURL != "" {
+		resp["thumbnail_url"] = thumbURL
+	}
+	c.JSON(http.StatusOK, resp)
 }
 
 func detectPlatform(url string) string {

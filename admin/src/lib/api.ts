@@ -672,11 +672,14 @@ class ApiClient {
     });
   }
 
-  async downloadSocialMedia(url: string, platform: string, mediaType: string) {
-    return this.request<any>('/api/v1/admin/social/download', {
-      method: 'POST',
-      body: JSON.stringify({ url, platform, media_type: mediaType }),
-    });
+  async downloadSocialMedia(url: string, platform: string, mediaType: string, thumbnailUrl?: string) {
+    return this.request<{ media_url: string; r2_key: string; size: number; thumbnail_url?: string }>(
+      '/api/v1/admin/social/download',
+      {
+        method: 'POST',
+        body: JSON.stringify({ url, platform, media_type: mediaType, thumbnail_url: thumbnailUrl }),
+      }
+    );
   }
 
   async listSocialCookies() {

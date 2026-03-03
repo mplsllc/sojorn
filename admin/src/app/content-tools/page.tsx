@@ -820,10 +820,13 @@ function SocialImportPanel() {
   const [importing, setImporting] = useState(false);
   const [downloadProgress, setDownloadProgress] = useState<Record<string, 'pending' | 'downloading' | 'done' | 'error'>>({});
   const [downloadedUrls, setDownloadedUrls] = useState<Record<string, string>>({});
+  const [downloadedThumbs, setDownloadedThumbs] = useState<Record<string, string>>({});
   const [importResult, setImportResult] = useState<any>(null);
   const [fetchLimit, setFetchLimit] = useState(20);
   const [dateAfter, setDateAfter] = useState('');
   const [dateBefore, setDateBefore] = useState('');
+  const [minDuration, setMinDuration] = useState('');
+  const [maxDuration, setMaxDuration] = useState('');
   const [editingItem, setEditingItem] = useState<string | null>(null);
 
   const handleFetch = async () => {
@@ -865,8 +868,13 @@ function SocialImportPanel() {
     });
   };
 
-  const newItems = items.filter((i) => !i.imported);
-  const importedItems = items.filter((i) => i.imported);
+  const filteredItems = items.filter((item) => {
+    if (minDuration !== '' && item.duration < parseInt(minDuration)) return false;
+    if (maxDuration !== '' && item.duration > parseInt(maxDuration)) return false;
+    return true;
+  });
+  const newItems = filteredItems.filter((i) => !i.imported);
+  const importedItems = filteredItems.filter((i) => i.imported);
 
   const selectAll = () => {
     if (selected.size === newItems.length) {
@@ -901,6 +909,7 @@ function SocialImportPanel() {
     // Step 1: Download each selected item
     const progress: Record<string, 'pending' | 'downloading' | 'done' | 'error'> = {};
     const urls: Record<string, string> = {};
+    const thumbs: Record<string, string> = {};
     selectedItems.forEach((i) => { progress[i.id] = 'pending'; });
     setDownloadProgress({ ...progress });
 
@@ -908,8 +917,9 @@ function SocialImportPanel() {
       progress[item.id] = 'downloading';
       setDownloadProgress({ ...progress });
       try {
-        const result = await api.downloadSocialMedia(item.url, platform, item.media_type);
-        urls[item.id] = result.media_url || result.local_path || item.url;
+        const result = await api.downloadSocialMedia(item.url, platform, item.media_type, item.thumbnail_url);
+        urls[item.id] = result.media_url || item.url;
+        if (result.thumbnail_url) thumbs[item.id] = result.thumbnail_url;
         progress[item.id] = 'done';
       } catch {
         urls[item.id] = item.url;
@@ -917,6 +927,7 @@ function SocialImportPanel() {
       }
       setDownloadProgress({ ...progress });
       setDownloadedUrls({ ...urls });
+      setDownloadedThumbs({ ...thumbs });
     }
 
     // Step 2: Group by content type and import, using overrides for body text
@@ -941,7 +952,7 @@ function SocialImportPanel() {
             return {
               body,
               media_url: urls[item.id] || item.url,
-              thumbnail_url: item.thumbnail_url,
+              thumbnail_url: downloadedThumbs[item.id] || item.thumbnail_url,
               duration_ms: item.duration ? item.duration * 1000 : undefined,
               visibility: 'public',
               // Social import tracking
@@ -1079,6 +1090,46 @@ function SocialImportPanel() {
         <span className="text-[10px] text-gray-400">Leave blank for no date filter</span>
       </div>
 
+      {/* Duration Filter */}
+      <div className="flex items-center gap-3 mb-4">
+        <div className="flex items-center gap-2">
+          <label className="text-xs font-medium text-gray-500 whitespace-nowrap">Min sec</label>
+          <input
+            type="number"
+            min="0"
+            max="7200"
+            placeholder="e.g. 30"
+            value={minDuration}
+            onChange={(e) => setMinDuration(e.target.value)}
+            title="Only show videos at least this many seconds long"
+            className="w-24 px-2 py-1.5 border border-warm-300 rounded-lg text-sm focus:ring-1 focus:ring-brand-500"
+          />
+        </div>
+        <div className="flex items-center gap-2">
+          <label className="text-xs font-medium text-gray-500 whitespace-nowrap">Max sec</label>
+          <input
+            type="number"
+            min="0"
+            max="7200"
+            placeholder="e.g. 60"
+            value={maxDuration}
+            onChange={(e) => setMaxDuration(e.target.value)}
+            title="Only show videos at most this many seconds long"
+            className="w-24 px-2 py-1.5 border border-warm-300 rounded-lg text-sm focus:ring-1 focus:ring-brand-500"
+          />
+        </div>
+        {(minDuration || maxDuration) && (
+          <button
+            type="button"
+            onClick={() => { setMinDuration(''); setMaxDuration(''); }}
+            className="text-xs text-gray-500 hover:text-gray-700"
+          >
+            Clear duration
+          </button>
+        )}
+        <span className="text-[10px] text-gray-400">Filter by video length (seconds)</span>
+      </div>
+
       {error && (
         <div className="mb-4 p-3 rounded-lg text-sm bg-red-50 text-red-800 border border-red-200 flex items-start gap-2">
           <AlertCircle className="w-4 h-4 mt-0.5 flex-shrink-0" />
@@ -1104,7 +1155,7 @@ function SocialImportPanel() {
                   onClick={selectAllIncluding}
                   className="text-sm text-gray-500 hover:text-gray-700 font-medium"
                 >
-                  Select All ({items.length})
+                  Select All ({filteredItems.length}{filteredItems.length < items.length ? ` of ${items.length}` : ''})
                 </button>
               )}
               <span className="text-sm text-gray-500">
@@ -1132,7 +1183,7 @@ function SocialImportPanel() {
           </div>
 
           <div className="space-y-2 max-h-[700px] overflow-y-auto">
-            {items.map((item) => {
+            {filteredItems.map((item) => {
               const isSelected = selected.has(item.id);
               const dlStatus = downloadProgress[item.id];
               const ov = overrides[item.id];
