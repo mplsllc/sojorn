@@ -829,6 +829,31 @@ class ApiClient {
     return this.request<any>(`/api/v1/admin/waitlist/${id}`, { method: 'DELETE' });
   }
 
+  async importWaitlist(emails: Array<{ email: string; name?: string; status?: string }>) {
+    return this.request<{ imported: number; skipped: number; errors: string[] }>('/api/v1/admin/waitlist/import', {
+      method: 'POST',
+      body: JSON.stringify({ emails }),
+    });
+  }
+
+  async emailBlastWaitlist(payload: {
+    status_filter: string;
+    subject: string;
+    title: string;
+    header?: string;
+    content: string;
+    button_text?: string;
+    button_url?: string;
+    button_color?: string;
+    footer?: string;
+    text_body?: string;
+  }) {
+    return this.request<{ sent: number; failed: number }>('/api/v1/admin/waitlist/blast', {
+      method: 'POST',
+      body: JSON.stringify(payload),
+    });
+  }
+
   // Feed impression reset
   async resetFeedImpressions(userId: string) {
     return this.request<any>(`/api/v1/admin/users/${userId}/feed-impressions`, { method: 'DELETE' });

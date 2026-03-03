@@ -4764,6 +4764,165 @@ func (h *AdminHandler) AdminDeleteWaitlist(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{"message": "Deleted"})
 }
 
+// AdminImportWaitlist POST /admin/waitlist/import
+func (h *AdminHandler) AdminImportWaitlist(c *gin.Context) {
+	ctx := c.Request.Context()
+
+	var req struct {
+		Emails []struct {
+			Email  string `json:"email"`
+			Name   string `json:"name"`
+			Status string `json:"status"`
+		} `json:"emails" binding:"required"`
+	}
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+	if len(req.Emails) == 0 {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "No emails provided"})
+		return
+	}
+	if len(req.Emails) > 5000 {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Maximum 5000 emails per import"})
+		return
+	}
+
+	var imported, skipped int
+	var errs []string
+	for _, row := range req.Emails {
+		email := strings.ToLower(strings.TrimSpace(row.Email))
+		if email == "" || !strings.Contains(email, "@") {
+			skipped++
+			continue
+		}
+		status := row.Status
+		if status == "" {
+			status = "pending"
+		}
+		tag, err := h.pool.Exec(ctx,
+			`INSERT INTO waitlist (email, name, status, created_at, updated_at)
+			 VALUES ($1, NULLIF($2,''), $3, NOW(), NOW())
+			 ON CONFLICT (email) DO NOTHING`,
+			email, row.Name, status)
+		if err != nil {
+			errs = append(errs, email+": "+err.Error())
+			continue
+		}
+		if tag.RowsAffected() > 0 {
+			imported++
+		} else {
+			skipped++
+		}
+	}
+
+	adminID, _ := c.Get("user_id")
+	h.pool.Exec(ctx, `INSERT INTO audit_log (actor_id, action, target_type, details) VALUES ($1, 'waitlist_import', 'waitlist', $2)`,
+		adminID, mustMarshal(map[string]interface{}{"imported": imported, "skipped": skipped}))
+
+	c.JSON(http.StatusOK, gin.H{"imported": imported, "skipped": skipped, "errors": errs})
+}
+
+// AdminEmailBlast POST /admin/waitlist/blast
+func (h *AdminHandler) AdminEmailBlast(c *gin.Context) {
+	ctx := c.Request.Context()
+
+	if h.emailService == nil {
+		c.JSON(http.StatusServiceUnavailable, gin.H{"error": "Email service not configured"})
+		return
+	}
+
+	var req struct {
+		StatusFilter string `json:"status_filter"`
+		Subject      string `json:"subject" binding:"required"`
+		Title        string `json:"title" binding:"required"`
+		Header       string `json:"header"`
+		Content      string `json:"content" binding:"required"`
+		ButtonText   string `json:"button_text"`
+		ButtonURL    string `json:"button_url"`
+		ButtonColor  string `json:"button_color"`
+		Footer       string `json:"footer"`
+		TextBody     string `json:"text_body"`
+	}
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+
+	query := `SELECT email, name FROM waitlist`
+	args := []interface{}{}
+	if req.StatusFilter != "" && req.StatusFilter != "all" {
+		query += " WHERE status = $1"
+		args = append(args, req.StatusFilter)
+	}
+	query += " ORDER BY created_at ASC"
+
+	rows, err := h.pool.Query(ctx, query, args...)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to fetch recipients"})
+		return
+	}
+	defer rows.Close()
+
+	type recipient struct {
+		Email string
+		Name  string
+	}
+	var recipients []recipient
+	for rows.Next() {
+		var email string
+		var name *string
+		if scanErr := rows.Scan(&email, &name); scanErr == nil {
+			n := ""
+			if name != nil {
+				n = *name
+			}
+			recipients = append(recipients, recipient{Email: email, Name: n})
+		}
+	}
+	rows.Close()
+
+	if len(recipients) == 0 {
+		c.JSON(http.StatusOK, gin.H{"sent": 0, "failed": 0, "message": "No recipients matched"})
+		return
+	}
+	if len(recipients) > 5000 {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Too many recipients (max 5000)"})
+		return
+	}
+
+	buttonColor := req.ButtonColor
+	if buttonColor == "" {
+		buttonColor = "#4338CA"
+	}
+	htmlBody := h.emailService.BuildHTMLEmailWithColor(
+		req.Title, req.Header, req.Content,
+		req.ButtonURL, req.ButtonText, req.Footer, buttonColor,
+	)
+	textBody := req.TextBody
+	if textBody == "" {
+		textBody = req.Header + "\n\n" + req.Content
+	}
+
+	var sent, failed int
+	for _, r := range recipients {
+		if sendErr := h.emailService.SendGenericEmail(r.Email, r.Name, req.Subject, htmlBody, textBody); sendErr != nil {
+			failed++
+		} else {
+			sent++
+		}
+	}
+
+	adminID, _ := c.Get("user_id")
+	h.pool.Exec(ctx, `INSERT INTO audit_log (actor_id, action, target_type, details) VALUES ($1, 'waitlist_email_blast', 'waitlist', $2)`,
+		adminID, mustMarshal(map[string]interface{}{
+			"subject": req.Subject, "status_filter": req.StatusFilter,
+			"sent": sent, "failed": failed,
+		}))
+
+	c.JSON(http.StatusOK, gin.H{"sent": sent, "failed": failed})
+}
+
 // ──────────────────────────────────────────────
 // Feed Impression Reset
 // ──────────────────────────────────────────────

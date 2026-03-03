@@ -935,6 +935,8 @@ func main() {
 
 			// Waitlist management
 			adminOnly.GET("/waitlist", adminHandler.AdminListWaitlist)
+			adminOnly.POST("/waitlist/import", adminHandler.AdminImportWaitlist)
+			adminOnly.POST("/waitlist/blast", adminHandler.AdminEmailBlast)
 			adminOnly.PATCH("/waitlist/:id", adminHandler.AdminUpdateWaitlist)
 			adminOnly.DELETE("/waitlist/:id", adminHandler.AdminDeleteWaitlist)
 
