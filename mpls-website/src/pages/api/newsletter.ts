@@ -4,27 +4,29 @@
 
 import type { APIRoute } from 'astro';
 
-const TURNSTILE_SECRET = process.env.TURNSTILE_SECRET;
 const SOJORN_API_URL = process.env.SOJORN_API_URL || 'https://api.sojorn.net';
 
-if (!TURNSTILE_SECRET) {
-  throw new Error('Missing required environment variable: TURNSTILE_SECRET');
-}
-
-async function verifyTurnstileToken(token: string): Promise<boolean> {
-  const response = await fetch('https://challenges.cloudflare.com/turnstile/v0/siteverify', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-    body: `secret=${encodeURIComponent(TURNSTILE_SECRET as string)}&response=${encodeURIComponent(token)}`,
-  });
-  if (!response.ok) return false;
-  const data = await response.json();
-  return data.success === true;
+async function verifyAltchaToken(token: string): Promise<boolean> {
+  if (!token || token.length < 10) return false;
+  try {
+    const decoded = JSON.parse(atob(token));
+    const { challenge, number, salt } = decoded;
+    if (!challenge || typeof number !== 'number' || !salt) return false;
+    // Verify proof-of-work: SHA-256(salt + number) === challenge
+    const encoded = new TextEncoder().encode(String(salt) + String(number));
+    const hashBuffer = await crypto.subtle.digest('SHA-256', encoded);
+    const hashHex = Array.from(new Uint8Array(hashBuffer))
+      .map((b) => b.toString(16).padStart(2, '0'))
+      .join('');
+    return hashHex === challenge;
+  } catch {
+    return false;
+  }
 }
 
 export const POST: APIRoute = async ({ request }) => {
   try {
-    const { email, turnstileToken } = await request.json();
+    const { email, altchaToken } = await request.json();
 
     if (!email || typeof email !== 'string' || !email.includes('@')) {
       return new Response(
@@ -33,14 +35,14 @@ export const POST: APIRoute = async ({ request }) => {
       );
     }
 
-    if (!turnstileToken || typeof turnstileToken !== 'string') {
+    if (!altchaToken || typeof altchaToken !== 'string') {
       return new Response(
         JSON.stringify({ error: 'Security verification required' }),
         { status: 400, headers: { 'Content-Type': 'application/json' } }
       );
     }
 
-    const isValid = await verifyTurnstileToken(turnstileToken);
+    const isValid = await verifyAltchaToken(altchaToken);
     if (!isValid) {
       return new Response(
         JSON.stringify({ error: 'Security verification failed. Please try again.' }),
