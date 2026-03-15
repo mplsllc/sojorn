@@ -5,6 +5,7 @@
 'use client';
 
 import AdminShell from '@/components/AdminShell';
+import PerPageSelect from '@/components/PerPageSelect';
 import SelectionBar from '@/components/SelectionBar';
 import { api } from '@/lib/api';
 import { statusColor, formatDateTime } from '@/lib/utils';
@@ -45,10 +46,11 @@ export default function ModerationPage() {
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [bulkLoading, setBulkLoading] = useState(false);
   const [loadingMore, setLoadingMore] = useState(false);
+  const [limit, setLimit] = useState(50);
 
   const fetchQueue = () => {
     setLoading(true);
-    api.getModerationQueue({ limit: 50, status: statusFilter })
+    api.getModerationQueue({ limit, status: statusFilter })
       .then((data) => { setItems(data.items); setTotal(data.total); })
       .catch(() => {})
       .finally(() => setLoading(false));
@@ -56,13 +58,13 @@ export default function ModerationPage() {
 
   const loadMore = () => {
     setLoadingMore(true);
-    api.getModerationQueue({ limit: 50, status: statusFilter, offset: items.length })
+    api.getModerationQueue({ limit, status: statusFilter, offset: items.length })
       .then((data) => { setItems((prev) => [...prev, ...(data.items || [])]); setTotal(data.total || 0); })
       .catch(() => {})
       .finally(() => setLoadingMore(false));
   };
 
-  useEffect(() => { fetchQueue(); }, [statusFilter]);
+  useEffect(() => { fetchQueue(); }, [statusFilter, limit]);
 
   const handleReview = async (id: string, action: string) => {
     try {
@@ -98,11 +100,14 @@ export default function ModerationPage() {
           <h1 className="text-2xl font-bold text-gray-900">Moderation Queue</h1>
           <p className="text-sm text-gray-500 mt-1">{total} items {statusFilter}</p>
         </div>
-        <select className="input w-auto" value={statusFilter} onChange={(e) => setStatusFilter(e.target.value)}>
-          <option value="pending">Pending</option>
-          <option value="actioned">Actioned</option>
-          <option value="dismissed">Dismissed</option>
-        </select>
+        <div className="flex items-center gap-3">
+          <PerPageSelect value={limit} onChange={(n) => { setLimit(n); setItems([]); }} />
+          <select className="input w-auto" title="Filter by status" value={statusFilter} onChange={(e) => setStatusFilter(e.target.value)}>
+            <option value="pending">Pending</option>
+            <option value="actioned">Actioned</option>
+            <option value="dismissed">Dismissed</option>
+          </select>
+        </div>
       </div>
 
       {statusFilter === 'pending' && (

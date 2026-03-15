@@ -5,6 +5,7 @@
 'use client';
 
 import AdminShell from '@/components/AdminShell';
+import PerPageSelect from '@/components/PerPageSelect';
 import SelectionBar from '@/components/SelectionBar';
 import { api } from '@/lib/api';
 import { statusColor, formatDate, truncate } from '@/lib/utils';
@@ -33,7 +34,7 @@ function UsersPageInner() {
   const [offset, setOffset] = useState(0);
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [bulkLoading, setBulkLoading] = useState(false);
-  const limit = 25;
+  const [limit, setLimit] = useState(25);
 
   useEffect(() => {
     const urlStatus = searchParams.get('status');
@@ -55,7 +56,7 @@ function UsersPageInner() {
       .finally(() => setLoading(false));
   };
 
-  useEffect(() => { fetchUsers(); }, [offset, statusFilter, roleFilter, sort]);
+  useEffect(() => { fetchUsers(); }, [offset, statusFilter, roleFilter, sort, limit]);
 
   const handleSearch = (e: React.FormEvent) => {
     e.preventDefault();
@@ -252,7 +253,8 @@ function UsersPageInner() {
           <p className="text-sm text-gray-500">
             Showing {offset + 1}–{Math.min(offset + limit, total)} of {total}
           </p>
-          <div className="flex gap-2">
+          <div className="flex items-center gap-3">
+            <PerPageSelect value={limit} onChange={(n) => { setLimit(n); setOffset(0); }} />
             <button className="btn-secondary text-sm py-1.5 px-3" disabled={offset === 0} onClick={() => setOffset(Math.max(0, offset - limit))}>
               <ChevronLeft className="w-4 h-4" />
             </button>

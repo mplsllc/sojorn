@@ -6,6 +6,7 @@
 
 import AdminShell from '@/components/AdminShell';
 import AdminOnlyGuard from '@/components/AdminOnlyGuard';
+import PerPageSelect from '@/components/PerPageSelect';
 import { api } from '@/lib/api';
 import { formatDate, truncate } from '@/lib/utils';
 import { ChevronLeft, ChevronRight, Search, Shield, ShieldOff, MessageSquare, Users, Building2, Pin, PinOff, Plus, Pencil, Trash2, Save } from 'lucide-react';
@@ -59,7 +60,7 @@ export default function NeighborhoodsPage() {
   const [editModal, setEditModal] = useState<Neighborhood | null>(null);
   const [editForm, setEditForm] = useState({ name: '', city: '', state: '', zip_code: '', radius_meters: '' });
   const [saving, setSaving] = useState(false);
-  const limit = 25;
+  const [limit, setLimit] = useState(25);
 
   const selectedStats = useMemo(() => {
     if (!selected) return null;
@@ -100,7 +101,7 @@ export default function NeighborhoodsPage() {
 
   useEffect(() => {
     fetchNeighborhoods();
-  }, [offset, sort, order]);
+  }, [offset, sort, order, limit]);
 
   const onSearch = (e: React.FormEvent) => {
     e.preventDefault();
@@ -338,7 +339,8 @@ export default function NeighborhoodsPage() {
           </div>
           <div className="border-t border-warm-300 px-4 py-3 flex items-center justify-between">
             <p className="text-sm text-gray-500">Showing {Math.min(offset + 1, total)}–{Math.min(offset + limit, total)} of {total}</p>
-            <div className="flex gap-2">
+            <div className="flex items-center gap-3">
+              <PerPageSelect value={limit} onChange={(n) => { setLimit(n); setOffset(0); }} />
               <button className="btn-secondary text-sm py-1.5 px-3" disabled={offset === 0} onClick={() => setOffset(Math.max(0, offset - limit))}><ChevronLeft className="w-4 h-4" /></button>
               <button className="btn-secondary text-sm py-1.5 px-3" disabled={offset + limit >= total} onClick={() => setOffset(offset + limit)}><ChevronRight className="w-4 h-4" /></button>
             </div>

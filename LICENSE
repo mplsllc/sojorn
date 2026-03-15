@@ -1,45 +1,25 @@
-Sojorn — Split Licensing
+Sojorn
 
 Copyright (c) 2026 MPLS LLC
 
-This project uses a split licensing model. Each component is licensed
-independently as described below.
+This program is free software: you can redistribute it and/or modify
+it under the terms of the GNU Affero General Public License as published
+by the Free Software Foundation, either version 3 of the License, or
+(at your option) any later version.
 
-Component                License                  License File
-─────────────────────    ───────────────────────   ─────────────────────
-Go API Engine            BSL 1.1                   go-backend/LICENSE
-AI Gateway               BSL 1.1                   ai-gateway/LICENSE
-Flutter App              AGPL-3.0                  sojorn_app/LICENSE
-Admin Panel              AGPL-3.0                  admin/LICENSE
-Website                  AGPL-3.0                  website/LICENSE
+This program is distributed in the hope that it will be useful,
+but WITHOUT ANY WARRANTY; without even the implied warranty of
+MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
+GNU Affero General Public License for more details.
 
-Business Source License 1.1 (BSL) Components
-─────────────────────────────────────────────
+You should have received a copy of the GNU Affero General Public License
+along with this program. If not, see <https://www.gnu.org/licenses/>.
 
-The Go API Engine and AI Gateway are licensed under the Business Source
-License 1.1. You may copy, modify, create derivative works, redistribute,
-and make non-production use of these components. Production use requires a
-commercial license from the Licensor.
+SPDX-License-Identifier: AGPL-3.0-or-later
 
-BSL-licensed code converts to Apache License 2.0 four years after each
-release (Change Date: 2030-02-21 for the initial release).
-
-For commercial licensing inquiries: hello@sojorn.net
-
-AGPL-3.0 Components
-────────────────────
-
-The Flutter App, Admin Panel, and Website are licensed under the GNU Affero
-General Public License v3.0. If you modify and deploy these components as a
-network service, you must make your modified source code available to users.
-
-The Flutter App license was changed from Apache License 2.0 to AGPL-3.0 in
-February 2026. This change enables direct code sharing with the community of
-AGPL-licensed open source social platforms (Mastodon, Misskey, Pixelfed, etc.)
-while ensuring improvements flow back to the commons.
-
-All Source Code
-───────────────
+The full license text is available at:
+https://www.gnu.org/licenses/agpl-3.0.html
 
 All source code is publicly available for audit and transparency at:
-https://gitlab.com/patrickbritton3/sojorn
+https://gitlab.com/mpls/sojorn
+https://github.com/mplsllc/sojorn

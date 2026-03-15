@@ -6,6 +6,7 @@
 
 import AdminShell from '@/components/AdminShell';
 import AdminOnlyGuard from '@/components/AdminOnlyGuard';
+import PerPageSelect from '@/components/PerPageSelect';
 import { api } from '@/lib/api';
 import { formatDate } from '@/lib/utils';
 import { useEffect, useState } from 'react';
@@ -24,7 +25,7 @@ export default function GroupsPage() {
   const [editGroup, setEditGroup] = useState<any | null>(null);
   const [editForm, setEditForm] = useState({ name: '', description: '', is_private: false, is_active: true });
   const [editSaving, setEditSaving] = useState(false);
-  const limit = 50;
+  const [limit, setLimit] = useState(50);
 
   const fetchGroups = () => {
     setLoading(true);
@@ -34,7 +35,7 @@ export default function GroupsPage() {
       .finally(() => setLoading(false));
   };
 
-  useEffect(() => { fetchGroups(); }, [offset]);
+  useEffect(() => { fetchGroups(); }, [offset, limit]);
 
   const handleSearch = (e: React.FormEvent) => {
     e.preventDefault();
@@ -213,6 +214,7 @@ export default function GroupsPage() {
               className="text-sm px-3 py-1.5 rounded border disabled:opacity-40">Prev</button>
             <button disabled={groups.length < limit} onClick={() => setOffset(offset + limit)}
               className="text-sm px-3 py-1.5 rounded border disabled:opacity-40">Next</button>
+            <PerPageSelect value={limit} onChange={(n) => { setLimit(n); setOffset(0); }} />
           </div>
         </div>
 

@@ -1,5 +1,5 @@
 // Copyright (c) 2026 MPLS LLC
-// Licensed under the Business Source License 1.1
+// SPDX-License-Identifier: AGPL-3.0-or-later
 // See LICENSE file for details
 
 // Package services — Harmony Score Calculator

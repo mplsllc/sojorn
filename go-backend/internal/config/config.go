@@ -1,5 +1,5 @@
 // Copyright (c) 2026 MPLS LLC
-// Licensed under the Business Source License 1.1
+// SPDX-License-Identifier: AGPL-3.0-or-later
 // See LICENSE file for details
 
 package config
@@ -48,6 +48,7 @@ type Config struct {
 	IcedAPIBase             string // IcedCoffee public-safety API base URL
 	EventbriteAPIKey        string // Eventbrite API key for event ingestion
 	TicketmasterAPIKey      string // Ticketmaster Discovery API key for event ingestion
+	InstanceName            string // Human-readable instance name (shown in /api/v1/instance)
 }
 
 func LoadConfig() *Config {
@@ -98,6 +99,7 @@ func LoadConfig() *Config {
 		IcedAPIBase:             getEnv("ICED_API_BASE", "http://127.0.0.1:8089"),
 		EventbriteAPIKey:        getEnv("EVENTBRITE_API_KEY", ""),
 		TicketmasterAPIKey:      getEnv("TICKETMASTER_API_KEY", ""),
+		InstanceName:            getEnv("INSTANCE_NAME", "Sojorn"),
 	}
 }
 

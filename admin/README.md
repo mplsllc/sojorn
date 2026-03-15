@@ -42,11 +42,11 @@ Secure administration frontend for the Sojorn social network platform.
 
 ```bash
 npm install
-cp .env.local.example .env.local
+# Secrets are managed via Infisical — see hush.mp.ls
 npm run dev
 ```
 
-The admin panel runs on **port 3001** by default.
+The admin panel runs on **port 3002** by default.
 
 ## Environment Variables
 
@@ -68,7 +68,7 @@ UPDATE profiles SET role = 'admin' WHERE handle = 'your_handle';
 npm run build && npm start
 ```
 
-Served behind Nginx with SSL at `admin.sojorn.net`, proxied to port 3001.
+Served behind Nginx with SSL at `admin.sojorn.net`, proxied to port 3002.
 
 ## Moderation Flow
 

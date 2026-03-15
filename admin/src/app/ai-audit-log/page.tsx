@@ -6,6 +6,7 @@
 
 import AdminShell from '@/components/AdminShell';
 import AdminOnlyGuard from '@/components/AdminOnlyGuard';
+import PerPageSelect from '@/components/PerPageSelect';
 import { api } from '@/lib/api';
 import { formatDateTime } from '@/lib/utils';
 import { useEffect, useState, useCallback } from 'react';
@@ -67,7 +68,7 @@ export default function AIAuditLogPage() {
   const [total, setTotal] = useState(0);
   const [loading, setLoading] = useState(true);
   const [page, setPage] = useState(0);
-  const limit = 25;
+  const [limit, setLimit] = useState(25);
 
   // Filters
   const [decisionFilter, setDecisionFilter] = useState('');
@@ -101,7 +102,7 @@ export default function AIAuditLogPage() {
       })
       .catch(() => {})
       .finally(() => setLoading(false));
-  }, [page, decisionFilter, contentTypeFilter, feedbackFilter, searchQuery]);
+  }, [page, decisionFilter, contentTypeFilter, feedbackFilter, searchQuery, limit]);
 
   useEffect(() => { fetchLog(); }, [fetchLog]);
 
@@ -436,32 +437,33 @@ export default function AIAuditLogPage() {
           </div>
 
           {/* Pagination */}
-          {totalPages > 1 && (
-            <div className="flex items-center justify-between mt-6">
-              <p className="text-sm text-gray-500">
-                Showing {page * limit + 1}–{Math.min((page + 1) * limit, total)} of {total}
-              </p>
-              <div className="flex items-center gap-2">
-                <button
-                  onClick={() => setPage(Math.max(0, page - 1))}
-                  disabled={page === 0}
-                  className="flex items-center gap-1 px-3 py-1.5 rounded-lg text-sm font-medium bg-warm-100 hover:bg-warm-200 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
-                >
-                  <ChevronLeft className="w-4 h-4" /> Prev
-                </button>
-                <span className="text-sm text-gray-600 font-medium">
-                  Page {page + 1} of {totalPages}
-                </span>
-                <button
-                  onClick={() => setPage(Math.min(totalPages - 1, page + 1))}
-                  disabled={page >= totalPages - 1}
-                  className="flex items-center gap-1 px-3 py-1.5 rounded-lg text-sm font-medium bg-warm-100 hover:bg-warm-200 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
-                >
-                  Next <ChevronRight className="w-4 h-4" />
-                </button>
-              </div>
+          <div className="flex items-center justify-between mt-6">
+            <p className="text-sm text-gray-500">
+              Showing {page * limit + 1}–{Math.min((page + 1) * limit, total)} of {total}
+            </p>
+            <div className="flex items-center gap-3">
+              <PerPageSelect value={limit} onChange={(n) => { setLimit(n); setPage(0); }} />
+              <button
+                type="button"
+                onClick={() => setPage(Math.max(0, page - 1))}
+                disabled={page === 0}
+                className="flex items-center gap-1 px-3 py-1.5 rounded-lg text-sm font-medium bg-warm-100 hover:bg-warm-200 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+              >
+                <ChevronLeft className="w-4 h-4" /> Prev
+              </button>
+              <span className="text-sm text-gray-600 font-medium">
+                Page {page + 1} of {totalPages}
+              </span>
+              <button
+                type="button"
+                onClick={() => setPage(Math.min(totalPages - 1, page + 1))}
+                disabled={page >= totalPages - 1}
+                className="flex items-center gap-1 px-3 py-1.5 rounded-lg text-sm font-medium bg-warm-100 hover:bg-warm-200 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+              >
+                Next <ChevronRight className="w-4 h-4" />
+              </button>
             </div>
-          )}
+          </div>
         </>
       )}
     </AdminShell>

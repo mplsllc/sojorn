@@ -1,5 +1,5 @@
 // Copyright (c) 2026 MPLS LLC
-// Licensed under the Business Source License 1.1
+// SPDX-License-Identifier: AGPL-3.0-or-later
 // See LICENSE file for details
 
 package main
@@ -23,6 +23,8 @@ import (
 	"github.com/rs/zerolog"
 	"github.com/rs/zerolog/log"
 	"gitlab.com/patrickbritton3/sojorn/go-backend/internal/config"
+	"gitlab.com/patrickbritton3/sojorn/go-backend/internal/extension"
+	ext_audio "gitlab.com/patrickbritton3/sojorn/go-backend/internal/extensions/audio"
 	"gitlab.com/patrickbritton3/sojorn/go-backend/internal/handlers"
 	"gitlab.com/patrickbritton3/sojorn/go-backend/internal/middleware"
 	"gitlab.com/patrickbritton3/sojorn/go-backend/internal/monitoring"
@@ -57,6 +59,23 @@ func main() {
 
 	if err := dbPool.Ping(context.Background()); err != nil {
 		log.Fatal().Err(err).Msg("Unable to ping database")
+	}
+
+	// ── Extension Registry ──────────────────────────────────
+	extRegistry := extension.NewRegistry(dbPool)
+	extRegistry.Register(ext_audio.New(extRegistry))
+	// Future extensions registered here:
+	// extRegistry.Register(ext_beacons.New(extRegistry))
+	// extRegistry.Register(ext_groups.New(extRegistry))
+	// extRegistry.Register(ext_quips.New(extRegistry))
+	// extRegistry.Register(ext_neighborhoods.New(extRegistry))
+	// extRegistry.Register(ext_events.New(extRegistry))
+	// extRegistry.Register(ext_reposts.New(extRegistry))
+	// extRegistry.Register(ext_official.New(extRegistry))
+	// extRegistry.Register(ext_aimod.New(extRegistry))
+
+	if err := extRegistry.LoadEnabledState(context.Background()); err != nil {
+		log.Warn().Err(err).Msg("Failed to load extension state (table may not exist yet)")
 	}
 
 	r := gin.Default()
@@ -271,8 +290,8 @@ func main() {
 	// Image proxy (CORS bypass for web.archive.org, imgur, giphy)
 	imageProxyHandler := handlers.NewImageProxyHandler()
 
-	// Soundbank handler (in-house audio library replacing Freesound)
-	soundsHandler := handlers.NewSoundsHandler(dbPool, cfg.R2Endpoint, cfg.R2AccessKey, cfg.R2SecretKey, cfg.R2MediaBucket, cfg.R2ImgDomain)
+	// Instance handler (public capabilities endpoint + admin config)
+	instanceHandler := handlers.NewInstanceHandler(dbPool, extRegistry)
 
 	// Group events handler
 	eventHandler := handlers.NewEventHandler(dbPool)
@@ -327,6 +346,9 @@ func main() {
 
 	v1 := r.Group("/api/v1")
 	{
+		// Public instance capabilities (unauthenticated — app needs it pre-login)
+		v1.GET("/instance", instanceHandler.GetInstance)
+
 		// Public waitlist signup (no auth required)
 		waitlist := v1.Group("/waitlist")
 		waitlist.Use(middleware.RateLimit(0.2, 3))
@@ -712,11 +734,6 @@ func main() {
 			authorized.PUT("/dashboard/layout", dashboardLayoutHandler.SaveDashboardLayout)
 			authorized.GET("/users/:id/dashboard-layout", dashboardLayoutHandler.GetUserDashboardLayout)
 
-			// Soundbank (in-house audio library)
-			authorized.GET("/sounds", soundsHandler.List)
-			authorized.POST("/sounds/register", soundsHandler.Register)
-			authorized.POST("/sounds/:id/use", soundsHandler.RecordUse)
-
 			// Events (public feed + user's groups)
 			authorized.GET("/events/upcoming", eventHandler.GetUpcomingPublicEvents)
 			authorized.GET("/events/mine", eventHandler.GetMyEvents)
@@ -920,11 +937,6 @@ func main() {
 			adminOnly.GET("/quips/broken", adminHandler.GetBrokenQuips)
 			adminOnly.POST("/quips/:id/repair", adminHandler.RepairQuip)
 
-			// Soundbank management
-			adminOnly.GET("/sounds", soundsHandler.AdminList)
-			adminOnly.POST("/sounds", soundsHandler.AdminCreate)
-			adminOnly.PATCH("/sounds/:id", soundsHandler.AdminUpdate)
-
 			// Test push
 			adminOnly.POST("/notifications/test", notificationHandler.SendTestPush)
 
@@ -949,7 +961,44 @@ func main() {
 			adminOnly.GET("/beacon-alerts/feeds", adminHandler.GetBeaconFeedStatus)
 			adminOnly.PATCH("/beacon-alerts/feeds", adminHandler.ToggleBeaconFeed)
 			adminOnly.POST("/beacon-alerts/feeds/sync", adminHandler.TriggerBeaconSync)
+
+			// Extensions management
+			adminOnly.GET("/extensions", instanceHandler.AdminGetExtensions)
+			adminOnly.PUT("/extensions/:id", instanceHandler.AdminToggleExtension)
+			adminOnly.GET("/instance-config", instanceHandler.AdminGetInstanceConfig)
+			adminOnly.PUT("/instance-config", instanceHandler.AdminUpdateInstanceConfig)
 		}
+	}
+
+	// ── Initialize extensions (register routes on authorized + adminOnly groups) ──
+	extDeps := &extension.Deps{
+		DB:                  dbPool,
+		Config:              cfg,
+		Hub:                 hub,
+		S3Client:            s3Client,
+		AssetService:        assetService,
+		NotificationService: notificationService,
+		ModerationService:   moderationService,
+		ContentFilter:       contentFilter,
+		ContentModerator:    contentModerator,
+		FeedService:         feedService,
+		PushService:         pushService,
+		EmailService:        emailService,
+		LocalAIService:      localAIService,
+		LinkPreviewService:  linkPreviewService,
+	}
+
+	// authorized and adminOnly groups are needed for extension route registration.
+	// We reuse the same middleware-wrapped groups the core routes use.
+	extAuthorized := r.Group("/api/v1")
+	extAuthorized.Use(middleware.AuthMiddleware(cfg.JWTSecret, dbPool))
+	extAdminOnly := r.Group("/api/v1/admin")
+	extAdminOnly.Use(middleware.AuthMiddleware(cfg.JWTSecret, dbPool))
+	extAdminOnly.Use(middleware.AdminMiddleware(dbPool))
+	extAdminOnly.Use(middleware.AdminOnlyMiddleware())
+
+	if err := extRegistry.InitAll(bgCtx, extDeps, extAuthorized, extAdminOnly); err != nil {
+		log.Warn().Err(err).Msg("Extension initialization had errors")
 	}
 
 	// Public claim request endpoint (no auth)

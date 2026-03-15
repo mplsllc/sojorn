@@ -12,7 +12,7 @@ import {
   LayoutDashboard, Users, FileText, Shield, ShieldCheck, Scale, Flag,
   Settings, Activity, LogOut, ChevronLeft, ChevronRight, ChevronDown,
   Sliders, FolderTree, HardDrive, AtSign, Brain, ScrollText, Wrench, Bot,
-  UserCog, ShieldAlert, Cog, Mail, MapPinned, Users2, Video, ClipboardList, Clock, Calendar, Cpu, Radio, Music2, Bell,
+  UserCog, ShieldAlert, Cog, Mail, MapPinned, Users2, Video, ClipboardList, Clock, Calendar, Cpu, Radio, Music2, Bell, Puzzle,
 } from 'lucide-react';
 import { useMemo, useState } from 'react';
 
@@ -89,6 +89,7 @@ const navigation: NavEntry[] = [
     label: 'Platform',
     icon: Cog,
     items: [
+      { href: '/extensions', label: 'Extensions', icon: Puzzle },
       { href: '/beacon-alerts', label: 'Beacon Alerts', icon: Radio },
       { href: '/algorithm', label: 'Algorithm', icon: Sliders },
       { href: '/usernames', label: 'Usernames', icon: AtSign },

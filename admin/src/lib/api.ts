@@ -981,6 +981,32 @@ class ApiClient {
       { method: 'POST', body: JSON.stringify(data) },
     );
   }
+
+  // Extensions
+  async listExtensions() {
+    return this.request<{ id: string; name: string; description: string; dependencies: string[]; enabled: boolean }[]>(
+      '/api/v1/admin/extensions',
+    );
+  }
+
+  async toggleExtension(id: string, enabled: boolean) {
+    return this.request<{ id: string; enabled: boolean }>(
+      `/api/v1/admin/extensions/${id}`,
+      { method: 'PUT', body: JSON.stringify({ enabled }) },
+    );
+  }
+
+  // Instance config
+  async getInstanceConfig() {
+    return this.request<Record<string, string>>('/api/v1/admin/instance-config');
+  }
+
+  async updateInstanceConfig(config: Record<string, string>) {
+    return this.request<{ updated: number }>(
+      '/api/v1/admin/instance-config',
+      { method: 'PUT', body: JSON.stringify(config) },
+    );
+  }
 }
 
 export const api = new ApiClient();

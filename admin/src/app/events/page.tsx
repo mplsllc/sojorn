@@ -6,6 +6,7 @@
 
 import AdminShell from '@/components/AdminShell';
 import AdminOnlyGuard from '@/components/AdminOnlyGuard';
+import PerPageSelect from '@/components/PerPageSelect';
 import { api } from '@/lib/api';
 import { formatDateTime } from '@/lib/utils';
 import { useEffect, useState } from 'react';
@@ -20,7 +21,7 @@ export default function EventsPage() {
   const [editEvent, setEditEvent] = useState<any | null>(null);
   const [editForm, setEditForm] = useState({ title: '', description: '', status: '' });
   const [editSaving, setEditSaving] = useState(false);
-  const limit = 50;
+  const [limit, setLimit] = useState(50);
 
   const fetchEvents = () => {
     setLoading(true);
@@ -30,7 +31,7 @@ export default function EventsPage() {
       .finally(() => setLoading(false));
   };
 
-  useEffect(() => { fetchEvents(); }, [offset]);
+  useEffect(() => { fetchEvents(); }, [offset, limit]);
 
   const handleSearch = (e: React.FormEvent) => {
     e.preventDefault();
@@ -176,6 +177,7 @@ export default function EventsPage() {
             className="text-sm px-3 py-1.5 rounded border disabled:opacity-40">Prev</button>
           <button type="button" disabled={events.length < limit} onClick={() => setOffset(offset + limit)}
             className="text-sm px-3 py-1.5 rounded border disabled:opacity-40">Next</button>
+          <PerPageSelect value={limit} onChange={(n) => { setLimit(n); setOffset(0); }} />
         </div>
       </div>
 

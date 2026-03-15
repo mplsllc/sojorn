@@ -5,6 +5,7 @@
 'use client';
 
 import AdminShell from '@/components/AdminShell';
+import PerPageSelect from '@/components/PerPageSelect';
 import { api } from '@/lib/api';
 import { formatDateTime } from '@/lib/utils';
 import { useEffect, useState } from 'react';
@@ -42,7 +43,7 @@ export default function AuditLogPage() {
   const [total, setTotal] = useState(0);
   const [loading, setLoading] = useState(true);
   const [page, setPage] = useState(0);
-  const limit = 50;
+  const [limit, setLimit] = useState(50);
 
   // Filters
   const [actionFilter, setActionFilter] = useState('');
@@ -305,31 +306,32 @@ export default function AuditLogPage() {
         )}
 
         {/* Pagination */}
-        {totalPages > 1 && (
-          <div className="flex items-center justify-between px-4 py-3 border-t border-warm-200">
-            <p className="text-xs text-gray-500">
-              Page {page + 1} of {totalPages} ({total.toLocaleString()} entries)
-            </p>
-            <div className="flex items-center gap-2">
-              <button
-                onClick={() => setPage((p) => Math.max(0, p - 1))}
-                disabled={page === 0}
-                title="Previous page"
-                className="p-1.5 rounded border border-warm-300 disabled:opacity-40 hover:bg-warm-100"
-              >
-                <ChevronLeft className="w-4 h-4" />
-              </button>
-              <button
-                onClick={() => setPage((p) => Math.min(totalPages - 1, p + 1))}
-                disabled={page >= totalPages - 1}
-                title="Next page"
-                className="p-1.5 rounded border border-warm-300 disabled:opacity-40 hover:bg-warm-100"
-              >
-                <ChevronRight className="w-4 h-4" />
-              </button>
-            </div>
+        <div className="flex items-center justify-between px-4 py-3 border-t border-warm-200">
+          <p className="text-xs text-gray-500">
+            Page {page + 1} of {totalPages} ({total.toLocaleString()} entries)
+          </p>
+          <div className="flex items-center gap-3">
+            <PerPageSelect value={limit} onChange={(n) => { setLimit(n); setPage(0); setTrigger((t) => t + 1); }} />
+            <button
+              type="button"
+              onClick={() => setPage((p) => Math.max(0, p - 1))}
+              disabled={page === 0}
+              title="Previous page"
+              className="p-1.5 rounded border border-warm-300 disabled:opacity-40 hover:bg-warm-100"
+            >
+              <ChevronLeft className="w-4 h-4" />
+            </button>
+            <button
+              type="button"
+              onClick={() => setPage((p) => Math.min(totalPages - 1, p + 1))}
+              disabled={page >= totalPages - 1}
+              title="Next page"
+              className="p-1.5 rounded border border-warm-300 disabled:opacity-40 hover:bg-warm-100"
+            >
+              <ChevronRight className="w-4 h-4" />
+            </button>
           </div>
-        )}
+        </div>
       </div>
 
       {/* Purge Confirmation Modal */}

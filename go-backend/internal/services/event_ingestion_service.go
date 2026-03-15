@@ -1,6 +1,6 @@
-// Copyright (c) 2026 MPLS LLC. All rights reserved.
-// Use of this source code is governed by the Business Source License
-// included in the LICENSE file.
+// Copyright (c) 2026 MPLS LLC
+// SPDX-License-Identifier: AGPL-3.0-or-later
+// See LICENSE file for details
 
 package services
 

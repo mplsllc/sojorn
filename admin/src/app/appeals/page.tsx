@@ -5,6 +5,7 @@
 'use client';
 
 import AdminShell from '@/components/AdminShell';
+import PerPageSelect from '@/components/PerPageSelect';
 import SelectionBar from '@/components/SelectionBar';
 import { api } from '@/lib/api';
 import { statusColor, formatDateTime } from '@/lib/utils';
@@ -24,10 +25,11 @@ export default function AppealsPage() {
   const [restoreContent, setRestoreContent] = useState(false);
 
   const [loadingMore, setLoadingMore] = useState(false);
+  const [limit, setLimit] = useState(50);
 
   const fetchAppeals = () => {
     setLoading(true);
-    api.listAppeals({ limit: 50, status: statusFilter || undefined })
+    api.listAppeals({ limit, status: statusFilter || undefined })
       .then((data) => { setAppeals(data.appeals); setTotal(data.total); })
       .catch(() => {})
       .finally(() => setLoading(false));
@@ -35,13 +37,13 @@ export default function AppealsPage() {
 
   const loadMore = () => {
     setLoadingMore(true);
-    api.listAppeals({ limit: 50, status: statusFilter || undefined, offset: appeals.length })
+    api.listAppeals({ limit, status: statusFilter || undefined, offset: appeals.length })
       .then((data) => { setAppeals((prev) => [...prev, ...(data.appeals || [])]); setTotal(data.total || 0); })
       .catch(() => {})
       .finally(() => setLoadingMore(false));
   };
 
-  useEffect(() => { fetchAppeals(); }, [statusFilter]);
+  useEffect(() => { fetchAppeals(); }, [statusFilter, limit]);
 
   const sortedAppeals = sortOrder === 'oldest'
     ? [...appeals].sort((a, b) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime())
@@ -83,7 +85,8 @@ export default function AppealsPage() {
           <h1 className="text-2xl font-bold text-gray-900">Appeals</h1>
           <p className="text-sm text-gray-500 mt-1">{total} {statusFilter || 'total'} appeals</p>
         </div>
-        <div className="flex gap-3">
+        <div className="flex items-center gap-3">
+          <PerPageSelect value={limit} onChange={(n) => { setLimit(n); setAppeals([]); }} />
           <select className="input w-auto" title="Filter by status" value={statusFilter} onChange={(e) => { setStatusFilter(e.target.value); setSelected(new Set()); }}>
             <option value="">All Statuses</option>
             <option value="pending">Pending</option>

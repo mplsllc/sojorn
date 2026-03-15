@@ -5,6 +5,7 @@
 'use client';
 
 import AdminShell from '@/components/AdminShell';
+import PerPageSelect from '@/components/PerPageSelect';
 import SelectionBar from '@/components/SelectionBar';
 import { api } from '@/lib/api';
 import { statusColor, formatDateTime } from '@/lib/utils';
@@ -28,15 +29,17 @@ export default function ReportsPage() {
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [bulkLoading, setBulkLoading] = useState(false);
 
+  const [limit, setLimit] = useState(50);
+
   const fetchReports = () => {
     setLoading(true);
-    api.listReports({ limit: 50, status: statusFilter, context: contextFilter || undefined })
+    api.listReports({ limit, status: statusFilter, context: contextFilter || undefined })
       .then((data) => { setReports(data.reports); setTotal(data.total); })
       .catch(() => {})
       .finally(() => setLoading(false));
   };
 
-  useEffect(() => { fetchReports(); }, [statusFilter, contextFilter]);
+  useEffect(() => { fetchReports(); }, [statusFilter, contextFilter, limit]);
 
   const handleUpdate = async (id: string, status: string) => {
     try {
@@ -70,12 +73,15 @@ export default function ReportsPage() {
           <h1 className="text-2xl font-bold text-gray-900">Reports</h1>
           <p className="text-sm text-gray-500 mt-1">{total} {statusFilter} reports</p>
         </div>
-        <select className="input w-auto" value={statusFilter} onChange={(e) => setStatusFilter(e.target.value)}>
-          <option value="pending">Pending</option>
-          <option value="reviewed">Reviewed</option>
-          <option value="actioned">Actioned</option>
-          <option value="dismissed">Dismissed</option>
-        </select>
+        <div className="flex items-center gap-3">
+          <PerPageSelect value={limit} onChange={(n) => { setLimit(n); }} />
+          <select className="input w-auto" title="Filter by status" value={statusFilter} onChange={(e) => setStatusFilter(e.target.value)}>
+            <option value="pending">Pending</option>
+            <option value="reviewed">Reviewed</option>
+            <option value="actioned">Actioned</option>
+            <option value="dismissed">Dismissed</option>
+          </select>
+        </div>
       </div>
 
       <div className="mb-4 flex gap-2">
