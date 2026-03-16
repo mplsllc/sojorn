@@ -6,7 +6,6 @@ package main
 
 import (
 	"context"
-	"io/ioutil"
 	"os"
 	"path/filepath"
 	"sort"
@@ -37,29 +36,53 @@ func main() {
 	}
 	defer pool.Close()
 
-	// Locate migrations directory
-	// Assuming running from project root: go run cmd/migrate/main.go
-	migrationsDir := "internal/database/migrations"
-	if _, err := os.Stat(migrationsDir); os.IsNotExist(err) {
-		// Try absolute path or different relative path logic if needed
-		// getting executable path is tricky with 'go run', so we rely on CWD being project root
-		log.Fatal().Msgf("Migrations directory not found at: %s. Make sure you run this from the project root.", migrationsDir)
+	// Locate migrations directory — try multiple paths for flexibility.
+	// 1. Running from go-backend/: internal/database/migrations
+	// 2. Running from repo root:   go-backend/internal/database/migrations
+	// 3. Docker / compiled binary:  migrations/ next to the binary
+	candidates := []string{
+		"internal/database/migrations",
+		"go-backend/internal/database/migrations",
+		"migrations",
 	}
 
-	// Get all .sql files
-	files, err := ioutil.ReadDir(migrationsDir)
+	// Also check relative to the executable path (for Docker deployments
+	// where the binary lives in /app and migrations in /app/migrations).
+	if exe, err := os.Executable(); err == nil {
+		exeDir := filepath.Dir(exe)
+		candidates = append(candidates,
+			filepath.Join(exeDir, "migrations"),
+			filepath.Join(exeDir, "internal", "database", "migrations"),
+		)
+	}
+
+	var migrationsDir string
+	for _, candidate := range candidates {
+		if info, err := os.Stat(candidate); err == nil && info.IsDir() {
+			migrationsDir = candidate
+			break
+		}
+	}
+	if migrationsDir == "" {
+		log.Fatal().Strs("tried", candidates).Msg("Migrations directory not found. Make sure you run this from the project root or place a migrations/ directory next to the binary.")
+	}
+
+	log.Info().Str("dir", migrationsDir).Msg("Using migrations directory")
+
+	// Get all .up.sql files
+	entries, err := os.ReadDir(migrationsDir)
 	if err != nil {
 		log.Fatal().Err(err).Msg("Failed to read migrations directory")
 	}
 
 	var sqlFiles []string
-	for _, file := range files {
-		if !file.IsDir() && strings.HasSuffix(file.Name(), ".up.sql") {
-			sqlFiles = append(sqlFiles, file.Name())
+	for _, entry := range entries {
+		if !entry.IsDir() && strings.HasSuffix(entry.Name(), ".up.sql") {
+			sqlFiles = append(sqlFiles, entry.Name())
 		}
 	}
 
-	// Sort files to ensure order
+	// Sort files to ensure order (000_init runs first)
 	sort.Strings(sqlFiles)
 
 	if len(sqlFiles) == 0 {
@@ -69,14 +92,12 @@ func main() {
 
 	ctx := context.Background()
 
-	// Simple migration runner: just runs them all
-	// In a production system, you'd want a migrations table to track what has been run.
-	// For this transition, we are manually applying specific schema changes.
-
+	// Simple migration runner: runs them all in sorted order.
+	// Uses IF NOT EXISTS throughout for idempotent re-runs.
 	for _, filename := range sqlFiles {
 		log.Info().Msgf("Applying migration: %s", filename)
 
-		content, err := ioutil.ReadFile(filepath.Join(migrationsDir, filename))
+		content, err := os.ReadFile(filepath.Join(migrationsDir, filename))
 		if err != nil {
 			log.Error().Err(err).Msgf("Failed to read file: %s", filename)
 			continue
@@ -88,7 +109,6 @@ func main() {
 
 		if err != nil {
 			log.Error().Err(err).Msgf("Failed to execute migration: %s", filename)
-			// Decide if we should stop or continue. Usually stop.
 			os.Exit(1)
 		}
 
