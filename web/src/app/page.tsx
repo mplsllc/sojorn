@@ -25,6 +25,19 @@ interface InstanceInfo {
   extensions?: string[];
 }
 
+const API_BASE = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8080';
+
+async function checkSetupStatus(): Promise<boolean> {
+  try {
+    const res = await fetch(`${API_BASE}/api/v1/setup/status`, { cache: 'no-store' });
+    const data = await res.json();
+    return data.configured === true;
+  } catch {
+    // If the API is unreachable, assume configured to avoid redirect loops
+    return true;
+  }
+}
+
 async function getInstance(): Promise<InstanceInfo> {
   try {
     return await api.getInstance();
@@ -90,6 +103,12 @@ const features = [
 ];
 
 export default async function LandingPage() {
+  // If no admin has been created yet, redirect to the first-run setup wizard
+  const configured = await checkSetupStatus();
+  if (!configured) {
+    redirect('/setup');
+  }
+
   const cookieStore = cookies();
   const token = cookieStore.get('token')?.value;
   if (token) {

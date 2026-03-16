@@ -313,7 +313,7 @@ func main() {
 	imageProxyHandler := handlers.NewImageProxyHandler()
 
 	// Instance handler (public capabilities endpoint + admin config)
-	instanceHandler := handlers.NewInstanceHandler(dbPool, extRegistry)
+	instanceHandler := handlers.NewInstanceHandler(dbPool, extRegistry, cfg.JWTSecret)
 
 	// eventHandler moved to groups/events extensions
 
@@ -357,6 +357,10 @@ func main() {
 		// Public instance capabilities (unauthenticated — app needs it pre-login)
 		v1.GET("/instance", instanceHandler.GetInstance)
 		v1.GET("/instance/about", instanceHandler.GetAbout)
+
+		// First-run setup wizard (one-time, public)
+		v1.GET("/setup/status", instanceHandler.SetupStatus)
+		v1.POST("/setup", instanceHandler.Setup)
 
 		v1.GET("/version", func(c *gin.Context) {
 			c.JSON(200, gin.H{
