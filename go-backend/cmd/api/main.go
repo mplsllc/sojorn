@@ -156,7 +156,7 @@ func main() {
 	feedAlgorithmService := services.NewFeedAlgorithmService(dbPool)
 	feedService := services.NewFeedService(postRepo, assetService, feedAlgorithmService)
 
-	pushService, err := services.NewPushService(userRepo, cfg.FirebaseCredentialsFile)
+	pushService, err := services.NewPushService(userRepo, cfg.FirebaseCredentialsFile, cfg.AppBaseURL)
 	if err != nil {
 		log.Warn().Err(err).Msg("Failed to initialize PushService")
 	}
@@ -219,7 +219,7 @@ func main() {
 	contentModerator := services.NewContentModerator(localAIService, sightEngineService, moderationService)
 
 	userHandler := handlers.NewUserHandler(userRepo, postRepo, notificationService, assetService)
-	postHandler := handlers.NewPostHandler(postRepo, userRepo, feedService, assetService, notificationService, moderationService, contentFilter, linkPreviewService, localAIService, s3Client, cfg.R2VideoBucket, cfg.R2VidDomain, contentModerator)
+	postHandler := handlers.NewPostHandler(postRepo, userRepo, feedService, assetService, notificationService, moderationService, contentFilter, linkPreviewService, localAIService, s3Client, cfg.R2VideoBucket, cfg.R2VidDomain, contentModerator, cfg.MN511ProxyURL)
 	// chatHandler moved to chat extension
 	mfaRepo := repository.NewMFARepository(dbPool)
 	totpService := services.NewTOTPService()
@@ -232,7 +232,7 @@ func main() {
 	appealHandler := handlers.NewAppealHandler(appealService)
 
 	// Initialize official accounts service
-	officialAccountsService := services.NewOfficialAccountsService(dbPool, localAIService, linkPreviewService)
+	officialAccountsService := services.NewOfficialAccountsService(dbPool, localAIService, linkPreviewService, cfg.SearxngURL, cfg.OllamaURL)
 	officialAccountsService.StartScheduler()
 	defer officialAccountsService.StopScheduler()
 
@@ -241,9 +241,9 @@ func main() {
 
 	// Beacon alert repo + ingestion kept for adminHandler (routes moved to beacons extension)
 	beaconAlertRepo := repository.NewBeaconAlertRepository(dbPool)
-	beaconIngestion := services.NewBeaconIngestionService(beaconAlertRepo, "http://127.0.0.1:8787", cfg.IcedAPIBase, s3Client, cfg.R2MediaBucket, cfg.R2ImgDomain)
+	beaconIngestion := services.NewBeaconIngestionService(beaconAlertRepo, cfg.MN511ProxyURL, cfg.IcedAPIBase, s3Client, cfg.R2MediaBucket, cfg.R2ImgDomain)
 
-	adminHandler := handlers.NewAdminHandler(dbPool, moderationService, appealService, emailService, sightEngineService, officialAccountsService, linkPreviewService, localAIService, beaconAlertRepo, beaconIngestion, feedAlgorithmService, cfg.JWTSecret, cfg.Env == "production", s3Client, cfg.R2MediaBucket, cfg.R2VideoBucket, cfg.R2ImgDomain, cfg.R2VidDomain)
+	adminHandler := handlers.NewAdminHandler(dbPool, moderationService, appealService, emailService, sightEngineService, officialAccountsService, linkPreviewService, localAIService, beaconAlertRepo, beaconIngestion, feedAlgorithmService, cfg.JWTSecret, cfg.Env == "production", s3Client, cfg.R2MediaBucket, cfg.R2VideoBucket, cfg.R2ImgDomain, cfg.R2VidDomain, cfg.AppBaseURL, cfg.CookieDomain, cfg.OllamaURL)
 
 	accountHandler := handlers.NewAccountHandler(userRepo, emailService, cfg)
 

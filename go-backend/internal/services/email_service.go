@@ -138,12 +138,12 @@ func (s *EmailService) SendVerificationEmail(toEmail, toName, token string) erro
 		"{{name}}":       name,
 		"{{verify_url}}": verifyURL,
 	}, toEmail, toName, func() error {
-		subject := "Verify your Sojorn account"
+		subject := "Verify your " + s.config.InstanceName + " account"
 		title := "Email Verification"
 		header := fmt.Sprintf("Hey %s!", name)
 
 		content := `
-		<p>Welcome to Sojorn &mdash; your vibrant new social space. We're thrilled to have you join our community!</p>
+		<p>Welcome to ` + s.config.InstanceName + ` &mdash; your vibrant new social space. We're thrilled to have you join our community!</p>
 		<p>To get started in the app, please verify your email address by clicking the button below:</p>
 	`
 		footer := fmt.Sprintf(`
@@ -156,7 +156,7 @@ func (s *EmailService) SendVerificationEmail(toEmail, toName, token string) erro
 	`, verifyURL, verifyURL)
 
 		htmlBody := s.buildHTMLEmail(title, header, content, verifyURL, "Verify My Email", footer)
-		textBody := fmt.Sprintf("Welcome to Sojorn!\n\nPlease verify your email by visiting this link:\n\n%s\n\nIf you did not create an account, you can ignore this email.", verifyURL)
+		textBody := fmt.Sprintf("Welcome to %s!\n\nPlease verify your email by visiting this link:\n\n%s\n\nIf you did not create an account, you can ignore this email.", s.config.InstanceName, verifyURL)
 		return s.sendEmail(toEmail, toName, subject, htmlBody, textBody)
 	})
 }
@@ -168,12 +168,12 @@ func (s *EmailService) SendPasswordResetEmail(toEmail, toName, token string) err
 		"{{name}}":      toName,
 		"{{reset_url}}": resetURL,
 	}, toEmail, toName, func() error {
-		subject := "Reset your Sojorn password"
+		subject := "Reset your " + s.config.InstanceName + " password"
 		title := "Password Reset"
 		header := "Reset your password"
 		content := fmt.Sprintf(`
 		<p>Hey %s,</p>
-		<p>You requested a password reset for your Sojorn account. Click the button below to set a new password:</p>
+		<p>You requested a password reset for your ` + s.config.InstanceName + ` account. Click the button below to set a new password:</p>
 	`, toName)
 
 		footer := fmt.Sprintf(`
@@ -187,7 +187,7 @@ func (s *EmailService) SendPasswordResetEmail(toEmail, toName, token string) err
 	`, resetURL, resetURL)
 
 		htmlBody := s.buildHTMLEmail(title, header, content, resetURL, "Reset Password", footer)
-		textBody := fmt.Sprintf("Reset your Sojorn password by visiting this link:\n\n%s\n\nThis link expires in 1 hour.", resetURL)
+		textBody := fmt.Sprintf("Reset your %s password by visiting this link:\n\n%s\n\nThis link expires in 1 hour.", s.config.InstanceName, resetURL)
 		return s.sendEmail(toEmail, toName, subject, htmlBody, textBody)
 	})
 }
@@ -218,7 +218,7 @@ func (s *EmailService) sendViaSMTP(toEmail, toName, subject, htmlBody, textBody 
 
 	boundary := "sojorn-mime-alt-boundary"
 	var msg strings.Builder
-	msg.WriteString("From: Sojorn <" + fromEmail + ">\r\n")
+	msg.WriteString("From: " + s.config.InstanceName + " <" + fromEmail + ">\r\n")
 	msg.WriteString("To: " + toName + " <" + toEmail + ">\r\n")
 	msg.WriteString("Subject: " + subject + "\r\n")
 	msg.WriteString("MIME-Version: 1.0\r\n")
@@ -292,7 +292,7 @@ func (s *EmailService) sendViaSendPulse(toEmail, toName, subject, htmlBody, text
 	// Determine correct FROM email
 	fromEmail := s.config.SMTPFrom
 	if fromEmail == "" {
-		fromEmail = "no-reply@sojorn.net"
+		fromEmail = "noreply@localhost"
 	}
 
 	reqBody := sendPulseEmailRequest{
@@ -301,7 +301,7 @@ func (s *EmailService) sendViaSendPulse(toEmail, toName, subject, htmlBody, text
 			Text:    textBody,
 			Subject: subject,
 			From: sendPulseIdentity{
-				Name:  "Sojorn",
+				Name:  s.config.InstanceName,
 				Email: fromEmail,
 			},
 			To: []sendPulseIdentity{
@@ -358,22 +358,23 @@ func (s *EmailService) SendBanNotificationEmail(toEmail, toName, reason string) 
 		"{{name}}":   toName,
 		"{{reason}}": reason,
 	}, toEmail, toName, func() error {
-		subject := "Your Sojorn account has been suspended"
+		supportEmail := s.supportEmail()
+		subject := "Your " + s.config.InstanceName + " account has been suspended"
 		title := "Account Suspended"
 		header := "Your account has been suspended"
 		content := fmt.Sprintf(`
 		<p>Hi %s,</p>
-		<p>After a review of your recent activity, your Sojorn account has been <strong>permanently suspended</strong> for violating our <a href="https://mp.ls/terms" style="color: #4338CA;">Community Guidelines</a>.</p>
+		<p>After a review of your recent activity, your %s account has been <strong>permanently suspended</strong> for violating our <a href="%s/terms" style="color: #4338CA;">Community Guidelines</a>.</p>
 		<p style="background: #FEF2F2; border-left: 4px solid #EF4444; padding: 12px 16px; border-radius: 4px; margin: 16px 0;">
 			<strong>Reason:</strong> %s
 		</p>
 		<p>If you believe this action was taken in error, you can submit an appeal.</p>
-	`, toName, reason)
+	`, toName, s.config.InstanceName, s.config.AppBaseURL, reason)
 
-		appealURL := "mailto:appeals@sojorn.net?subject=Account%%20Appeal"
+		appealURL := "mailto:" + supportEmail + "?subject=Account%20Appeal"
 		footer := `<p style="color: #9CA3AF; font-size: 12px; margin-top: 16px;">You can also reply directly to this email to submit your appeal.</p>`
 		htmlBody := s.buildHTMLEmail(title, header, content, appealURL, "Submit an Appeal", footer)
-		textBody := fmt.Sprintf("Hi %s,\n\nYour Sojorn account has been permanently suspended.\n\nReason: %s\n\nIf you believe this was in error, reply to this email or contact appeals@sojorn.net.\n\n— The Sojorn Team", toName, reason)
+		textBody := fmt.Sprintf("Hi %s,\n\nYour %s account has been permanently suspended.\n\nReason: %s\n\nIf you believe this was in error, reply to this email or contact %s.\n\n— The %s Team", toName, s.config.InstanceName, reason, supportEmail, s.config.InstanceName)
 		return s.sendEmail(toEmail, toName, subject, htmlBody, textBody)
 	})
 }
@@ -384,20 +385,20 @@ func (s *EmailService) SendSuspensionNotificationEmail(toEmail, toName, reason, 
 		"{{reason}}":   reason,
 		"{{duration}}": duration,
 	}, toEmail, toName, func() error {
-		subject := "Your Sojorn account has been temporarily suspended"
+		subject := "Your " + s.config.InstanceName + " account has been temporarily suspended"
 		title := "Account Temporarily Suspended"
 		header := "Your account has been temporarily suspended"
 		content := fmt.Sprintf(`
 		<p>Hi %s,</p>
-		<p>Your Sojorn account has been <strong>temporarily suspended for %s</strong> due to a violation of our <a href="https://mp.ls/terms" style="color: #4338CA;">Community Guidelines</a>.</p>
+		<p>Your %s account has been <strong>temporarily suspended for %s</strong> due to a violation of our <a href="%s/terms" style="color: #4338CA;">Community Guidelines</a>.</p>
 		<p style="background: #FFFBEB; border-left: 4px solid #F59E0B; padding: 12px 16px; border-radius: 4px; margin: 16px 0;">
 			<strong>Reason:</strong> %s
 		</p>
 		<p>Your account will be automatically restored after the suspension period.</p>
-	`, toName, duration, reason)
+	`, toName, s.config.InstanceName, duration, s.config.AppBaseURL, reason)
 
-		htmlBody := s.buildHTMLEmail(title, header, content, "https://mp.ls/terms", "Review Community Guidelines", "")
-		textBody := fmt.Sprintf("Hi %s,\n\nYour Sojorn account has been temporarily suspended for %s.\n\nReason: %s\n\nYour account will be restored after the suspension period.\n\n— The Sojorn Team", toName, duration, reason)
+		htmlBody := s.buildHTMLEmail(title, header, content, s.config.AppBaseURL+"/terms", "Review Community Guidelines", "")
+		textBody := fmt.Sprintf("Hi %s,\n\nYour %s account has been temporarily suspended for %s.\n\nReason: %s\n\nYour account will be restored after the suspension period.\n\n— The %s Team", toName, s.config.InstanceName, duration, reason, s.config.InstanceName)
 		return s.sendEmail(toEmail, toName, subject, htmlBody, textBody)
 	})
 }
@@ -407,20 +408,20 @@ func (s *EmailService) SendAccountRestoredEmail(toEmail, toName, reason string) 
 		"{{name}}":   toName,
 		"{{reason}}": reason,
 	}, toEmail, toName, func() error {
-		subject := "Your Sojorn account has been restored"
+		subject := "Your " + s.config.InstanceName + " account has been restored"
 		title := "Account Restored"
 		header := "Welcome back!"
 		content := fmt.Sprintf(`
 		<p>Hi %s,</p>
-		<p>Great news — your Sojorn account has been <strong>restored</strong> and is fully active again.</p>
+		<p>Great news — your ` + s.config.InstanceName + ` account has been <strong>restored</strong> and is fully active again.</p>
 		<p style="background: #F0FDF4; border-left: 4px solid #22C55E; padding: 12px 16px; border-radius: 4px; margin: 16px 0;">
 			<strong>Note:</strong> %s
 		</p>
 		<p>All of your previous posts and comments have been restored and are visible again.</p>
 	`, toName, reason)
 
-		htmlBody := s.buildHTMLEmail(title, header, content, "https://mp.ls/sojorn", "Open Sojorn", "")
-		textBody := fmt.Sprintf("Hi %s,\n\nYour Sojorn account has been restored and is fully active again.\n\nNote: %s\n\nAll of your posts and comments are visible again.\n\n— The Sojorn Team", toName, reason)
+		htmlBody := s.buildHTMLEmail(title, header, content, s.config.AppBaseURL, "Open "+s.config.InstanceName, "")
+		textBody := fmt.Sprintf("Hi %s,\n\nYour %s account has been restored and is fully active again.\n\nNote: %s\n\nAll of your posts and comments are visible again.\n\n— The %s Team", toName, s.config.InstanceName, reason, s.config.InstanceName)
 		return s.sendEmail(toEmail, toName, subject, htmlBody, textBody)
 	})
 }
@@ -429,12 +430,12 @@ func (s *EmailService) SendDeactivationEmail(toEmail, toName string) error {
 	return s.sendFromTemplate("deactivation", map[string]string{
 		"{{name}}": toName,
 	}, toEmail, toName, func() error {
-		subject := "Your Sojorn account has been deactivated"
+		subject := "Your " + s.config.InstanceName + " account has been deactivated"
 		title := "Account Deactivated"
 		header := "Your account has been deactivated"
 		content := fmt.Sprintf(`
 		<p>Hey %s,</p>
-		<p>Your Sojorn account has been deactivated. Your profile is now hidden from other users.</p>
+		<p>Your ` + s.config.InstanceName + ` account has been deactivated. Your profile is now hidden from other users.</p>
 		<ul style="text-align: left; color: #4B5563;">
 			<li>Your profile, posts, and connections are hidden but <strong>fully preserved</strong></li>
 			<li>No one can see your account while it is deactivated</li>
@@ -442,8 +443,8 @@ func (s *EmailService) SendDeactivationEmail(toEmail, toName string) error {
 		</ul>
 	`, toName)
 
-		htmlBody := s.buildHTMLEmail(title, header, content, "https://mp.ls/sojorn", "Log In to Reactivate", "")
-		textBody := fmt.Sprintf("Hey %s,\n\nYour Sojorn account has been deactivated. Your profile is now hidden.\n\nLog back in at any time to reactivate.\n\n— The Sojorn Team", toName)
+		htmlBody := s.buildHTMLEmail(title, header, content, s.config.AppBaseURL, "Log In to Reactivate", "")
+		textBody := fmt.Sprintf("Hey %s,\n\nYour %s account has been deactivated. Your profile is now hidden.\n\nLog back in at any time to reactivate.\n\n— The %s Team", toName, s.config.InstanceName, s.config.InstanceName)
 		return s.sendEmail(toEmail, toName, subject, htmlBody, textBody)
 	})
 }
@@ -453,12 +454,12 @@ func (s *EmailService) SendDeletionScheduledEmail(toEmail, toName, deletionDate 
 		"{{name}}":          toName,
 		"{{deletion_date}}": deletionDate,
 	}, toEmail, toName, func() error {
-		subject := "Your Sojorn account is scheduled for deletion"
+		subject := "Your " + s.config.InstanceName + " account is scheduled for deletion"
 		title := "Account Deletion Scheduled"
 		header := "Your account is scheduled for deletion"
 		content := fmt.Sprintf(`
 		<p>Hey %s,</p>
-		<p>Your Sojorn account has been scheduled for <strong>permanent deletion on %s</strong>.</p>
+		<p>Your ` + s.config.InstanceName + ` account has been scheduled for <strong>permanent deletion on %s</strong>.</p>
 		<ul style="text-align: left; color: #4B5563;">
 			<li>Your account is immediately deactivated and hidden</li>
 			<li>On <strong>%s</strong>, all data will be permanently destroyed</li>
@@ -469,8 +470,8 @@ func (s *EmailService) SendDeletionScheduledEmail(toEmail, toName, deletionDate 
 		</p>
 	`, toName, deletionDate, deletionDate, deletionDate)
 
-		htmlBody := s.buildHTMLEmail(title, header, content, "https://mp.ls/sojorn", "Log In to Cancel Deletion", "")
-		textBody := fmt.Sprintf("Hey %s,\n\nYour Sojorn account has been scheduled for permanent deletion on %s.\n\nLog back in before %s to cancel.\n\n— The Sojorn Team", toName, deletionDate, deletionDate)
+		htmlBody := s.buildHTMLEmail(title, header, content, s.config.AppBaseURL, "Log In to Cancel Deletion", "")
+		textBody := fmt.Sprintf("Hey %s,\n\nYour %s account has been scheduled for permanent deletion on %s.\n\nLog back in before %s to cancel.\n\n— The %s Team", toName, s.config.InstanceName, deletionDate, deletionDate, s.config.InstanceName)
 		return s.sendEmail(toEmail, toName, subject, htmlBody, textBody)
 	})
 }
@@ -485,7 +486,7 @@ func (s *EmailService) SendDestroyConfirmationEmail(toEmail, toName, confirmURL 
 		header := "Confirm account destruction"
 		content := fmt.Sprintf(`
 		<p>Hey %s,</p>
-		<p>You requested <strong>immediate and permanent destruction</strong> of your Sojorn account.</p>
+		<p>You requested <strong>immediate and permanent destruction</strong> of your ` + s.config.InstanceName + ` account.</p>
 		<p style="background: #FEF2F2; border-left: 4px solid #DC2626; padding: 12px 16px; border-radius: 4px; margin: 16px 0;">
 			<strong>THIS ACTION IS IRREVERSIBLE</strong>
 		</p>
@@ -501,7 +502,7 @@ func (s *EmailService) SendDestroyConfirmationEmail(toEmail, toName, confirmURL 
 
 		footer := `<p style="color: #9CA3AF; font-size: 13px; margin-top: 16px;">This link expires in 1 hour. If you did not request this, ignore this email.</p>`
 		htmlBody := s.BuildHTMLEmailWithColor(title, header, content, confirmURL, "PERMANENTLY DESTROY MY ACCOUNT", footer, "#DC2626")
-		textBody := fmt.Sprintf("FINAL WARNING\n\nHey %s,\n\nYou requested IMMEDIATE AND PERMANENT DESTRUCTION of your Sojorn account.\n\nTo confirm, visit:\n%s\n\nThis link expires in 1 hour.\n\n— The Sojorn Team", toName, confirmURL)
+		textBody := fmt.Sprintf("FINAL WARNING\n\nHey %s,\n\nYou requested IMMEDIATE AND PERMANENT DESTRUCTION of your %s account.\n\nTo confirm, visit:\n%s\n\nThis link expires in 1 hour.\n\n— The %s Team", toName, s.config.InstanceName, confirmURL, s.config.InstanceName)
 		return s.sendEmail(toEmail, toName, subject, htmlBody, textBody)
 	})
 }
@@ -521,13 +522,13 @@ func (s *EmailService) SendContentRemovalEmail(toEmail, toName, contentType, rea
 		"{{strike_count}}":   fmt.Sprintf("%d", strikeCount),
 		"{{strike_warning}}": strikeWarning,
 	}, toEmail, toName, func() error {
-		subject := fmt.Sprintf("Your %s on Sojorn was removed", contentType)
+		subject := fmt.Sprintf("Your %s on %s was removed", contentType, s.config.InstanceName)
 		title := "Content Removed"
 		header := fmt.Sprintf("Your %s has been removed", contentType)
 
 		content := fmt.Sprintf(`
 		<p>Hi %s,</p>
-		<p>One of your %ss has been removed by our moderation team for violating our <a href="https://mp.ls/terms" style="color: #4338CA;">Community Guidelines</a>.</p>
+		<p>One of your %ss has been removed by our moderation team for violating our <a href="` + s.config.AppBaseURL + `/terms" style="color: #4338CA;">Community Guidelines</a>.</p>
 		<p style="background: #FEF2F2; border-left: 4px solid #EF4444; padding: 12px 16px; border-radius: 4px; margin: 16px 0;">
 			<strong>Reason:</strong> %s
 		</p>
@@ -536,8 +537,8 @@ func (s *EmailService) SendContentRemovalEmail(toEmail, toName, contentType, rea
 		<p>If you believe this was in error, you can reply to this email.</p>
 	`, toName, contentType, reason, strikeCount, strikeWarning)
 
-		htmlBody := s.buildHTMLEmail(title, header, content, "https://mp.ls/terms", "Review Community Guidelines", "")
-		textBody := fmt.Sprintf("Hi %s,\n\nYour %s has been removed.\n\nReason: %s\nStrike %d on your account.\n\n— The Sojorn Team", toName, contentType, reason, strikeCount)
+		htmlBody := s.buildHTMLEmail(title, header, content, s.config.AppBaseURL+"/terms", "Review Community Guidelines", "")
+		textBody := fmt.Sprintf("Hi %s,\n\nYour %s has been removed.\n\nReason: %s\nStrike %d on your account.\n\n— The %s Team", toName, contentType, reason, strikeCount, s.config.InstanceName)
 		return s.sendEmail(toEmail, toName, subject, htmlBody, textBody)
 	})
 }
@@ -548,6 +549,17 @@ func (s *EmailService) SendGenericEmail(toEmail, toName, subject, htmlBody, text
 }
 
 func (s *EmailService) AddSubscriber(email, name string) {
+}
+
+// supportEmail returns the best available support/appeals address.
+func (s *EmailService) supportEmail() string {
+	if s.config.SupportEmail != "" {
+		return s.config.SupportEmail
+	}
+	if s.config.SMTPFrom != "" {
+		return s.config.SMTPFrom
+	}
+	return "support@localhost"
 }
 
 func (s *EmailService) buildHTMLEmail(title, header, content, buttonURL, buttonText, footer string) string {
@@ -580,7 +592,7 @@ func (s *EmailService) BuildHTMLEmailWithColor(title, header, content, buttonURL
             <table role="presentation" width="520" cellpadding="0" cellspacing="0" align="center" style="max-width: 520px; margin: 0 auto; background-color: #ffffff; border-radius: 16px; overflow: hidden;">
                 <!-- Header -->
                 <tr><td style="background-color: #EEF2FF; padding: 40px; text-align: center;">
-                    <img src="https://mp.ls/img/sojornlogo.png" alt="Sojorn" width="80" height="80" style="width: 80px; height: 80px; border-radius: 20px; margin-bottom: 16px; display: block; margin-left: auto; margin-right: auto;">
+                    <img src="{{LOGO_URL}}" alt="{{INSTANCE_NAME}}" width="80" height="80" style="width: 80px; height: 80px; border-radius: 20px; margin-bottom: 16px; display: block; margin-left: auto; margin-right: auto;">
                     <p style="color: #4338CA; font-size: 12px; font-weight: 600; letter-spacing: 1px; text-transform: uppercase; margin: 0;">{{TITLE}}</p>
                 </td></tr>
                 
@@ -603,11 +615,11 @@ func (s *EmailService) BuildHTMLEmailWithColor(title, header, content, buttonURL
                 
                 <!-- Footer -->
                 <tr><td style="padding: 32px; text-align: center; background-color: #F9FAFB; border-top: 1px solid #E5E7EB;">
-                    <p style="font-size: 12px; color: #9CA3AF; margin: 0 0 8px 0;">&copy; 2026 Sojorn by MPLS LLC. All rights reserved.</p>
+                    <p style="font-size: 12px; color: #9CA3AF; margin: 0 0 8px 0;">&copy; 2026 {{INSTANCE_NAME}}. All rights reserved.</p>
                     <p style="font-size: 12px; color: #9CA3AF; margin: 0;">
-                        <a href="https://mp.ls/sojorn" style="color: #9CA3AF; text-decoration: none;">Website</a> &bull; 
-                        <a href="https://mp.ls/privacy" style="color: #9CA3AF; text-decoration: none;">Privacy</a> &bull; 
-                        <a href="https://mp.ls/terms" style="color: #9CA3AF; text-decoration: none;">Terms</a>
+                        <a href="{{APP_BASE_URL}}" style="color: #9CA3AF; text-decoration: none;">Website</a> &bull;
+                        <a href="{{APP_BASE_URL}}/privacy" style="color: #9CA3AF; text-decoration: none;">Privacy</a> &bull;
+                        <a href="{{APP_BASE_URL}}/terms" style="color: #9CA3AF; text-decoration: none;">Terms</a>
                     </p>
                 </td></tr>
             </table>
@@ -624,6 +636,9 @@ func (s *EmailService) BuildHTMLEmailWithColor(title, header, content, buttonURL
 		"{{BUTTON_URL}}", buttonURL,
 		"{{BUTTON_TEXT}}", buttonText,
 		"{{FOOTER}}", footer,
+		"{{LOGO_URL}}", s.config.AppBaseURL+"/img/logo.png",
+		"{{INSTANCE_NAME}}", s.config.InstanceName,
+		"{{APP_BASE_URL}}", s.config.AppBaseURL,
 	)
 	return r.Replace(tpl)
 }

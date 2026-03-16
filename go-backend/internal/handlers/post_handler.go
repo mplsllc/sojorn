@@ -34,9 +34,10 @@ type PostHandler struct {
 	localAIService      *services.LocalAIService
 	videoProcessor      *services.VideoProcessor
 	contentModerator    *services.ContentModerator
+	mn511BaseURL        string
 }
 
-func NewPostHandler(postRepo *repository.PostRepository, userRepo *repository.UserRepository, feedService *services.FeedService, assetService *services.AssetService, notificationService *services.NotificationService, moderationService *services.ModerationService, contentFilter *services.ContentFilter, linkPreviewService *services.LinkPreviewService, localAIService *services.LocalAIService, s3Client *s3.Client, videoBucket, vidDomain string, contentModerator *services.ContentModerator) *PostHandler {
+func NewPostHandler(postRepo *repository.PostRepository, userRepo *repository.UserRepository, feedService *services.FeedService, assetService *services.AssetService, notificationService *services.NotificationService, moderationService *services.ModerationService, contentFilter *services.ContentFilter, linkPreviewService *services.LinkPreviewService, localAIService *services.LocalAIService, s3Client *s3.Client, videoBucket, vidDomain string, contentModerator *services.ContentModerator, mn511BaseURL string) *PostHandler {
 	return &PostHandler{
 		postRepo:            postRepo,
 		userRepo:            userRepo,
@@ -49,6 +50,7 @@ func NewPostHandler(postRepo *repository.PostRepository, userRepo *repository.Us
 		localAIService:      localAIService,
 		videoProcessor:      services.NewVideoProcessor(s3Client, videoBucket, vidDomain),
 		contentModerator:    contentModerator,
+		mn511BaseURL:        mn511BaseURL,
 	}
 }
 

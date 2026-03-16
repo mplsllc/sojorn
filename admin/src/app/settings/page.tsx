@@ -8,7 +8,7 @@ import AdminShell from '@/components/AdminShell';
 import AdminOnlyGuard from '@/components/AdminOnlyGuard';
 import { api } from '@/lib/api';
 import { useEffect, useState } from 'react';
-import { Settings, Globe, Key, Activity, Users, RefreshCw } from 'lucide-react';
+import { Settings, Globe, Key, Activity, Users, RefreshCw, Palette } from 'lucide-react';
 
 export default function SettingsPage() {
   const [apiUrl, setApiUrl] = useState(
@@ -19,6 +19,9 @@ export default function SettingsPage() {
   const [healthLoading, setHealthLoading] = useState(true);
   const [adminUsers, setAdminUsers] = useState<any[]>([]);
   const [adminLoading, setAdminLoading] = useState(true);
+  const [branding, setBranding] = useState<Record<string, string>>({});
+  const [brandingSaving, setBrandingSaving] = useState(false);
+  const [brandingSaved, setBrandingSaved] = useState(false);
 
   const handleSaveApiUrl = () => {
     if (typeof window !== 'undefined') {
@@ -45,12 +48,31 @@ export default function SettingsPage() {
     api.listUsers({ role: 'admin', limit: 50 })
       .then((d) => {
         const all = d.users ?? [];
-        // Include both admin and moderator users
         setAdminUsers(all);
       })
       .catch(() => {})
       .finally(() => setAdminLoading(false));
+    api.getInstanceConfig()
+      .then((cfg: Record<string, string>) => setBranding(cfg))
+      .catch(() => {});
   }, []);
+
+  const handleSaveBranding = async () => {
+    setBrandingSaving(true);
+    try {
+      await api.updateInstanceConfig(branding);
+      setBrandingSaved(true);
+      setTimeout(() => setBrandingSaved(false), 2000);
+    } catch (e) {
+      console.error('Failed to save branding', e);
+    } finally {
+      setBrandingSaving(false);
+    }
+  };
+
+  const updateBranding = (key: string, value: string) => {
+    setBranding((prev) => ({ ...prev, [key]: value }));
+  };
 
   return (
     <AdminOnlyGuard>
@@ -61,6 +83,70 @@ export default function SettingsPage() {
       </div>
 
       <div className="space-y-6 max-w-3xl">
+        {/* Instance Branding */}
+        <div className="card p-5">
+          <div className="flex items-center gap-2 mb-4">
+            <Palette className="w-5 h-5 text-brand-500" />
+            <h3 className="text-lg font-semibold text-gray-900">Instance Branding</h3>
+          </div>
+          <p className="text-sm text-gray-500 mb-4">
+            Configure how your instance appears to users and in the app.
+          </p>
+          <div className="space-y-4">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Instance Name</label>
+                <input className="input" placeholder="My Social Network" value={branding.instance_name || ''} onChange={(e) => updateBranding('instance_name', e.target.value)} />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Registration Mode</label>
+                <select className="input" value={branding.registration_mode || 'open'} onChange={(e) => updateBranding('registration_mode', e.target.value)}>
+                  <option value="open">Open</option>
+                  <option value="invite">Invite Only</option>
+                  <option value="closed">Closed</option>
+                </select>
+              </div>
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">Description</label>
+              <input className="input" placeholder="A community for..." value={branding.instance_description || ''} onChange={(e) => updateBranding('instance_description', e.target.value)} />
+            </div>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Logo URL</label>
+                <input className="input" placeholder="https://cdn.example.com/logo.png" value={branding.instance_logo_url || ''} onChange={(e) => updateBranding('instance_logo_url', e.target.value)} />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Accent Color</label>
+                <div className="flex gap-2">
+                  <input type="color" className="h-10 w-10 rounded border border-warm-300 cursor-pointer" value={branding.instance_accent_color || '#6366f1'} onChange={(e) => updateBranding('instance_accent_color', e.target.value)} />
+                  <input className="input flex-1" placeholder="#6366f1" value={branding.instance_accent_color || ''} onChange={(e) => updateBranding('instance_accent_color', e.target.value)} />
+                </div>
+              </div>
+            </div>
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Contact Email</label>
+                <input className="input" placeholder="hello@example.com" value={branding.contact_email || ''} onChange={(e) => updateBranding('contact_email', e.target.value)} />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Terms URL</label>
+                <input className="input" placeholder="/terms" value={branding.terms_url || ''} onChange={(e) => updateBranding('terms_url', e.target.value)} />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Privacy URL</label>
+                <input className="input" placeholder="/privacy" value={branding.privacy_url || ''} onChange={(e) => updateBranding('privacy_url', e.target.value)} />
+              </div>
+            </div>
+            <div className="flex items-center gap-2">
+              <button type="button" onClick={handleSaveBranding} disabled={brandingSaving} className="btn-primary text-sm">
+                {brandingSaving ? 'Saving...' : 'Save Branding'}
+              </button>
+              {brandingSaved && <span className="text-sm text-green-600">Saved!</span>}
+            </div>
+          </div>
+        </div>
+
         {/* System Info */}
         <div className="card p-5">
           <div className="flex items-center justify-between mb-4">
@@ -179,7 +265,7 @@ export default function SettingsPage() {
               <label className="block text-sm font-medium text-gray-700 mb-1">API Base URL</label>
               <input
                 className="input"
-                placeholder="https://api.sojorn.net (default)"
+                placeholder="Leave blank to use environment default"
                 value={apiUrl}
                 onChange={(e) => setApiUrl(e.target.value)}
               />
@@ -212,7 +298,7 @@ export default function SettingsPage() {
             <div className="flex justify-between">
               <span className="text-gray-500">API URL</span>
               <span className="text-gray-900 font-medium font-mono text-xs">
-                {process.env.NEXT_PUBLIC_API_URL || 'https://api.sojorn.net'}
+                {process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8080'}
               </span>
             </div>
           </div>

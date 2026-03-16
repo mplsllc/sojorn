@@ -60,9 +60,6 @@ type NewsSource struct {
 	Enabled bool   `json:"enabled"`
 }
 
-// SearXNG endpoint — local Docker instance
-const searxngBaseURL = "http://localhost:8888"
-
 // SearXNGResponse represents the JSON response from SearXNG /search endpoint.
 type SearXNGResponse struct {
 	Results []SearXNGResult `json:"results"`
@@ -140,9 +137,11 @@ type OfficialAccountsService struct {
 	httpClient         *http.Client
 	stopCh             chan struct{}
 	wg                 sync.WaitGroup
+	searxngURL         string
+	ollamaURL          string
 }
 
-func NewOfficialAccountsService(pool *pgxpool.Pool, localAIService *LocalAIService, linkPreviewService *LinkPreviewService) *OfficialAccountsService {
+func NewOfficialAccountsService(pool *pgxpool.Pool, localAIService *LocalAIService, linkPreviewService *LinkPreviewService, searxngURL, ollamaURL string) *OfficialAccountsService {
 	return &OfficialAccountsService{
 		pool:               pool,
 		localAIService:     localAIService,
@@ -150,7 +149,9 @@ func NewOfficialAccountsService(pool *pgxpool.Pool, localAIService *LocalAIServi
 		httpClient: &http.Client{
 			Timeout: 30 * time.Second,
 		},
-		stopCh: make(chan struct{}),
+		stopCh:     make(chan struct{}),
+		searxngURL: searxngURL,
+		ollamaURL:  ollamaURL,
 	}
 }
 
@@ -266,7 +267,7 @@ func (s *OfficialAccountsService) ToggleEnabled(ctx context.Context, id string, 
 // FetchSearXNGNews queries the local SearXNG instance for news about a site.
 // Returns results as RSSItems for uniform handling in the pipeline.
 func (s *OfficialAccountsService) FetchSearXNGNews(ctx context.Context, site string) ([]RSSItem, error) {
-	searchURL := fmt.Sprintf("%s/search?q=site:%s&categories=news&format=json&language=en", searxngBaseURL, site)
+	searchURL := fmt.Sprintf("%s/search?q=site:%s&categories=news&format=json&language=en", s.searxngURL, site)
 
 	req, err := http.NewRequestWithContext(ctx, "GET", searchURL, nil)
 	if err != nil {
@@ -740,7 +741,7 @@ func (s *OfficialAccountsService) generateTextLocal(ctx context.Context, modelID
 		return "", fmt.Errorf("marshal error: %w", err)
 	}
 
-	req, err := http.NewRequestWithContext(ctx, "POST", "http://localhost:11434/v1/chat/completions", bytes.NewReader(jsonBody))
+	req, err := http.NewRequestWithContext(ctx, "POST", s.ollamaURL+"/v1/chat/completions", bytes.NewReader(jsonBody))
 	if err != nil {
 		return "", fmt.Errorf("request error: %w", err)
 	}

@@ -17,11 +17,12 @@ import (
 )
 
 type PushService struct {
-	client   *messaging.Client
-	userRepo *repository.UserRepository
+	client     *messaging.Client
+	userRepo   *repository.UserRepository
+	appBaseURL string
 }
 
-func NewPushService(userRepo *repository.UserRepository, credentialsFile string) (*PushService, error) {
+func NewPushService(userRepo *repository.UserRepository, credentialsFile string, appBaseURL string) (*PushService, error) {
 	ctx := context.Background()
 	var opt option.ClientOption
 
@@ -49,8 +50,9 @@ func NewPushService(userRepo *repository.UserRepository, credentialsFile string)
 	log.Info().Msg("[INFO] PushService initialized successfully")
 
 	return &PushService{
-		client:   client,
-		userRepo: userRepo,
+		client:     client,
+		userRepo:   userRepo,
+		appBaseURL: appBaseURL,
 	}, nil
 }
 
@@ -112,7 +114,7 @@ func (s *PushService) SendPushWithBadge(ctx context.Context, userID, title, body
 				Data:  data,
 			},
 			FCMOptions: &messaging.WebpushFCMOptions{
-				Link: buildDeepLink(data),
+				Link: s.buildDeepLink(data),
 			},
 		},
 	}
@@ -217,9 +219,9 @@ func (s *PushService) handleFailedTokens(ctx context.Context, userID string, tok
 }
 
 // buildDeepLink creates a deep link URL from notification data
-func buildDeepLink(data map[string]string) string {
+func (s *PushService) buildDeepLink(data map[string]string) string {
 	target := data["target"]
-	baseURL := "https://sojorn.net"
+	baseURL := s.appBaseURL
 
 	switch target {
 	case "secure_chat":

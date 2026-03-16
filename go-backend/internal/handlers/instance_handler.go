@@ -51,6 +51,9 @@ func (h *InstanceHandler) GetInstance(c *gin.Context) {
 		"logo_url":      cfg["instance_logo_url"],
 		"accent_color":  cfg["instance_accent_color"],
 		"registration":  cfg["registration_mode"],
+		"contact_email": cfg["contact_email"],
+		"terms_url":     cfg["terms_url"],
+		"privacy_url":   cfg["privacy_url"],
 		"version":       "1.0.0",
 		"extensions":    h.registry.EnabledMap(),
 	})

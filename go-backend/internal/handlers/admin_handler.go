@@ -57,9 +57,12 @@ type AdminHandler struct {
 	videoBucket             string
 	imgDomain               string
 	vidDomain               string
+	appBaseURL              string
+	cookieDomain            string
+	ollamaURL               string
 }
 
-func NewAdminHandler(pool *pgxpool.Pool, moderationService *services.ModerationService, appealService *services.AppealService, emailService *services.EmailService, sightEngineService *services.SightEngineService, officialAccountsService *services.OfficialAccountsService, linkPreviewService *services.LinkPreviewService, localAIService *services.LocalAIService, beaconAlertRepo *repository.BeaconAlertRepository, beaconIngestion *services.BeaconIngestionService, feedAlgorithmService *services.FeedAlgorithmService, jwtSecret string, isProduction bool, s3Client *s3.Client, mediaBucket string, videoBucket string, imgDomain string, vidDomain string) *AdminHandler {
+func NewAdminHandler(pool *pgxpool.Pool, moderationService *services.ModerationService, appealService *services.AppealService, emailService *services.EmailService, sightEngineService *services.SightEngineService, officialAccountsService *services.OfficialAccountsService, linkPreviewService *services.LinkPreviewService, localAIService *services.LocalAIService, beaconAlertRepo *repository.BeaconAlertRepository, beaconIngestion *services.BeaconIngestionService, feedAlgorithmService *services.FeedAlgorithmService, jwtSecret string, isProduction bool, s3Client *s3.Client, mediaBucket string, videoBucket string, imgDomain string, vidDomain string, appBaseURL string, cookieDomain string, ollamaURL string) *AdminHandler {
 	return &AdminHandler{
 		pool:                    pool,
 		moderationService:       moderationService,
@@ -79,6 +82,9 @@ func NewAdminHandler(pool *pgxpool.Pool, moderationService *services.ModerationS
 		videoBucket:             videoBucket,
 		imgDomain:               imgDomain,
 		vidDomain:               vidDomain,
+		appBaseURL:              appBaseURL,
+		cookieDomain:            cookieDomain,
+		ollamaURL:               ollamaURL,
 	}
 }
 
@@ -91,7 +97,9 @@ func (h *AdminHandler) setAdminCookie(c *gin.Context, token string, maxAge int) 
 		HttpOnly: true,
 	}
 	if h.isProduction {
-		cookie.Domain = ".sojorn.net"
+		if h.cookieDomain != "" {
+			cookie.Domain = h.cookieDomain
+		}
 		cookie.Secure = true
 		cookie.SameSite = http.SameSiteNoneMode
 		cookie.Path = "/api"
@@ -2838,7 +2846,7 @@ func (h *AdminHandler) ListLocalModels(c *gin.Context) {
 	ctx := c.Request.Context()
 
 	// Query Ollama's /api/tags endpoint for locally available models
-	req, err := http.NewRequestWithContext(ctx, "GET", "http://localhost:11434/api/tags", nil)
+	req, err := http.NewRequestWithContext(ctx, "GET", h.ollamaURL+"/api/tags", nil)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to create request"})
 		return
@@ -3331,7 +3339,7 @@ func (h *AdminHandler) AdminImportContent(c *gin.Context) {
 		if item.ThumbnailURL != "" {
 			// Mirror external thumbnails (e.g. TikTok CDN) to R2 before storing.
 			thumbSrc := item.ThumbnailURL
-			if !isOurDomain(thumbSrc) {
+			if !h.isOurDomain(thumbSrc) {
 				if mirrored, err := h.mirrorToR2(c.Request.Context(), thumbSrc, "imports/thumbs"); err == nil {
 					thumbSrc = mirrored
 				} else {
@@ -4333,12 +4341,12 @@ func (h *AdminHandler) SendTestEmail(c *gin.Context) {
 	// Replace placeholders with sample data for test
 	replacer := strings.NewReplacer(
 		"{{name}}", "Test User",
-		"{{verify_url}}", "https://mp.ls/verified",
-		"{{reset_url}}", "https://mp.ls/sojorn",
+		"{{verify_url}}", h.appBaseURL+"/verified",
+		"{{reset_url}}", h.appBaseURL,
 		"{{reason}}", "This is a test reason",
 		"{{duration}}", "7 days",
 		"{{deletion_date}}", time.Now().AddDate(0, 0, 14).Format("January 2, 2006"),
-		"{{confirm_url}}", "https://mp.ls/destroyed",
+		"{{confirm_url}}", h.appBaseURL+"/destroyed",
 		"{{content_type}}", "post",
 		"{{strike_count}}", "1",
 		"{{strike_warning}}", "",
@@ -5807,7 +5815,7 @@ func (h *AdminHandler) OllamaModelStatus(c *gin.Context) {
 	client := &http.Client{Timeout: 5 * time.Second}
 
 	// Get installed models
-	tagsReq, err := http.NewRequestWithContext(ctx, "GET", "http://localhost:11434/api/tags", nil)
+	tagsReq, err := http.NewRequestWithContext(ctx, "GET", h.ollamaURL+"/api/tags", nil)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to create request"})
 		return
@@ -5839,7 +5847,7 @@ func (h *AdminHandler) OllamaModelStatus(c *gin.Context) {
 	}
 
 	// Get running models
-	psReq, err := http.NewRequestWithContext(ctx, "GET", "http://localhost:11434/api/ps", nil)
+	psReq, err := http.NewRequestWithContext(ctx, "GET", h.ollamaURL+"/api/ps", nil)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to create ps request"})
 		return
@@ -5920,7 +5928,7 @@ func (h *AdminHandler) OllamaLoadModel(c *gin.Context) {
 
 	ctx := c.Request.Context()
 	payload, _ := json.Marshal(map[string]any{"model": modelName})
-	req, err := http.NewRequestWithContext(ctx, "POST", "http://localhost:11434/api/generate", bytes.NewReader(payload))
+	req, err := http.NewRequestWithContext(ctx, "POST", h.ollamaURL+"/api/generate", bytes.NewReader(payload))
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to create request"})
 		return
@@ -5956,7 +5964,7 @@ func (h *AdminHandler) OllamaUnloadModel(c *gin.Context) {
 
 	ctx := c.Request.Context()
 	payload, _ := json.Marshal(map[string]any{"model": modelName, "keep_alive": 0})
-	req, err := http.NewRequestWithContext(ctx, "POST", "http://localhost:11434/api/generate", bytes.NewReader(payload))
+	req, err := http.NewRequestWithContext(ctx, "POST", h.ollamaURL+"/api/generate", bytes.NewReader(payload))
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to create request"})
 		return
@@ -5986,7 +5994,7 @@ func (h *AdminHandler) OllamaDeleteModel(c *gin.Context) {
 
 	ctx := c.Request.Context()
 	payload, _ := json.Marshal(map[string]string{"name": modelName})
-	req, err := http.NewRequestWithContext(ctx, "DELETE", "http://localhost:11434/api/delete", bytes.NewReader(payload))
+	req, err := http.NewRequestWithContext(ctx, "DELETE", h.ollamaURL+"/api/delete", bytes.NewReader(payload))
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to create request"})
 		return
@@ -6024,7 +6032,7 @@ func (h *AdminHandler) OllamaPullModel(c *gin.Context) {
 
 	ctx := c.Request.Context()
 	payload, _ := json.Marshal(map[string]any{"name": req.Name, "stream": false})
-	httpReq, err := http.NewRequestWithContext(ctx, "POST", "http://localhost:11434/api/pull", bytes.NewReader(payload))
+	httpReq, err := http.NewRequestWithContext(ctx, "POST", h.ollamaURL+"/api/pull", bytes.NewReader(payload))
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to create request"})
 		return
@@ -6369,11 +6377,9 @@ func (h *AdminHandler) TriggerBeaconSync(c *gin.Context) {
 }
 
 // isOurDomain returns true if the URL is hosted on a Sojorn-controlled domain.
-func isOurDomain(url string) bool {
-	return strings.Contains(url, "img.sojorn.net") ||
-		strings.Contains(url, "quips.sojorn.net") ||
-		strings.Contains(url, "img.gosojorn.com") ||
-		strings.Contains(url, "quips.gosojorn.com")
+func (h *AdminHandler) isOurDomain(url string) bool {
+	return (h.imgDomain != "" && strings.Contains(url, h.imgDomain)) ||
+		(h.vidDomain != "" && strings.Contains(url, h.vidDomain))
 }
 
 // mirrorToR2 downloads an external image URL and uploads it to the media bucket.

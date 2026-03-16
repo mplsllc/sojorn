@@ -40,7 +40,7 @@ func (e *Ext) Init(_ context.Context, deps *extension.Deps) error {
 	e.icedHandler = handlers.NewIcedHandler(deps.Config.IcedAPIBase)
 	e.ingestion = services.NewBeaconIngestionService(
 		beaconAlertRepo,
-		"http://127.0.0.1:8787",
+		deps.Config.MN511ProxyURL,
 		deps.Config.IcedAPIBase,
 		deps.S3Client,
 		deps.Config.R2MediaBucket,

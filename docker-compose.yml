@@ -1,0 +1,86 @@
+# Sojorn — Self-Hosted Social Network
+# Quick start: cp go-backend/.env.example .env && docker compose up -d
+#
+# Required: set JWT_SECRET in .env before first run.
+
+services:
+  # ── PostgreSQL Database ──────────────────────────────────
+  postgres:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: sojorn
+      POSTGRES_PASSWORD: sojorn
+      POSTGRES_DB: sojorn
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    ports:
+      - "5432:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U sojorn"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  # ── Database Migrations ──────────────────────────────────
+  migrate:
+    build:
+      context: ./go-backend
+    command: ["./migrate"]
+    env_file: .env
+    environment:
+      DATABASE_URL: postgres://sojorn:sojorn@postgres:5432/sojorn?sslmode=disable
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+  # ── Go API Backend ───────────────────────────────────────
+  api:
+    build:
+      context: ./go-backend
+    restart: unless-stopped
+    env_file: .env
+    environment:
+      DATABASE_URL: postgres://sojorn:sojorn@postgres:5432/sojorn?sslmode=disable
+      PORT: "8080"
+    ports:
+      - "8080:8080"
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+
+  # ── Admin Panel (Next.js) ────────────────────────────────
+  admin:
+    build:
+      context: ./admin
+      args:
+        NEXT_PUBLIC_API_URL: http://localhost:8080
+    restart: unless-stopped
+    environment:
+      NEXT_PUBLIC_API_URL: http://localhost:8080
+    ports:
+      - "3002:3002"
+    depends_on:
+      - api
+
+  # ── Ollama (Optional — AI Moderation) ───────────────────
+  # Uncomment to enable local AI-powered content moderation.
+  # ollama:
+  #   image: ollama/ollama:latest
+  #   restart: unless-stopped
+  #   ports:
+  #     - "11434:11434"
+  #   volumes:
+  #     - ollama_data:/root/.ollama
+  #   # Uncomment for GPU passthrough (NVIDIA):
+  #   # deploy:
+  #   #   resources:
+  #   #     reservations:
+  #   #       devices:
+  #   #         - driver: nvidia
+  #   #           count: 1
+  #   #           capabilities: [gpu]
+
+volumes:
+  pgdata:
+  # ollama_data:

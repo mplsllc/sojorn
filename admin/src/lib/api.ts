@@ -2,7 +2,7 @@
 // Licensed under the GNU Affero General Public License v3.0
 // See LICENSE file for details
 
-const API_BASE = process.env.NEXT_PUBLIC_API_URL || 'https://api.sojorn.net';
+const API_BASE = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8080';
 
 class ApiClient {
   private async request<T>(path: string, options: RequestInit = {}): Promise<T> {
@@ -966,7 +966,7 @@ class ApiClient {
     form.append('media', file);
     form.append('type', type);
     // Use raw fetch — FormData can't have Content-Type set manually
-    const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL || 'https://api.sojorn.net'}/api/v1/upload`, {
+    const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8080'}/api/v1/upload`, {
       method: 'POST',
       body: form,
       credentials: 'include',

@@ -1,29 +1,26 @@
 # Build stage
-FROM golang:1.21-alpine AS builder
+FROM golang:1.25-alpine AS builder
 
 WORKDIR /app
 
-# Copy dependencies
 COPY go.mod go.sum ./
 RUN go mod download
 
-# Copy source code
 COPY . .
 
-# Build the application
-RUN CGO_ENABLED=0 GOOS=linux go build -o /api ./cmd/api/main.go
+RUN CGO_ENABLED=0 GOOS=linux go build -ldflags="-s -w" -o /api ./cmd/api/main.go
+RUN CGO_ENABLED=0 GOOS=linux go build -ldflags="-s -w" -o /migrate ./cmd/migrate/main.go
 
 # Run stage
-FROM alpine:latest
+FROM alpine:3.20
+
+RUN apk add --no-cache ca-certificates tzdata
 
 WORKDIR /app
 
-# Copy the binary from the builder stage
 COPY --from=builder /api ./api
-COPY .env.example ./.env
-
-# Create migrations directory
-COPY internal/database/migrations ./migrations
+COPY --from=builder /migrate ./migrate
+COPY migrations ./migrations
 
 EXPOSE 8080
 

@@ -46,7 +46,7 @@ func ValidateUsernameWithDB(ctx context.Context, pool *pgxpool.Pool, handle stri
 		if err == nil && count > 0 {
 			return UsernameCheckResult{
 				UsernameReserved,
-				"This username is reserved. If you officially represent this brand, company, or public figure, you can submit a verification request at support@sojorn.net to claim it.",
+				"This username is reserved. Contact the instance administrator to claim it.",
 			}
 		}
 	}

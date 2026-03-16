@@ -17,8 +17,6 @@ import (
 	"gitlab.com/patrickbritton3/sojorn/go-backend/pkg/utils"
 )
 
-const mn511BaseURL = "http://127.0.0.1:8787"
-
 // mn511Feature represents a single GeoJSON Feature from the MN511 API.
 type mn511Feature struct {
 	Type string `json:"type"`
@@ -51,6 +49,11 @@ type mn511Response struct {
 // GetOfficialAlerts fetches live MN511 incidents and returns them in the same
 // JSON shape as GetNearbyBeacons so the Flutter client can handle them uniformly.
 func (h *PostHandler) GetOfficialAlerts(c *gin.Context) {
+	if h.mn511BaseURL == "" {
+		c.JSON(http.StatusOK, gin.H{"beacons": []gin.H{}})
+		return
+	}
+
 	lat := utils.GetQueryFloat(c, "lat", 0)
 	long := utils.GetQueryFloat(c, "long", 0)
 	radius := utils.GetQueryFloat(c, "radius", 16000)
@@ -71,7 +74,7 @@ func (h *PostHandler) GetOfficialAlerts(c *gin.Context) {
 	maxLon := long + lonDelta
 
 	bbox := fmt.Sprintf("%.6f,%.6f,%.6f,%.6f", minLon, minLat, maxLon, maxLat)
-	apiURL := fmt.Sprintf("%s/api/alerts?bbox=%s&status=active", mn511BaseURL, bbox)
+	apiURL := fmt.Sprintf("%s/api/alerts?bbox=%s&status=active", h.mn511BaseURL, bbox)
 
 	client := &http.Client{Timeout: 8 * time.Second}
 	resp, err := client.Get(apiURL)
@@ -199,6 +202,11 @@ type mn511CameraResponse struct {
 // GetOfficialCameras fetches MN511 traffic cameras within the given radius and
 // returns them in the beacon JSON shape with beacon_type "camera".
 func (h *PostHandler) GetOfficialCameras(c *gin.Context) {
+	if h.mn511BaseURL == "" {
+		c.JSON(http.StatusOK, gin.H{"beacons": []gin.H{}})
+		return
+	}
+
 	lat := utils.GetQueryFloat(c, "lat", 0)
 	long := utils.GetQueryFloat(c, "long", 0)
 	radius := utils.GetQueryFloat(c, "radius", 16000)
@@ -213,7 +221,7 @@ func (h *PostHandler) GetOfficialCameras(c *gin.Context) {
 
 	bbox := fmt.Sprintf("%.6f,%.6f,%.6f,%.6f",
 		long-lonDelta, lat-latDelta, long+lonDelta, lat+latDelta)
-	apiURL := fmt.Sprintf("%s/api/camera-views?bbox=%s&limit=300", mn511BaseURL, bbox)
+	apiURL := fmt.Sprintf("%s/api/camera-views?bbox=%s&limit=300", h.mn511BaseURL, bbox)
 
 	client := &http.Client{Timeout: 8 * time.Second}
 	resp, err := client.Get(apiURL)
@@ -347,6 +355,11 @@ type mn511SignProps struct {
 // GetOfficialSigns fetches MN DOT electronic road signs (DMS) within the
 // given bbox and returns them in the beacon JSON shape with beacon_type "sign".
 func (h *PostHandler) GetOfficialSigns(c *gin.Context) {
+	if h.mn511BaseURL == "" {
+		c.JSON(http.StatusOK, gin.H{"beacons": []gin.H{}})
+		return
+	}
+
 	lat := utils.GetQueryFloat(c, "lat", 0)
 	long := utils.GetQueryFloat(c, "long", 0)
 	radius := utils.GetQueryFloat(c, "radius", 16000)
@@ -360,7 +373,7 @@ func (h *PostHandler) GetOfficialSigns(c *gin.Context) {
 	lonDelta := (radius / 1000.0) / (111.0 * math.Cos(lat*math.Pi/180.0))
 	bbox := fmt.Sprintf("%.6f,%.6f,%.6f,%.6f", long-lonDelta, lat-latDelta, long+lonDelta, lat+latDelta)
 
-	apiURL := fmt.Sprintf("%s/api/signs?bbox=%s", mn511BaseURL, bbox)
+	apiURL := fmt.Sprintf("%s/api/signs?bbox=%s", h.mn511BaseURL, bbox)
 	client := &http.Client{Timeout: 8 * time.Second}
 	resp, err := client.Get(apiURL)
 	if err != nil {
@@ -465,6 +478,11 @@ type mn511WeatherProps struct {
 // GetOfficialWeatherStations fetches MN DOT RWIS weather sensor stations and
 // returns them in the beacon JSON shape with beacon_type "weather_station".
 func (h *PostHandler) GetOfficialWeatherStations(c *gin.Context) {
+	if h.mn511BaseURL == "" {
+		c.JSON(http.StatusOK, gin.H{"beacons": []gin.H{}})
+		return
+	}
+
 	lat := utils.GetQueryFloat(c, "lat", 0)
 	long := utils.GetQueryFloat(c, "long", 0)
 	radius := utils.GetQueryFloat(c, "radius", 16000)
@@ -478,7 +496,7 @@ func (h *PostHandler) GetOfficialWeatherStations(c *gin.Context) {
 	lonDelta := (radius / 1000.0) / (111.0 * math.Cos(lat*math.Pi/180.0))
 	bbox := fmt.Sprintf("%.6f,%.6f,%.6f,%.6f", long-lonDelta, lat-latDelta, long+lonDelta, lat+latDelta)
 
-	apiURL := fmt.Sprintf("%s/api/weather-stations?bbox=%s", mn511BaseURL, bbox)
+	apiURL := fmt.Sprintf("%s/api/weather-stations?bbox=%s", h.mn511BaseURL, bbox)
 	client := &http.Client{Timeout: 8 * time.Second}
 	resp, err := client.Get(apiURL)
 	if err != nil {

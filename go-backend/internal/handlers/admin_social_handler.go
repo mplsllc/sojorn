@@ -681,7 +681,7 @@ func (h *AdminHandler) DownloadSocialMedia(c *gin.Context) {
 
 	// Mirror thumbnail to R2 so we never store third-party CDN URLs in the DB.
 	thumbURL := req.ThumbnailURL
-	if thumbURL != "" && !isOurDomain(thumbURL) {
+	if thumbURL != "" && !h.isOurDomain(thumbURL) {
 		if r2Thumb, err := h.mirrorToR2(c.Request.Context(), thumbURL, "imports/thumbs"); err == nil {
 			thumbURL = r2Thumb
 		} else {
