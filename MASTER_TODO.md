@@ -1,5 +1,36 @@
 # Sojorn Master TODO
-Last updated 2026-03-02.
+Last updated 2026-03-16.
+
+---
+
+## 🔧 EXTENSION MIGRATION — CMS Refactor
+
+### Migrated to extension system ✅
+| Extension | ID | Routes | Background Jobs |
+|---|---|---|---|
+| Soundbank | `audio` | sounds CRUD | — |
+| Beacons | `beacons` | unified, cameras, iced, beacon search | beacon ingestion |
+| Neighborhoods | `neighborhoods` | detect, board, moderation | — |
+| Groups | `groups` | groups CRUD, membership, group events | — |
+| Capsules | `capsules` | E2EE groups, posts, chat, threads, key escrow | — |
+| Events | `events` | public event feed, user events | event ingestion (Eventbrite + Ticketmaster) |
+| Reposts | `reposts` | repost, boost, amplification, trending | — |
+| Discover | `discover` | search, hashtags, follow suggestions | trending score refresh |
+| Chat | `chat` | conversations, messages, reactions | — |
+
+### Still in main.go (not yet extensions)
+- **Beacon routes on postHandler** — CreateBeacon, GetNearbyBeacons, Vouch, Report, Resolve (needs PostHandler refactor)
+- **All admin routes** — adminHandler is a mega-handler; admin routes for each feature still wired inline
+- **Official Accounts** — scheduler + admin CRUD
+- **AI Moderation** — content moderation cascade (local AI → SightEngine)
+- **Marketplace** — not yet built
+
+### Next steps
+- [ ] Extract beacon routes from PostHandler into beacons extension
+- [ ] Split adminHandler into per-extension admin route registration
+- [ ] Create official_accounts extension
+- [ ] Create ai_moderation extension
+- [ ] Flutter: query `GET /api/v1/instance` to conditionally render feature UI
 
 ---
 
@@ -99,6 +130,7 @@ Add these to `website/src/pages/licenses.astro` as ported projects:
 
 ## ✅ COMPLETED
 
+- Extension system: 9 features (audio, beacons, neighborhoods, groups, capsules, events, reposts, discover, chat) migrated to toggleable extensions with runtime enable/disable ✅
 - first_frame_url: DB migration + Go model field + repo INSERT/SELECT + handler call after frame moderation + Flutter Quip model + QuipVideoItem thumbnail preference ✅
 - Quip report button: wired to SanctuarySheet via Post stub (id/authorId/caption from Quip) ✅
 - All 7 pre-existing Flutter compile errors fixed
