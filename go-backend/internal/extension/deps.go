@@ -29,4 +29,5 @@ type Deps struct {
 	EmailService        *services.EmailService
 	LocalAIService      *services.LocalAIService
 	LinkPreviewService  *services.LinkPreviewService
+	SightEngineService  *services.SightEngineService
 }

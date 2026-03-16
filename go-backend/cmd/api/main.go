@@ -32,6 +32,8 @@ import (
 	ext_events "gitlab.com/patrickbritton3/sojorn/go-backend/internal/extensions/events"
 	ext_groups "gitlab.com/patrickbritton3/sojorn/go-backend/internal/extensions/groups"
 	ext_neighborhoods "gitlab.com/patrickbritton3/sojorn/go-backend/internal/extensions/neighborhoods"
+	ext_official "gitlab.com/patrickbritton3/sojorn/go-backend/internal/extensions/official_accounts"
+	ext_moderation "gitlab.com/patrickbritton3/sojorn/go-backend/internal/extensions/moderation"
 	ext_reposts "gitlab.com/patrickbritton3/sojorn/go-backend/internal/extensions/reposts"
 	"gitlab.com/patrickbritton3/sojorn/go-backend/internal/handlers"
 	"gitlab.com/patrickbritton3/sojorn/go-backend/internal/middleware"
@@ -80,6 +82,8 @@ func main() {
 	extRegistry.Register(ext_reposts.New(extRegistry))
 	extRegistry.Register(ext_discover.New(extRegistry))
 	extRegistry.Register(ext_chat.New(extRegistry))
+	extRegistry.Register(ext_official.New(extRegistry))
+	extRegistry.Register(ext_moderation.New(extRegistry))
 
 	if err := extRegistry.LoadEnabledState(context.Background()); err != nil {
 		log.Warn().Err(err).Msg("Failed to load extension state (table may not exist yet)")
@@ -228,16 +232,14 @@ func main() {
 	keyHandler := handlers.NewKeyHandler(userRepo)
 	backupHandler := handlers.NewBackupHandler(repository.NewBackupRepository(dbPool))
 	settingsHandler := handlers.NewSettingsHandler(userRepo, notifRepo)
-	analysisHandler := handlers.NewAnalysisHandler()
 	appealHandler := handlers.NewAppealHandler(appealService)
 
 	// Initialize official accounts service
 	officialAccountsService := services.NewOfficialAccountsService(dbPool, localAIService, linkPreviewService, cfg.SearxngURL, cfg.OllamaURL)
-	officialAccountsService.StartScheduler()
-	defer officialAccountsService.StopScheduler()
+	// Scheduler moved to official_accounts extension BackgroundJobs
 
 	// icedHandler moved to beacons extension
-	moderationHandler := handlers.NewModerationHandler(moderationService, sightEngineService, localAIService)
+	// moderationHandler moved to moderation extension
 
 	// Beacon alert repo + ingestion kept for adminHandler (routes moved to beacons extension)
 	beaconAlertRepo := repository.NewBeaconAlertRepository(dbPool)
@@ -421,21 +423,10 @@ func main() {
 			authorized.GET("/feed", postHandler.GetFeed)
 			authorized.GET("/feed/personal", postHandler.GetFeed)
 			authorized.GET("/feed/sojorn", postHandler.GetSojornFeed)
-			// Beacon routes on postHandler remain here (extension owns unified/cameras/iced/search)
-			authorized.POST("/beacons", middleware.UserRateLimit(3.0/3600.0, 3), postHandler.CreateBeacon)
-			authorized.GET("/beacons/nearby", postHandler.GetNearbyBeacons)
-			authorized.GET("/beacons/official", postHandler.GetOfficialAlerts)
-			authorized.GET("/beacons/signs", postHandler.GetOfficialSigns)
-			authorized.GET("/beacons/weather", postHandler.GetOfficialWeatherStations)
-			authorized.POST("/beacons/:id/vouch", postHandler.VouchBeacon)
-			authorized.POST("/beacons/:id/report", postHandler.ReportBeacon)
-			authorized.POST("/beacons/:id/resolve", postHandler.ResolveBeacon)
-			authorized.DELETE("/beacons/:id/vouch", postHandler.RemoveBeaconVote)
 			authorized.GET("/categories", categoryHandler.GetCategories)
 			authorized.POST("/categories/settings", categoryHandler.SetUserCategorySettings)
 			authorized.GET("/categories/settings", categoryHandler.GetUserCategorySettings)
-			authorized.POST("/analysis/tone", analysisHandler.CheckTone)
-			authorized.POST("/moderate", moderationHandler.CheckContent)
+			// analysis/tone and /moderate routes moved to moderation extension
 
 			// User reports
 			authorized.GET("/reports/mine", userHandler.GetMyReports)
@@ -783,6 +774,7 @@ func main() {
 		EmailService:        emailService,
 		LocalAIService:      localAIService,
 		LinkPreviewService:  linkPreviewService,
+		SightEngineService:  sightEngineService,
 	}
 
 	// authorized and adminOnly groups are needed for extension route registration.
