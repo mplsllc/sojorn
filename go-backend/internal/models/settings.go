@@ -20,6 +20,9 @@ type PrivacySettings struct {
 	FollowRequestPolicy   *string   `json:"follow_request_policy" db:"follow_request_policy"`
 	DefaultPostVisibility *string   `json:"default_post_visibility" db:"default_post_visibility"`
 	IsPrivateProfile      *bool     `json:"is_private_profile" db:"is_private_profile"`
+	AllowDMsFrom          *string   `json:"allow_dms_from" db:"allow_dms_from"`
+	SearchableByHandle    *bool     `json:"searchable_by_handle" db:"searchable_by_handle"`
+	SearchableByEmail     *bool     `json:"searchable_by_email" db:"searchable_by_email"`
 	UpdatedAt             time.Time `json:"updated_at" db:"updated_at"`
 }
 

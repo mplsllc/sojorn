@@ -114,6 +114,7 @@ type RegisterRequest struct {
 	EmailContact    bool   `json:"email_contact"`
 	BirthMonth      int    `json:"birth_month" binding:"required,min=1,max=12"`
 	BirthYear       int    `json:"birth_year" binding:"required,min=1900,max=2025"`
+	InviteToken     string `json:"invite_token"`
 }
 
 type LoginRequest struct {
@@ -129,6 +130,39 @@ func (h *AuthHandler) Register(c *gin.Context) {
 		return
 	}
 	req.Email = strings.ToLower(strings.TrimSpace(req.Email))
+
+	// ── Registration mode enforcement ──────────────────────────
+	var registrationMode string
+	_ = h.repo.Pool().QueryRow(c.Request.Context(),
+		`SELECT value FROM instance_config WHERE key = 'registration_mode'`).Scan(&registrationMode)
+
+	switch registrationMode {
+	case "closed":
+		c.JSON(http.StatusForbidden, gin.H{"error": "Registration is closed on this instance"})
+		return
+	case "invite":
+		if req.InviteToken == "" {
+			c.JSON(http.StatusForbidden, gin.H{"error": "An invite token is required to register on this instance"})
+			return
+		}
+		var inviteUsedBy *string
+		var inviteExpiresAt *time.Time
+		err := h.repo.Pool().QueryRow(c.Request.Context(),
+			`SELECT used_by, expires_at FROM invite_tokens WHERE token = $1`, req.InviteToken).Scan(&inviteUsedBy, &inviteExpiresAt)
+		if err != nil {
+			c.JSON(http.StatusForbidden, gin.H{"error": "Invalid invite token"})
+			return
+		}
+		if inviteUsedBy != nil {
+			c.JSON(http.StatusForbidden, gin.H{"error": "This invite token has already been used"})
+			return
+		}
+		if inviteExpiresAt != nil && time.Now().After(*inviteExpiresAt) {
+			c.JSON(http.StatusForbidden, gin.H{"error": "This invite token has expired"})
+			return
+		}
+	}
+	// "open" or unset: allow registration without invite
 
 	// Validate ALTCHA token
 	altchaService := services.NewAltchaService(h.config.JWTSecret)
@@ -244,6 +278,13 @@ func (h *AuthHandler) Register(c *gin.Context) {
 		}
 		internalError(c, "Failed to create profile", err)
 		return
+	}
+
+	// Mark invite token as used (if invite-only registration)
+	if registrationMode == "invite" && req.InviteToken != "" {
+		_, _ = h.repo.Pool().Exec(c.Request.Context(),
+			`UPDATE invite_tokens SET used_by = $1, used_at = NOW() WHERE token = $2`,
+			userID, req.InviteToken)
 	}
 
 	rawToken, _ := generateRandomString(32)

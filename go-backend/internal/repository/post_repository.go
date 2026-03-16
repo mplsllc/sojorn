@@ -627,15 +627,70 @@ func (r *PostRepository) GetPostByID(ctx context.Context, postID string, userID 
 }
 
 func (r *PostRepository) UpdatePost(ctx context.Context, postID string, authorID string, body string) error {
-	query := `UPDATE public.posts SET body = $1, edited_at = NOW() WHERE id = $2::uuid AND author_id = $3::uuid AND deleted_at IS NULL`
-	res, err := r.pool.Exec(ctx, query, body, postID, authorID)
+	tx, err := r.pool.Begin(ctx)
+	if err != nil {
+		return fmt.Errorf("failed to start transaction: %w", err)
+	}
+	defer tx.Rollback(ctx)
+
+	// Fetch old content and verify ownership
+	var oldBody string
+	err = tx.QueryRow(ctx,
+		`SELECT body FROM public.posts WHERE id = $1::uuid AND author_id = $2::uuid AND deleted_at IS NULL`,
+		postID, authorID).Scan(&oldBody)
+	if err != nil {
+		return fmt.Errorf("post not found or unauthorized")
+	}
+
+	// Save old content to edit history
+	_, err = tx.Exec(ctx,
+		`INSERT INTO public.post_edits (post_id, content, edited_at) VALUES ($1::uuid, $2, NOW())`,
+		postID, oldBody)
+	if err != nil {
+		return fmt.Errorf("failed to save edit history: %w", err)
+	}
+
+	// Apply the update
+	res, err := tx.Exec(ctx,
+		`UPDATE public.posts SET body = $1, edited_at = NOW() WHERE id = $2::uuid AND author_id = $3::uuid AND deleted_at IS NULL`,
+		body, postID, authorID)
 	if err != nil {
 		return err
 	}
 	if res.RowsAffected() == 0 {
 		return fmt.Errorf("post not found or unauthorized")
 	}
-	return nil
+
+	return tx.Commit(ctx)
+}
+
+// GetPostEdits returns the edit history for a post, most recent first.
+func (r *PostRepository) GetPostEdits(ctx context.Context, postID string) ([]map[string]interface{}, error) {
+	rows, err := r.pool.Query(ctx,
+		`SELECT id, content, edited_at FROM public.post_edits WHERE post_id = $1::uuid ORDER BY edited_at DESC`,
+		postID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var edits []map[string]interface{}
+	for rows.Next() {
+		var id, content string
+		var editedAt time.Time
+		if err := rows.Scan(&id, &content, &editedAt); err != nil {
+			return nil, err
+		}
+		edits = append(edits, map[string]interface{}{
+			"id":        id,
+			"content":   content,
+			"edited_at": editedAt,
+		})
+	}
+	if edits == nil {
+		edits = []map[string]interface{}{}
+	}
+	return edits, nil
 }
 
 // UpdatePostModeration updates moderation-related fields on a post.

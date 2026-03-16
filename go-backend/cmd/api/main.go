@@ -347,11 +347,16 @@ func main() {
 
 	notificationHandler := handlers.NewNotificationHandler(notifRepo, notificationService, dbPool, pushService)
 
+	// ActivityPub handler (created early so WebFinger can be on the root router)
+	apHandler := handlers.NewActivityPubHandler(dbPool, cfg.APIBaseURL)
+	r.GET("/.well-known/webfinger", apHandler.WebFinger)
+
 	v1 := r.Group("/api/v1")
 	v1.Use(middleware.RateLimit(30.0, 60))
 	{
 		// Public instance capabilities (unauthenticated — app needs it pre-login)
 		v1.GET("/instance", instanceHandler.GetInstance)
+		v1.GET("/instance/about", instanceHandler.GetAbout)
 
 		v1.GET("/version", func(c *gin.Context) {
 			c.JSON(200, gin.H{
@@ -388,6 +393,10 @@ func main() {
 
 		// Image proxy (public — no auth needed, CORS bypass for Flutter web)
 		v1.GET("/image-proxy", imageProxyHandler.ProxyImage)
+
+		// ActivityPub read-only endpoints (public, no auth)
+		v1.GET("/ap/users/:handle", apHandler.GetActor)
+		v1.GET("/ap/users/:handle/outbox", apHandler.GetOutbox)
 
 		auth := v1.Group("/auth")
 		{
@@ -459,6 +468,7 @@ func main() {
 			authorized.GET("/posts/:id/thread", postHandler.GetPostChain)
 			authorized.GET("/posts/:id/focus-context", postHandler.GetPostFocusContext)
 			authorized.PATCH("/posts/:id", postHandler.UpdatePost)
+			authorized.GET("/posts/:id/edits", postHandler.GetPostEdits)
 			authorized.DELETE("/posts/:id", postHandler.DeletePost)
 			authorized.POST("/posts/:id/pin", postHandler.PinPost)
 			authorized.PATCH("/posts/:id/visibility", postHandler.UpdateVisibility)

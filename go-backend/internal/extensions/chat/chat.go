@@ -30,7 +30,8 @@ func (e *Ext) Dependencies() []string { return nil }
 
 func (e *Ext) Init(_ context.Context, deps *extension.Deps) error {
 	chatRepo := repository.NewChatRepository(deps.DB)
-	e.handler = handlers.NewChatHandler(chatRepo, deps.NotificationService, deps.Hub)
+	userRepo := repository.NewUserRepository(deps.DB)
+	e.handler = handlers.NewChatHandler(chatRepo, deps.NotificationService, deps.Hub, userRepo)
 	return nil
 }
 

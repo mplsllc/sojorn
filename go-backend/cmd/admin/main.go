@@ -52,6 +52,8 @@ func main() {
 	switch os.Args[1] {
 	case "create-admin":
 		cmdCreateAdmin(os.Args[2:])
+	case "create-invite":
+		cmdCreateInvite(os.Args[2:])
 	case "reset-password":
 		cmdResetPassword(os.Args[2:])
 	case "list-extensions":
@@ -72,6 +74,7 @@ func printUsage() {
 
 Commands:
   create-admin     Create an admin user account
+  create-invite    Generate an invite token for registration
   reset-password   Reset a user's password
   list-extensions  List all registered extensions
   toggle-extension Enable or disable an extension
@@ -153,6 +156,60 @@ func cmdCreateAdmin(args []string) {
 	}
 
 	fmt.Printf("Admin account created: @%s\n", *handle)
+}
+
+// ---------- create-invite ----------
+
+func cmdCreateInvite(args []string) {
+	fs := flag.NewFlagSet("create-invite", flag.ExitOnError)
+	expiresIn := fs.String("expires", "", "Optional expiry duration (e.g. 24h, 7d). Empty = no expiry")
+	fs.Parse(args)
+
+	pool := mustConnect()
+	defer pool.Close()
+
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+
+	var expiresAt *time.Time
+	if *expiresIn != "" {
+		dur := *expiresIn
+		// Support "d" suffix for days
+		if strings.HasSuffix(dur, "d") {
+			days := dur[:len(dur)-1]
+			var n int
+			if _, err := fmt.Sscanf(days, "%d", &n); err != nil {
+				fmt.Fprintf(os.Stderr, "Error: invalid duration %q\n", *expiresIn)
+				os.Exit(1)
+			}
+			t := time.Now().Add(time.Duration(n) * 24 * time.Hour)
+			expiresAt = &t
+		} else {
+			d, err := time.ParseDuration(dur)
+			if err != nil {
+				fmt.Fprintf(os.Stderr, "Error: invalid duration %q: %v\n", *expiresIn, err)
+				os.Exit(1)
+			}
+			t := time.Now().Add(d)
+			expiresAt = &t
+		}
+	}
+
+	var token string
+	err := pool.QueryRow(ctx,
+		`INSERT INTO invite_tokens (expires_at) VALUES ($1) RETURNING token`,
+		expiresAt).Scan(&token)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "Error creating invite token: %v\n", err)
+		os.Exit(1)
+	}
+
+	fmt.Printf("Invite token: %s\n", token)
+	if expiresAt != nil {
+		fmt.Printf("Expires at:   %s\n", expiresAt.Format(time.RFC3339))
+	} else {
+		fmt.Println("Expires at:   never")
+	}
 }
 
 // ---------- reset-password ----------

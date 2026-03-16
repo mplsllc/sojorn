@@ -1080,7 +1080,27 @@ func (h *PostHandler) UpdatePost(c *gin.Context) {
 		return
 	}
 
-	c.JSON(http.StatusOK, gin.H{"message": "Post updated"})
+	// Return the updated post
+	post, err := h.postRepo.GetPostByID(c.Request.Context(), postID, userIDStr.(string))
+	if err != nil {
+		// Update succeeded but fetch failed — still report success
+		c.JSON(http.StatusOK, gin.H{"message": "Post updated"})
+		return
+	}
+	h.enrichSinglePostLinkPreview(c.Request.Context(), post)
+	c.JSON(http.StatusOK, gin.H{"post": post})
+}
+
+func (h *PostHandler) GetPostEdits(c *gin.Context) {
+	postID := c.Param("id")
+
+	edits, err := h.postRepo.GetPostEdits(c.Request.Context(), postID)
+	if err != nil {
+		internalError(c, "Failed to fetch edit history", err)
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{"edits": edits})
 }
 
 func (h *PostHandler) DeletePost(c *gin.Context) {

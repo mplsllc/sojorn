@@ -59,6 +59,55 @@ func (h *InstanceHandler) GetInstance(c *gin.Context) {
 	})
 }
 
+// GetAbout returns public "about this instance" information including stats.
+func (h *InstanceHandler) GetAbout(c *gin.Context) {
+	ctx := c.Request.Context()
+
+	// Load instance config from DB.
+	rows, err := h.db.Query(ctx, `SELECT key, value FROM instance_config`)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to load instance config"})
+		return
+	}
+	defer rows.Close()
+
+	cfg := make(map[string]string)
+	for rows.Next() {
+		var k, v string
+		if err := rows.Scan(&k, &v); err != nil {
+			continue
+		}
+		cfg[k] = v
+	}
+
+	// Gather stats.
+	var userCount, postCount, monthlyActiveUsers int
+
+	_ = h.db.QueryRow(ctx,
+		`SELECT count(*) FROM profiles WHERE status = 'active'`).Scan(&userCount)
+
+	_ = h.db.QueryRow(ctx,
+		`SELECT count(*) FROM posts WHERE status = 'active'`).Scan(&postCount)
+
+	_ = h.db.QueryRow(ctx,
+		`SELECT count(DISTINCT author_id) FROM posts WHERE created_at > NOW() - INTERVAL '30 days'`).Scan(&monthlyActiveUsers)
+
+	c.JSON(http.StatusOK, gin.H{
+		"name":                 cfg["instance_name"],
+		"description":          cfg["instance_description"],
+		"contact_email":        cfg["contact_email"],
+		"terms_url":            cfg["terms_url"],
+		"privacy_url":          cfg["privacy_url"],
+		"version":              "1.0.0",
+		"extensions":           h.registry.EnabledMap(),
+		"stats": gin.H{
+			"user_count":          userCount,
+			"post_count":          postCount,
+			"monthly_active_users": monthlyActiveUsers,
+		},
+	})
+}
+
 // AdminGetExtensions returns all registered extensions with their state.
 func (h *InstanceHandler) AdminGetExtensions(c *gin.Context) {
 	c.JSON(http.StatusOK, h.registry.All())

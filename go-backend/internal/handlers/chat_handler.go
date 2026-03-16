@@ -20,16 +20,21 @@ import (
 
 type ChatHandler struct {
 	chatRepo            *repository.ChatRepository
+	userRepo            *repository.UserRepository
 	notificationService *services.NotificationService
 	hub                 *realtime.Hub
 }
 
-func NewChatHandler(chatRepo *repository.ChatRepository, notificationService *services.NotificationService, hub *realtime.Hub) *ChatHandler {
-	return &ChatHandler{
+func NewChatHandler(chatRepo *repository.ChatRepository, notificationService *services.NotificationService, hub *realtime.Hub, userRepo ...*repository.UserRepository) *ChatHandler {
+	h := &ChatHandler{
 		chatRepo:            chatRepo,
 		notificationService: notificationService,
 		hub:                 hub,
 	}
+	if len(userRepo) > 0 {
+		h.userRepo = userRepo[0]
+	}
+	return h
 }
 
 func (h *ChatHandler) GetConversations(c *gin.Context) {
@@ -48,6 +53,24 @@ func (h *ChatHandler) GetOrCreateConversation(c *gin.Context) {
 	if otherUserID == "" {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "other_user_id is required"})
 		return
+	}
+
+	// Check DM permission of the target user
+	if h.userRepo != nil {
+		perm, _ := h.userRepo.GetDMPermission(c.Request.Context(), otherUserID)
+		switch perm {
+		case "nobody":
+			c.JSON(http.StatusForbidden, gin.H{"error": "This user does not accept direct messages"})
+			return
+		case "followers":
+			// Check if the sender follows the target
+			isFollowing, err := h.userRepo.IsFollowing(c.Request.Context(), userIDStr.(string), otherUserID)
+			if err != nil || !isFollowing {
+				c.JSON(http.StatusForbidden, gin.H{"error": "This user only accepts messages from followers"})
+				return
+			}
+		}
+		// "everyone" (default) — allow
 	}
 
 	id, err := h.chatRepo.GetOrCreateConversation(c.Request.Context(), userIDStr.(string), otherUserID)

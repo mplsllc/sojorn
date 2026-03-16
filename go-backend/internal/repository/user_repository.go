@@ -149,24 +149,26 @@ func (r *UserRepository) MarkOnboardingComplete(ctx context.Context, userID stri
 func (r *UserRepository) SearchUsers(ctx context.Context, query string, viewerID string, limit int) ([]models.Profile, error) {
 	// The % operator uses pg_trgm for fuzzy matching
 	sql := `
-		SELECT 
+		SELECT
 			p.id, p.handle, p.display_name, p.bio, p.avatar_url, p.origin_country, p.has_completed_onboarding, p.created_at
 		FROM public.profiles p
 		LEFT JOIN public.trust_state t ON p.id = t.user_id
+		LEFT JOIN public.profile_privacy_settings pps ON p.id = pps.user_id
 		WHERE (
-			p.handle % $1 OR p.handle ILIKE '%' || $1 || '%' 
+			p.handle % $1 OR p.handle ILIKE '%' || $1 || '%'
 			OR p.display_name % $1 OR p.display_name ILIKE '%' || $1 || '%'
 		)
 		  AND (
-			  p.is_private = FALSE 
+			  p.is_private = FALSE
 			  OR ($2 != '' AND EXISTS (
-				  SELECT 1 FROM public.follows f 
+				  SELECT 1 FROM public.follows f
 				  WHERE f.follower_id = $2::uuid AND f.following_id = p.id AND f.status = 'accepted'
 			  ))
 			  OR ($2 != '' AND p.id = $2::uuid)
 		  )
 		  AND NOT public.has_block_between(p.id, CASE WHEN $2 != '' THEN $2::uuid ELSE NULL END)
-		ORDER BY 
+		  AND COALESCE(pps.searchable_by_handle, true) = true
+		ORDER BY
 			(similarity(p.handle, $1) + CASE WHEN p.handle ILIKE $1 || '%' THEN 0.5 ELSE 0 END + CASE WHEN COALESCE(t.harmony_score, 0) > 80 THEN 0.3 ELSE 0 END) DESC,
 			p.created_at DESC
 		LIMIT $3
@@ -692,7 +694,9 @@ func (r *UserRepository) GetPrivacySettings(ctx context.Context, userID string) 
 	query := `
 		SELECT user_id, show_location, show_interests, profile_visibility,
 		       posts_visibility, saved_visibility, follow_request_policy,
-		       default_post_visibility, is_private_profile, updated_at
+		       default_post_visibility, is_private_profile,
+		       allow_dms_from, searchable_by_handle, searchable_by_email,
+		       updated_at
 		FROM public.profile_privacy_settings
 		WHERE user_id = $1::uuid
 	`
@@ -700,7 +704,9 @@ func (r *UserRepository) GetPrivacySettings(ctx context.Context, userID string) 
 	err := r.pool.QueryRow(ctx, query, userID).Scan(
 		&ps.UserID, &ps.ShowLocation, &ps.ShowInterests, &ps.ProfileVisibility,
 		&ps.PostsVisibility, &ps.SavedVisibility, &ps.FollowRequestPolicy,
-		&ps.DefaultPostVisibility, &ps.IsPrivateProfile, &ps.UpdatedAt,
+		&ps.DefaultPostVisibility, &ps.IsPrivateProfile,
+		&ps.AllowDMsFrom, &ps.SearchableByHandle, &ps.SearchableByEmail,
+		&ps.UpdatedAt,
 	)
 	if err != nil {
 		if err.Error() == "no rows in result set" || err.Error() == "pgx: no rows in result set" {
@@ -721,6 +727,9 @@ func (r *UserRepository) GetPrivacySettings(ctx context.Context, userID string) 
 				FollowRequestPolicy:   &anyone,
 				DefaultPostVisibility: &pub,
 				IsPrivateProfile:      &f,
+				AllowDMsFrom:          &anyone,
+				SearchableByHandle:    &t,
+				SearchableByEmail:     &f,
 				UpdatedAt:             time.Now(),
 			}, nil
 		}
@@ -734,8 +743,10 @@ func (r *UserRepository) UpdatePrivacySettings(ctx context.Context, ps *models.P
 		INSERT INTO public.profile_privacy_settings (
 			user_id, show_location, show_interests, profile_visibility,
 			posts_visibility, saved_visibility, follow_request_policy,
-			default_post_visibility, is_private_profile, updated_at
-		) VALUES ($1::uuid, $2, $3, $4, $5, $6, $7, $8, $9, NOW())
+			default_post_visibility, is_private_profile,
+			allow_dms_from, searchable_by_handle, searchable_by_email,
+			updated_at
+		) VALUES ($1::uuid, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, NOW())
 		ON CONFLICT (user_id) DO UPDATE SET
 			show_location = COALESCE(EXCLUDED.show_location, profile_privacy_settings.show_location),
 			show_interests = COALESCE(EXCLUDED.show_interests, profile_privacy_settings.show_interests),
@@ -745,14 +756,31 @@ func (r *UserRepository) UpdatePrivacySettings(ctx context.Context, ps *models.P
 			follow_request_policy = COALESCE(EXCLUDED.follow_request_policy, profile_privacy_settings.follow_request_policy),
 			default_post_visibility = COALESCE(EXCLUDED.default_post_visibility, profile_privacy_settings.default_post_visibility),
 			is_private_profile = COALESCE(EXCLUDED.is_private_profile, profile_privacy_settings.is_private_profile),
+			allow_dms_from = COALESCE(EXCLUDED.allow_dms_from, profile_privacy_settings.allow_dms_from),
+			searchable_by_handle = COALESCE(EXCLUDED.searchable_by_handle, profile_privacy_settings.searchable_by_handle),
+			searchable_by_email = COALESCE(EXCLUDED.searchable_by_email, profile_privacy_settings.searchable_by_email),
 			updated_at = NOW()
 	`
 	_, err := r.pool.Exec(ctx, query,
 		ps.UserID, ps.ShowLocation, ps.ShowInterests, ps.ProfileVisibility,
 		ps.PostsVisibility, ps.SavedVisibility, ps.FollowRequestPolicy,
 		ps.DefaultPostVisibility, ps.IsPrivateProfile,
+		ps.AllowDMsFrom, ps.SearchableByHandle, ps.SearchableByEmail,
 	)
 	return err
+}
+
+// GetDMPermission returns the allow_dms_from setting for a user.
+func (r *UserRepository) GetDMPermission(ctx context.Context, userID string) (string, error) {
+	var perm string
+	err := r.pool.QueryRow(ctx,
+		`SELECT COALESCE(allow_dms_from, 'everyone') FROM public.profile_privacy_settings WHERE user_id = $1::uuid`,
+		userID).Scan(&perm)
+	if err != nil {
+		// No row means default = everyone
+		return "everyone", nil
+	}
+	return perm, nil
 }
 
 func (r *UserRepository) GetUserSettings(ctx context.Context, userID string) (*models.UserSettings, error) {
