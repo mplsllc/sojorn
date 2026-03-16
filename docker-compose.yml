@@ -49,6 +49,20 @@ services:
       migrate:
         condition: service_completed_successfully
 
+  # ── Web Frontend (Next.js) ───────────────────────────────
+  web:
+    build:
+      context: ./web
+      args:
+        NEXT_PUBLIC_API_URL: http://localhost:8080
+    restart: unless-stopped
+    environment:
+      NEXT_PUBLIC_API_URL: http://localhost:8080
+    ports:
+      - "3000:3000"
+    depends_on:
+      - api
+
   # ── Admin Panel (Next.js) ────────────────────────────────
   admin:
     build:
