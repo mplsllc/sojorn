@@ -25,6 +25,14 @@ import (
 	"gitlab.com/patrickbritton3/sojorn/go-backend/internal/config"
 	"gitlab.com/patrickbritton3/sojorn/go-backend/internal/extension"
 	ext_audio "gitlab.com/patrickbritton3/sojorn/go-backend/internal/extensions/audio"
+	ext_beacons "gitlab.com/patrickbritton3/sojorn/go-backend/internal/extensions/beacons"
+	ext_capsules "gitlab.com/patrickbritton3/sojorn/go-backend/internal/extensions/capsules"
+	ext_chat "gitlab.com/patrickbritton3/sojorn/go-backend/internal/extensions/chat"
+	ext_discover "gitlab.com/patrickbritton3/sojorn/go-backend/internal/extensions/discover"
+	ext_events "gitlab.com/patrickbritton3/sojorn/go-backend/internal/extensions/events"
+	ext_groups "gitlab.com/patrickbritton3/sojorn/go-backend/internal/extensions/groups"
+	ext_neighborhoods "gitlab.com/patrickbritton3/sojorn/go-backend/internal/extensions/neighborhoods"
+	ext_reposts "gitlab.com/patrickbritton3/sojorn/go-backend/internal/extensions/reposts"
 	"gitlab.com/patrickbritton3/sojorn/go-backend/internal/handlers"
 	"gitlab.com/patrickbritton3/sojorn/go-backend/internal/middleware"
 	"gitlab.com/patrickbritton3/sojorn/go-backend/internal/monitoring"
@@ -64,15 +72,14 @@ func main() {
 	// ── Extension Registry ──────────────────────────────────
 	extRegistry := extension.NewRegistry(dbPool)
 	extRegistry.Register(ext_audio.New(extRegistry))
-	// Future extensions registered here:
-	// extRegistry.Register(ext_beacons.New(extRegistry))
-	// extRegistry.Register(ext_groups.New(extRegistry))
-	// extRegistry.Register(ext_quips.New(extRegistry))
-	// extRegistry.Register(ext_neighborhoods.New(extRegistry))
-	// extRegistry.Register(ext_events.New(extRegistry))
-	// extRegistry.Register(ext_reposts.New(extRegistry))
-	// extRegistry.Register(ext_official.New(extRegistry))
-	// extRegistry.Register(ext_aimod.New(extRegistry))
+	extRegistry.Register(ext_beacons.New(extRegistry))
+	extRegistry.Register(ext_neighborhoods.New(extRegistry))
+	extRegistry.Register(ext_groups.New(extRegistry))
+	extRegistry.Register(ext_capsules.New(extRegistry))
+	extRegistry.Register(ext_events.New(extRegistry))
+	extRegistry.Register(ext_reposts.New(extRegistry))
+	extRegistry.Register(ext_discover.New(extRegistry))
+	extRegistry.Register(ext_chat.New(extRegistry))
 
 	if err := extRegistry.LoadEnabledState(context.Background()); err != nil {
 		log.Warn().Err(err).Msg("Failed to load extension state (table may not exist yet)")
@@ -141,23 +148,9 @@ func main() {
 
 	userRepo := repository.NewUserRepository(dbPool)
 	postRepo := repository.NewPostRepository(dbPool)
-	chatRepo := repository.NewChatRepository(dbPool)
 	categoryRepo := repository.NewCategoryRepository(dbPool)
 	notifRepo := repository.NewNotificationRepository(dbPool)
-	tagRepo := repository.NewTagRepository(dbPool)
-
-	// Refresh trending hashtag scores periodically (every 15 min) so Discover page has data
-	go func() {
-		if err := tagRepo.RefreshTrendingScores(context.Background()); err != nil {
-			log.Warn().Err(err).Msg("Initial trending score refresh failed")
-		}
-		ticker := time.NewTicker(15 * time.Minute)
-		for range ticker.C {
-			if err := tagRepo.RefreshTrendingScores(context.Background()); err != nil {
-				log.Warn().Err(err).Msg("Trending score refresh failed")
-			}
-		}
-	}()
+	// chatRepo, tagRepo moved to discover/chat extensions
 
 	assetService := services.NewAssetService(cfg.R2SigningSecret, cfg.R2PublicBaseURL, cfg.R2ImgDomain, cfg.R2VidDomain)
 	feedAlgorithmService := services.NewFeedAlgorithmService(dbPool)
@@ -227,7 +220,7 @@ func main() {
 
 	userHandler := handlers.NewUserHandler(userRepo, postRepo, notificationService, assetService)
 	postHandler := handlers.NewPostHandler(postRepo, userRepo, feedService, assetService, notificationService, moderationService, contentFilter, linkPreviewService, localAIService, s3Client, cfg.R2VideoBucket, cfg.R2VidDomain, contentModerator)
-	chatHandler := handlers.NewChatHandler(chatRepo, notificationService, hub)
+	// chatHandler moved to chat extension
 	mfaRepo := repository.NewMFARepository(dbPool)
 	totpService := services.NewTOTPService()
 	authHandler := handlers.NewAuthHandler(userRepo, cfg, emailService, sendPulseService, mfaRepo, totpService)
@@ -243,32 +236,18 @@ func main() {
 	officialAccountsService.StartScheduler()
 	defer officialAccountsService.StopScheduler()
 
-	icedHandler := handlers.NewIcedHandler(cfg.IcedAPIBase)
+	// icedHandler moved to beacons extension
 	moderationHandler := handlers.NewModerationHandler(moderationService, sightEngineService, localAIService)
 
-	// Unified beacon alerts system
+	// Beacon alert repo + ingestion kept for adminHandler (routes moved to beacons extension)
 	beaconAlertRepo := repository.NewBeaconAlertRepository(dbPool)
-	beaconUnifiedHandler := handlers.NewBeaconUnifiedHandler(beaconAlertRepo)
 	beaconIngestion := services.NewBeaconIngestionService(beaconAlertRepo, "http://127.0.0.1:8787", cfg.IcedAPIBase, s3Client, cfg.R2MediaBucket, cfg.R2ImgDomain)
-	beaconIngestion.Start()
-	defer beaconIngestion.Stop()
 
 	adminHandler := handlers.NewAdminHandler(dbPool, moderationService, appealService, emailService, sightEngineService, officialAccountsService, linkPreviewService, localAIService, beaconAlertRepo, beaconIngestion, feedAlgorithmService, cfg.JWTSecret, cfg.Env == "production", s3Client, cfg.R2MediaBucket, cfg.R2VideoBucket, cfg.R2ImgDomain, cfg.R2VidDomain)
 
 	accountHandler := handlers.NewAccountHandler(userRepo, emailService, cfg)
 
-	// Capsule system handlers (E2EE groups)
-	capsuleHandler := handlers.NewCapsuleHandler(dbPool)
-	capsuleEscrowHandler := handlers.NewCapsuleEscrowHandler(dbPool)
-
-	// Group feature handler (posts, chat, forum, members)
-	groupHandler := handlers.NewGroupHandler(dbPool, notificationService)
-
-	// Neighborhood board handler (standalone message board)
-	boardHandler := handlers.NewBoardHandler(dbPool, contentFilter, moderationService, contentModerator, notificationService)
-
-	// Beacon search handler (search beacons, board, public groups)
-	beaconSearchHandler := handlers.NewBeaconSearchHandler(dbPool)
+	// Capsule, group, board, beacon search handlers moved to extensions
 
 	mediaHandler := handlers.NewMediaHandler(
 		s3Client,
@@ -283,8 +262,7 @@ func main() {
 	// Health check service
 	hcService := monitoring.NewHealthCheckService(dbPool)
 
-	// Repost & profile layout handlers
-	repostHandler := handlers.NewRepostHandler(dbPool)
+	// repostHandler moved to reposts extension
 	profileLayoutHandler := handlers.NewProfileLayoutHandler(dbPool)
 
 	// Image proxy (CORS bypass for web.archive.org, imgur, giphy)
@@ -293,8 +271,7 @@ func main() {
 	// Instance handler (public capabilities endpoint + admin config)
 	instanceHandler := handlers.NewInstanceHandler(dbPool, extRegistry)
 
-	// Group events handler
-	eventHandler := handlers.NewEventHandler(dbPool)
+	// eventHandler moved to groups/events extensions
 
 	// Dashboard layout handler (customizable home page widgets)
 	dashboardLayoutHandler := handlers.NewDashboardLayoutHandler(dbPool)
@@ -303,25 +280,7 @@ func main() {
 	harmonyCalc := services.NewHarmonyCalculator(dbPool)
 	harmonyCalc.ScheduleDailyRecalculation(bgCtx)
 
-	// Event ingestion — fetch from Eventbrite & Ticketmaster every 2 hours
-	if cfg.EventbriteAPIKey != "" || cfg.TicketmasterAPIKey != "" {
-		eventIngestion := services.NewEventIngestionService(dbPool, cfg.EventbriteAPIKey, cfg.TicketmasterAPIKey)
-		go func() {
-			// Initial sync after 30s delay (let other services start first)
-			time.Sleep(30 * time.Second)
-			if err := eventIngestion.SyncAll(context.Background()); err != nil {
-				log.Warn().Err(err).Msg("Initial event ingestion sync failed")
-			}
-			ticker := time.NewTicker(2 * time.Hour)
-			defer ticker.Stop()
-			for range ticker.C {
-				if err := eventIngestion.SyncAll(context.Background()); err != nil {
-					log.Warn().Err(err).Msg("Event ingestion sync failed")
-				}
-			}
-		}()
-		log.Info().Msg("Event ingestion service started (Eventbrite + Ticketmaster)")
-	}
+	// Event ingestion moved to events extension BackgroundJobs
 
 	r.GET("/ws", wsHandler.ServeWS)
 
@@ -462,14 +421,12 @@ func main() {
 			authorized.GET("/feed", postHandler.GetFeed)
 			authorized.GET("/feed/personal", postHandler.GetFeed)
 			authorized.GET("/feed/sojorn", postHandler.GetSojornFeed)
+			// Beacon routes on postHandler remain here (extension owns unified/cameras/iced/search)
 			authorized.POST("/beacons", middleware.UserRateLimit(3.0/3600.0, 3), postHandler.CreateBeacon)
 			authorized.GET("/beacons/nearby", postHandler.GetNearbyBeacons)
-			authorized.GET("/beacons/unified", beaconUnifiedHandler.GetUnifiedBeacons)
 			authorized.GET("/beacons/official", postHandler.GetOfficialAlerts)
-			authorized.GET("/beacons/cameras", beaconUnifiedHandler.GetAllCameras)
 			authorized.GET("/beacons/signs", postHandler.GetOfficialSigns)
 			authorized.GET("/beacons/weather", postHandler.GetOfficialWeatherStations)
-			authorized.GET("/beacons/iced", icedHandler.GetIcedAlerts)
 			authorized.POST("/beacons/:id/vouch", postHandler.VouchBeacon)
 			authorized.POST("/beacons/:id/report", postHandler.ReportBeacon)
 			authorized.POST("/beacons/:id/resolve", postHandler.ResolveBeacon)
@@ -483,16 +440,7 @@ func main() {
 			// User reports
 			authorized.GET("/reports/mine", userHandler.GetMyReports)
 
-			// Chat routes
-			authorized.GET("/conversations", chatHandler.GetConversations)
-			authorized.GET("/conversation", chatHandler.GetOrCreateConversation)
-			authorized.POST("/messages", chatHandler.SendMessage)
-			authorized.GET("/conversations/:id/messages", chatHandler.GetMessages)
-			authorized.DELETE("/conversations/:id", chatHandler.DeleteConversation)
-			authorized.DELETE("/messages/:id", chatHandler.DeleteMessage)
-			authorized.POST("/messages/:id/reactions", chatHandler.AddReaction)
-			authorized.DELETE("/messages/:id/reactions", chatHandler.RemoveReaction)
-			authorized.GET("/mutual-follows", chatHandler.GetMutualFollows)
+			// Chat routes moved to chat extension
 
 			// Key routes
 			authorized.POST("/keys", keyHandler.PublishKeys)
@@ -526,24 +474,10 @@ func main() {
 			// Media routes
 			authorized.POST("/upload", mediaHandler.Upload)
 			authorized.GET("/media/sign", mediaHandler.GetSignedMediaURL)
-			// Search & Discover routes
-			discoverHandler := handlers.NewDiscoverHandler(userRepo, postRepo, tagRepo, categoryRepo, assetService)
-			authorized.GET("/search", discoverHandler.Search)
-			authorized.GET("/discover", discoverHandler.GetDiscover)
-			authorized.GET("/hashtags/trending", discoverHandler.GetTrendingHashtags)
-			authorized.GET("/hashtags/following", discoverHandler.GetFollowedHashtags)
-			authorized.GET("/hashtags/:name", discoverHandler.GetHashtagPage)
-			authorized.POST("/hashtags/:name/follow", discoverHandler.FollowHashtag)
-			authorized.DELETE("/hashtags/:name/follow", discoverHandler.UnfollowHashtag)
+			// Search, discover, hashtags, follow routes moved to discover extension
 
 			// User by-handle lookup (used by capsule invite to resolve public keys)
 			authorized.GET("/users/by-handle/:handle", userHandler.GetUserByHandle)
-
-			// Follow System (unique routes only — followers/following covered by users group above)
-			followHandler := handlers.NewFollowHandler(dbPool)
-			authorized.GET("/users/:id/is-following", followHandler.IsFollowing)
-			authorized.GET("/users/:id/mutual-followers", followHandler.GetMutualFollowers)
-			authorized.GET("/users/suggested", followHandler.GetSuggestedUsers)
 
 			// Notifications
 			authorized.GET("/notifications", notificationHandler.GetNotifications)
@@ -587,142 +521,7 @@ func main() {
 				appeals.GET("/:id", appealHandler.GetAppeal)
 			}
 
-			// Neighborhood board (standalone message board — NOT posts)
-			board := authorized.Group("/board")
-			{
-				board.GET("/nearby", boardHandler.ListNearby)
-				board.POST("", boardHandler.CreateEntry)
-				board.GET("/:id", boardHandler.GetEntry)
-				board.POST("/:id/replies", boardHandler.CreateReply)
-				board.POST("/vote", boardHandler.ToggleVote)
-				board.POST("/:id/remove", boardHandler.RemoveEntry)
-				board.PATCH("/:id/tag", boardHandler.UpdateTag)
-				board.POST("/:id/flag", boardHandler.FlagEntry)
-			}
-
-			// Beacon ecosystem search (beacons, board entries, public groups — never private)
-			authorized.GET("/beacon/search", beaconSearchHandler.Search)
-
-			// Neighborhood system (on-demand OSM detection + auto-join)
-			neighborhoodHandler := handlers.NewNeighborhoodHandler(dbPool)
-			neighborhoods := authorized.Group("/neighborhoods")
-			{
-				neighborhoods.GET("/detect", neighborhoodHandler.Detect)
-				neighborhoods.GET("/current", neighborhoodHandler.GetCurrent)
-				neighborhoods.GET("/search", neighborhoodHandler.SearchByZip)
-				neighborhoods.POST("/choose", neighborhoodHandler.Choose)
-				neighborhoods.GET("/mine", neighborhoodHandler.GetMyNeighborhood)
-
-				// Neighborhood moderation (admin/owner only)
-				neighborhoods.GET("/:id/reports", neighborhoodHandler.GetNeighborhoodReports)
-				neighborhoods.PATCH("/:id/reports/:reportId", neighborhoodHandler.UpdateNeighborhoodReport)
-			}
-
-			// Groups system (community groups with discovery and membership)
-			groupsHandler := handlers.NewGroupsHandler(dbPool)
-			groups := authorized.Group("/groups")
-			{
-				groups.GET("", groupsHandler.ListGroups)                                          // List all groups with optional category filter
-				groups.GET("/mine", groupsHandler.GetMyGroups)                                    // Get user's joined groups
-				groups.GET("/suggested", groupsHandler.GetSuggestedGroups)                        // Get suggested groups
-				groups.POST("", groupsHandler.CreateGroup)                                        // Create new group
-				groups.GET("/:id", groupsHandler.GetGroup)                                        // Get group details
-				groups.POST("/:id/join", groupsHandler.JoinGroup)                                 // Join group or request to join
-				groups.POST("/:id/leave", groupsHandler.LeaveGroup)                               // Leave group
-				groups.GET("/:id/members", groupsHandler.GetGroupMembers)                         // Get group members
-				groups.GET("/:id/requests", groupsHandler.GetPendingRequests)                     // Get pending join requests (admin)
-				groups.POST("/:id/requests/:requestId/approve", groupsHandler.ApproveJoinRequest) // Approve join request
-				groups.POST("/:id/requests/:requestId/reject", groupsHandler.RejectJoinRequest)   // Reject join request
-				groups.GET("/:id/feed", groupsHandler.GetGroupFeed)
-				groups.GET("/:id/key-status", groupsHandler.GetGroupKeyStatus)
-				groups.POST("/:id/keys", groupsHandler.DistributeGroupKeys)
-				groups.GET("/:id/members/public-keys", groupsHandler.GetGroupMemberPublicKeys)
-				groups.POST("/:id/invite-member", groupsHandler.InviteMember)
-				groups.DELETE("/:id/members/:userId", groupsHandler.RemoveMember)
-				groups.PATCH("/:id/settings", groupsHandler.UpdateGroupSettings)
-
-				// Group events
-				groups.POST("/:id/events", eventHandler.CreateEvent)
-				groups.GET("/:id/events", eventHandler.ListGroupEvents)
-				groups.GET("/:id/events/:eventId", eventHandler.GetEvent)
-				groups.PATCH("/:id/events/:eventId", eventHandler.UpdateEvent)
-				groups.DELETE("/:id/events/:eventId", eventHandler.DeleteEvent)
-				groups.POST("/:id/events/:eventId/rsvp", eventHandler.RSVPEvent)
-				groups.DELETE("/:id/events/:eventId/rsvp", eventHandler.RemoveRSVP)
-				groups.POST("/:id/events/:eventId/approve", eventHandler.ApproveEvent)
-				groups.POST("/:id/events/:eventId/reject", eventHandler.RejectEvent)
-			}
-
-			// Capsule system (E2EE groups + clusters)
-			capsules := authorized.Group("/capsules")
-			{
-				capsules.GET("/mine", capsuleHandler.ListMyGroups)
-				capsules.GET("/discover", capsuleHandler.DiscoverGroups)
-				capsules.POST("", capsuleHandler.CreateCapsule)
-				capsules.GET("/:id", capsuleHandler.GetCapsule)
-				capsules.POST("/:id/rotate-keys", capsuleHandler.RotateKeys)
-
-				// Group features (posts, chat, forum, members)
-				capsules.GET("/:id/posts", groupHandler.ListGroupPosts)
-				capsules.POST("/:id/posts", groupHandler.CreateGroupPost)
-				capsules.POST("/:id/posts/:postId/like", groupHandler.ToggleGroupPostLike)
-				capsules.GET("/:id/posts/:postId/comments", groupHandler.ListGroupPostComments)
-				capsules.POST("/:id/posts/:postId/comments", groupHandler.CreateGroupPostComment)
-				capsules.GET("/:id/messages", groupHandler.ListGroupMessages)
-				capsules.POST("/:id/messages", groupHandler.SendGroupMessage)
-				capsules.GET("/:id/threads", groupHandler.ListGroupThreads)
-				capsules.POST("/:id/threads", groupHandler.CreateGroupThread)
-				capsules.GET("/:id/threads/:threadId", groupHandler.GetGroupThread)
-				capsules.POST("/:id/threads/:threadId/replies", groupHandler.CreateGroupThreadReply)
-				capsules.GET("/:id/members", groupHandler.ListGroupMembers)
-				capsules.DELETE("/:id/members/:memberId", groupHandler.RemoveGroupMember)
-				capsules.PATCH("/:id/members/:memberId", groupHandler.UpdateMemberRole)
-				capsules.POST("/:id/leave", groupHandler.LeaveGroup)
-				capsules.PATCH("/:id", groupHandler.UpdateGroup)
-				capsules.DELETE("/:id", groupHandler.DeleteGroup)
-				capsules.POST("/:id/invite-member", groupHandler.InviteToGroup)
-				capsules.GET("/:id/search-users", groupHandler.SearchUsersForInvite)
-
-				// Reporting & moderation (group admins + members)
-				capsules.POST("/:id/entries/:entryId/report", groupHandler.ReportCapsuleEntry)
-				capsules.POST("/:id/messages/:messageId/report", groupHandler.ReportGroupMessage)
-				capsules.POST("/:id/posts/:postId/report", groupHandler.ReportGroupPost)
-				capsules.GET("/:id/reports", groupHandler.GetGroupReports)
-				capsules.PATCH("/:id/reports/:reportId", groupHandler.UpdateGroupReport)
-				capsules.DELETE("/:id/messages/:messageId", groupHandler.DeleteGroupMessage)
-			}
-
-			// Capsule key management (per-user encrypted key store)
-			capsuleKeys := authorized.Group("/capsule-keys")
-			{
-				capsuleKeys.GET("", capsuleEscrowHandler.GetMyKeys)
-				capsuleKeys.POST("", capsuleEscrowHandler.StoreKey)
-				capsuleKeys.GET("/:id", capsuleEscrowHandler.GetMyKeyForGroup)
-				capsuleKeys.DELETE("/:id", capsuleEscrowHandler.DeleteKey)
-			}
-
-			// Capsule escrow backup (PIN-encrypted private key recovery)
-			escrow := authorized.Group("/capsule/escrow")
-			{
-				escrow.GET("/status", capsuleEscrowHandler.GetBackupStatus)
-				escrow.POST("/backup", capsuleEscrowHandler.UploadBackup)
-				escrow.GET("/backup", capsuleEscrowHandler.GetBackup)
-				escrow.DELETE("/backup", capsuleEscrowHandler.DeleteBackup)
-			}
-
-			// Repost & amplification system
-			authorized.POST("/posts/repost", repostHandler.CreateRepost)
-			authorized.POST("/posts/boost", repostHandler.BoostPost)
-			authorized.GET("/posts/trending", repostHandler.GetTrendingPosts)
-			authorized.GET("/posts/:id/reposts", repostHandler.GetRepostsForPost)
-			authorized.GET("/posts/:id/amplification", repostHandler.GetAmplificationAnalytics)
-			authorized.POST("/posts/:id/calculate-score", repostHandler.CalculateAmplificationScore)
-			authorized.DELETE("/reposts/:id", repostHandler.DeleteRepost)
-			authorized.POST("/reposts/:id/report", repostHandler.ReportRepost)
-			authorized.GET("/amplification/rules", repostHandler.GetAmplificationRules)
-			authorized.GET("/users/:id/reposts", repostHandler.GetUserReposts)
-			authorized.GET("/users/:id/can-boost/:postId", repostHandler.CanBoostPost)
-			authorized.GET("/users/:id/daily-boosts", repostHandler.GetDailyBoostCount)
+			// Board, beacon search, neighborhoods, groups, capsules, reposts moved to extensions
 
 			// Profile widget layout
 			authorized.GET("/profile/layout", profileLayoutHandler.GetProfileLayout)
@@ -734,9 +533,7 @@ func main() {
 			authorized.PUT("/dashboard/layout", dashboardLayoutHandler.SaveDashboardLayout)
 			authorized.GET("/users/:id/dashboard-layout", dashboardLayoutHandler.GetUserDashboardLayout)
 
-			// Events (public feed + user's groups)
-			authorized.GET("/events/upcoming", eventHandler.GetUpcomingPublicEvents)
-			authorized.GET("/events/mine", eventHandler.GetMyEvents)
+			// Events routes moved to events extension
 
 		}
 	}
