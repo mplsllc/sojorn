@@ -136,13 +136,36 @@ flutter build apk --dart-define=API_BASE_URL=https://api.example.com/api/v1
 
 ## First Admin Account
 
-After your first user registers, promote them to admin:
+After your first user registers, promote them to admin using the CLI tool:
 
-```sql
-UPDATE profiles SET role = 'admin' WHERE handle = 'your_handle';
+```bash
+cd go-backend
+./admin create-admin --handle your_handle
 ```
 
 Then log in at the admin panel (port 3002).
+
+## Invite-Only Mode
+
+To restrict registration to invited users only, set the registration mode to "invite" in the admin panel under **Instance Config**. When invite-only mode is active, the `/auth/register` endpoint requires a valid invite code. Existing users are unaffected.
+
+## Version Endpoint
+
+Check the running version of your instance at any time:
+
+```bash
+curl https://api.example.com/api/v1/version
+```
+
+Returns:
+
+```json
+{
+  "version": "1.0.0-beta",
+  "commit": "abc1234",
+  "built_at": "2026-01-15T12:00:00Z"
+}
+```
 
 ## Extensions
 
@@ -233,3 +256,73 @@ docker compose up -d
 ```
 
 Migrations run automatically on container start.
+
+## Migration Failure Recovery
+
+If a database migration fails (e.g., due to a syntax error in SQL, a constraint violation, or a timeout), the server will refuse to start until the issue is resolved.
+
+To recover:
+
+1. **Check the error message.** The server logs the exact migration file and SQL error on startup.
+2. **Fix the SQL issue.** If you are running custom migrations, correct the problematic `.up.sql` file. If this is a Sojorn release migration, check the release notes or issue tracker for known workarounds.
+3. **Re-run migrations.** Start the server again or run the migration tool manually:
+   ```bash
+   cd go-backend
+   export DATABASE_URL="postgres://user:pass@localhost:5432/sojorn?sslmode=disable"
+   go run cmd/migrate/main.go
+   ```
+4. **If the migration partially applied,** you may need to manually inspect the database state and clean up incomplete changes before re-running. Check the `schema_migrations` table to see which version was last successfully applied.
+
+Migrations are idempotent where possible, but some DDL operations (adding columns, creating tables) cannot be safely retried if they partially succeeded. In those cases, manually roll back the partial change and re-run.
+
+## Logging
+
+Sojorn uses structured logging via zerolog. Set the log level with the `LOG_LEVEL` environment variable.
+
+| Level | Value | What It Shows |
+|-------|-------|---------------|
+| Debug | `debug` | Everything: SQL queries, request/response details, middleware decisions, extension lifecycle events. Use for local development and troubleshooting. |
+| Info | `info` | Startup summary, extension toggles, background job completions, significant state changes. This is the default. |
+| Warn | `warn` | Degraded conditions: missing optional services (SMTP, R2, Firebase), failed background job iterations, deprecated usage patterns. The server continues operating. |
+| Error | `error` | Failures that affect user-facing behavior: database errors, failed email sends, unrecoverable background job errors. Minimal output -- use in production if log volume is a concern. |
+
+Set the level in your environment:
+
+```bash
+export LOG_LEVEL=info
+```
+
+Or in your `.env` file:
+
+```
+LOG_LEVEL=info
+```
+
+Logs are written to stderr in a human-readable console format. For production, pipe to a log aggregator or use Docker's logging driver.
+
+## Shutdown & Restart
+
+Sojorn handles graceful shutdown when it receives a `SIGTERM` or `SIGINT` signal.
+
+The shutdown sequence:
+
+1. **Signal received.** The server stops accepting new connections.
+2. **In-flight requests drain.** All currently active HTTP requests are allowed to complete.
+3. **Grace period: 10 seconds.** If in-flight requests do not finish within 10 seconds, the server force-closes remaining connections.
+4. **Background jobs stop.** The background context is cancelled, signaling all extension background goroutines and internal jobs (feed scoring, account purge, audit retention) to exit.
+5. **Database pool closes.** The PostgreSQL connection pool is drained and closed.
+6. **Process exits.** The server logs total uptime and exits cleanly.
+
+To restart with zero downtime behind a reverse proxy, start the new instance before stopping the old one, or use a process manager like systemd that handles restart sequencing:
+
+```ini
+# Example systemd unit excerpt
+[Service]
+ExecStart=/opt/sojorn/bin/api
+Restart=always
+RestartSec=5
+KillSignal=SIGTERM
+TimeoutStopSec=15
+```
+
+The 15-second `TimeoutStopSec` gives the 10-second grace period room to complete before systemd sends SIGKILL.
