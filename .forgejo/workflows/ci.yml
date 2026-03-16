@@ -1,0 +1,50 @@
+name: CI
+
+on:
+  push:
+    branches: [main, goSojorn]
+  pull_request:
+    branches: [main]
+
+jobs:
+  backend:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go-backend/go.mod
+      - name: Vet
+        working-directory: go-backend
+        run: go vet ./...
+      - name: Build
+        working-directory: go-backend
+        run: go build ./...
+      - name: Test
+        working-directory: go-backend
+        run: go test ./... -v -count=1
+
+  admin:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+      - name: Install
+        working-directory: admin
+        run: npm ci
+      - name: Build
+        working-directory: admin
+        run: npm run build
+
+  docker:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build API image
+        run: docker build --target builder -t sojorn-api-builder go-backend/
+      - name: Build API runtime
+        run: docker build -t sojorn-api go-backend/
+      - name: Build Admin image
+        run: docker build -t sojorn-admin admin/

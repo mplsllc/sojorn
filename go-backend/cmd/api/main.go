@@ -43,10 +43,37 @@ import (
 	"gitlab.com/patrickbritton3/sojorn/go-backend/internal/services"
 )
 
+var (
+	gitCommit = "dev"
+	buildDate = "unknown"
+)
+
 func main() {
+	startTime := time.Now()
+
 	cfg := config.LoadConfig()
 
 	log.Logger = log.Output(zerolog.ConsoleWriter{Out: os.Stderr, TimeFormat: time.RFC3339})
+
+	// Set global log level from config
+	switch strings.ToLower(cfg.LogLevel) {
+	case "debug":
+		zerolog.SetGlobalLevel(zerolog.DebugLevel)
+	case "warn", "warning":
+		zerolog.SetGlobalLevel(zerolog.WarnLevel)
+	case "error":
+		zerolog.SetGlobalLevel(zerolog.ErrorLevel)
+	default:
+		zerolog.SetGlobalLevel(zerolog.InfoLevel)
+	}
+
+	// ── Startup validation ──────────────────────────────────
+	if cfg.JWTSecret == "" {
+		log.Fatal().Msg("JWT_SECRET is required — generate one with: openssl rand -hex 32")
+	}
+	if len(cfg.JWTSecret) < 32 {
+		log.Fatal().Msg("JWT_SECRET must be at least 32 characters for adequate security")
+	}
 
 	if cfg.DatabaseURL == "" {
 		log.Fatal().Msg("DATABASE_URL is not set")
@@ -69,6 +96,17 @@ func main() {
 
 	if err := dbPool.Ping(context.Background()); err != nil {
 		log.Fatal().Err(err).Msg("Unable to ping database")
+	}
+
+	// ── Service availability warnings ───────────────────────
+	if cfg.SMTPHost == "" {
+		log.Warn().Msg("SMTP not configured — email features (verification, password reset) disabled")
+	}
+	if cfg.R2Endpoint == "" {
+		log.Warn().Msg("R2/S3 storage not configured — media uploads disabled")
+	}
+	if cfg.Env == "production" && cfg.CORSOrigins == "*" {
+		log.Warn().Msg("CORS_ORIGINS is set to * in production — consider restricting to your domain")
 	}
 
 	// ── Extension Registry ──────────────────────────────────
@@ -144,6 +182,10 @@ func main() {
 		c.Header("X-Robots-Tag", "noindex, nofollow, noarchive, nosnippet")
 		c.Next()
 	})
+
+	r.Use(middleware.SecurityHeaders(cfg.Env == "production"))
+	r.Use(middleware.RequestID())
+	r.Use(middleware.RequestLogger())
 
 	r.NoRoute(func(c *gin.Context) {
 		log.Debug().Msgf("No route found for %s %s", c.Request.Method, c.Request.URL.Path)
@@ -306,9 +348,18 @@ func main() {
 	notificationHandler := handlers.NewNotificationHandler(notifRepo, notificationService, dbPool, pushService)
 
 	v1 := r.Group("/api/v1")
+	v1.Use(middleware.RateLimit(30.0, 60))
 	{
 		// Public instance capabilities (unauthenticated — app needs it pre-login)
 		v1.GET("/instance", instanceHandler.GetInstance)
+
+		v1.GET("/version", func(c *gin.Context) {
+			c.JSON(200, gin.H{
+				"version":  "1.0.0-beta",
+				"commit":   gitCommit,
+				"built_at": buildDate,
+			})
+		})
 
 		// Public waitlist signup (no auth required)
 		waitlist := v1.Group("/waitlist")
@@ -340,13 +391,13 @@ func main() {
 
 		auth := v1.Group("/auth")
 		{
-			auth.POST("/register", authHandler.Register)
-			auth.POST("/signup", authHandler.Register)
-			auth.POST("/login", authHandler.Login)
+			auth.POST("/register", middleware.RateLimit(0.5, 3), authHandler.Register)
+			auth.POST("/signup", middleware.RateLimit(0.5, 3), authHandler.Register)
+			auth.POST("/login", middleware.RateLimit(1.0, 5), authHandler.Login)
 			auth.POST("/refresh", authHandler.RefreshSession)
-			auth.POST("/resend-verification", authHandler.ResendVerificationEmail)
+			auth.POST("/resend-verification", middleware.RateLimit(0.2, 2), authHandler.ResendVerificationEmail)
 			auth.GET("/verify", authHandler.VerifyEmail)
-			auth.POST("/forgot-password", authHandler.ForgotPassword)
+			auth.POST("/forgot-password", middleware.RateLimit(0.2, 2), authHandler.ForgotPassword)
 			auth.POST("/reset-password", authHandler.ResetPassword)
 			auth.POST("/mfa/verify", authHandler.VerifyMFA) // No auth — user is mid-login
 		}
@@ -790,6 +841,35 @@ func main() {
 		log.Warn().Err(err).Msg("Extension initialization had errors")
 	}
 
+	// ── Startup summary ─────────────────────────────────────
+	enabledCount := 0
+	for _, on := range extRegistry.EnabledMap() {
+		if on {
+			enabledCount++
+		}
+	}
+	log.Info().
+		Str("instance", cfg.InstanceName).
+		Str("env", cfg.Env).
+		Str("log_level", cfg.LogLevel).
+		Str("port", cfg.Port).
+		Int("extensions_enabled", enabledCount).
+		Msg("Sojorn API starting")
+
+	// First-run: check if any admin exists
+	var adminCount int
+	err = dbPool.QueryRow(context.Background(),
+		`SELECT count(*) FROM profiles WHERE role = 'admin'`).Scan(&adminCount)
+	if err == nil && adminCount == 0 {
+		log.Warn().Msg("")
+		log.Warn().Msg("┌─────────────────────────────────────────────────────────────┐")
+		log.Warn().Msg("│  No admin account found.                                    │")
+		log.Warn().Msg("│  Run: ./admin create-admin --handle yourname \\              │")
+		log.Warn().Msg("│       --email you@example.com --password yourpass            │")
+		log.Warn().Msg("└─────────────────────────────────────────────────────────────┘")
+		log.Warn().Msg("")
+	}
+
 	// Public claim request endpoint (no auth)
 	r.POST("/api/v1/username-claim", adminHandler.SubmitClaimRequest)
 
@@ -859,19 +939,20 @@ func main() {
 		}
 	}()
 
-	log.Info().Msgf("Server started on port %s", cfg.Port)
-
 	quit := make(chan os.Signal, 1)
 	signal.Notify(quit, syscall.SIGINT, syscall.SIGTERM)
 	<-quit
-	log.Info().Msg("Shutting down server...")
 
-	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	log.Info().Msg("Shutting down gracefully...")
+
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 	if err := srv.Shutdown(ctx); err != nil {
 		log.Fatal().Err(err).Msg("Server forced to shutdown")
 	}
 
-	log.Info().Msg("Server exiting")
+	log.Info().
+		Dur("uptime", time.Since(startTime)).
+		Msg("Shutdown complete")
 }
 

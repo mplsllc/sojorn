@@ -6,16 +6,17 @@ package main
 
 import (
 	"context"
+	"fmt"
 	"os"
 	"path/filepath"
 	"sort"
 	"strings"
 	"time"
 
-	"gitlab.com/patrickbritton3/sojorn/go-backend/internal/config"
-	"gitlab.com/patrickbritton3/sojorn/go-backend/internal/database"
 	"github.com/rs/zerolog"
 	"github.com/rs/zerolog/log"
+	"gitlab.com/patrickbritton3/sojorn/go-backend/internal/config"
+	"gitlab.com/patrickbritton3/sojorn/go-backend/internal/database"
 )
 
 func main() {
@@ -92,28 +93,68 @@ func main() {
 
 	ctx := context.Background()
 
-	// Simple migration runner: runs them all in sorted order.
-	// Uses IF NOT EXISTS throughout for idempotent re-runs.
+	// Ensure schema_migrations tracking table exists.
+	_, err = pool.Exec(ctx, `CREATE TABLE IF NOT EXISTS schema_migrations (
+		version TEXT PRIMARY KEY,
+		applied_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+	)`)
+	if err != nil {
+		log.Fatal().Err(err).Msg("Failed to create schema_migrations table")
+	}
+
+	applied := 0
+	skipped := 0
+
 	for _, filename := range sqlFiles {
+		// Check if this migration was already applied.
+		var exists int
+		err := pool.QueryRow(ctx, `SELECT 1 FROM schema_migrations WHERE version = $1`, filename).Scan(&exists)
+		if err == nil {
+			log.Info().Msgf("Skipping %s, already applied", filename)
+			skipped++
+			continue
+		}
+
 		log.Info().Msgf("Applying migration: %s", filename)
 
 		content, err := os.ReadFile(filepath.Join(migrationsDir, filename))
 		if err != nil {
 			log.Error().Err(err).Msgf("Failed to read file: %s", filename)
-			continue
+			os.Exit(1)
 		}
 
-		ctx, cancel := context.WithTimeout(ctx, 30*time.Second)
-		_, err = pool.Exec(ctx, string(content))
+		// Run migration + record in a single transaction.
+		tx, err := pool.Begin(ctx)
+		if err != nil {
+			log.Error().Err(err).Msgf("Failed to begin transaction for: %s", filename)
+			os.Exit(1)
+		}
+
+		txCtx, cancel := context.WithTimeout(ctx, 30*time.Second)
+		_, execErr := tx.Exec(txCtx, string(content))
 		cancel()
 
-		if err != nil {
-			log.Error().Err(err).Msgf("Failed to execute migration: %s", filename)
+		if execErr != nil {
+			_ = tx.Rollback(ctx)
+			log.Error().Err(execErr).Msgf("Failed to execute migration: %s", filename)
+			os.Exit(1)
+		}
+
+		_, execErr = tx.Exec(ctx, `INSERT INTO schema_migrations (version) VALUES ($1)`, filename)
+		if execErr != nil {
+			_ = tx.Rollback(ctx)
+			log.Error().Err(execErr).Msgf("Failed to record migration: %s", filename)
+			os.Exit(1)
+		}
+
+		if err := tx.Commit(ctx); err != nil {
+			log.Error().Err(err).Msgf("Failed to commit migration: %s", filename)
 			os.Exit(1)
 		}
 
 		log.Info().Msgf("Successfully applied: %s", filename)
+		applied++
 	}
 
-	log.Info().Msg("All migrations applied successfully.")
+	log.Info().Msg(fmt.Sprintf("%d migrations applied, %d already up-to-date", applied, skipped))
 }
